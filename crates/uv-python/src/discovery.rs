@@ -717,11 +717,15 @@ pub fn find_python_installations<'a>(
             if preference.allows(PythonSource::SearchPath) {
                 debug!("Checking for Python interpreter at {request}");
                 Box::new(
-                    python_interpreters_with_executable_name(name, cache).map(|result| {
-                        result
-                            .map(PythonInstallation::from_tuple)
-                            .map(FindPythonResult::Ok)
-                    }),
+                    python_interpreters_with_executable_name(name, cache)
+                        .filter(move |result| {
+                            result_satisfies_environment_preference(result, environments)
+                        })
+                        .map(|result| {
+                            result
+                                .map(PythonInstallation::from_tuple)
+                                .map(FindPythonResult::Ok)
+                        }),
                 )
             } else {
                 Box::new(std::iter::once(Err(Error::SourceNotAllowed(
