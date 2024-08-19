@@ -2757,6 +2757,10 @@ Show the path to the uv tools directory.
 
 The tools directory is used to store environments and metadata for installed tools.
 
+By default, tools are stored in the uv data directory at `$XDG_DATA_HOME/uv/tools` or `$HOME/.local/share/uv/tools` on Unix and `{FOLDERID_RoamingAppData}\uv\data\tools` on Windows.
+
+The tool installation directory may be overridden with `$UV_TOOL_DIR`.
+
 To instead view the directory uv installs executables into, use the `--bin` flag.
 
 <h3 class="cli-reference">Usage</h3>
