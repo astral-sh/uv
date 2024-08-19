@@ -46,9 +46,9 @@ uv-resolver = { workspace = true }
 uv-types = { workspace = true }
 
 anyhow = { workspace = true }
-chrono = { workspace = true }
 codspeed-criterion-compat = { version = "2.6.0", default-features = false, optional = true }
 criterion = { version = "0.5.1", default-features = false, features = ["async_tokio"] }
+jiff = { workspace = true }
 tokio = { workspace = true }
 
 [features]

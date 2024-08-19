@@ -429,7 +429,7 @@ fn jax_instability() -> Result<()> {
          ]
 
          [options]
-         exclude-newer = "2024-03-25 00:00:00 UTC"
+         exclude-newer = "2024-03-25T00:00:00Z"
 
          [[package]]
          name = "importlib-metadata"
@@ -566,7 +566,7 @@ fn jax_instability() -> Result<()> {
          ]
 
          [options]
-         exclude-newer = "2024-03-25 00:00:00 UTC"
+         exclude-newer = "2024-03-25T00:00:00Z"
 
          [[package]]
          name = "importlib-metadata"

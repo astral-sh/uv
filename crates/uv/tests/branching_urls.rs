@@ -214,7 +214,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
     ]
 
     [options]
-    exclude-newer = "2024-03-25 00:00:00 UTC"
+    exclude-newer = "2024-03-25T00:00:00Z"
 
     [[package]]
     name = "a"
@@ -409,7 +409,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     ]
 
     [options]
-    exclude-newer = "2024-03-25 00:00:00 UTC"
+    exclude-newer = "2024-03-25T00:00:00Z"
 
     [[package]]
     name = "a"
@@ -570,7 +570,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     ]
 
     [options]
-    exclude-newer = "2024-03-25 00:00:00 UTC"
+    exclude-newer = "2024-03-25T00:00:00Z"
 
     [[package]]
     name = "a"
@@ -655,7 +655,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     ]
 
     [options]
-    exclude-newer = "2024-03-25 00:00:00 UTC"
+    exclude-newer = "2024-03-25T00:00:00Z"
 
     [[package]]
     name = "a"
@@ -778,7 +778,7 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     requires-python = ">=3.11, <3.13"
 
     [options]
-    exclude-newer = "2024-03-25 00:00:00 UTC"
+    exclude-newer = "2024-03-25T00:00:00Z"
 
     [[package]]
     name = "a"

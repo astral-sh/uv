@@ -1363,13 +1363,13 @@ fn unix_timestamp(time: SystemTime) -> u64 {
 }
 
 fn rfc2822_to_unix_timestamp(s: &str) -> Option<u64> {
-    rfc2822_to_datetime(s).and_then(|dt| u64::try_from(dt.timestamp()).ok())
+    rfc2822_to_datetime(s).and_then(|timestamp| u64::try_from(timestamp.as_second()).ok())
 }
 
-fn rfc2822_to_datetime(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
-    chrono::DateTime::parse_from_rfc2822(s)
+fn rfc2822_to_datetime(s: &str) -> Option<jiff::Timestamp> {
+    jiff::fmt::rfc2822::DateTimeParser::new()
+        .parse_timestamp(s)
         .ok()
-        .map(|dt| dt.to_utc())
 }
 
 fn unix_timestamp_to_header(seconds: u64) -> Option<HeaderValue> {
@@ -1377,11 +1377,19 @@ fn unix_timestamp_to_header(seconds: u64) -> Option<HeaderValue> {
 }
 
 fn unix_timestamp_to_rfc2822(seconds: u64) -> Option<String> {
-    unix_timestamp_to_datetime(seconds).map(|dt| dt.to_rfc2822())
+    use jiff::fmt::rfc2822::DateTimePrinter;
+
+    unix_timestamp_to_datetime(seconds).and_then(|timestamp| {
+        let mut buf = String::new();
+        DateTimePrinter::new()
+            .print_timestamp(&timestamp, &mut buf)
+            .ok()?;
+        Some(buf)
+    })
 }
 
-fn unix_timestamp_to_datetime(seconds: u64) -> Option<chrono::DateTime<chrono::Utc>> {
-    chrono::DateTime::from_timestamp(i64::try_from(seconds).ok()?, 0)
+fn unix_timestamp_to_datetime(seconds: u64) -> Option<jiff::Timestamp> {
+    jiff::Timestamp::from_second(i64::try_from(seconds).ok()?).ok()
 }
 
 fn parse_seconds(value: &[u8]) -> Option<u64> {
