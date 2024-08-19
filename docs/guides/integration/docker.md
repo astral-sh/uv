@@ -22,8 +22,8 @@ Or with the standalone installer:
 
 ```dockerfile title="Dockerfile"
 FROM python:3.12-slim-bullseye
-RUN apt-get update && apt-get install -y curl --no-install-recommends
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN apt-get update && apt-get install -y curl
+RUN curl -LsSf https://astral.sh/uv/install.sh > /tmp/uv-installer.sh && sh /tmp/uv-installer.sh && rm /tmp/uv-installer.sh
 ENV PATH="/root/.cargo/bin/:$PATH"
 ```
 
