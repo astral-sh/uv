@@ -1209,7 +1209,7 @@ impl std::fmt::Display for PackageRange<'_> {
         if segments.len() > 1 {
             match self.kind {
                 PackageRangeKind::Dependency => write!(f, "one of:")?,
-                PackageRangeKind::Compatibility => write!(f, "any of:")?,
+                PackageRangeKind::Compatibility => write!(f, "all of:")?,
                 PackageRangeKind::Available => write!(f, "are available:")?,
             }
         }

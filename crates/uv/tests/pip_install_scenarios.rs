@@ -346,7 +346,7 @@ fn excluded_only_compatible_version() {
               package-a==2.0.0
               package-a==3.0.0
           and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
-          And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that any of:
+          And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all of:
               package-a<2.0.0
               package-a>2.0.0
           depend on one of:
@@ -3462,7 +3462,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
           we can conclude that package-a==1.0.0 cannot be used.
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: package-c was requested with a pre-release marker (e.g., any of:
+          hint: package-c was requested with a pre-release marker (e.g., all of:
               package-c>1.0.0,<2.0.0a5
               package-c>2.0.0a7,<2.0.0b1
               package-c>2.0.0b1,<2.0.0b5
@@ -3997,7 +3997,7 @@ fn python_greater_than_current_excluded() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10,<3.11 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that any of:
+      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10,<3.11 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that all of:
               Python>=3.10,<3.11
               Python>=3.12
            are incompatible.
