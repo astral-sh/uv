@@ -8,7 +8,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, PreviewMode};
+use uv_configuration::Concurrency;
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
@@ -16,7 +16,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 
@@ -39,7 +39,6 @@ pub(crate) async fn install(
     force: bool,
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
-    preview: PreviewMode,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -48,10 +47,6 @@ pub(crate) async fn install(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv tool install` is experimental and may change without warning");
-    }
-
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls);
@@ -104,7 +99,6 @@ pub(crate) async fn install(
                 &interpreter,
                 &settings,
                 &state,
-                preview,
                 connectivity,
                 concurrency,
                 native_tls,
@@ -142,7 +136,6 @@ pub(crate) async fn install(
             &interpreter,
             &settings,
             &state,
-            preview,
             connectivity,
             concurrency,
             native_tls,
@@ -167,7 +160,6 @@ pub(crate) async fn install(
                 &interpreter,
                 &settings,
                 &state,
-                preview,
                 connectivity,
                 concurrency,
                 native_tls,
@@ -284,7 +276,6 @@ pub(crate) async fn install(
             &state,
             Box::new(DefaultResolveLogger),
             Box::new(DefaultInstallLogger),
-            preview,
             connectivity,
             concurrency,
             native_tls,
@@ -310,7 +301,6 @@ pub(crate) async fn install(
             settings.as_ref().into(),
             &state,
             Box::new(DefaultResolveLogger),
-            preview,
             connectivity,
             concurrency,
             native_tls,
@@ -334,7 +324,6 @@ pub(crate) async fn install(
             settings.as_ref().into(),
             &state,
             Box::new(DefaultInstallLogger),
-            preview,
             connectivity,
             concurrency,
             native_tls,

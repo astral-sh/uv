@@ -4,25 +4,15 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
-use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_tool::InstalledTools;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// List installed tools.
-pub(crate) async fn list(
-    show_paths: bool,
-    preview: PreviewMode,
-    cache: &Cache,
-    printer: Printer,
-) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv tool list` is experimental and may change without warning");
-    }
-
+pub(crate) async fn list(show_paths: bool, cache: &Cache, printer: Printer) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?;
     let _lock = match installed_tools.acquire_lock() {
         Ok(lock) => lock,

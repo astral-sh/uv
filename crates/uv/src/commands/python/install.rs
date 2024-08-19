@@ -11,7 +11,6 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_client::Connectivity;
-use uv_configuration::PreviewMode;
 use uv_fs::CWD;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
@@ -19,7 +18,6 @@ use uv_python::{
     requests_from_version_file, PythonDownloads, PythonRequest, PYTHON_VERSIONS_FILENAME,
     PYTHON_VERSION_FILENAME,
 };
-use uv_warnings::warn_user_once;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -33,14 +31,9 @@ pub(crate) async fn install(
     python_downloads: PythonDownloads,
     native_tls: bool,
     connectivity: Connectivity,
-    preview: PreviewMode,
     no_config: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv python install` is experimental and may change without warning");
-    }
-
     let start = std::time::Instant::now();
 
     let installations = ManagedPythonInstallations::from_settings()?.init()?;

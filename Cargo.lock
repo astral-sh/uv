@@ -5027,7 +5027,6 @@ dependencies = [
  "url",
  "uv-cache",
  "uv-client",
- "uv-configuration",
  "uv-extract",
  "uv-fs",
  "uv-state",

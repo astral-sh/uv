@@ -19,7 +19,6 @@ fn init() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
@@ -65,7 +64,6 @@ fn init() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
     "###);
@@ -86,7 +84,6 @@ fn init_cache() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
@@ -103,7 +100,6 @@ fn init_no_readme() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
@@ -145,7 +141,6 @@ fn init_current_dir() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Initialized project `foo`
     "###);
 
@@ -191,7 +186,6 @@ fn init_current_dir() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
     "###);
@@ -212,7 +206,6 @@ fn init_dot_args() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
@@ -258,7 +251,6 @@ fn init_dot_args() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
     "###);
@@ -290,7 +282,6 @@ fn init_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo`
     "###);
@@ -356,7 +347,6 @@ fn init_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -386,7 +376,6 @@ fn init_workspace_relative_sub_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
@@ -452,7 +441,6 @@ fn init_workspace_relative_sub_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -483,7 +471,6 @@ fn init_workspace_outside() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
@@ -549,7 +536,6 @@ fn init_workspace_outside() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -567,7 +553,6 @@ fn init_invalid_names() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Initialized project `foo-bar` at `[TEMP_DIR]/foo-bar`
     "###);
 
@@ -602,7 +587,6 @@ fn init_invalid_names() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     error: Not a valid package or extra name: "bar baz". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "###);
 
@@ -633,7 +617,6 @@ fn init_isolated() -> Result<()> {
 
     ----- stderr -----
     warning: The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace.
-    warning: `uv init` is experimental and may change without warning
     Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo`
     "###);
@@ -682,7 +665,6 @@ fn init_no_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Initialized project `foo`
     "###);
 
@@ -715,7 +697,6 @@ fn init_no_workspace_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     warning: `--no-workspace` was provided, but no workspace was found
     Initialized project `project`
     "###);
@@ -767,7 +748,6 @@ fn init_project_inside_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
@@ -779,7 +759,6 @@ fn init_project_inside_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Adding `bar` as member of workspace `[TEMP_DIR]/`
     Initialized project `bar` at `[TEMP_DIR]/foo/bar`
     "###);
@@ -850,7 +829,6 @@ fn init_explicit_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
@@ -891,7 +869,6 @@ fn init_virtual_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Initialized workspace `foo`
     "###);
 
@@ -913,7 +890,6 @@ fn init_virtual_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Adding `bar` as member of workspace `[TEMP_DIR]/foo`
     Initialized project `bar` at `[TEMP_DIR]/foo/bar`
     "###);
@@ -952,7 +928,6 @@ fn init_nested_virtual_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     warning: Nested workspaces are not supported, but outer workspace (`[TEMP_DIR]/`) includes `[TEMP_DIR]/foo`
     Initialized workspace `foo` at `[TEMP_DIR]/foo`
     "###);
@@ -1009,7 +984,6 @@ fn init_matches_members() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Project `foo` is already a member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/packages/foo`
     "###);
@@ -1052,7 +1026,6 @@ fn init_matches_exclude() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Project `foo` is excluded by workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/packages/foo`
     "###);
@@ -1098,7 +1071,6 @@ fn init_requires_python_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
@@ -1152,7 +1124,6 @@ fn init_requires_python_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
@@ -1207,7 +1178,6 @@ fn init_requires_python_specifiers() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
@@ -1255,7 +1225,6 @@ fn init_unmanaged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
@@ -1284,7 +1253,6 @@ fn init_hidden() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning
     error: Not a valid package or extra name: ".foo". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "###);
 }

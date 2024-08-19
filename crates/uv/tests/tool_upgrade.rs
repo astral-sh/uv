@@ -27,7 +27,6 @@ fn test_tool_upgrade_name() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool install` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -49,7 +48,6 @@ fn test_tool_upgrade_name() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.6.0 -> v2.14.0
      - babel==2.6.0
      + babel==2.14.0
@@ -79,7 +77,6 @@ fn test_tool_upgrade_all() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool install` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -100,7 +97,6 @@ fn test_tool_upgrade_all() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool install` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -122,7 +118,6 @@ fn test_tool_upgrade_all() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.6.0 -> v2.14.0
      - babel==2.6.0
      + babel==2.14.0
@@ -154,7 +149,6 @@ fn test_tool_upgrade_non_existing_package() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool upgrade` is experimental and may change without warning
     `black` is not installed; run `uv tool install black` to install
     "###);
 
@@ -169,7 +163,6 @@ fn test_tool_upgrade_non_existing_package() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool upgrade` is experimental and may change without warning
     Nothing to upgrade
     "###);
 }
@@ -194,7 +187,6 @@ fn test_tool_upgrade_settings() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool install` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -218,7 +210,6 @@ fn test_tool_upgrade_settings() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool upgrade` is experimental and may change without warning
     Nothing to upgrade
     "###);
 
@@ -234,7 +225,6 @@ fn test_tool_upgrade_settings() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool upgrade` is experimental and may change without warning
     Updated black v23.1.0 -> v24.3.0
      - black==23.1.0
      + black==24.3.0
@@ -263,7 +253,6 @@ fn test_tool_upgrade_respect_constraints() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool install` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -285,7 +274,6 @@ fn test_tool_upgrade_respect_constraints() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.6.0 -> v2.9.1
      - babel==2.6.0
      + babel==2.9.1
@@ -316,7 +304,6 @@ fn test_tool_upgrade_constraint() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool install` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -340,7 +327,6 @@ fn test_tool_upgrade_constraint() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.6.0 -> v2.13.1
      - babel==2.6.0
      + babel==2.13.1
@@ -362,7 +348,6 @@ fn test_tool_upgrade_constraint() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.13.1 -> v2.14.0
      - babel==2.13.1
      + babel==2.14.0
@@ -385,7 +370,6 @@ fn test_tool_upgrade_constraint() {
 
     ----- stderr -----
     warning: `--upgrade` is enabled by default on `uv tool upgrade`
-    warning: `uv tool upgrade` is experimental and may change without warning
     Nothing to upgrade
     "###);
 }
@@ -413,7 +397,6 @@ fn test_tool_upgrade_with() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool install` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -435,7 +418,6 @@ fn test_tool_upgrade_with() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool upgrade` is experimental and may change without warning
     Modified babel environment
      - pytz==2018.5
      + pytz==2024.1

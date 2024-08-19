@@ -8,7 +8,6 @@ use pep440_rs::Version;
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::PreviewMode;
 use uv_fs::{absolutize_path, Simplified, CWD};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
@@ -33,7 +32,6 @@ pub(crate) async fn init(
     no_readme: bool,
     python: Option<String>,
     no_workspace: bool,
-    preview: PreviewMode,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -41,10 +39,6 @@ pub(crate) async fn init(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv init` is experimental and may change without warning");
-    }
-
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
         None => CWD.to_path_buf(),

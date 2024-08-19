@@ -5,25 +5,15 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint};
-use uv_warnings::warn_user_once;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Uninstall a tool.
-pub(crate) async fn uninstall(
-    name: Option<PackageName>,
-    preview: PreviewMode,
-    printer: Printer,
-) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv tool uninstall` is experimental and may change without warning");
-    }
-
+pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = match installed_tools.acquire_lock() {
         Ok(lock) => lock,

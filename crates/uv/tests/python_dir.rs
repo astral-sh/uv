@@ -17,6 +17,5 @@ fn python_dir() {
     [TEMP_DIR]/python
 
     ----- stderr -----
-    warning: `uv python dir` is experimental and may change without warning
     "###);
 }

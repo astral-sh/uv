@@ -31,7 +31,6 @@ fn sync() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -66,7 +65,6 @@ fn locked() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
     "###);
 
@@ -93,7 +91,6 @@ fn locked() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -128,7 +125,6 @@ fn frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
     "###);
 
@@ -152,7 +148,6 @@ fn frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -183,7 +178,6 @@ fn empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Resolved 0 packages in [TIME]
     Audited 0 packages in [TIME]
     "###);
@@ -197,7 +191,6 @@ fn empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Resolved 0 packages in [TIME]
     Audited 0 packages in [TIME]
     "###);
@@ -259,8 +252,6 @@ fn package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -331,10 +322,8 @@ fn mixed_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
@@ -352,7 +341,6 @@ fn mixed_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
     error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.8. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.8.[X]` followed by `uv pip install -e .`.
     "###);
@@ -409,7 +397,6 @@ fn virtual_workspace_dev_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -424,7 +411,6 @@ fn virtual_workspace_dev_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -461,7 +447,6 @@ fn sync_build_isolation() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
     --- stdout:
@@ -502,7 +487,6 @@ fn sync_build_isolation() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -568,7 +552,6 @@ fn sync_reset_state() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -614,7 +597,6 @@ fn sync_build_isolation_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
     --- stdout:
@@ -654,7 +636,6 @@ fn sync_build_isolation_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 9 packages in [TIME]
@@ -718,8 +699,6 @@ fn sync_relative_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
@@ -772,8 +751,6 @@ fn sync_relative_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Audited 2 packages in [TIME]
     "###);

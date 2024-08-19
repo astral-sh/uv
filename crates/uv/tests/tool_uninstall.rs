@@ -30,7 +30,6 @@ fn tool_uninstall() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool uninstall` is experimental and may change without warning
     Uninstalled 2 executables: black, blackd
     "###);
 
@@ -43,7 +42,6 @@ fn tool_uninstall() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool list` is experimental and may change without warning
     No tools installed
     "###);
 
@@ -58,7 +56,6 @@ fn tool_uninstall() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool install` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.2.0
@@ -85,7 +82,6 @@ fn tool_uninstall_not_installed() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool uninstall` is experimental and may change without warning
     error: `black` is not installed
     "###);
 }
@@ -115,7 +111,6 @@ fn tool_uninstall_missing_receipt() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool uninstall` is experimental and may change without warning
     Removed dangling environment for `black`
     "###);
 }
@@ -145,7 +140,6 @@ fn tool_uninstall_all_missing_receipt() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool uninstall` is experimental and may change without warning
     Removed dangling environment for `black`
     "###);
 }
