@@ -1007,6 +1007,8 @@ The project is re-locked before syncing unless the `--locked` or `--frozen` flag
 
 uv will search for a project in the current directory or any parent directory. If a project cannot be found, uv will exit with an error.
 
+Note that, when installing from a lockfile, uv will not provide warnings for yanked package versions.
+
 <h3 class="cli-reference">Usage</h3>
 
 ```
