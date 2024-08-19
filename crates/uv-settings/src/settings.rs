@@ -168,6 +168,39 @@ pub struct GlobalOptions {
         possible_values = true
     )]
     pub python_downloads: Option<PythonDownloads>,
+    /// The maximum number of in-flight concurrent downloads that uv will perform at any given
+    /// time.
+    #[option(
+        default = "50",
+        value_type = "int",
+        example = r#"
+            concurrent-downloads = 4
+        "#
+    )]
+    pub concurrent_downloads: Option<NonZeroUsize>,
+    /// The maximum number of source distributions that uv will build concurrently at any given
+    /// time.
+    ///
+    /// Defaults to the number of available CPU cores.
+    #[option(
+        default = "None",
+        value_type = "int",
+        example = r#"
+            concurrent-builds = 4
+        "#
+    )]
+    pub concurrent_builds: Option<NonZeroUsize>,
+    /// The number of threads used when installing and unzipping packages.
+    ///
+    /// Defaults to the number of available CPU cores.
+    #[option(
+        default = "None",
+        value_type = "int",
+        example = r#"
+            concurrent-installs = 4
+        "#
+    )]
+    pub concurrent_installs: Option<NonZeroUsize>,
 }
 
 /// Settings relevant to all installer operations.
@@ -1176,39 +1209,6 @@ pub struct PipOptions {
         "#
     )]
     pub reinstall_package: Option<Vec<PackageName>>,
-    /// The maximum number of in-flight concurrent downloads that uv will perform at any given
-    /// time.
-    #[option(
-        default = "50",
-        value_type = "int",
-        example = r#"
-            concurrent-downloads = 4
-        "#
-    )]
-    pub concurrent_downloads: Option<NonZeroUsize>,
-    /// The maximum number of source distributions that uv will build concurrently at any given
-    /// time.
-    ///
-    /// Defaults to the number of available CPU cores.
-    #[option(
-        default = "None",
-        value_type = "int",
-        example = r#"
-            concurrent-builds = 4
-        "#
-    )]
-    pub concurrent_builds: Option<NonZeroUsize>,
-    /// The number of threads used when installing and unzipping packages.
-    ///
-    /// Defaults to the number of available CPU cores.
-    #[option(
-        default = "None",
-        value_type = "int",
-        example = r#"
-            concurrent-installs = 4
-        "#
-    )]
-    pub concurrent_installs: Option<NonZeroUsize>,
 }
 
 impl From<ResolverInstallerOptions> for ResolverOptions {
