@@ -256,8 +256,10 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
 /// relatively rare so the trade-off is acceptable.
 ///
 /// The following limited expression is supported:
-///     
-///      [not] in '<version> [additional versions]'
+///
+/// ```text
+/// [not] in '<version> [additional versions]'
+/// ```
 ///
 /// where the version is PEP 440 compliant. Arbitrary whitespace is allowed between versions.
 ///
