@@ -106,10 +106,7 @@ fn tool_run_at_version() {
 
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning
-    error: Failed to parse: `pytest@`
-      Caused by: Expected URL
-    pytest@
-           ^
+    error: Not a valid package or extra name: "pytest@". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "###);
 
     // Invalid versions are just treated as package and command names
@@ -124,7 +121,7 @@ fn tool_run_at_version() {
 
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning
-    error: Distribution not found at: file://[TEMP_DIR]/invalid
+    error: Not a valid package or extra name: "pytest@invalid". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "###);
 
     let filters = context
@@ -922,5 +919,73 @@ fn tool_run_resolution_error() {
     warning: `uv tool run` is experimental and may change without warning
       × No solution found when resolving tool dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    "###);
+}
+
+#[test]
+fn tool_run_latest() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `pytest` at a specific version.
+    context
+        .tool_install()
+        .arg("pytest==7.0.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Run `pytest`, which should use the installed version.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("pytest")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 7.0.0
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning
+    "###);
+
+    // Run `pytest@latest`, which should use the latest version.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("pytest@latest")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 8.1.1
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    "###);
+
+    // Run `pytest`, which should use the installed version.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("pytest")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 7.0.0
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning
     "###);
 }

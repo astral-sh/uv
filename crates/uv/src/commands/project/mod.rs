@@ -103,6 +103,9 @@ pub(crate) enum ProjectError {
     Tool(#[from] uv_tool::Error),
 
     #[error(transparent)]
+    Name(#[from] uv_normalize::InvalidNameError),
+
+    #[error(transparent)]
     NamedRequirements(#[from] uv_requirements::NamedRequirementsError),
 
     #[error(transparent)]

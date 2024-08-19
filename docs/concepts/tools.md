@@ -85,7 +85,7 @@ Tool upgrades will reinstall the tool executables, even if they have not changed
 
 ### Including additional dependencies
 
-Additional packages can be included during tool invocations:
+Additional packages can be included during `uv tool run` (`uvx`) invocations:
 
 ```console
 $ uvx --with <extra-package> <tool>
