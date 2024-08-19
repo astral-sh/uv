@@ -31,6 +31,7 @@ pub struct CacheArgs {
 
 impl Cache {
     /// Prefer, in order:
+    ///
     /// 1. A temporary cache directory, if the user requested `--no-cache`.
     /// 2. The specific cache directory specified by the user via `--cache-dir` or `UV_CACHE_DIR`.
     /// 3. The system-appropriate cache directory.
