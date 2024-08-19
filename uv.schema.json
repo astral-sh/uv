@@ -721,13 +721,6 @@
             }
           ]
         },
-        "legacy-setup-py": {
-          "description": "Use legacy `setuptools` behavior when building source distributions without a `pyproject.toml`.",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
         "link-mode": {
           "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and Windows.",
           "anyOf": [

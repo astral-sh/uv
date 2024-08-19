@@ -2610,7 +2610,7 @@ fn incompatible_wheel() -> Result<()> {
     Ok(())
 }
 
-/// Install a project without a `pyproject.toml`, using the PEP 517 build backend (default).
+/// Install a project without a `pyproject.toml`, using the PEP 517 build backend.
 #[test]
 fn sync_legacy_sdist_pep_517() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2620,32 +2620,6 @@ fn sync_legacy_sdist_pep_517() -> Result<()> {
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.in"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + flake8==6.0.0 (from https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz)
-    "###
-    );
-
-    Ok(())
-}
-
-/// Install a project without a `pyproject.toml`, using `setuptools` directly.
-#[test]
-fn sync_legacy_sdist_setuptools() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
-
-    uv_snapshot!(context.pip_sync()
-        .arg("requirements.in")
-        .arg("--legacy-setup-py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

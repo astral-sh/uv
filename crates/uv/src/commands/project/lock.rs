@@ -14,7 +14,7 @@ use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, Reinstall, SetupPyStrategy, Upgrade};
+use uv_configuration::{Concurrency, ExtrasSpecification, Reinstall, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
@@ -383,7 +383,6 @@ async fn do_lock(
     // optional on the downstream APIs.
     let build_constraints = [];
     let extras = ExtrasSpecification::default();
-    let setup_py = SetupPyStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -404,7 +403,6 @@ async fn do_lock(
         &state.git,
         &state.in_flight,
         index_strategy,
-        setup_py,
         config_setting,
         build_isolation,
         link_mode,

@@ -4,7 +4,7 @@ use pep508_rs::MarkerTree;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, HashCheckingMode, SetupPyStrategy};
+use uv_configuration::{Concurrency, ExtrasSpecification, HashCheckingMode};
 use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
 use uv_installer::SitePackages;
@@ -216,7 +216,6 @@ pub(super) async fn do_sync(
     // optional on the downstream APIs.
     let build_constraints = [];
     let dry_run = false;
-    let setup_py = SetupPyStrategy::default();
 
     // Extract the hashes from the lockfile.
     let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
@@ -240,7 +239,6 @@ pub(super) async fn do_sync(
         &state.git,
         &state.in_flight,
         index_strategy,
-        setup_py,
         config_setting,
         build_isolation,
         link_mode,
