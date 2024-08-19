@@ -122,6 +122,7 @@ notably including Windows and macOS — there is no clear alternative location t
 these platforms. The installation directory is determined from the first available environment
 variable:
 
+- `$UV_TOOL_BIN_DIR`
 - `$XDG_BIN_HOME`
 - `$XDG_DATA_HOME/../bin`
 - `$HOME/.local/bin`

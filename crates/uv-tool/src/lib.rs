@@ -349,6 +349,7 @@ impl fmt::Display for InstalledTool {
 ///
 /// This follows, in order:
 ///
+/// - `$UV_TOOL_BIN_DIR`
 /// - `$XDG_BIN_HOME`
 /// - `$XDG_DATA_HOME/../bin`
 /// - `$HOME/.local/bin`
@@ -357,8 +358,9 @@ impl fmt::Display for InstalledTool {
 ///
 /// Errors if a directory cannot be found.
 pub fn find_executable_directory() -> Result<PathBuf, Error> {
-    std::env::var_os("XDG_BIN_HOME")
+    std::env::var_os("UV_TOOL_BIN_DIR")
         .and_then(dirs_sys::is_absolute_path)
+        .or_else(|| std::env::var_os("XDG_BIN_HOME").and_then(dirs_sys::is_absolute_path))
         .or_else(|| {
             std::env::var_os("XDG_DATA_HOME")
                 .and_then(dirs_sys::is_absolute_path)
