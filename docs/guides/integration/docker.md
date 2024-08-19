@@ -31,9 +31,44 @@ Note this requires `curl` to be available.
 
 In either case, it is best practice to pin to a specific uv version.
 
-## Installing a package
+## Installing a project
 
-Once uv is installed in an image, it can be used to install some packages.
+If you're using uv to manage your project, you can copy it into the image and install it:
+
+```dockerfile title="Dockerfile"
+# Copy the project into the image
+ADD . /app
+WORKDIR /app
+
+# Sync the project into a new environment
+RUN uv sync
+```
+
+Once the project is installed, you can either _activate_ the virtual environment:
+
+```dockerfile title="Dockerfile"
+# Use the virtual environment automatically
+ENV VIRTUAL_ENV=/app/.venv
+# Place executables in the environment at the front of the path
+ENV PATH="/app/.venv/bin:$PATH"
+```
+
+Or, you can use `uv run` to run commands in the environment:
+
+```dockerfile
+RUN uv run /app/some_script.py
+```
+
+And, to start your application by default:
+
+```dockerfile
+# Presuming there is a `my_app` command provided by the project
+CMD ["uv", "run", "my_app"]
+```
+
+## Using the pip interface
+
+### Installing a package
 
 The system Python environment is safe to use this context, since a container is already isolated.
 The `--system` flag can be used to install in the system environment:
@@ -64,7 +99,7 @@ When using a virtual environment, the `--system` flag should be omitted from uv 
 RUN uv pip install ruff
 ```
 
-## Installing requirements
+### Installing requirements
 
 To install requirements files, copy them into the container:
 
@@ -73,7 +108,7 @@ COPY requirements.txt .
 RUN uv pip install -r requirements.txt
 ```
 
-## Installing a project
+### Installing a project
 
 When installing a project alongside requirements, it is prudent to separate copying the requirements
 from the rest of the source code. This allows the dependencies of the project (which do not change
