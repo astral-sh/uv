@@ -1,6 +1,6 @@
 # Benchmarks
 
-All benchmarks were computed on macOS using Python 3.12.0 (for non-uv tools), and come with a few
+All benchmarks were computed on macOS using Python 3.12.4 (for non-uv tools), and come with a few
 important caveats:
 
 - Benchmark performance may vary dramatically across different operating systems and filesystems. In
@@ -9,11 +9,6 @@ important caveats:
 - Benchmark performance may vary dramatically depending on the set of packages being installed. For
   example, a resolution that requires building a single intensive source distribution may appear
   very similar across tools, since the bottleneck is tool-agnostic.
-- Unlike Poetry, both uv and pip-tools do _not_ generate platform-independent lockfiles. As such,
-  Poetry is (by design) doing significantly more work than other tools in the resolution benchmarks.
-  Poetry is included for completeness, as many projects may not _need_ a platform-independent
-  lockfile. However, it's critical to understand that benchmarking uv's resolution time against
-  Poetry is an unfair comparison. (Benchmarking installation, however, _is_ a fair comparison.)
 
 This document benchmarks against Trio's `docs-requirements.in`, as a representative example of a
 real-world project.
@@ -22,35 +17,35 @@ In each case, a smaller bar (i.e., lower) is better.
 
 ## Warm Installation
 
-Benchmarking package installation (e.g., `uv pip sync`) with a warm cache. This is equivalent to
+Benchmarking package installation (e.g., `uv sync`) with a warm cache. This is equivalent to
 removing and recreating a virtual environment, and then populating it with dependencies that you've
 installed previously on the same machine.
 
-![install-warm](./assets/png/install-warm.png)
+![install-warm](https://github.com/user-attachments/assets/84118aaa-d030-4e29-8f1e-9483091ceca3)
 
 ## Cold Installation
 
-Benchmarking package installation (e.g., `uv pip sync`) with a cold cache. This is equivalent to
-running `uv pip sync` on a new machine or in CI (assuming that the package manager cache is not
+Benchmarking package installation (e.g., `uv sync`) with a cold cache. This is equivalent to
+running `uv sync` on a new machine or in CI (assuming that the package manager cache is not
 shared across runs).
 
-![install-cold](./assets/png/install-cold.png)
+![install-cold](https://github.com/user-attachments/assets/e7f5b203-7e84-452b-8c56-1ff6531c9898)
 
 ## Warm Resolution
 
-Benchmarking dependency resolution (e.g., `uv pip compile`) with a warm cache, but no existing
+Benchmarking dependency resolution (e.g., `uv lock`) with a warm cache, but no existing
 lockfile. This is equivalent to blowing away an existing `requirements.txt` file to regenerate it
 from a `requirements.in` file.
 
-![resolve-warm](./assets/png/resolve-warm.png)
+![resolve-warm](https://github.com/user-attachments/assets/e1637a08-8b27-4077-8138-b3849e53eb04)
 
 ## Cold Resolution
 
-Benchmarking dependency resolution (e.g., `uv pip compile`) with a cold cache. This is equivalent to
-running `uv pip compile` on a new machine or in CI (assuming that the package manager cache is not
+Benchmarking dependency resolution (e.g., `uv lock`) with a cold cache. This is equivalent to
+running `uv lock` on a new machine or in CI (assuming that the package manager cache is not
 shared across runs).
 
-![resolve-cold](./assets/png/resolve-cold.png)
+![resolve-cold](https://github.com/user-attachments/assets/b578c264-c209-45ab-b4c3-54073d871e86)
 
 ## Reproduction
 
@@ -69,7 +64,7 @@ To benchmark resolution against pip-compile, Poetry, and PDM:
 
 ```shell
 uv run resolver \
-    --uv-pip \
+    --uv-project \
     --poetry \
     --pdm \
     --pip-compile \
@@ -82,7 +77,7 @@ To benchmark installation against pip-sync, Poetry, and PDM:
 
 ```shell
 uv run resolver \
-    --uv-pip \
+    --uv-project \
     --poetry \
     --pdm \
     --pip-sync \
@@ -96,10 +91,10 @@ Both commands should be run from the `scripts/benchmark` directory.
 After running the benchmark script, you can generate the corresponding graph via:
 
 ```shell
-cargo run -p uv-dev render-benchmarks resolve-warm.json --title "Warm Resolution"
-cargo run -p uv-dev render-benchmarks resolve-cold.json --title "Cold Resolution"
-cargo run -p uv-dev render-benchmarks install-warm.json --title "Warm Installation"
-cargo run -p uv-dev render-benchmarks install-cold.json --title "Cold Installation"
+cargo run -p uv-dev --all-features render-benchmarks resolve-warm.json --title "Warm Resolution"
+cargo run -p uv-dev --all-features render-benchmarks resolve-cold.json --title "Cold Resolution"
+cargo run -p uv-dev --all-features render-benchmarks install-warm.json --title "Warm Installation"
+cargo run -p uv-dev --all-features render-benchmarks install-cold.json --title "Cold Installation"
 ```
 
 You need to install the [Roboto Font](https://fonts.google.com/specimen/Roboto) if the labels are
@@ -108,8 +103,7 @@ missing in the generated graph.
 ## Acknowledgements
 
 The inclusion of this `BENCHMARKS.md` file was inspired by the excellent benchmarking documentation
-in
-[Orogene](https://github.com/orogene/orogene/blob/472e481b4fc6e97c2b57e69240bf8fe995dfab83/BENCHMARKS.md).
+in [Orogene](https://github.com/orogene/orogene/blob/472e481b4fc6e97c2b57e69240bf8fe995dfab83/BENCHMARKS.md).
 
 ## Troubleshooting
 
