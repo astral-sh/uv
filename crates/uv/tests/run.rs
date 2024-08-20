@@ -7,7 +7,7 @@ use indoc::indoc;
 
 use uv_python::PYTHON_VERSION_FILENAME;
 
-use common::{uv_snapshot, TestContext};
+use common::{copy_dir_all, uv_snapshot, TestContext};
 
 mod common;
 
@@ -533,6 +533,141 @@ fn run_with() -> Result<()> {
     Audited 4 packages in [TIME]
       × No solution found when resolving `--with` dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_with_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let anyio_local = context.temp_dir.child("src").child("anyio_local");
+    copy_dir_all(
+        context.workspace_root.join("scripts/packages/anyio_local"),
+        &anyio_local,
+    )?;
+
+    let black_editable = context.temp_dir.child("src").child("black_editable");
+    copy_dir_all(
+        context
+            .workspace_root
+            .join("scripts/packages/black_editable"),
+        &black_editable,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio", "sniffio==1.3.1"]
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import sniffio
+       "
+    })?;
+
+    // Requesting an editable requirement should install it in a layer.
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/black_editable").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[TEMP_DIR]/src/black_editable)
+    "###);
+
+    // Requesting an editable requirement should install it in a layer, even if it satisfied
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
+    "###);
+
+    // Requesting the project itself should use the base environment.
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg(".").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    "###);
+
+    // Similarly, an already editable requirement does not require a layer
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio", "sniffio==1.3.1"]
+
+        [tool.uv.sources]
+        anyio = { path = "./src/anyio_local", editable = true }
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==4.3.0
+     + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+     - idna==3.6
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
+    "###);
+
+    // If invalid, we should reference `--with-editable`.
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("./foo").arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
+      × Invalid `--with` requirement
+      ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
     "###);
 
     Ok(())

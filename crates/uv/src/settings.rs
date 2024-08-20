@@ -193,6 +193,7 @@ pub(crate) struct RunSettings {
     pub(crate) dev: bool,
     pub(crate) command: ExternalCommand,
     pub(crate) with: Vec<String>,
+    pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
@@ -215,6 +216,7 @@ impl RunSettings {
             no_dev,
             command,
             with,
+            with_editable,
             with_requirements,
             isolated,
             locked,
@@ -238,6 +240,7 @@ impl RunSettings {
             dev: flag(dev, no_dev).unwrap_or(true),
             command,
             with,
+            with_editable,
             with_requirements: with_requirements
                 .into_iter()
                 .filter_map(Maybe::into_option)

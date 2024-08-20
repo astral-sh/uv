@@ -1012,6 +1012,11 @@ async fn run_project(
                 .into_iter()
                 .map(RequirementsSource::from_package)
                 .chain(
+                    args.with_editable
+                        .into_iter()
+                        .map(RequirementsSource::Editable),
+                )
+                .chain(
                     args.with_requirements
                         .into_iter()
                         .map(RequirementsSource::from_requirements_file),

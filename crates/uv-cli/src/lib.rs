@@ -2140,6 +2140,14 @@ pub struct RunArgs {
     #[arg(long)]
     pub with: Vec<String>,
 
+    /// Run with the given packages installed as editables
+    ///
+    /// When used in a project, these dependencies will be layered on top of
+    /// the project environment in a separate, ephemeral environment. These
+    /// dependencies are allowed to conflict with those specified by the project.
+    #[arg(long)]
+    pub with_editable: Vec<String>,
+
     /// Run with all packages listed in the given `requirements.txt` files.
     ///
     /// The same environment semantics as `--with` apply.
