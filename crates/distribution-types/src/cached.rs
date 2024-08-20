@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// A built distribution (wheel) that exists in the local cache.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum CachedDist {
     /// The distribution exists in a registry, like `PyPI`.
     Registry(CachedRegistryDist),
@@ -21,14 +21,14 @@ pub enum CachedDist {
     Url(CachedDirectUrlDist),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct CachedRegistryDist {
     pub filename: WheelFilename,
     pub path: PathBuf,
     pub hashes: Vec<HashDigest>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct CachedDirectUrlDist {
     pub filename: WheelFilename,
     pub url: VerbatimUrl,

@@ -5607,8 +5607,7 @@ fn lock_redact_https() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - foo==0.1.0 (from file://[TEMP_DIR]/)
-     + foo==0.1.0 (from file://[TEMP_DIR]/)
+     ~ foo==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())

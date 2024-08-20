@@ -910,18 +910,12 @@ fn tool_install_already_installed() {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - black==24.3.0
-     + black==24.3.0
-     - click==8.1.7
-     + click==8.1.7
-     - mypy-extensions==1.0.0
-     + mypy-extensions==1.0.0
-     - packaging==24.0
-     + packaging==24.0
-     - pathspec==0.12.1
-     + pathspec==0.12.1
-     - platformdirs==4.2.0
-     + platformdirs==4.2.0
+     ~ black==24.3.0
+     ~ click==8.1.7
+     ~ mypy-extensions==1.0.0
+     ~ packaging==24.0
+     ~ pathspec==0.12.1
+     ~ platformdirs==4.2.0
     Installed 2 executables: black, blackd
     "###);
 
@@ -944,8 +938,7 @@ fn tool_install_already_installed() {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - black==24.3.0
-     + black==24.3.0
+     ~ black==24.3.0
     Installed 2 executables: black, blackd
     "###);
 
@@ -968,8 +961,7 @@ fn tool_install_already_installed() {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - click==8.1.7
-     + click==8.1.7
+     ~ click==8.1.7
     Installed 2 executables: black, blackd
     "###);
 }
@@ -1169,18 +1161,12 @@ fn tool_install_entry_point_exists() {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - black==24.3.0
-     + black==24.3.0
-     - click==8.1.7
-     + click==8.1.7
-     - mypy-extensions==1.0.0
-     + mypy-extensions==1.0.0
-     - packaging==24.0
-     + packaging==24.0
-     - pathspec==0.12.1
-     + pathspec==0.12.1
-     - platformdirs==4.2.0
-     + platformdirs==4.2.0
+     ~ black==24.3.0
+     ~ click==8.1.7
+     ~ mypy-extensions==1.0.0
+     ~ packaging==24.0
+     ~ pathspec==0.12.1
+     ~ platformdirs==4.2.0
     Installed 2 executables: black, blackd
     "###);
 

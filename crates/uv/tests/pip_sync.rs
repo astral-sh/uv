@@ -1146,8 +1146,7 @@ fn install_local_wheel() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+     ~ tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
     "###
     );
 
@@ -1993,10 +1992,8 @@ fn reinstall() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     - markupsafe==2.1.3
-     + markupsafe==2.1.3
-     - tomli==2.0.1
-     + tomli==2.0.1
+     ~ markupsafe==2.1.3
+     ~ tomli==2.0.1
     "###
     );
 
@@ -2048,8 +2045,7 @@ fn reinstall_package() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - tomli==2.0.1
-     + tomli==2.0.1
+     ~ tomli==2.0.1
     "###
     );
 
@@ -2102,8 +2098,7 @@ fn reinstall_git() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     ~ uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###
     );
 
@@ -2292,8 +2287,7 @@ fn sync_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
-     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     ~ poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
     "###
     );
 
@@ -2389,8 +2383,7 @@ fn sync_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - poetry-editable==0.1.1 (from file://[TEMP_DIR]/poetry_editable)
-     + poetry-editable==0.1.1 (from file://[TEMP_DIR]/poetry_editable)
+     ~ poetry-editable==0.1.1 (from file://[TEMP_DIR]/poetry_editable)
     "###
     );
 
@@ -2563,8 +2556,7 @@ fn sync_editable_and_local() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
-     + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+     ~ black==0.1.0 (from file://[TEMP_DIR]/black_editable)
     "###
     );
 
@@ -2585,8 +2577,7 @@ fn sync_editable_and_local() -> Result<()> {
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
-     + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+     ~ black==0.1.0 (from file://[TEMP_DIR]/black_editable)
     "###
     );
 
@@ -2838,8 +2829,7 @@ fn find_links_wheel_cache() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - tqdm==1000.0.0
-     + tqdm==1000.0.0
+     ~ tqdm==1000.0.0
     "###
     );
 
@@ -2889,8 +2879,7 @@ fn find_links_source_cache() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - tqdm==999.0.0
-     + tqdm==999.0.0
+     ~ tqdm==999.0.0
     "###
     );
 
@@ -3271,8 +3260,7 @@ requires-python = ">=3.8"
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - example==0.0.0 (from file://[TEMP_DIR]/editable)
-     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );
 
@@ -3805,8 +3793,7 @@ fn require_hashes_source_url() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
-     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     ~ source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
     "###
     );
 
@@ -3907,8 +3894,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     ~ anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
     "###
     );
 
@@ -4121,8 +4107,7 @@ fn require_hashes_re_download() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.0.0
-     + anyio==4.0.0
+     ~ anyio==4.0.0
     "###
     );
 
@@ -4414,8 +4399,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     ~ anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
     "###
     );
 
@@ -4440,8 +4424,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     ~ anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
     "###
     );
 
@@ -4522,8 +4505,7 @@ fn require_hashes_at_least_one() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.0.0
-     + anyio==4.0.0
+     ~ anyio==4.0.0
     "###
     );
 
@@ -4545,8 +4527,7 @@ fn require_hashes_at_least_one() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.0.0
-     + anyio==4.0.0
+     ~ anyio==4.0.0
     "###
     );
 
@@ -4661,8 +4642,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - example-a-961b4c22==1.0.0
-     + example-a-961b4c22==1.0.0
+     ~ example-a-961b4c22==1.0.0
     "###
     );
 
@@ -4806,8 +4786,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - example-a-961b4c22==1.0.0
-     + example-a-961b4c22==1.0.0
+     ~ example-a-961b4c22==1.0.0
     "###
     );
 
@@ -5014,8 +4993,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - example-a-961b4c22==1.0.0
-     + example-a-961b4c22==1.0.0
+     ~ example-a-961b4c22==1.0.0
     "###
     );
 

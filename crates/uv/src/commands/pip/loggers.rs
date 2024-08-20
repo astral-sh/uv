@@ -6,7 +6,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use distribution_types::{InstalledMetadata, LocalDist, Name};
+use distribution_types::{InstalledMetadata, Name};
 use pep440_rs::Version;
 use uv_normalize::PackageName;
 
@@ -108,13 +108,22 @@ impl InstallLogger for DefaultInstallLogger {
             .uninstalled
             .iter()
             .map(|distribution| ChangeEvent {
-                dist: LocalDist::from(distribution),
+                dist: distribution,
                 kind: ChangeEventKind::Removed,
             })
             .chain(changelog.installed.iter().map(|distribution| ChangeEvent {
-                dist: LocalDist::from(distribution),
+                dist: distribution,
                 kind: ChangeEventKind::Added,
             }))
+            .chain(
+                changelog
+                    .reinstalled
+                    .iter()
+                    .map(|distribution| ChangeEvent {
+                        dist: distribution,
+                        kind: ChangeEventKind::Reinstalled,
+                    }),
+            )
             .sorted_unstable_by(|a, b| {
                 a.dist
                     .name()
@@ -138,6 +147,15 @@ impl InstallLogger for DefaultInstallLogger {
                         printer.stderr(),
                         " {} {}{}",
                         "-".red(),
+                        event.dist.name().bold(),
+                        event.dist.installed_version().dimmed()
+                    )?;
+                }
+                ChangeEventKind::Reinstalled => {
+                    writeln!(
+                        printer.stderr(),
+                        " {} {}{}",
+                        "~".yellow(),
                         event.dist.name().bold(),
                         event.dist.installed_version().dimmed()
                     )?;

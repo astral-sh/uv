@@ -16,7 +16,7 @@ use uv_normalize::PackageName;
 use crate::{DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef};
 
 /// A built distribution (wheel) that is installed in a virtual environment.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum InstalledDist {
     /// The distribution was derived from a registry, like `PyPI`.
     Registry(InstalledRegistryDist),
@@ -30,14 +30,14 @@ pub enum InstalledDist {
     LegacyEditable(InstalledLegacyEditable),
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledRegistryDist {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
@@ -47,21 +47,21 @@ pub struct InstalledDirectUrlDist {
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledEggInfoFile {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledEggInfoDirectory {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledLegacyEditable {
     pub name: PackageName,
     pub version: Version,
