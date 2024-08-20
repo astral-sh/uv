@@ -948,7 +948,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.python_preference,
                 globals.preview,
                 &cache,
-                printer,
             )
             .await
         }
