@@ -136,7 +136,7 @@ See https://github.com/astral-sh/uv/issues/5130 */
 }
 /* Retain larger spacing for each top-level section in the nav */
 .md-nav__item--nested {
-  margin-top: 0.6em;
+  margin-top: 1em;
 }
 /* Retain larger spacing for the right-side table-of-contents nav */
 .md-nav--secondary .md-nav__link {
@@ -149,18 +149,19 @@ See https://github.com/astral-sh/uv/issues/5130 */
 
 /* Increase the size of the sections headings, remove the bold */
 .md-nav__container > .md-nav__link:first-child {
-  font-size: 16px;
+  font-size: 17.5px;
   font-weight: normal;
   margin-bottom: 0.1em;
 }
+
 /* Increase the size of the index nav item to match the sections */
-.md-nav_link:first-child {
-  font-size: 16px;
+.md-nav__item:first-child {
+  font-size: 17.5px;
   font-weight: normal;
 }
 /* But do not increase the size of other nav items */
 .md-nav__item--section > .md-nav > .md-nav__list > .md-nav__item {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: normal;
 }
 
