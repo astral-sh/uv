@@ -374,14 +374,13 @@ class Poetry(Suite):
             pyproject = tomli.load(fp)
 
         # Add the dependencies to the pyproject.toml.
-        pyproject["tool"]["poetry"]["dependencies"].update(
-            {
-                str(requirement.name): str(requirement.specifier)
-                if requirement.specifier
-                else "*"
-                for requirement in requirements
-            }
-        )
+        for requirement in requirements:
+            version = str(requirement.specifier) if requirement.specifier else "*"
+            if requirement.extras:
+                entry = {"version": version, "extras": sorted(requirement.extras)}
+            else:
+                entry = version
+            pyproject["tool"]["poetry"]["dependencies"][requirement.name] = entry
 
         with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
             tomli_w.dump(pyproject, fp)
