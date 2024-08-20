@@ -1691,7 +1691,9 @@ uv tree [OPTIONS]
 
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 
-<li><code>x86_64-pc-windows-msvc</code>:  An x86 Windows target</li>
+<li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+
+<li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 
@@ -3808,7 +3810,9 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 
-<li><code>x86_64-pc-windows-msvc</code>:  An x86 Windows target</li>
+<li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+
+<li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 
@@ -4104,7 +4108,9 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 
-<li><code>x86_64-pc-windows-msvc</code>:  An x86 Windows target</li>
+<li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+
+<li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 
@@ -4434,7 +4440,9 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 
-<li><code>x86_64-pc-windows-msvc</code>:  An x86 Windows target</li>
+<li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+
+<li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
 

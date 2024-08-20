@@ -21,10 +21,15 @@ pub enum TargetTriple {
     /// An alias for `aarch64-apple-darwin`, the default target for macOS.
     Macos,
 
-    /// An x86 Windows target.
+    /// A 64-bit x86 Windows target.
     #[cfg_attr(feature = "clap", value(name = "x86_64-pc-windows-msvc"))]
     #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-pc-windows-msvc"))]
     X8664PcWindowsMsvc,
+
+    /// A 32-bit x86 Windows target.
+    #[cfg_attr(feature = "clap", value(name = "i686-pc-windows-msvc"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "i686-pc-windows-msvc"))]
+    I686PcWindowsMsvc,
 
     /// An x86 Linux target. Equivalent to `x86_64-manylinux_2_17`.
     #[cfg_attr(feature = "clap", value(name = "x86_64-unknown-linux-gnu"))]
@@ -112,6 +117,7 @@ impl TargetTriple {
                 });
                 Platform::new(Os::Macos { major, minor }, Arch::Aarch64)
             }
+            Self::I686PcWindowsMsvc => Platform::new(Os::Windows, Arch::X86),
             Self::X8664AppleDarwin => {
                 let (major, minor) = macos_deployment_target().map_or((12, 0), |(major, minor)| {
                     debug!("Found macOS deployment target: {}.{}", major, minor);
@@ -183,6 +189,7 @@ impl TargetTriple {
             Self::Windows | Self::X8664PcWindowsMsvc => "x86_64",
             Self::Linux | Self::X8664UnknownLinuxGnu => "x86_64",
             Self::Macos | Self::Aarch64AppleDarwin => "arm64",
+            Self::I686PcWindowsMsvc => "x86",
             Self::X8664AppleDarwin => "x86_64",
             Self::Aarch64UnknownLinuxGnu => "aarch64",
             Self::Aarch64UnknownLinuxMusl => "aarch64",
@@ -202,6 +209,7 @@ impl TargetTriple {
             Self::Windows | Self::X8664PcWindowsMsvc => "Windows",
             Self::Linux | Self::X8664UnknownLinuxGnu => "Linux",
             Self::Macos | Self::Aarch64AppleDarwin => "Darwin",
+            Self::I686PcWindowsMsvc => "Windows",
             Self::X8664AppleDarwin => "Darwin",
             Self::Aarch64UnknownLinuxGnu => "Linux",
             Self::Aarch64UnknownLinuxMusl => "Linux",
@@ -221,6 +229,7 @@ impl TargetTriple {
             Self::Windows | Self::X8664PcWindowsMsvc => "",
             Self::Linux | Self::X8664UnknownLinuxGnu => "",
             Self::Macos | Self::Aarch64AppleDarwin => "",
+            Self::I686PcWindowsMsvc => "",
             Self::X8664AppleDarwin => "",
             Self::Aarch64UnknownLinuxGnu => "",
             Self::Aarch64UnknownLinuxMusl => "",
@@ -240,6 +249,7 @@ impl TargetTriple {
             Self::Windows | Self::X8664PcWindowsMsvc => "",
             Self::Linux | Self::X8664UnknownLinuxGnu => "",
             Self::Macos | Self::Aarch64AppleDarwin => "",
+            Self::I686PcWindowsMsvc => "",
             Self::X8664AppleDarwin => "",
             Self::Aarch64UnknownLinuxGnu => "",
             Self::Aarch64UnknownLinuxMusl => "",
@@ -259,6 +269,7 @@ impl TargetTriple {
             Self::Windows | Self::X8664PcWindowsMsvc => "nt",
             Self::Linux | Self::X8664UnknownLinuxGnu => "posix",
             Self::Macos | Self::Aarch64AppleDarwin => "posix",
+            Self::I686PcWindowsMsvc => "nt",
             Self::X8664AppleDarwin => "posix",
             Self::Aarch64UnknownLinuxGnu => "posix",
             Self::Aarch64UnknownLinuxMusl => "posix",
@@ -278,6 +289,7 @@ impl TargetTriple {
             Self::Windows | Self::X8664PcWindowsMsvc => "win32",
             Self::Linux | Self::X8664UnknownLinuxGnu => "linux",
             Self::Macos | Self::Aarch64AppleDarwin => "darwin",
+            Self::I686PcWindowsMsvc => "win32",
             Self::X8664AppleDarwin => "darwin",
             Self::Aarch64UnknownLinuxGnu => "linux",
             Self::Aarch64UnknownLinuxMusl => "linux",

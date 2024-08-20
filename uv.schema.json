@@ -1310,10 +1310,17 @@
           ]
         },
         {
-          "description": "An x86 Windows target.",
+          "description": "A 64-bit x86 Windows target.",
           "type": "string",
           "enum": [
             "x86_64-pc-windows-msvc"
+          ]
+        },
+        {
+          "description": "A 32-bit x86 Windows target.",
+          "type": "string",
+          "enum": [
+            "i686-pc-windows-msvc"
           ]
         },
         {
