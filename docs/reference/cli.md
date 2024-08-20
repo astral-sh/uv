@@ -999,7 +999,9 @@ uv remove [OPTIONS] <PACKAGES>...
 
 Update the project's environment.
 
-Syncing ensures that all project dependencies are installed and up-to-date with the lockfile. Syncing also removes packages that are not declared as dependencies of the project.
+Syncing ensures that all project dependencies are installed and up-to-date with the lockfile.
+
+By default, an exact sync is performed: uv removes packages that are not declared as dependencies of the project. Use the `--inexact` flag to keep extraneous packages. Note that if an extraneous package conflicts with a project dependency, it will still be removed. Additionally, if `--no-build-isolation` is used, uv will not remove extraneous packages to avoid removing possible build dependencies.
 
 If the project virtual environment (`.venv`) does not exist, it will be created.
 
@@ -1092,6 +1094,12 @@ uv sync [OPTIONS]
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--extra-index-url</code> flag.</p>
 
+</dd><dt><code>--inexact</code></dt><dd><p>Do not remove extraneous packages present in the environment.</p>
+
+<p>When enabled, uv will make the minimum necessary changes to satisfy the requirements.</p>
+
+<p>By default, syncing will remove any extraneous packages from the environment, unless <code>--no-build-isolation</code> is enabled, in which case extra packages are considered necessary for builds.</p>
+
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
@@ -1151,12 +1159,6 @@ uv sync [OPTIONS]
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
 </dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
-
-</dd><dt><code>--no-clean</code></dt><dd><p>Do not remove extraneous packages.</p>
-
-<p>When enabled, uv will make the minimum necessary changes to satisfy the requirements.</p>
-
-<p>By default, syncing will remove any extraneous packages from the environment, unless <code>--no-build-isolation</code> is enabled, in which case extra packages are considered necessary for builds.</p>
 
 </dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 

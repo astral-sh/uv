@@ -609,18 +609,22 @@ pub enum ProjectCommand {
     Remove(RemoveArgs),
     /// Update the project's environment.
     ///
-    /// Syncing ensures that all project dependencies are installed and
-    /// up-to-date with the lockfile. Syncing also removes packages that are not
-    /// declared as dependencies of the project.
+    /// Syncing ensures that all project dependencies are installed and up-to-date with the
+    /// lockfile.
     ///
-    /// If the project virtual environment (`.venv`) does not exist, it will be
-    /// created.
+    /// By default, an exact sync is performed: uv removes packages that are not declared as
+    /// dependencies of the project. Use the `--inexact` flag to keep extraneous packages. Note that
+    /// if an extraneous package conflicts with a project dependency, it will still be removed.
+    /// Additionally, if `--no-build-isolation` is used, uv will not remove extraneous packages to
+    /// avoid removing possible build dependencies.
     ///
-    /// The project is re-locked before syncing unless the `--locked` or
-    /// `--frozen` flag is provided.
+    /// If the project virtual environment (`.venv`) does not exist, it will be created.
     ///
-    /// uv will search for a project in the current directory or any parent
-    /// directory. If a project cannot be found, uv will exit with an error.
+    /// The project is re-locked before syncing unless the `--locked` or `--frozen` flag is
+    /// provided.
+    ///
+    /// uv will search for a project in the current directory or any parent directory. If a project
+    /// cannot be found, uv will exit with an error.
     ///
     /// Note that, when installing from a lockfile, uv will not provide warnings for yanked package
     /// versions.
@@ -2247,16 +2251,19 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
-    /// Do not remove extraneous packages.
+    /// Do not remove extraneous packages present in the environment.
     ///
-    /// When enabled, uv will make the minimum necessary changes to satisfy the
-    /// requirements.
+    /// When enabled, uv will make the minimum necessary changes to satisfy the requirements.
     ///
-    /// By default, syncing will remove any extraneous packages from the
-    /// environment, unless `--no-build-isolation` is enabled, in which case
-    /// extra packages are considered necessary for builds.
-    #[arg(long)]
-    pub no_clean: bool,
+    /// By default, syncing will remove any extraneous packages from the environment, unless
+    /// `--no-build-isolation` is enabled, in which case extra packages are considered necessary for
+    /// builds.
+    #[arg(long, overrides_with("exact"), alias = "no-exact")]
+    pub inexact: bool,
+
+    /// Perform an exact sync, removing extraneous packages.
+    #[arg(long, overrides_with("inexact"), hide = true)]
+    pub exact: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
