@@ -566,8 +566,6 @@
 - Rework `pyproject.toml` reformatting to respect original
   indentation ([#5075](https://github.com/astral-sh/uv/pull/5075))
 
-###
-
 ## 0.2.25
 
 ### Enhancements
