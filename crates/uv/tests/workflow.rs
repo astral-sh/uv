@@ -19,7 +19,6 @@ fn packse_add_remove_one_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 49 packages in [TIME]
     "###);
 
@@ -221,7 +220,6 @@ fn packse_add_remove_existing_package_noop() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 49 packages in [TIME]
     "###);
 
@@ -255,7 +253,6 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 49 packages in [TIME]
     "###);
 
@@ -407,7 +404,6 @@ fn jax_instability() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     "###);
 

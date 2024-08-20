@@ -14,7 +14,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
+use uv_configuration::{Concurrency, ExtrasSpecification};
 use uv_distribution::LoweredRequirement;
 use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -56,7 +56,7 @@ pub(crate) async fn run(
     dev: bool,
     python: Option<String>,
     settings: ResolverInstallerSettings,
-    preview: PreviewMode,
+
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -65,10 +65,6 @@ pub(crate) async fn run(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv run` is experimental and may change without warning");
-    }
-
     // These cases seem quite complex because (in theory) they should change the "current package".
     // Let's ban them entirely for now.
     for source in &requirements {
@@ -158,7 +154,6 @@ pub(crate) async fn run(
                         requirement,
                         script_dir,
                         script_sources,
-                        preview,
                     )
                     .map(LoweredRequirement::into_inner)
                 })
@@ -179,7 +174,6 @@ pub(crate) async fn run(
                 } else {
                     Box::new(SummaryInstallLogger)
                 },
-                preview,
                 connectivity,
                 concurrency,
                 native_tls,
@@ -347,7 +341,6 @@ pub(crate) async fn run(
                     )
                     .await?;
 
-                    // Note we force preview on during `uv run` for now since the entire interface is in preview.
                     PythonInstallation::find_or_download(
                         python_request,
                         EnvironmentPreference::Any,
@@ -398,7 +391,6 @@ pub(crate) async fn run(
                 } else {
                     Box::new(SummaryResolveLogger)
                 },
-                preview,
                 connectivity,
                 concurrency,
                 native_tls,
@@ -432,7 +424,6 @@ pub(crate) async fn run(
                 } else {
                     Box::new(SummaryInstallLogger)
                 },
-                preview,
                 connectivity,
                 concurrency,
                 native_tls,
@@ -545,7 +536,6 @@ pub(crate) async fn run(
                     } else {
                         Box::new(SummaryInstallLogger)
                     },
-                    preview,
                     connectivity,
                     concurrency,
                     native_tls,

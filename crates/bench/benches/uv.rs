@@ -91,8 +91,7 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, IndexStrategy, PreviewMode, SetupPyStrategy,
-        SourceStrategy,
+        BuildOptions, Concurrency, ConfigSettings, IndexStrategy, SetupPyStrategy, SourceStrategy,
     };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
@@ -188,7 +187,6 @@ mod resolver {
             exclude_newer,
             sources,
             concurrency,
-            PreviewMode::Disabled,
         );
 
         let markers = if universal {
@@ -208,12 +206,7 @@ mod resolver {
             &hashes,
             &build_context,
             installed_packages,
-            DistributionDatabase::new(
-                client,
-                &build_context,
-                concurrency.downloads,
-                PreviewMode::Disabled,
-            ),
+            DistributionDatabase::new(client, &build_context, concurrency.downloads),
         )?;
 
         Ok(resolver.resolve().await?)

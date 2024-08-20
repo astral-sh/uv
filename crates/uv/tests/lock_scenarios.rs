@@ -73,7 +73,6 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###
     );
@@ -191,7 +190,6 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###
     );
@@ -291,7 +289,6 @@ fn fork_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###
     );
@@ -426,7 +423,6 @@ fn conflict_in_fork() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies for split (sys_platform == 'darwin'):
       ╰─▶ Because only package-b==1.0.0 is available and package-b==1.0.0 depends on package-d==1, we can conclude that all versions of package-b depend on package-d==1.
           And because package-c==1.0.0 depends on package-d==2 and only package-c==1.0.0 is available, we can conclude that all versions of package-b and all versions of package-c are incompatible.
@@ -495,7 +491,6 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on package-a>=2 and package-a<2, we can conclude that your project's requirements are unsatisfiable.
     "###
@@ -579,7 +574,6 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 7 packages in [TIME]
     "###
     );
@@ -758,7 +752,6 @@ fn fork_upgrade() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###
     );
@@ -879,7 +872,6 @@ fn fork_incomplete_markers() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -1033,7 +1025,6 @@ fn fork_marker_accrue() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###
     );
@@ -1167,7 +1158,6 @@ fn fork_marker_disjoint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies for split (sys_platform == 'linux'):
       ╰─▶ Because your project depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that your project's requirements are unsatisfiable.
     "###
@@ -1238,7 +1228,6 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###
     );
@@ -1419,7 +1408,6 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -1589,7 +1577,6 @@ fn fork_marker_inherit_combined() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -1752,7 +1739,6 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###
     );
@@ -1901,7 +1887,6 @@ fn fork_marker_inherit_transitive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -2058,7 +2043,6 @@ fn fork_marker_inherit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###
     );
@@ -2197,7 +2181,6 @@ fn fork_marker_limited_inherit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -2353,7 +2336,6 @@ fn fork_marker_selection() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###
     );
@@ -2509,7 +2491,6 @@ fn fork_marker_track() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -2662,7 +2643,6 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###
     );
@@ -2797,7 +2777,6 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because package-b{sys_platform == 'darwin'}==1.0.0 depends on package-c>=2.0.0 and package-a{sys_platform == 'linux'}==1.0.0 depends on package-c<2.0.0, we can conclude that package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
           And because your project depends on package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
@@ -2870,7 +2849,6 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}>=2.0.0 and only package-c{sys_platform == 'darwin'}<=2.0.0 is available, we can conclude that package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}==2.0.0.
           And because only the following versions of package-c{sys_platform == 'linux'} are available:
@@ -2964,7 +2942,6 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###
     );
@@ -3132,7 +3109,6 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     "###
     );
@@ -3369,7 +3345,6 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###
     );
@@ -3512,7 +3487,6 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 11 packages in [TIME]
     "###
     );
@@ -3796,7 +3770,6 @@ fn preferences_dependent_forking() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -3971,7 +3944,6 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -4124,7 +4096,6 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 1 package in [TIME]
     "###
     );
@@ -4209,7 +4180,6 @@ fn fork_requires_python_full() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 1 package in [TIME]
     "###
     );
@@ -4298,7 +4268,6 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###
     );
@@ -4392,7 +4361,6 @@ fn fork_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 1 package in [TIME]
     "###
     );

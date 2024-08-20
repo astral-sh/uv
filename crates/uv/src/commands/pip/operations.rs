@@ -21,8 +21,7 @@ use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, ExtrasSpecification, Overrides, PreviewMode, Reinstall,
-    Upgrade,
+    BuildOptions, Concurrency, Constraints, ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -111,7 +110,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     options: Options,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
-    preview: PreviewMode,
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
@@ -122,7 +120,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             requirements,
             hasher,
             index,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
         )
         .with_reporter(ResolverReporter::from(printer))
         .resolve()
@@ -135,7 +133,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 extras,
                 hasher,
                 index,
-                DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
+                DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(ResolverReporter::from(printer))
             .resolve()
@@ -188,7 +186,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         overrides,
         hasher,
         index,
-        DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
+        DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
     )
     .with_reporter(ResolverReporter::from(printer))
     .resolve()
@@ -213,7 +211,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 &dev,
                 hasher,
                 index,
-                DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
+                DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(ResolverReporter::from(printer))
             .resolve(&markers)
@@ -259,7 +257,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             hasher,
             build_dispatch,
             installed_packages,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
         )?
         .with_reporter(reporter);
 
@@ -361,7 +359,6 @@ pub(crate) async fn install(
     logger: Box<dyn InstallLogger>,
     dry_run: bool,
     printer: Printer,
-    preview: PreviewMode,
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
 
@@ -429,7 +426,7 @@ pub(crate) async fn install(
             tags,
             hasher,
             build_options,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
         )
         .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
 

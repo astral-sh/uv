@@ -16,7 +16,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary,
-    NoBuild, PreviewMode, Reinstall, SetupPyStrategy, SourceStrategy, Upgrade,
+    NoBuild, Reinstall, SetupPyStrategy, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -92,7 +92,6 @@ pub(crate) async fn pip_compile(
     concurrency: Concurrency,
     native_tls: bool,
     quiet: bool,
-    preview: PreviewMode,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -331,7 +330,6 @@ pub(crate) async fn pip_compile(
         exclude_newer,
         sources,
         concurrency,
-        preview,
     );
 
     let options = OptionsBuilder::new()
@@ -368,7 +366,6 @@ pub(crate) async fn pip_compile(
         options,
         Box::new(DefaultResolveLogger),
         printer,
-        preview,
     )
     .await
     {

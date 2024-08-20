@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use uv_configuration::{PreviewMode, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
@@ -39,7 +39,6 @@ impl RequiresDist {
         install_path: &Path,
         lock_path: &Path,
         sources: SourceStrategy,
-        preview_mode: PreviewMode,
     ) -> Result<Self, MetadataError> {
         match sources {
             SourceStrategy::Enabled => {
@@ -55,7 +54,7 @@ impl RequiresDist {
                     return Ok(Self::from_metadata23(metadata));
                 };
 
-                Self::from_project_workspace(metadata, &project_workspace, preview_mode)
+                Self::from_project_workspace(metadata, &project_workspace)
             }
             SourceStrategy::Disabled => Ok(Self::from_metadata23(metadata)),
         }
@@ -64,7 +63,6 @@ impl RequiresDist {
     fn from_project_workspace(
         metadata: pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
-        preview_mode: PreviewMode,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
@@ -96,7 +94,6 @@ impl RequiresDist {
                         project_workspace.project_root(),
                         sources,
                         project_workspace.workspace(),
-                        preview_mode,
                     )
                     .map(LoweredRequirement::into_inner)
                     .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
@@ -120,7 +117,6 @@ impl RequiresDist {
                     project_workspace.project_root(),
                     sources,
                     project_workspace.workspace(),
-                    preview_mode,
                 )
                 .map(LoweredRequirement::into_inner)
                 .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
@@ -155,7 +151,6 @@ mod test {
     use indoc::indoc;
     use insta::assert_snapshot;
 
-    use uv_configuration::PreviewMode;
     use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
@@ -182,7 +177,6 @@ mod test {
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
-            PreviewMode::Enabled,
         )?)
     }
 

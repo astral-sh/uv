@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{HashDigest, Metadata23};
-use uv_configuration::{PreviewMode, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_workspace::WorkspaceError;
 
@@ -61,7 +61,6 @@ impl Metadata {
         install_path: &Path,
         lock_path: &Path,
         sources: SourceStrategy,
-        preview_mode: PreviewMode,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let RequiresDist {
@@ -78,7 +77,6 @@ impl Metadata {
             install_path,
             lock_path,
             sources,
-            preview_mode,
         )
         .await?;
 
