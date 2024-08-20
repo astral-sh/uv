@@ -110,8 +110,8 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=1" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=1" },
         ]
         "###
         );
@@ -342,8 +342,8 @@ fn fork_basic() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -677,8 +677,8 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = "==4.4.0" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "==4.3.0" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = "==4.4.0" },
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = "==1.0.0" },
             { name = "package-c", marker = "sys_platform == 'darwin'", specifier = "==1.0.0" },
         ]
@@ -1325,8 +1325,8 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -1493,8 +1493,8 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -1662,8 +1662,8 @@ fn fork_marker_inherit_combined() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -1804,8 +1804,8 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -1964,8 +1964,8 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -2096,8 +2096,8 @@ fn fork_marker_inherit() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -2256,8 +2256,8 @@ fn fork_marker_limited_inherit() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-b" },
         ]
         "###
@@ -2400,8 +2400,8 @@ fn fork_marker_selection() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "package-a" },
-            { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -2567,8 +2567,8 @@ fn fork_marker_track() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "package-a" },
-            { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2.8" },
             { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2.8" },
+            { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2.8" },
         ]
         "###
         );
@@ -4029,8 +4029,8 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'windows'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'illumos'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'windows'", specifier = ">=2" },
         ]
         "###
         );

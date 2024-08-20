@@ -2777,12 +2777,12 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/astral-sh/pubgrub?rev=2fac39371a47e7cb821e510aaa4de25405413d29#2fac39371a47e7cb821e510aaa4de25405413d29"
+source = "git+https://github.com/astral-sh/pubgrub?rev=8a637db61dff7378615ab575a489b11120030da7#8a637db61dff7378615ab575a489b11120030da7"
 dependencies = [
  "indexmap",
  "log",
  "priority-queue",
- "rustc-hash 2.0.0",
+ "rustc-hash 1.1.0",
  "thiserror",
 ]
 
