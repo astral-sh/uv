@@ -2,7 +2,7 @@ use std::env;
 use std::io::stdout;
 use std::path::Path;
 
-use anstream::{eprint, AutoStream, StripStream};
+use anstream::{eprint, AutoStream};
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -377,7 +377,7 @@ pub(crate) async fn pip_compile(
     };
 
     // Write the resolved dependencies to the output channel.
-    let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file)?;
+    let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
 
     if include_header {
         writeln!(
@@ -603,7 +603,7 @@ fn cmd(
     format!("uv {args}")
 }
 
-/// A multi-casting writer that writes to both the standard output and an output file, if present.
+/// A multicasting writer that writes to both the standard output and an output file, if present.
 #[allow(clippy::disallowed_types)]
 struct OutputWriter<'a> {
     stdout: Option<AutoStream<std::io::Stdout>>,
@@ -614,23 +614,25 @@ struct OutputWriter<'a> {
 #[allow(clippy::disallowed_types)]
 impl<'a> OutputWriter<'a> {
     /// Create a new output writer.
-    fn new(include_stdout: bool, output_file: Option<&'a Path>) -> Result<Self> {
+    fn new(include_stdout: bool, output_file: Option<&'a Path>) -> Self {
         let stdout = include_stdout.then(|| AutoStream::<std::io::Stdout>::auto(stdout()));
-        Ok(Self {
+        Self {
             stdout,
             output_file,
             buffer: Vec::new(),
-        })
+        }
     }
 
-    /// Write the given arguments to both the standard output and the output file, if present.
+    /// Write the given arguments to both standard output and the output buffer, if present.
     fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> std::io::Result<()> {
         use std::io::Write;
 
         // Write to the buffer.
-        self.buffer.write_fmt(args)?;
+        if self.output_file.is_some() {
+            self.buffer.write_fmt(args)?;
+        }
 
-        // Write to `stdout`.
+        // Write to standard output.
         if let Some(stdout) = &mut self.stdout {
             write!(stdout, "{args}")?;
         }
@@ -641,7 +643,6 @@ impl<'a> OutputWriter<'a> {
     /// Commit the buffer to the output file.
     async fn commit(self) -> std::io::Result<()> {
         if let Some(output_file) = self.output_file {
-            // Apply the `anstream` stripping to the buffer.
             let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
             uv_fs::write_atomic(output_file, &stream).await?;
         }
