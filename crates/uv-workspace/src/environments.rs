@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use serde::ser::SerializeSeq;
 
-use pep508_rs::{MarkerTree, Pep508Error};
+use pep508_rs::MarkerTree;
 
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct SupportedEnvironments(Vec<MarkerTree>);
@@ -74,14 +74,5 @@ impl<'de> serde::Deserialize<'de> for SupportedEnvironments {
         }
 
         deserializer.deserialize_any(StringOrVecVisitor)
-    }
-}
-
-/// Parse a marker string into a [`SupportedEnvironments`] struct.
-impl FromStr for SupportedEnvironments {
-    type Err = Pep508Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        MarkerTree::parse_str(s).map(|markers| SupportedEnvironments(vec![markers]))
     }
 }

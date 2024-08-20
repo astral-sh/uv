@@ -274,7 +274,6 @@ async fn do_lock(
     let constraints = workspace.constraints();
     let dev = vec![DEV_DEPENDENCIES.clone()];
     let source_trees = vec![];
-    let environments = workspace.environments();
 
     // Collect the list of members.
     let members = {
@@ -289,6 +288,42 @@ async fn do_lock(
         }
 
         members
+    };
+
+    // Collect the list of supported environments.
+    let environments = {
+        let environments = workspace.environments();
+
+        // Ensure that the environments are disjoint.
+        if let Some(environments) = &environments {
+            for (lhs, rhs) in environments
+                .as_markers()
+                .iter()
+                .zip(environments.as_markers().iter().skip(1))
+            {
+                if !lhs.is_disjoint(rhs) {
+                    let mut hint = lhs.negate();
+                    hint.and(rhs.clone());
+
+                    let lhs = lhs
+                        .contents()
+                        .map(|contents| contents.to_string())
+                        .unwrap_or("true".to_string());
+                    let rhs = rhs
+                        .contents()
+                        .map(|contents| contents.to_string())
+                        .unwrap_or("true".to_string());
+                    let hint = hint
+                        .contents()
+                        .map(|contents| contents.to_string())
+                        .unwrap_or("true".to_string());
+
+                    return Err(ProjectError::OverlappingMarkers(lhs, rhs, hint));
+                }
+            }
+        }
+
+        environments
     };
 
     // Determine the supported Python range. If no range is defined, and warn and default to the

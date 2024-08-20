@@ -9919,7 +9919,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
     Ok(())
 }
 
-/// Lock a requirement from PyPI.
+/// Lock with a user-provided constraint on the space of supported environments.
 #[test]
 fn lock_constrained_environment() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -9934,7 +9934,7 @@ fn lock_constrained_environment() -> Result<()> {
         dependencies = ["black"]
 
         [tool.uv]
-        environments = ["platform_system != 'Windows'"]
+        environments = "platform_system != 'Windows'"
         "#,
     )?;
 
@@ -9958,7 +9958,7 @@ fn lock_constrained_environment() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        environment-markers = [
+        resolution-markers = [
             "platform_system != 'Windows'",
         ]
         supported-markers = [
@@ -10061,6 +10061,32 @@ fn lock_constrained_environment() -> Result<()> {
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 7 packages in [TIME]
+    "###);
+
+    // Rewrite with a list, rather than a string.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["black"]
+
+        [tool.uv]
+        environments = ["platform_system != 'Windows'"]
+        "#,
+    )?;
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10211,6 +10237,40 @@ fn lock_constrained_environment() -> Result<()> {
         "###
         );
     });
+
+    Ok(())
+}
+
+/// User-provided constraints must be disjoint.
+#[test]
+fn lock_overlapping_environment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = ["black"]
+
+        [tool.uv]
+        environments = ["platform_system != 'Windows'", "python_version > '3.10'"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    error: Supported environments must be disjoint, but the following markers overlap: `platform_system != 'Windows'` and `python_full_version >= '3.11'`.
+
+    hint: replace `python_full_version >= '3.11'` with `python_full_version >= '3.11' and platform_system == 'Windows'`.
+    "###);
 
     Ok(())
 }
