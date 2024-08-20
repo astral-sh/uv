@@ -1,5 +1,107 @@
 # Changelog
 
+## 0.3.0
+
+This release introduces the uv [project](https://docs.astral.sh/uv/guides/projects/),
+  [tool](https://docs.astral.sh/uv/guides/tools/),
+  [script](https://docs.astral.sh/uv/guides/scripts/), and
+  [python](https://docs.astral.sh/uv/guides/install-python/) interfaces. If you've been following
+  uv's development, you've probably seen these new commands behind a preview flag. Now, the
+  interfaces are stable and ready for production-use.
+
+These features are all documented in [new, comprehensive
+documentation](https://docs.astral.sh/uv/).
+
+This release also stabilizes preview functionality in `uv venv`:
+
+- `uv venv --python <version>` will [automatically
+  download](https://docs.astral.sh/uv/concepts/python-versions/#requesting-a-version) the Python
+  version if required
+- `uv venv` will read the required Python version from the `.python-version` file or
+  `pyproject.toml`
+
+The `uv pip` interface should not be affected by any breaking changes.
+
+Note the following changelog entries does not include all the new features since they were added
+incrementally as preview features. See the
+[feature page](https://docs.astral.sh/uv/getting-started/features/) in the documentation for a
+comprehensive listing.
+
+### Breaking changes
+
+- Migrate to XDG and Linux strategy for macOS directories ([#5806](https://github.com/astral-sh/uv/pull/5806))
+- Move concurrency settings to top-level ([#4257](https://github.com/astral-sh/uv/pull/4257))
+- Apply system Python filtering to executable name requests ([#4309](https://github.com/astral-sh/uv/pull/4309))
+- Remove `--legacy-setup-py` command-line argument ([#4255](https://github.com/astral-sh/uv/pull/4255))
+- Stabilize preview features ([#6166](https://github.com/astral-sh/uv/pull/6166))
+
+### Enhancements
+
+- Add 32-bit Windows target ([#6252](https://github.com/astral-sh/uv/pull/6252))
+- Add support for `python_version in ...` markers ([#6172](https://github.com/astral-sh/uv/pull/6172))
+- Allow user to constrain supported lock environments ([#6210](https://github.com/astral-sh/uv/pull/6210))
+- Lift requirement that .egg-info filenames must include version ([#6179](https://github.com/astral-sh/uv/pull/6179))
+- Change "any of" to "all of" in error messages ([#6222](https://github.com/astral-sh/uv/pull/6222))
+- Collapse redundant dependency clauses enumerating available versions ([#6160](https://github.com/astral-sh/uv/pull/6160))
+- Collapse unavailable packages in resolver errors ([#6154](https://github.com/astral-sh/uv/pull/6154))
+- Fix messages for unavailable packages when range is plural ([#6221](https://github.com/astral-sh/uv/pull/6221))
+- Improve resolver error messages when `--offline` is used ([#6156](https://github.com/astral-sh/uv/pull/6156))
+- Avoid overwriting dependencies with different markers in `uv add` ([#6010](https://github.com/astral-sh/uv/pull/6010))
+- Simplify available package version ranges when the name includes markers or extras ([#6162](https://github.com/astral-sh/uv/pull/6162))
+- Simplify version ranges reported for unavailable packages ([#6155](https://github.com/astral-sh/uv/pull/6155))
+- Rename `environment-markers` to `resolution-markers` ([#6240](https://github.com/astral-sh/uv/pull/6240))
+- Support `uv add -r requirements.txt` ([#6005](https://github.com/astral-sh/uv/pull/6005))
+
+### CLI
+
+- Hide global options in `uv generate-shell-completion` ([#6170](https://github.com/astral-sh/uv/pull/6170))
+- Show generate-shell-completion command in `uv help` ([#6180](https://github.com/astral-sh/uv/pull/6180))
+- Special-case reinstalls in environment update summaries ([#6243](https://github.com/astral-sh/uv/pull/6243))
+- Add output when `uv add` and `uv remove` update scripts ([#6231](https://github.com/astral-sh/uv/pull/6231))
+- Add support for `package@latest` in `tool run` ([#6138](https://github.com/astral-sh/uv/pull/6138))
+- Show `python find` output with `-q` ([#6256](https://github.com/astral-sh/uv/pull/6256))
+- Warn when `--upgrade` is passed to `tool run` ([#6140](https://github.com/astral-sh/uv/pull/6140))
+
+### Configuration
+
+- Allow customizing the tool install directory with `UV_TOOL_BIN_DIR` ([#6207](https://github.com/astral-sh/uv/pull/6207))
+
+### Performance
+
+- Use `FxHash` in `uv-auth` ([#6149](https://github.com/astral-sh/uv/pull/6149))
+
+### Bug fixes
+
+- Avoid panicking when the resolver thread encounters a closed channel ([#6182](https://github.com/astral-sh/uv/pull/6182))
+- Respect release-only semantics of `python_full_version` when constructing markers ([#6171](https://github.com/astral-sh/uv/pull/6171))
+- Tolerate missing `[project]` table in `uv venv` ([#6178](https://github.com/astral-sh/uv/pull/6178))
+- Avoid using workspace `lock_path` as relative root ([#6157](https://github.com/astral-sh/uv/pull/6157))
+
+### Documentation
+
+- Preview changes are now included in the standard changelog ([#6259](https://github.com/astral-sh/uv/pull/6259))
+- Document dynamic metadata behavior for cache ([#5993](https://github.com/astral-sh/uv/pull/5993))
+- Document the effect of ordering on package priority ([#6211](https://github.com/astral-sh/uv/pull/6211))
+- Make some edits to the workspace concept documentation ([#6223](https://github.com/astral-sh/uv/pull/6223))
+- Update environment variables doc ([#5994](https://github.com/astral-sh/uv/pull/5994))
+- Disable collapsible navigation in the documentation ([#5674](https://github.com/astral-sh/uv/pull/5674))
+- Document `uv add` and `uv remove` behavior with markers ([#6163](https://github.com/astral-sh/uv/pull/6163))
+- Document the Python installation directory ([#6227](https://github.com/astral-sh/uv/pull/6227))
+- Document the `uv.pip` section semantics ([#6225](https://github.com/astral-sh/uv/pull/6225))
+- Document the cache directory ([#6229](https://github.com/astral-sh/uv/pull/6229))
+- Document the tools directory ([#6228](https://github.com/astral-sh/uv/pull/6228))
+- Document yanked packages caveat during sync ([#6219](https://github.com/astral-sh/uv/pull/6219))
+- Link to persistent configuration options in Python versions document ([#6226](https://github.com/astral-sh/uv/pull/6226))
+- Link to the projects concept from the dependencies concept ([#6224](https://github.com/astral-sh/uv/pull/6224))
+- Improvements to the Docker installation guide ([#6216](https://github.com/astral-sh/uv/pull/6216))
+- Increase the size of navigation entries ([#6233](https://github.com/astral-sh/uv/pull/6233))
+- Install `ca-certificates` in docker and use pipefail ([#6208](https://github.com/astral-sh/uv/pull/6208))
+- Add script support to feature highlights in index ([#6251](https://github.com/astral-sh/uv/pull/6251))
+- Show `uv generate-shell-completion` in CLI documentation reference ([#6146](https://github.com/astral-sh/uv/pull/6146))
+- Update Docker guide for projects ([#6217](https://github.com/astral-sh/uv/pull/6217))
+- Use `uv add --script` in guide ([#6215](https://github.com/astral-sh/uv/pull/6215))
+- Show pinned version example on in GitHub Actions integration guide ([#6234](https://github.com/astral-sh/uv/pull/6234))
+
 ## 0.2.37
 
 ### Performance
