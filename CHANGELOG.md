@@ -2,32 +2,38 @@
 
 ## 0.3.0
 
-This release stabilizes all preview functionality in uv. In brief, this means that:
+This release introduces the uv [project](https://docs.astral.sh/uv/guides/projects/),
+  [tool](https://docs.astral.sh/uv/guides/tools/),
+  [script](https://docs.astral.sh/uv/guides/scripts/), and
+  [python](https://docs.astral.sh/uv/guides/install-python/) interfaces. If you've been following
+  uv's development, you've probably seen these new commands behind a preview flag. Now, the
+  interfaces are stable and ready for production-use.
+
+These features are all documented in [new, comprehensive
+documentation](https://docs.astral.sh/uv/).
+
+This release also stabilizes preview functionality in `uv venv`:
 
 - `uv venv --python <version>` will [automatically
   download](https://docs.astral.sh/uv/concepts/python-versions/#requesting-a-version) the Python
   version if required
 - `uv venv` will read the required Python version from the `.python-version` file or
   `pyproject.toml`
-- The uv [project](https://docs.astral.sh/uv/guides/projects/),
-  [tool](https://docs.astral.sh/uv/guides/tools/),
-  [script](https://docs.astral.sh/uv/guides/scripts/), and
-  [python](https://docs.astral.sh/uv/guides/pythons/) interfaces are considered stable and ready for
-  production-use.
 
-Additionally, we're excited to announce [official documentation](https://docs.astral.sh/uv/) for uv.
+The `uv pip` interface should not be affected by any breaking changes.
 
-Future preview changes will now be included in the standard changelog. Preview changes prior to this
-release are available [in the
-history](https://github.com/astral-sh/uv/blob/5ddd84683c0b14f494bbc909173c123a545c55b6/PREVIEW-CHANGELOG.md).
+Note the following changelog entries does not include all the new features since they were added
+incrementally as preview features. See the
+[feature page](https://docs.astral.sh/uv/getting-started/features/) in the documentation for a
+comprehensive listing.
 
 ### Breaking changes
 
 - Migrate to XDG and Linux strategy for macOS directories ([#5806](https://github.com/astral-sh/uv/pull/5806))
-- Move concurrency settings to top-level  ([#4257](https://github.com/astral-sh/uv/pull/4257))
+- Move concurrency settings to top-level ([#4257](https://github.com/astral-sh/uv/pull/4257))
 - Apply system Python filtering to executable name requests ([#4309](https://github.com/astral-sh/uv/pull/4309))
-- Remove --legacy-setup-py command-line argument ([#4255](https://github.com/astral-sh/uv/pull/4255))
-- Stablize preview features ([#6166](https://github.com/astral-sh/uv/pull/6166))
+- Remove `--legacy-setup-py` command-line argument ([#4255](https://github.com/astral-sh/uv/pull/4255))
+- Stabilize preview features ([#6166](https://github.com/astral-sh/uv/pull/6166))
 
 ### Enhancements
 
@@ -67,12 +73,13 @@ history](https://github.com/astral-sh/uv/blob/5ddd84683c0b14f494bbc909173c123a54
 ### Bug fixes
 
 - Avoid panicking when the resolver thread encounters a closed channel ([#6182](https://github.com/astral-sh/uv/pull/6182))
-- Respect release-only semantics of python_full_version when constructing markers ([#6171](https://github.com/astral-sh/uv/pull/6171))
+- Respect release-only semantics of `python_full_version` when constructing markers ([#6171](https://github.com/astral-sh/uv/pull/6171))
 - Tolerate missing `[project]` table in `uv venv` ([#6178](https://github.com/astral-sh/uv/pull/6178))
 - Avoid using workspace `lock_path` as relative root ([#6157](https://github.com/astral-sh/uv/pull/6157))
 
 ### Documentation
 
+- Preview changes are now included in the standard changelog ([#6259](https://github.com/astral-sh/uv/pull/6259))
 - Document dynamic metadata behavior for cache ([#5993](https://github.com/astral-sh/uv/pull/5993))
 - Document the effect of ordering on package priority ([#6211](https://github.com/astral-sh/uv/pull/6211))
 - Make some edits to the workspace concept documentation ([#6223](https://github.com/astral-sh/uv/pull/6223))
