@@ -8662,7 +8662,7 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because your project depends on datasets<2.19 and datasets>=2.19, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because only datasets<2.19 is available and your project depends on datasets>=2.19, we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     Ok(())
