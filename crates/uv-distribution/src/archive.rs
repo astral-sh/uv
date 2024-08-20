@@ -1,6 +1,6 @@
 use distribution_types::Hashed;
 use pypi_types::HashDigest;
-use uv_cache::ArchiveId;
+use uv_cache::{ArchiveId, Cache};
 
 /// An archive (unzipped wheel) that exists in the local cache.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -15,6 +15,11 @@ impl Archive {
     /// Create a new [`Archive`] with the given ID and hashes.
     pub(crate) fn new(id: ArchiveId, hashes: Vec<HashDigest>) -> Self {
         Self { id, hashes }
+    }
+
+    /// Returns `true` if the archive exists in the cache.
+    pub(crate) fn exists(&self, cache: &Cache) -> bool {
+        cache.archive(&self.id).exists()
     }
 }
 
