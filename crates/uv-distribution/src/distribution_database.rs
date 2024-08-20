@@ -596,8 +596,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        // If the archive is missing the required hashes, force a refresh.
-        let archive = if archive.has_digests(hashes) {
+        // If the archive is missing the required hashes, or has since been removed, force a refresh.
+        let archive = Some(archive)
+            .filter(|archive| archive.has_digests(hashes))
+            .filter(|archive| archive.exists(self.build_context.cache()));
+
+        let archive = if let Some(archive) = archive {
             archive
         } else {
             self.client
@@ -746,12 +750,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        // If the archive is missing the required hashes, force a refresh.
-        let archive = if archive.has_digests(hashes) {
+        // If the archive is missing the required hashes, or has since been removed, force a refresh.
+        let archive = Some(archive)
+            .filter(|archive| archive.has_digests(hashes))
+            .filter(|archive| archive.exists(self.build_context.cache()));
+
+        let archive = if let Some(archive) = archive {
             archive
         } else {
             self.client
-                .managed(|client| async move {
+                .managed(|client| async {
                     client
                         .cached_client()
                         .skip_cache(self.request(url)?, &http_entry, download)
