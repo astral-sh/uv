@@ -60,6 +60,9 @@ pub(crate) enum ProjectError {
     #[error("The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`")]
     LockedPythonIncompatibility(Version, RequiresPython),
 
+    #[error("The current Python platform is not compatible with the lockfile's supported environments: {0}")]
+    LockedPlatformIncompatibility(String),
+
     #[error("The requested Python interpreter ({0}) is incompatible with the project Python requirement: `{1}`")]
     RequestedPythonIncompatibility(Version, RequiresPython),
 
@@ -71,6 +74,9 @@ pub(crate) enum ProjectError {
         VersionSpecifiers,
         PathBuf,
     ),
+
+    #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
+    OverlappingMarkers(String, String, String),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),

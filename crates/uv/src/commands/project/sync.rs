@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-
+use itertools::Itertools;
+use pep508_rs::MarkerTree;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -165,6 +166,21 @@ pub(super) async fn do_sync(
             return Err(ProjectError::LockedPythonIncompatibility(
                 venv.interpreter().python_version().clone(),
                 requires_python.clone(),
+            ));
+        }
+    }
+
+    // Validate that the platform is supported by the lockfile.
+    let environments = lock.supported_environments();
+    if !environments.is_empty() {
+        let platform = venv.interpreter().markers();
+        if !environments.iter().any(|env| env.evaluate(platform, &[])) {
+            return Err(ProjectError::LockedPlatformIncompatibility(
+                environments
+                    .iter()
+                    .filter_map(MarkerTree::contents)
+                    .map(|env| format!("`{env}`"))
+                    .join(", "),
             ));
         }
     }

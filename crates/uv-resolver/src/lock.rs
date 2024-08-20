@@ -47,6 +47,8 @@ pub struct Lock {
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     fork_markers: Vec<MarkerTree>,
+    /// The list of supported environments specified by the user.
+    supported_environments: Vec<MarkerTree>,
     /// The range of supported Python versions.
     requires_python: Option<RequiresPython>,
     /// We discard the lockfile if these options don't match.
@@ -161,6 +163,7 @@ impl Lock {
             requires_python,
             options,
             ResolverManifest::default(),
+            vec![],
             graph.fork_markers.clone(),
         )?;
         Ok(lock)
@@ -173,6 +176,7 @@ impl Lock {
         requires_python: Option<RequiresPython>,
         options: ResolverOptions,
         manifest: ResolverManifest,
+        supported_environments: Vec<MarkerTree>,
         fork_markers: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each package in a canonical order and
@@ -329,6 +333,7 @@ impl Lock {
         Ok(Self {
             version,
             fork_markers,
+            supported_environments,
             requires_python,
             options,
             packages,
@@ -341,6 +346,13 @@ impl Lock {
     #[must_use]
     pub fn with_manifest(mut self, manifest: ResolverManifest) -> Self {
         self.manifest = manifest;
+        self
+    }
+
+    /// Record the supported environments that were used to generate this lock.
+    #[must_use]
+    pub fn with_supported_environments(mut self, supported_environments: Vec<MarkerTree>) -> Self {
+        self.supported_environments = supported_environments;
         self
     }
 
@@ -382,6 +394,11 @@ impl Lock {
     /// Returns the exclude newer setting used to generate this lock.
     pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
         self.options.exclude_newer
+    }
+
+    /// Returns the supported environments that were used to generate this lock.
+    pub fn supported_environments(&self) -> &[MarkerTree] {
+        &self.supported_environments
     }
 
     /// If this lockfile was built from a forking resolution with non-identical forks, return the
@@ -486,6 +503,7 @@ impl Lock {
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
         }
+
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
                 self.fork_markers
@@ -494,6 +512,16 @@ impl Lock {
                     .map(|marker| marker.to_string()),
             );
             doc.insert("resolution-markers", value(fork_markers));
+        }
+
+        if !self.supported_environments.is_empty() {
+            let supported_environments = each_element_on_its_line_array(
+                self.supported_environments
+                    .iter()
+                    .filter_map(MarkerTree::contents)
+                    .map(|marker| marker.to_string()),
+            );
+            doc.insert("supported-markers", value(supported_environments));
         }
 
         // Write the settings that were used to generate the resolution.
@@ -951,6 +979,8 @@ struct LockWire {
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     #[serde(rename = "resolution-markers", default)]
     fork_markers: Vec<MarkerTree>,
+    #[serde(rename = "supported-markers", default)]
+    supported_environments: Vec<MarkerTree>,
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptions,
@@ -966,6 +996,7 @@ impl From<Lock> for LockWire {
             version: lock.version,
             requires_python: lock.requires_python,
             fork_markers: lock.fork_markers,
+            supported_environments: lock.supported_environments,
             options: lock.options,
             manifest: lock.manifest,
             packages: lock.packages.into_iter().map(PackageWire::from).collect(),
@@ -1005,6 +1036,7 @@ impl TryFrom<LockWire> for Lock {
             wire.requires_python,
             wire.options,
             wire.manifest,
+            wire.supported_environments,
             wire.fork_markers,
         )
     }

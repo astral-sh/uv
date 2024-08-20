@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
+use crate::environments::SupportedEnvironments;
 use pep440_rs::VersionSpecifiers;
 use pypi_types::{RequirementSource, VerbatimParsedUrl};
 use uv_git::GitReference;
@@ -98,6 +99,8 @@ pub struct ToolUv {
         "#
     )]
     pub managed: Option<bool>,
+    /// The project's development dependencies. Development dependencies will be installed by
+    /// default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
     #[cfg_attr(
         feature = "schemars",
         schemars(
@@ -105,12 +108,40 @@ pub struct ToolUv {
             description = "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`."
         )
     )]
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[str]",
+        example = r#"
+            dev_dependencies = ["ruff==0.5.0"]
+        "#
+    )]
     pub dev_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
+    /// A list of supported environments against which to resolve dependencies.
+    ///
+    /// By default, uv will resolve for all possible environments during a `uv lock` operation.
+    /// However, you can restrict the set of supported environments to improve performance and avoid
+    /// unsatisfiable branches in the solution space.
     #[cfg_attr(
         feature = "schemars",
         schemars(
             with = "Option<Vec<String>>",
-            description = "PEP 508 style requirements, e.g. `ruff==0.5.0`, or `ruff @ https://...`."
+            description = "A list of environment markers, e.g. `python_version >= '3.6'`."
+        )
+    )]
+    #[option(
+        default = r#"[]"#,
+        value_type = "str | list[str]",
+        example = r#"
+            # Resolve for macOS, but not for Linux or Windows.
+            environments = ["sys_platform == 'darwin'"]
+        "#
+    )]
+    pub environments: Option<SupportedEnvironments>,
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "PEP 508-style requirements, e.g. `ruff==0.5.0`, or `ruff @ https://...`."
         )
     )]
     pub override_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,

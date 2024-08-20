@@ -174,7 +174,18 @@ impl ResolutionGraph {
                     vec![]
                 }
                 ResolverMarkers::Fork(_) => {
-                    panic!("A single fork must be universal");
+                    resolutions
+                        .iter()
+                        .map(|resolution| {
+                            resolution
+                                .markers
+                                .fork_markers()
+                                .expect("A non-forking resolution exists in forking mode")
+                                .clone()
+                        })
+                        // Any unsatisfiable forks were skipped.
+                        .filter(|fork| !fork.is_false())
+                        .collect()
                 }
             }
         } else {

@@ -51,7 +51,7 @@ called a re-validation request.
 
 A re-validation request includes with it some metadata (usually an "entity tag"
 or `etag` for short) that was on the cached response (which is now stale).
-When we send this request, the server can compare it with its most up to date
+When we send this request, the server can compare it with its most up-to-date
 version of the resource. If its entity tag matches the one we gave it (among
 other possible criteria), then the server can skip returning the body and
 instead just return a small HTTP 304 NOT MODIFIED response. When we get this

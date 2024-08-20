@@ -48,6 +48,16 @@
         "type": "string"
       }
     },
+    "environments": {
+      "description": "A list of environment markers, e.g. `python_version >= '3.6'`.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "exclude-newer": {
       "description": "Limit candidate packages to those that were uploaded prior to the given date.\n\nAccepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).",
       "anyOf": [
@@ -217,7 +227,7 @@
       ]
     },
     "override-dependencies": {
-      "description": "PEP 508 style requirements, e.g. `ruff==0.5.0`, or `ruff @ https://...`.",
+      "description": "PEP 508-style requirements, e.g. `ruff==0.5.0`, or `ruff @ https://...`.",
       "type": [
         "array",
         "null"

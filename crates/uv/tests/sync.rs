@@ -780,3 +780,38 @@ fn sync_relative_wheel() -> Result<()> {
 
     Ok(())
 }
+
+/// Syncing against an unstable environment should fail (but locking should succeed).
+#[test]
+fn sync_environment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["iniconfig"]
+
+        [tool.uv]
+        environments = ["python_version < '3.11'"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    error: The current Python platform is not compatible with the lockfile's supported environments: `python_full_version < '3.11'`
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
