@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
-use clap::builder::styling::Style;
+use clap::builder::styling::{AnsiColor, Style};
+use clap::builder::Styles;
 use clap::{Args, Parser, Subcommand};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
@@ -51,6 +52,13 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
     })
 }
 
+// Configures Clap v3-style help menu colors
+const STYLES: Styles = Styles::styled()
+    .header(AnsiColor::Yellow.on_default())
+    .usage(AnsiColor::Green.on_default())
+    .literal(AnsiColor::Green.on_default())
+    .placeholder(AnsiColor::Green.on_default());
+
 #[derive(Parser)]
 #[command(name = "uv", author, long_version = crate::version::version())]
 #[command(about = "An extremely fast Python package manager.")]
@@ -62,6 +70,7 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
     disable_help_subcommand = true,
     disable_version_flag = true
 )]
+#[command(styles=STYLES)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     #[command(subcommand)]
