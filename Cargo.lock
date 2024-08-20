@@ -2782,7 +2782,7 @@ dependencies = [
  "indexmap",
  "log",
  "priority-queue",
- "rustc-hash 1.1.0",
+ "rustc-hash 2.0.0",
  "thiserror",
 ]
 
