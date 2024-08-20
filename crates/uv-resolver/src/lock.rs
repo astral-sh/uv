@@ -493,7 +493,7 @@ impl Lock {
                     .filter_map(MarkerTree::contents)
                     .map(|marker| marker.to_string()),
             );
-            doc.insert("environment-markers", value(fork_markers));
+            doc.insert("resolution-markers", value(fork_markers));
         }
 
         // Write the settings that were used to generate the resolution.
@@ -949,7 +949,7 @@ struct LockWire {
     requires_python: Option<RequiresPython>,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
-    #[serde(rename = "environment-markers", default)]
+    #[serde(rename = "resolution-markers", default)]
     fork_markers: Vec<MarkerTree>,
     /// We discard the lockfile if these options match.
     #[serde(default)]
@@ -1019,7 +1019,7 @@ pub struct Package {
     /// the fork(s) that contained this version or source, so we can set the correct preferences in
     /// the next resolution.
     ///
-    /// Named `environment-markers` in `uv.lock`.
+    /// Named `resolution-markers` in `uv.lock`.
     fork_markers: Vec<MarkerTree>,
     /// The resolved dependencies of the package.
     dependencies: Vec<Dependency>,
@@ -1326,7 +1326,7 @@ impl Package {
                     .filter_map(MarkerTree::contents)
                     .map(|marker| marker.to_string()),
             );
-            table.insert("environment-markers", value(wheels));
+            table.insert("resolution-markers", value(wheels));
         }
 
         if !self.dependencies.is_empty() {
@@ -1536,7 +1536,7 @@ struct PackageWire {
     sdist: Option<SourceDist>,
     #[serde(default)]
     wheels: Vec<Wheel>,
-    #[serde(default, rename = "environment-markers")]
+    #[serde(default, rename = "resolution-markers")]
     fork_markers: Vec<MarkerTree>,
     #[serde(default)]
     dependencies: Vec<DependencyWire>,
