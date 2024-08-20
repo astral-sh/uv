@@ -25,25 +25,25 @@ installed previously on the same machine.
 
 ## Cold Installation
 
-Benchmarking package installation (e.g., `uv sync`) with a cold cache. This is equivalent to
-running `uv sync` on a new machine or in CI (assuming that the package manager cache is not
-shared across runs).
+Benchmarking package installation (e.g., `uv sync`) with a cold cache. This is equivalent to running
+`uv sync` on a new machine or in CI (assuming that the package manager cache is not shared across
+runs).
 
 ![install-cold](https://github.com/user-attachments/assets/e7f5b203-7e84-452b-8c56-1ff6531c9898)
 
 ## Warm Resolution
 
-Benchmarking dependency resolution (e.g., `uv lock`) with a warm cache, but no existing
-lockfile. This is equivalent to blowing away an existing `requirements.txt` file to regenerate it
-from a `requirements.in` file.
+Benchmarking dependency resolution (e.g., `uv lock`) with a warm cache, but no existing lockfile.
+This is equivalent to blowing away an existing `requirements.txt` file to regenerate it from a
+`requirements.in` file.
 
 ![resolve-warm](https://github.com/user-attachments/assets/e1637a08-8b27-4077-8138-b3849e53eb04)
 
 ## Cold Resolution
 
 Benchmarking dependency resolution (e.g., `uv lock`) with a cold cache. This is equivalent to
-running `uv lock` on a new machine or in CI (assuming that the package manager cache is not
-shared across runs).
+running `uv lock` on a new machine or in CI (assuming that the package manager cache is not shared
+across runs).
 
 ![resolve-cold](https://github.com/user-attachments/assets/b578c264-c209-45ab-b4c3-54073d871e86)
 
@@ -103,7 +103,8 @@ missing in the generated graph.
 ## Acknowledgements
 
 The inclusion of this `BENCHMARKS.md` file was inspired by the excellent benchmarking documentation
-in [Orogene](https://github.com/orogene/orogene/blob/472e481b4fc6e97c2b57e69240bf8fe995dfab83/BENCHMARKS.md).
+in
+[Orogene](https://github.com/orogene/orogene/blob/472e481b4fc6e97c2b57e69240bf8fe995dfab83/BENCHMARKS.md).
 
 ## Troubleshooting
 
