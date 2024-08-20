@@ -224,8 +224,7 @@ fn prune_unzipped() -> Result<()> {
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - iniconfig==2.0.0
-     - source-distribution==0.0.1
-     + source-distribution==0.0.1
+     ~ source-distribution==0.0.1
     "###);
 
     requirements_txt.write_str(indoc! { r"

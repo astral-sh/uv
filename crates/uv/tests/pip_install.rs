@@ -562,8 +562,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - flask==3.0.2
-     + flask==3.0.2
+     ~ flask==3.0.2
     "###
     );
 
@@ -1819,8 +1818,7 @@ fn reinstall_no_binary() {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - anyio==4.3.0
-     + anyio==4.3.0
+     ~ anyio==4.3.0
     "###
     );
 
@@ -2968,8 +2966,7 @@ requires-python = ">=3.8"
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
-     - example==0.0.0 (from file://[TEMP_DIR]/editable)
-     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );
 
@@ -3111,8 +3108,7 @@ requires-python = ">=3.8"
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
-     - example==0.0.0 (from file://[TEMP_DIR]/editable)
-     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );
 
@@ -4416,8 +4412,7 @@ fn already_installed_dependent_editable() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
-     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
 }
@@ -4515,8 +4510,7 @@ fn already_installed_local_path_dependent() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
-     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
 
@@ -4645,8 +4639,7 @@ fn already_installed_local_version_of_remote_package() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     ~ anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
     "###
     );
 
@@ -4768,8 +4761,7 @@ fn already_installed_multiple_versions() -> Result<()> {
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
-     - anyio==4.0.0
-     + anyio==4.0.0
+     ~ anyio==4.0.0
     "###
     );
 
@@ -4902,8 +4894,7 @@ fn already_installed_remote_url() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     ~ uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###);
 
     // Request installation again with a different version

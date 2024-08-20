@@ -3,13 +3,14 @@
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 use tracing::debug;
 
 use distribution_types::{
-    CachedDist, Diagnostic, InstalledDist, ResolutionDiagnostic, UnresolvedRequirementSpecification,
+    CachedDist, Diagnostic, InstalledDist, LocalDist, ResolutionDiagnostic,
+    UnresolvedRequirementSpecification,
 };
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
@@ -289,17 +290,38 @@ pub(crate) enum Modifications {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Changelog {
     /// The distributions that were installed.
-    pub(crate) installed: Vec<CachedDist>,
+    pub(crate) installed: HashSet<LocalDist>,
     /// The distributions that were uninstalled.
-    pub(crate) uninstalled: Vec<InstalledDist>,
+    pub(crate) uninstalled: HashSet<LocalDist>,
+    /// The distributions that were reinstalled.
+    pub(crate) reinstalled: HashSet<LocalDist>,
 }
 
 impl Changelog {
+    /// Create a [`Changelog`] from a list of installed and uninstalled distributions.
+    pub(crate) fn new(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
+        let mut uninstalled: HashSet<_> = uninstalled.into_iter().map(LocalDist::from).collect();
+
+        let (reinstalled, installed): (HashSet<_>, HashSet<_>) = installed
+            .into_iter()
+            .map(LocalDist::from)
+            .partition(|dist| uninstalled.contains(dist));
+
+        uninstalled.retain(|dist| !reinstalled.contains(dist));
+
+        Self {
+            installed,
+            uninstalled,
+            reinstalled,
+        }
+    }
+
     /// Create a [`Changelog`] from a list of installed distributions.
     pub(crate) fn from_installed(installed: Vec<CachedDist>) -> Self {
         Self {
-            installed,
-            uninstalled: vec![],
+            installed: installed.into_iter().map(LocalDist::from).collect(),
+            uninstalled: HashSet::default(),
+            reinstalled: HashSet::default(),
         }
     }
 
@@ -474,10 +496,7 @@ pub(crate) async fn install(
     }
 
     // Construct a summary of the changes made to the environment.
-    let changelog = Changelog {
-        installed: installs,
-        uninstalled: uninstalls,
-    };
+    let changelog = Changelog::new(installs, uninstalls);
 
     // Notify the user of any environment modifications.
     logger.on_complete(&changelog, printer)?;
@@ -615,6 +634,15 @@ fn report_dry_run(
                     printer.stderr(),
                     " {} {}{}",
                     "-".red(),
+                    event.name.bold(),
+                    event.version.dimmed()
+                )?;
+            }
+            ChangeEventKind::Reinstalled => {
+                writeln!(
+                    printer.stderr(),
+                    " {} {}{}",
+                    "~".yellow(),
                     event.name.bold(),
                     event.version.dimmed()
                 )?;

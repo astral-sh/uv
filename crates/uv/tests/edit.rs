@@ -192,8 +192,7 @@ fn add_git() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
@@ -606,8 +605,7 @@ fn add_git_raw() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
@@ -762,8 +760,7 @@ fn add_git_implicit() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###);
 
@@ -1050,8 +1047,7 @@ fn add_remove_dev() -> Result<()> {
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - idna==3.6
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - sniffio==1.3.1
     "###);
 
@@ -1260,8 +1256,7 @@ fn add_remove_optional() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -1470,8 +1465,7 @@ fn add_remove_workspace() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
-     - child1==0.1.0 (from file://[TEMP_DIR]/child1)
-     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     ~ child1==0.1.0 (from file://[TEMP_DIR]/child1)
      - child2==0.1.0 (from file://[TEMP_DIR]/child2)
     "###);
 
@@ -1718,8 +1712,7 @@ fn update() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -1753,8 +1746,7 @@ fn update() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 3 packages in [TIME]
      + chardet==5.2.0
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + pysocks==1.7.1
     "###);
 
@@ -1791,8 +1783,7 @@ fn update() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - requests==2.31.0
      + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068)
     "###);
@@ -2005,8 +1996,7 @@ fn add_update_marker() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -2041,8 +2031,7 @@ fn add_update_marker() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -2079,8 +2068,7 @@ fn add_update_marker() -> Result<()> {
     Installed 3 packages in [TIME]
      - idna==3.6
      + idna==2.7
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - urllib3==2.2.1
      + urllib3==1.23
     "###);
@@ -2118,8 +2106,7 @@ fn add_update_marker() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -2160,8 +2147,7 @@ fn add_update_marker() -> Result<()> {
      - certifi==2024.2.2
      - charset-normalizer==3.3.2
      - idna==2.7
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - requests==2.31.0
      - urllib3==1.23
     "###);
@@ -2308,8 +2294,7 @@ fn add_no_clean() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -2446,8 +2431,7 @@ fn remove_registry() -> Result<()> {
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - idna==3.6
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - sniffio==1.3.1
     "###);
 
