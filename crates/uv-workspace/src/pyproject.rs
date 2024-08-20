@@ -351,31 +351,32 @@ impl Source {
                 subdirectory,
                 ..
             } => {
-                // We can only resolve a full commit hash from a pep508 URL, everything else is ambiguous.
-                let rev = match reference {
-                    GitReference::FullCommit(ref mut rev) => Some(mem::take(rev)),
-                    _ => None,
-                }
-                // Give precedence to an explicit argument.
-                .or(rev);
-
-                // Error if the user tried to specify a reference but didn't disambiguate.
-                if reference != GitReference::DefaultBranch
-                    && rev.is_none()
-                    && tag.is_none()
-                    && branch.is_none()
-                {
-                    return Err(SourceError::UnresolvedReference(
-                        reference.as_str().unwrap().to_owned(),
-                    ));
-                }
-
-                Source::Git {
-                    rev,
-                    tag,
-                    branch,
-                    git: repository,
-                    subdirectory: subdirectory.map(|path| path.to_string_lossy().into_owned()),
+                if rev.is_none() && tag.is_none() && branch.is_none() {
+                    let rev = match reference {
+                        GitReference::FullCommit(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::Branch(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::Tag(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::ShortCommit(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::BranchOrTag(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::BranchOrTagOrCommit(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::NamedRef(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::DefaultBranch => None,
+                    };
+                    Source::Git {
+                        rev,
+                        tag,
+                        branch,
+                        git: repository,
+                        subdirectory: subdirectory.map(|path| path.to_string_lossy().into_owned()),
+                    }
+                } else {
+                    Source::Git {
+                        rev,
+                        tag,
+                        branch,
+                        git: repository,
+                        subdirectory: subdirectory.map(|path| path.to_string_lossy().into_owned()),
+                    }
                 }
             }
         };

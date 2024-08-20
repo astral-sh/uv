@@ -168,17 +168,8 @@ fn add_git() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    // Adding with an ambiguous Git reference will fail.
+    // Adding with an ambiguous Git reference should treat it as a revision.
     uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]).arg("--preview"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Cannot resolve Git reference `0.0.1` for requirement `uv-public-pypackage`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw-sources` flag.
-    "###);
-
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1").arg("--preview"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -190,6 +181,19 @@ fn add_git() -> Result<()> {
     Installed 2 packages in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+    "###);
+
+    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1").arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -3339,7 +3343,8 @@ fn add_requirements_file() -> Result<()> {
     "#})?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("Flask==2.3.2\ngit+https://github.com/agronholm/anyio.git@4.4.0")?;
+    requirements_txt
+        .write_str("Flask==2.3.2\nanyio @ git+https://github.com/agronholm/anyio.git@4.4.0")?;
 
     uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("requirements.txt"), @r###"
     success: true
@@ -3377,23 +3382,14 @@ fn add_requirements_file() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "flask==2.3.2",
-            "anyio @ git+https://github.com/agronholm/anyio.git@4.4.0",
+            "anyio",
         ]
+
+        [tool.uv.sources]
+        anyio = { git = "https://github.com/agronholm/anyio.git", rev = "4.4.0" }
         "###
         );
     });
-
-    // Using `--raw-sources` with `-r` should warn.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("requirements.txt").arg("--raw-sources"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `--raw-sources` is a no-op for `requirements.txt` files, which are always treated as raw sources
-    Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
-    "###);
 
     // Passing a `setup.py` should fail.
     uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("setup.py"), @r###"
@@ -3774,20 +3770,6 @@ fn add_git_to_script() -> Result<()> {
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
-
-    // Adding with an ambiguous Git reference will fail.
-    uv_snapshot!(context.filters(), context
-        .add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"])
-        .arg("--preview")
-        .arg("--script")
-        .arg("script.py"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Cannot resolve Git reference `0.0.1` for requirement `uv-public-pypackage`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw-sources` flag.
-    "###);
 
     uv_snapshot!(context.filters(), context
         .add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"])
