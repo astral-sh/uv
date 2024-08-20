@@ -127,6 +127,7 @@ nav:
       - Commands: reference/cli.md
       - Settings: reference/settings.md
       - Resolver: reference/resolver-internals.md
+      - Benchmarks: reference/benchmarks.md
       - Versioning: reference/versioning.md
       - Platform support: reference/platforms.md
 validation:
