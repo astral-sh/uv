@@ -9704,7 +9704,6 @@ fn lock_constrained_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 7 packages in [TIME]
     "###);
 
@@ -9726,7 +9725,7 @@ fn lock_constrained_environment() -> Result<()> {
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "black"
@@ -9814,7 +9813,6 @@ fn lock_constrained_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 7 packages in [TIME]
     "###);
 
@@ -9826,7 +9824,6 @@ fn lock_constrained_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 7 packages in [TIME]
     "###);
 
@@ -9852,7 +9849,6 @@ fn lock_constrained_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 7 packages in [TIME]
     "###);
 
@@ -9875,7 +9871,6 @@ fn lock_constrained_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Ignoring existing lockfile due to change in supported environments
     Resolved 8 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
@@ -9887,7 +9882,6 @@ fn lock_constrained_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Ignoring existing lockfile due to change in supported environments
     Resolved 8 packages in [TIME]
     Added colorama v0.4.6
@@ -9905,7 +9899,7 @@ fn lock_constrained_environment() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "black"
@@ -10026,7 +10020,6 @@ fn lock_overlapping_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     error: Supported environments must be disjoint, but the following markers overlap: `platform_system != 'Windows'` and `python_full_version >= '3.11'`.
 
     hint: replace `python_full_version >= '3.11'` with `python_full_version >= '3.11' and platform_system == 'Windows'`.

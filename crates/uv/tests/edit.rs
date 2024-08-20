@@ -2187,9 +2187,9 @@ fn update_source_replace_url() -> Result<()> {
     Ok(())
 }
 
-/// Adding a dependency does not clean the environment.
+/// Adding a dependency does not remove untracked dependencies from the environment.
 #[test]
-fn add_no_clean() -> Result<()> {
+fn add_inexact() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -2303,8 +2303,8 @@ fn add_no_clean() -> Result<()> {
         );
     });
 
-    // Install from the lockfile without cleaning the environment.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-clean"), @r###"
+    // Install from the lockfile without removing extraneous packages from the environment.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--inexact"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2313,7 +2313,7 @@ fn add_no_clean() -> Result<()> {
     Audited 2 packages in [TIME]
     "###);
 
-    // Install from the lockfile, cleaning the environment.
+    // Install from the lockfile, performing an exact sync.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0

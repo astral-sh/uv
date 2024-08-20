@@ -627,7 +627,8 @@ impl SyncSettings {
             no_all_extras,
             dev,
             no_dev,
-            no_clean,
+            inexact,
+            exact,
             installer,
             build,
             refresh,
@@ -640,9 +641,11 @@ impl SyncSettings {
             filesystem,
         );
 
+        let exact = flag(exact, inexact).unwrap_or(true);
+
         // By default, sync with exact semantics, unless the user set `--no-build-isolation`;
         // otherwise, we'll end up removing build dependencies.
-        let modifications = if no_clean || settings.no_build_isolation {
+        let modifications = if !exact || settings.no_build_isolation {
             Modifications::Sufficient
         } else {
             Modifications::Exact
