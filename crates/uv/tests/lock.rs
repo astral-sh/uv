@@ -3950,8 +3950,8 @@ fn lock_multiple_markers() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "iniconfig", marker = "implementation_name == 'cpython'" },
             { name = "iniconfig", marker = "python_full_version < '3.12'" },
+            { name = "iniconfig", marker = "implementation_name == 'cpython'" },
         ]
         "###
         );
@@ -9641,8 +9641,8 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "anyio", marker = "sys_platform == 'darwin'" },
             { name = "anyio", marker = "python_full_version >= '3.11'" },
+            { name = "anyio", marker = "sys_platform == 'darwin'" },
         ]
 
         [[package]]

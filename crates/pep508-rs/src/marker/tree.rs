@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Bound, Deref};
@@ -593,7 +594,7 @@ impl Display for MarkerExpression {
 /// will compare equally. Markers also support efficient polynomial-time operations,
 /// such as conjunction and disjunction.
 // TODO(ibraheem): decide whether we want to implement `Copy` for marker trees
-#[derive(Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub struct MarkerTree(NodeId);
 
 impl Default for MarkerTree {
@@ -1164,12 +1165,24 @@ impl fmt::Debug for MarkerTree {
     }
 }
 
+impl PartialOrd for MarkerTree {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MarkerTree {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.kind().cmp(&other.kind())
+    }
+}
+
 /// The underlying kind of an arbitrary node in a [`MarkerTree`].
 ///
 /// A marker tree is represented as an algebraic decision tree with two terminal nodes
 /// `True` or `False`. The edges of a given node correspond to a particular assignment of
 /// a value to that variable.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, PartialOrd, Ord)]
 pub enum MarkerTreeKind<'a> {
     /// An empty marker that always evaluates to `true`.
     True,
@@ -1209,6 +1222,20 @@ impl VersionMarkerTree<'_> {
     }
 }
 
+impl PartialOrd for VersionMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for VersionMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key()
+            .cmp(other.key())
+            .then_with(|| self.edges().cmp(other.edges()))
+    }
+}
+
 /// A string marker node, such as `os_name == 'Linux'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct StringMarkerTree<'a> {
@@ -1228,6 +1255,20 @@ impl StringMarkerTree<'_> {
         self.map
             .iter()
             .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
+    }
+}
+
+impl PartialOrd for StringMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for StringMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key()
+            .cmp(other.key())
+            .then_with(|| self.children().cmp(other.children()))
     }
 }
 
@@ -1266,6 +1307,21 @@ impl InMarkerTree<'_> {
     }
 }
 
+impl PartialOrd for InMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for InMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key()
+            .cmp(other.key())
+            .then_with(|| self.value().cmp(other.value()))
+            .then_with(|| self.children().cmp(other.children()))
+    }
+}
+
 /// A string marker node with inverse of the `in` operator, such as `'nux' in os_name`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ContainsMarkerTree<'a> {
@@ -1301,6 +1357,21 @@ impl ContainsMarkerTree<'_> {
     }
 }
 
+impl PartialOrd for ContainsMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ContainsMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key()
+            .cmp(other.key())
+            .then_with(|| self.value().cmp(other.value()))
+            .then_with(|| self.children().cmp(other.children()))
+    }
+}
+
 /// A node representing the existence or absence of a given extra, such as `extra == 'bar'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ExtraMarkerTree<'a> {
@@ -1327,6 +1398,20 @@ impl ExtraMarkerTree<'_> {
         } else {
             MarkerTree(self.low)
         }
+    }
+}
+
+impl PartialOrd for ExtraMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ExtraMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name()
+            .cmp(other.name())
+            .then_with(|| self.children().cmp(other.children()))
     }
 }
 
@@ -2017,14 +2102,14 @@ mod test {
         );
 
         assert_simplifies(
-             "(python_version > '3.17' or python_version > '3.16') and python_version > '3.15' and implementation_version == '1'",
-             "implementation_version == '1' and python_full_version >= '3.17'",
-         );
+            "(python_version > '3.17' or python_version > '3.16') and python_version > '3.15' and implementation_version == '1'",
+            "implementation_version == '1' and python_full_version >= '3.17'",
+        );
 
         assert_simplifies(
-             "('3.17' < python_version or '3.16' < python_version) and '3.15' < python_version and implementation_version == '1'",
-             "implementation_version == '1' and python_full_version >= '3.17'",
-         );
+            "('3.17' < python_version or '3.16' < python_version) and '3.15' < python_version and implementation_version == '1'",
+            "implementation_version == '1' and python_full_version >= '3.17'",
+        );
 
         assert_simplifies("extra == 'a' or extra == 'a'", "extra == 'a'");
         assert_simplifies(
@@ -2078,9 +2163,9 @@ mod test {
 
         // post-normalization filtering
         assert_simplifies(
-             "(python_version < '3.1' or python_version < '3.2') and (python_version < '3.2' or python_version == '3.3')",
-             "python_full_version < '3.2'",
-         );
+            "(python_version < '3.1' or python_version < '3.2') and (python_version < '3.2' or python_version == '3.3')",
+            "python_full_version < '3.2'",
+        );
 
         // normalize out redundant ranges
         assert_true("python_version < '3.12.0rc1' or python_version >= '3.12.0rc1'");
@@ -2236,7 +2321,7 @@ mod test {
                 or (os_name != 'Linux' and platform_system == 'win32' and sys_platform == 'x')
                 or (os_name == 'Linux' and platform_system != 'win32' and sys_platform == 'x')
                 or (os_name != 'Linux' and platform_system != 'win32' and sys_platform == 'x')",
-            "(os_name != 'Linux' and sys_platform == 'x') or (platform_system != 'win32' and sys_platform == 'x') or (os_name == 'Linux' and platform_system == 'win32')"
+            "(os_name != 'Linux' and sys_platform == 'x') or (platform_system != 'win32' and sys_platform == 'x') or (os_name == 'Linux' and platform_system == 'win32')",
         );
 
         assert_simplifies("python_version > '3.7'", "python_full_version >= '3.8'");
@@ -2254,24 +2339,24 @@ mod test {
                 or (os_name != 'Linux' and sys_platform == 'win32' and python_version == '3.8')",
             "(python_full_version < '3.7' and os_name == 'Linux' and sys_platform == 'win32') \
                 or (python_full_version >= '3.9' and os_name == 'Linux' and sys_platform == 'win32') \
-                or (python_full_version >= '3.7' and python_full_version < '3.9' and sys_platform == 'win32')"
+                or (python_full_version >= '3.7' and python_full_version < '3.9' and sys_platform == 'win32')",
         );
 
         assert_simplifies(
             "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
-            "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')"
+            "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
         );
 
         assert_simplifies(
             "(sys_platform == 'darwin' or sys_platform == 'win32')
                 and ((implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32'))",
-            "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')"
+            "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
         );
 
         assert_simplifies(
             "(sys_platform == 'darwin' or sys_platform == 'win32')
                 and ((platform_version != '1' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32'))",
-            "(os_name == 'nt' and platform_version != '1' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')"
+            "(os_name == 'nt' and platform_version != '1' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
         );
 
         assert_simplifies(
@@ -2279,12 +2364,12 @@ mod test {
                 or (os_name != 'nt' and platform_version == '1' and (sys_platform == 'win32' or sys_platform == 'win64'))",
             "(platform_version == '1' and sys_platform == 'win32') \
                 or (os_name != 'nt' and platform_version == '1' and sys_platform == 'win64') \
-                or (os_name == 'nt' and sys_platform == 'win32')"
+                or (os_name == 'nt' and sys_platform == 'win32')",
         );
 
         assert_simplifies(
             "(os_name == 'nt' and sys_platform == 'win32') or (os_name != 'nt' and (sys_platform == 'win32' or sys_platform == 'win64'))",
-            "(os_name != 'nt' and sys_platform == 'win64') or sys_platform == 'win32'"
+            "(os_name != 'nt' and sys_platform == 'win64') or sys_platform == 'win32'",
         );
     }
 
