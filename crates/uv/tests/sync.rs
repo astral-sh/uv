@@ -783,7 +783,6 @@ fn sync_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     error: The current Python platform is not compatible with the lockfile's supported environments: `python_full_version < '3.11'`
     "###);
