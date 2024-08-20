@@ -504,6 +504,9 @@ pub(crate) async fn pip_compile(
         }
     }
 
+    // Commit the output to disk.
+    writer.commit().await?;
+
     // Notify the user of any resolution diagnostics.
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
@@ -602,25 +605,21 @@ fn cmd(
 
 /// A multi-casting writer that writes to both the standard output and an output file, if present.
 #[allow(clippy::disallowed_types)]
-struct OutputWriter {
+struct OutputWriter<'a> {
     stdout: Option<AutoStream<std::io::Stdout>>,
-    output_file: Option<StripStream<std::fs::File>>,
+    output_file: Option<&'a Path>,
+    buffer: Vec<u8>,
 }
 
 #[allow(clippy::disallowed_types)]
-impl OutputWriter {
+impl<'a> OutputWriter<'a> {
     /// Create a new output writer.
-    fn new(include_stdout: bool, output_file: Option<&Path>) -> Result<Self> {
+    fn new(include_stdout: bool, output_file: Option<&'a Path>) -> Result<Self> {
         let stdout = include_stdout.then(|| AutoStream::<std::io::Stdout>::auto(stdout()));
-        let output_file = output_file
-            .map(|output_file| -> Result<_, std::io::Error> {
-                let output_file = fs_err::File::create(output_file)?;
-                Ok(StripStream::new(output_file.into()))
-            })
-            .transpose()?;
         Ok(Self {
             stdout,
             output_file,
+            buffer: Vec::new(),
         })
     }
 
@@ -628,14 +627,24 @@ impl OutputWriter {
     fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> std::io::Result<()> {
         use std::io::Write;
 
-        if let Some(output_file) = &mut self.output_file {
-            write!(output_file, "{args}")?;
-        }
+        // Write to the buffer.
+        self.buffer.write_fmt(args)?;
 
+        // Write to `stdout`.
         if let Some(stdout) = &mut self.stdout {
             write!(stdout, "{args}")?;
         }
 
+        Ok(())
+    }
+
+    /// Commit the buffer to the output file.
+    async fn commit(self) -> std::io::Result<()> {
+        if let Some(output_file) = self.output_file {
+            // Apply the `anstream` stripping to the buffer.
+            let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
+            uv_fs::write_atomic(output_file, &stream).await?;
+        }
         Ok(())
     }
 }
