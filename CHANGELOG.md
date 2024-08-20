@@ -25,7 +25,8 @@ The `uv pip` interface should not be affected by any breaking changes.
 Note the following changelog entries does not include all the new features since they were added
 incrementally as preview features. See the
 [feature page](https://docs.astral.sh/uv/getting-started/features/) in the documentation for a
-comprehensive listing.
+comprehensive listing, or read the [blog post](https://astral.sh/blog/uv-unified-python-packaging)
+for more context on the new features.
 
 ### Breaking changes
 
