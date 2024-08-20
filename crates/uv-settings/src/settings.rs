@@ -1303,7 +1303,11 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
             exclude_newer: value.exclude_newer,
-            link_mode: value.link_mode,
+            link_mode: if value.link_mode == Some(LinkMode::default()) {
+                None
+            } else {
+                value.link_mode
+            },
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
             no_build: value.no_build,
