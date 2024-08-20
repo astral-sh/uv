@@ -21,7 +21,6 @@ fn tool_dir() {
     [TEMP_DIR]/tools
 
     ----- stderr -----
-    warning: `uv tool dir` is experimental and may change without warning
     "###);
 }
 
@@ -40,6 +39,5 @@ fn tool_dir_bin() {
     [TEMP_DIR]/bin
 
     ----- stderr -----
-    warning: `uv tool dir` is experimental and may change without warning
     "###);
 }

@@ -12,23 +12,23 @@ uv [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="#uv-run"><code>uv run</code></a></dt><dd><p>Run a command or script (experimental)</p>
+<dl class="cli-reference"><dt><a href="#uv-run"><code>uv run</code></a></dt><dd><p>Run a command or script</p>
 </dd>
-<dt><a href="#uv-init"><code>uv init</code></a></dt><dd><p>Create a new project (experimental)</p>
+<dt><a href="#uv-init"><code>uv init</code></a></dt><dd><p>Create a new project</p>
 </dd>
-<dt><a href="#uv-add"><code>uv add</code></a></dt><dd><p>Add dependencies to the project (experimental)</p>
+<dt><a href="#uv-add"><code>uv add</code></a></dt><dd><p>Add dependencies to the project</p>
 </dd>
-<dt><a href="#uv-remove"><code>uv remove</code></a></dt><dd><p>Remove dependencies from the project (experimental)</p>
+<dt><a href="#uv-remove"><code>uv remove</code></a></dt><dd><p>Remove dependencies from the project</p>
 </dd>
-<dt><a href="#uv-sync"><code>uv sync</code></a></dt><dd><p>Update the project&#8217;s environment (experimental)</p>
+<dt><a href="#uv-sync"><code>uv sync</code></a></dt><dd><p>Update the project&#8217;s environment</p>
 </dd>
-<dt><a href="#uv-lock"><code>uv lock</code></a></dt><dd><p>Update the project&#8217;s lockfile (experimental)</p>
+<dt><a href="#uv-lock"><code>uv lock</code></a></dt><dd><p>Update the project&#8217;s lockfile</p>
 </dd>
-<dt><a href="#uv-tree"><code>uv tree</code></a></dt><dd><p>Display the project&#8217;s dependency tree (experimental)</p>
+<dt><a href="#uv-tree"><code>uv tree</code></a></dt><dd><p>Display the project&#8217;s dependency tree</p>
 </dd>
-<dt><a href="#uv-tool"><code>uv tool</code></a></dt><dd><p>Run and install commands provided by Python packages (experimental)</p>
+<dt><a href="#uv-tool"><code>uv tool</code></a></dt><dd><p>Run and install commands provided by Python packages</p>
 </dd>
-<dt><a href="#uv-python"><code>uv python</code></a></dt><dd><p>Manage Python versions and installations (experimental)</p>
+<dt><a href="#uv-python"><code>uv python</code></a></dt><dd><p>Manage Python versions and installations</p>
 </dd>
 <dt><a href="#uv-pip"><code>uv pip</code></a></dt><dd><p>Manage Python packages with a pip-compatible interface</p>
 </dd>
@@ -44,7 +44,7 @@ uv [OPTIONS] <COMMAND>
 
 ## uv run
 
-Run a command or script (experimental).
+Run a command or script.
 
 Ensures that the command runs in a Python environment.
 
@@ -332,7 +332,7 @@ uv run [OPTIONS] <COMMAND>
 
 ## uv init
 
-Create a new project (experimental).
+Create a new project.
 
 Follows the `pyproject.toml` specification.
 
@@ -451,7 +451,7 @@ uv init [OPTIONS] [PATH]
 
 ## uv add
 
-Add dependencies to the project (experimental).
+Add dependencies to the project.
 
 Dependencies are added to the project's `pyproject.toml` file.
 
@@ -737,7 +737,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 ## uv remove
 
-Remove dependencies from the project (experimental).
+Remove dependencies from the project.
 
 Dependencies are removed from the project's `pyproject.toml` file.
 
@@ -997,7 +997,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 ## uv sync
 
-Update the project's environment (experimental).
+Update the project's environment.
 
 Syncing ensures that all project dependencies are installed and up-to-date with the lockfile. Syncing also removes packages that are not declared as dependencies of the project.
 
@@ -1261,7 +1261,7 @@ uv sync [OPTIONS]
 
 ## uv lock
 
-Update the project's lockfile (experimental).
+Update the project's lockfile.
 
 If the project lockfile (`uv.lock`) does not exist, it will be created. If a lockfile is present, its contents will be used as preferences for the resolution.
 
@@ -1489,7 +1489,7 @@ uv lock [OPTIONS]
 
 ## uv tree
 
-Display the project's dependency tree (experimental)
+Display the project's dependency tree
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1775,7 +1775,7 @@ uv tree [OPTIONS]
 
 ## uv tool
 
-Run and install commands provided by Python packages (experimental)
+Run and install commands provided by Python packages
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -2860,7 +2860,7 @@ uv tool dir [OPTIONS]
 
 ## uv python
 
-Manage Python versions and installations (experimental)
+Manage Python versions and installations
 
 Generally, uv first searches for Python in a virtual environment, either
 active or in a `.venv` directory  in the current working directory or
@@ -2871,8 +2871,7 @@ searching for Python executables in the `PATH` environment variable.
 On Windows, the `py` launcher is also invoked to find Python
 executables.
 
-When preview is enabled, i.e., via `--preview` or by using a preview
-command, uv will download Python if a version cannot be found. This
+By default, uv will download Python if a version cannot be found. This
 behavior can be disabled with the `--python-downloads` option.
 
 The `--python` option allows requesting a different interpreter.

@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, PreviewMode, Reinstall, SetupPyStrategy, SourceStrategy, Upgrade,
+    IndexStrategy, Reinstall, SetupPyStrategy, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -67,7 +67,6 @@ pub(crate) async fn pip_sync(
     sources: SourceStrategy,
     concurrency: Concurrency,
     native_tls: bool,
-    preview: PreviewMode,
     cache: Cache,
     dry_run: bool,
     printer: Printer,
@@ -267,7 +266,6 @@ pub(crate) async fn pip_sync(
         exclude_newer,
         sources,
         concurrency,
-        preview,
     );
 
     // Determine the set of installed packages.
@@ -306,7 +304,6 @@ pub(crate) async fn pip_sync(
         options,
         Box::new(DefaultResolveLogger),
         printer,
-        preview,
     )
     .await
     {
@@ -340,7 +337,6 @@ pub(crate) async fn pip_sync(
         Box::new(DefaultInstallLogger),
         dry_run,
         printer,
-        preview,
     )
     .await?;
 

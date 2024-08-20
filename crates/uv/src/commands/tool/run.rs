@@ -18,7 +18,7 @@ use pypi_types::{Requirement, RequirementSource};
 use uv_cache::{Cache, Refresh, Timestamp};
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, PreviewMode};
+use uv_configuration::Concurrency;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
@@ -27,7 +27,7 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_tool::{entrypoint_paths, InstalledTools};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
@@ -70,7 +70,6 @@ pub(crate) async fn run(
     settings: ResolverInstallerSettings,
     invocation_source: ToolRunCommand,
     isolated: bool,
-    preview: PreviewMode,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -79,13 +78,9 @@ pub(crate) async fn run(
     cache: Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`{invocation_source}` is experimental and may change without warning");
-    }
-
     // treat empty command as `uv tool list`
     let Some(command) = command else {
-        return tool_list(false, PreviewMode::Enabled, &cache, printer).await;
+        return tool_list(false, &cache, printer).await;
     };
 
     let (target, args) = command.split();
@@ -110,7 +105,6 @@ pub(crate) async fn run(
         python.as_deref(),
         &settings,
         isolated,
-        preview,
         python_preference,
         python_downloads,
         connectivity,
@@ -380,7 +374,6 @@ async fn get_or_create_environment(
     python: Option<&str>,
     settings: &ResolverInstallerSettings,
     isolated: bool,
-    preview: PreviewMode,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -456,7 +449,6 @@ async fn get_or_create_environment(
             &interpreter,
             settings,
             &state,
-            preview,
             connectivity,
             concurrency,
             native_tls,
@@ -486,7 +478,6 @@ async fn get_or_create_environment(
                 &interpreter,
                 settings,
                 &state,
-                preview,
                 connectivity,
                 concurrency,
                 native_tls,
@@ -559,7 +550,6 @@ async fn get_or_create_environment(
         } else {
             Box::new(SummaryInstallLogger)
         },
-        preview,
         connectivity,
         concurrency,
         native_tls,

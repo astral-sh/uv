@@ -6,11 +6,10 @@ use anyhow::Result;
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, PreviewMode, TargetTriple};
+use uv_configuration::{Concurrency, TargetTriple};
 use uv_fs::CWD;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
-use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -36,17 +35,13 @@ pub(crate) async fn tree(
     settings: ResolverSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    preview: PreviewMode,
+
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv tree` is experimental and may change without warning");
-    }
-
     // Find the project requirements.
     let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
 
@@ -72,7 +67,6 @@ pub(crate) async fn tree(
         &interpreter,
         settings.as_ref(),
         Box::new(DefaultResolveLogger),
-        preview,
         connectivity,
         concurrency,
         native_tls,

@@ -247,14 +247,14 @@ pub enum Commands {
     #[command(flatten)]
     Project(Box<ProjectCommand>),
 
-    /// Run and install commands provided by Python packages (experimental).
+    /// Run and install commands provided by Python packages.
     #[command(
         after_help = "Use `uv help tool` for more details.",
         after_long_help = ""
     )]
     Tool(ToolNamespace),
 
-    /// Manage Python versions and installations (experimental)
+    /// Manage Python versions and installations
     ///
     /// Generally, uv first searches for Python in a virtual environment, either
     /// active or in a `.venv` directory  in the current working directory or
@@ -265,8 +265,7 @@ pub enum Commands {
     /// On Windows, the `py` launcher is also invoked to find Python
     /// executables.
     ///
-    /// When preview is enabled, i.e., via `--preview` or by using a preview
-    /// command, uv will download Python if a version cannot be found. This
+    /// By default, uv will download Python if a version cannot be found. This
     /// behavior can be disabled with the `--python-downloads` option.
     ///
     /// The `--python` option allows requesting a different interpreter.
@@ -515,7 +514,7 @@ pub enum PipCommand {
 
 #[derive(Subcommand)]
 pub enum ProjectCommand {
-    /// Run a command or script (experimental).
+    /// Run a command or script.
     ///
     /// Ensures that the command runs in a Python environment.
     ///
@@ -542,7 +541,7 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Run(RunArgs),
-    /// Create a new project (experimental).
+    /// Create a new project.
     ///
     /// Follows the `pyproject.toml` specification.
     ///
@@ -557,7 +556,7 @@ pub enum ProjectCommand {
     /// virtual environment (`.venv`) and lockfile (`uv.lock`) are lazily
     /// created during the first sync.
     Init(InitArgs),
-    /// Add dependencies to the project (experimental).
+    /// Add dependencies to the project.
     ///
     /// Dependencies are added to the project's `pyproject.toml` file.
     ///
@@ -584,7 +583,7 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Add(AddArgs),
-    /// Remove dependencies from the project (experimental).
+    /// Remove dependencies from the project.
     ///
     /// Dependencies are removed from the project's `pyproject.toml` file.
     ///
@@ -608,7 +607,7 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Remove(RemoveArgs),
-    /// Update the project's environment (experimental).
+    /// Update the project's environment.
     ///
     /// Syncing ensures that all project dependencies are installed and
     /// up-to-date with the lockfile. Syncing also removes packages that are not
@@ -630,7 +629,7 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Sync(SyncArgs),
-    /// Update the project's lockfile (experimental).
+    /// Update the project's lockfile.
     ///
     /// If the project lockfile (`uv.lock`) does not exist, it will be created.
     /// If a lockfile is present, its contents will be used as preferences for
@@ -643,7 +642,7 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Lock(LockArgs),
-    /// Display the project's dependency tree (experimental).
+    /// Display the project's dependency tree.
     Tree(TreeArgs),
 }
 

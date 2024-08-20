@@ -11,9 +11,7 @@ use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{
-    Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
-};
+use uv_configuration::{Concurrency, ExtrasSpecification, Reinstall, SetupPyStrategy, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
@@ -397,7 +395,6 @@ pub(crate) async fn resolve_names(
     interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
     state: &SharedState,
-    preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -478,7 +475,6 @@ pub(crate) async fn resolve_names(
         *exclude_newer,
         *sources,
         concurrency,
-        preview,
     );
 
     // Initialize the resolver.
@@ -486,7 +482,7 @@ pub(crate) async fn resolve_names(
         requirements,
         &hasher,
         &state.index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
     )
     .with_reporter(ResolverReporter::from(printer));
 
@@ -500,7 +496,6 @@ pub(crate) async fn resolve_environment<'a>(
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
-    preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -616,7 +611,6 @@ pub(crate) async fn resolve_environment<'a>(
         exclude_newer,
         sources,
         concurrency,
-        preview,
     );
 
     // Resolve the requirements.
@@ -645,7 +639,6 @@ pub(crate) async fn resolve_environment<'a>(
         options,
         logger,
         printer,
-        preview,
     )
     .await?)
 }
@@ -657,7 +650,6 @@ pub(crate) async fn sync_environment(
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn InstallLogger>,
-    preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -742,7 +734,6 @@ pub(crate) async fn sync_environment(
         exclude_newer,
         sources,
         concurrency,
-        preview,
     );
 
     // Sync the environment.
@@ -766,7 +757,6 @@ pub(crate) async fn sync_environment(
         logger,
         dry_run,
         printer,
-        preview,
     )
     .await?;
 
@@ -800,7 +790,6 @@ pub(crate) async fn update_environment(
     state: &SharedState,
     resolve: Box<dyn ResolveLogger>,
     install: Box<dyn InstallLogger>,
-    preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -939,7 +928,6 @@ pub(crate) async fn update_environment(
         *exclude_newer,
         *sources,
         concurrency,
-        preview,
     );
 
     // Resolve the requirements.
@@ -968,7 +956,6 @@ pub(crate) async fn update_environment(
         options,
         resolve,
         printer,
-        preview,
     )
     .await
     {
@@ -997,7 +984,6 @@ pub(crate) async fn update_environment(
         install,
         dry_run,
         printer,
-        preview,
     )
     .await?;
 

@@ -39,7 +39,6 @@ fn tool_run_args() {
     pytest 8.1.1
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -62,7 +61,6 @@ fn tool_run_args() {
     pytest 8.1.1
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     "###);
 }
@@ -84,7 +82,6 @@ fn tool_run_at_version() {
     pytest 8.0.0
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -105,7 +102,6 @@ fn tool_run_at_version() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     error: Not a valid package or extra name: "pytest@". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "###);
 
@@ -120,7 +116,6 @@ fn tool_run_at_version() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     error: Not a valid package or extra name: "pytest@invalid". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "###);
 
@@ -151,7 +146,6 @@ fn tool_run_at_version() {
     - pytest
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 4 packages in [TIME]
@@ -182,7 +176,6 @@ fn tool_run_from_version() {
     pytest 8.0.0
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -214,7 +207,6 @@ fn tool_run_suggest_valid_commands() {
     - blackd
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -237,7 +229,6 @@ fn tool_run_suggest_valid_commands() {
     The executable `fastapi-cli` was not found.
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -271,7 +262,6 @@ fn tool_run_warn_executable_not_in_from() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved 35 packages in [TIME]
     Prepared 35 packages in [TIME]
     Installed 35 packages in [TIME]
@@ -341,7 +331,6 @@ fn tool_run_from_install() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     "###);
 
     // Verify that `--isolated` uses an isolated environment.
@@ -358,7 +347,6 @@ fn tool_run_from_install() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -383,7 +371,6 @@ fn tool_run_from_install() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -412,7 +399,6 @@ fn tool_run_from_install() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -440,7 +426,6 @@ fn tool_run_from_install() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -474,7 +459,6 @@ fn tool_run_cache() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -501,7 +485,6 @@ fn tool_run_cache() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     "###);
 
@@ -521,7 +504,6 @@ fn tool_run_cache() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -550,7 +532,6 @@ fn tool_run_cache() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -577,7 +558,6 @@ fn tool_run_cache() {
     Python (CPython) 3.11.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -604,7 +584,6 @@ fn tool_run_cache() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     "###);
 
@@ -625,7 +604,6 @@ fn tool_run_cache() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -660,7 +638,6 @@ fn tool_run_url() {
     Werkzeug 3.0.1
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -701,7 +678,6 @@ fn tool_run_requirements_txt() {
     Werkzeug 3.0.1
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -748,7 +724,6 @@ fn tool_run_requirements_txt_arguments() {
     Werkzeug 3.0.1
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -780,7 +755,6 @@ fn tool_run_list_installed() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     No tools installed
     "###);
 
@@ -805,7 +779,6 @@ fn tool_run_list_installed() {
     - blackd
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     "###);
 }
 
@@ -830,7 +803,6 @@ fn tool_run_without_output() {
     pytest 8.1.1
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Installed [N] packages in [TIME]
     "###);
 
@@ -848,7 +820,6 @@ fn tool_run_without_output() {
     pytest 8.1.1
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     "###);
 }
 
@@ -868,7 +839,6 @@ fn warn_no_executables_found() {
     The executable `requests` was not found.
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
@@ -901,7 +871,6 @@ fn tool_run_upgrade_warn() {
 
     ----- stderr -----
     warning: Tools cannot be upgraded via `uv tool run`; use `uv tool upgrade --all` to upgrade all installed tools, or `uv tool run package@latest` to run the latest version of a tool
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -928,7 +897,6 @@ fn tool_run_resolution_error() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
       × No solution found when resolving tool dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     "###);
@@ -961,7 +929,6 @@ fn tool_run_latest() {
     pytest 7.0.0
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     "###);
 
     // Run `pytest@latest`, which should use the latest version.
@@ -976,7 +943,6 @@ fn tool_run_latest() {
     pytest 8.1.1
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -998,6 +964,5 @@ fn tool_run_latest() {
     pytest 7.0.0
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     "###);
 }
