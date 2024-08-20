@@ -1,5 +1,4 @@
-use std::fmt::Write;
-
+use anstream::println;
 use anyhow::Result;
 
 use uv_cache::Cache;
@@ -9,7 +8,6 @@ use uv_python::{EnvironmentPreference, PythonInstallation, PythonPreference, Pyt
 use uv_warnings::warn_user_once;
 
 use crate::commands::ExitStatus;
-use crate::printer::Printer;
 
 /// Find a Python interpreter.
 pub(crate) async fn find(
@@ -17,7 +15,6 @@ pub(crate) async fn find(
     python_preference: PythonPreference,
     preview: PreviewMode,
     cache: &Cache,
-    printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
         warn_user_once!("`uv python find` is experimental and may change without warning");
@@ -34,11 +31,7 @@ pub(crate) async fn find(
         cache,
     )?;
 
-    writeln!(
-        printer.stdout(),
-        "{}",
-        python.interpreter().sys_executable().user_display()
-    )?;
+    println!("{}", python.interpreter().sys_executable().user_display());
 
     Ok(ExitStatus::Success)
 }
