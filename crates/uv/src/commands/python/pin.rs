@@ -100,7 +100,7 @@ pub(crate) async fn pin(
                     if resolved {
                         return Err(err);
                     };
-                    warn_user_once!("{}", err);
+                    warn_user_once!("{err}");
                 }
             }
         };
@@ -180,7 +180,7 @@ fn warn_if_existing_pin_incompatible_with_project(
             },
             virtual_project,
         ) {
-            warn_user_once!("{}", err);
+            warn_user_once!("{err}");
             return;
         }
     }
@@ -209,14 +209,13 @@ fn warn_if_existing_pin_incompatible_with_project(
                 },
                 virtual_project,
             ) {
-                warn_user_once!("{}", err);
+                warn_user_once!("{err}");
             }
         }
         Err(err) => {
             warn_user_once!(
-                "Failed to resolve pinned Python version `{}`: {}",
+                "Failed to resolve pinned Python version `{}`: {err}",
                 pin.to_canonical_string(),
-                err
             );
         }
     }

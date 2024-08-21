@@ -656,6 +656,7 @@ fn init_no_workspace() -> Result<()> {
         "#,
     })?;
 
+    // Initialize with `--no-workspace`.
     let child = context.temp_dir.join("foo");
     fs_err::create_dir(&child)?;
 
@@ -668,6 +669,7 @@ fn init_no_workspace() -> Result<()> {
     Initialized project `foo`
     "###);
 
+    // Ensure that the workspace was not modified.
     let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
     insta::with_settings!({
@@ -680,6 +682,35 @@ fn init_no_workspace() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         "###
+        );
+    });
+
+    // Write out an invalid `pyproject.toml` in the parent, to ensure that `--no-workspace` is
+    // robust to errors in discovery.
+    pyproject_toml.write_str(indoc! {
+        r"",
+    })?;
+
+    let child = context.temp_dir.join("bar");
+    fs_err::create_dir(&child)?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--no-workspace"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Ignoring workspace discovery error due to `--no-workspace`: No `project` table found in: `[TEMP_DIR]/`
+    Initialized project `bar`
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @""
         );
     });
 
