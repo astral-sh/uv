@@ -649,6 +649,7 @@ fn python_pin_with_comments() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     3.12
+    3.10
 
     ----- stderr -----
     "###);

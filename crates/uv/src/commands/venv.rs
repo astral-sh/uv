@@ -22,8 +22,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, PythonDownloads, PythonInstallation,
-    PythonPreference, PythonRequest, VersionRequest,
+    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
+    PythonVersionFile, VersionRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_shell::Shell;
@@ -145,10 +145,11 @@ async fn venv_impl(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request =
-            request_from_version_file(&std::env::current_dir().into_diagnostic()?)
-                .await
-                .into_diagnostic()?;
+        // TODO(zanieb): Support `--no-config` here
+        interpreter_request = PythonVersionFile::discover(&*CWD, false)
+            .await
+            .into_diagnostic()?
+            .and_then(PythonVersionFile::into_version);
     }
 
     // (3) `Requires-Python` in `pyproject.toml`
