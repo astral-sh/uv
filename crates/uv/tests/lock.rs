@@ -5558,6 +5558,46 @@ fn lock_redact_https() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
+    // A subsequent sync will succeed because the credentials are in uv's request cache.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ foo==0.1.0 (from file://[TEMP_DIR]/)
+     ~ iniconfig==2.0.0
+    "###);
+
+    // Installing without credentials will fail without a cache.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: iniconfig==2.0.0
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+    "###);
+
+    // Installing with credentials from with `UV_INDEX_URL` should succeed.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").env("UV_INDEX_URL", "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ foo==0.1.0 (from file://[TEMP_DIR]/)
+     ~ iniconfig==2.0.0
+    "###);
+
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -5572,17 +5612,19 @@ fn lock_redact_https() -> Result<()> {
         "#,
     )?;
 
-    // Installing from the lockfile should succeed when credentials are included via `pyproject.toml`.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    // Installing from the lockfile should succeed when credentials are included via
+    // `pyproject.toml`.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      ~ foo==0.1.0 (from file://[TEMP_DIR]/)
+     ~ iniconfig==2.0.0
     "###);
 
     Ok(())
