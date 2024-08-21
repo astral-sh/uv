@@ -22,7 +22,6 @@ use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
-use uv_requirements::NamedRequirementsResolver;
 use uv_resolver::{
     FlatIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython, ResolverManifest,
     ResolverMarkers, SatisfiesResult,
@@ -33,7 +32,6 @@ use uv_workspace::{DiscoveryOptions, SupportedEnvironments, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
-use crate::commands::reporters::ResolverReporter;
 use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
@@ -255,13 +253,8 @@ async fn do_lock(
     let requirements = workspace
         .members_requirements()
         .chain(workspace.root_requirements())
-        .map(UnresolvedRequirementSpecification::from)
         .collect::<Vec<_>>();
-    let overrides = workspace
-        .overrides()
-        .into_iter()
-        .map(UnresolvedRequirementSpecification::from)
-        .collect::<Vec<_>>();
+    let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
     let constraints = workspace.constraints();
     let dev = vec![DEV_DEPENDENCIES.clone()];
     let source_trees = vec![];
@@ -414,17 +407,6 @@ async fn do_lock(
 
     let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
 
-    // Annoyingly, we have to resolve any unnamed overrides upfront.
-    let overrides = NamedRequirementsResolver::new(
-        overrides,
-        &hasher,
-        &state.index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve()
-    .await?;
-
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
         match ValidatedLock::validate(
@@ -504,7 +486,11 @@ async fn do_lock(
 
             // Resolve the requirements.
             let resolution = pip::operations::resolve(
-                requirements,
+                requirements
+                    .iter()
+                    .cloned()
+                    .map(UnresolvedRequirementSpecification::from)
+                    .collect(),
                 constraints.clone(),
                 overrides
                     .iter()
