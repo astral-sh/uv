@@ -26,7 +26,7 @@ use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
     /// The versions that were available for each package
-    pub(crate) available_versions: &'a FxHashMap<PubGrubPackage, BTreeSet<Version>>,
+    pub(crate) available_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
 
     /// The versions that were available for each package
     pub(crate) python_requirement: &'a PythonRequirement,
@@ -87,7 +87,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                         // Note that sometimes we do not have a range of available versions, e.g.,
                         // when a package is from a non-registry source. In that case, we cannot
                         // perform further simplicifaction of the range.
-                        if let Some(available_versions) = self.available_versions.get(package) {
+                        if let Some(available_versions) = package.name().and_then(|name| self.available_versions.get(name)) {
                             update_availability_range(&complement, available_versions)
                         } else {
                             complement
@@ -117,13 +117,21 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                         UnavailableReason::Package(reason) => {
                             // While there may be a term attached, this error applies to the entire
                             // package, so we show it for the entire package
-                            format!("{}{reason}", Padded::new("", &package, " "))
+                            format!(
+                                "{}{}",
+                                Padded::new("", &package, " "),
+                                reason.singular_message()
+                            )
                         }
                         UnavailableReason::Version(reason) => {
-                            format!(
-                                "{}{reason}",
-                                Padded::new("", &self.compatible_range(package, set), " ")
-                            )
+                            let set = self.simplify_set(set, package);
+                            let range = self.compatible_range(package, &set);
+                            let reason = if range.plural() {
+                                reason.plural_message()
+                            } else {
+                                reason.singular_message()
+                            };
+                            format!("{}{reason}", Padded::new("", &range, " "))
                         }
                     }
                 }
@@ -484,10 +492,13 @@ impl PubGrubReportFormatter<'_> {
         set: &'a Range<Version>,
         package: &PubGrubPackage,
     ) -> Cow<'a, Range<Version>> {
+        let Some(name) = package.name() else {
+            return Cow::Borrowed(set);
+        };
         if set == &Range::full() {
             Cow::Borrowed(set)
         } else {
-            Cow::Owned(set.simplify(self.available_versions.get(package).into_iter().flatten()))
+            Cow::Owned(set.simplify(self.available_versions.get(name).into_iter().flatten()))
         }
     }
 
@@ -695,13 +706,17 @@ impl PubGrubReportFormatter<'_> {
                     range: self.simplify_set(set, package).into_owned(),
                 });
             }
-        } else if let Some(version) = self.available_versions.get(package).and_then(|versions| {
-            versions
-                .iter()
-                .rev()
-                .filter(|version| version.any_prerelease())
-                .find(|version| set.contains(version))
-        }) {
+        } else if let Some(version) = package
+            .name()
+            .and_then(|name| self.available_versions.get(name))
+            .and_then(|versions| {
+                versions
+                    .iter()
+                    .rev()
+                    .filter(|version| version.any_prerelease())
+                    .find(|version| set.contains(version))
+            })
+        {
             // There are pre-release versions available for the package.
             if selector.prerelease_strategy().allows(name, markers) != AllowPrerelease::Yes {
                 hints.insert(PubGrubHint::PrereleaseAvailable {
@@ -827,7 +842,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::Offline => {
                 write!(
                     f,
-                    "{}{} Packages were unavailable because the network was disabled",
+                    "{}{} Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.",
                     "hint".bold().cyan(),
                     ":".bold(),
                 )
@@ -1201,7 +1216,7 @@ impl std::fmt::Display for PackageRange<'_> {
         if segments.len() > 1 {
             match self.kind {
                 PackageRangeKind::Dependency => write!(f, "one of:")?,
-                PackageRangeKind::Compatibility => write!(f, "any of:")?,
+                PackageRangeKind::Compatibility => write!(f, "all of:")?,
                 PackageRangeKind::Available => write!(f, "are available:")?,
             }
         }

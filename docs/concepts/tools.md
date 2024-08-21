@@ -85,7 +85,7 @@ Tool upgrades will reinstall the tool executables, even if they have not changed
 
 ### Including additional dependencies
 
-Additional packages can be included during tool invocations:
+Additional packages can be included during `uv tool run` (`uvx`) invocations:
 
 ```console
 $ uvx --with <extra-package> <tool>
@@ -122,6 +122,7 @@ notably including Windows and macOS — there is no clear alternative location t
 these platforms. The installation directory is determined from the first available environment
 variable:
 
+- `$UV_TOOL_BIN_DIR`
 - `$XDG_BIN_HOME`
 - `$XDG_DATA_HOME/../bin`
 - `$HOME/.local/bin`

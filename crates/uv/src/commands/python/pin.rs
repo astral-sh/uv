@@ -6,7 +6,6 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_configuration::PreviewMode;
 use uv_fs::{Simplified, CWD};
 use uv_python::{
     request_from_version_file, requests_from_version_file, write_version_file,
@@ -24,15 +23,10 @@ pub(crate) async fn pin(
     request: Option<String>,
     resolved: bool,
     python_preference: PythonPreference,
-    preview: PreviewMode,
     no_workspace: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv python pin` is experimental and may change without warning");
-    }
-
     let virtual_project = if no_workspace {
         None
     } else {

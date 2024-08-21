@@ -16,7 +16,7 @@ use uv_normalize::PackageName;
 use crate::{DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef};
 
 /// A built distribution (wheel) that is installed in a virtual environment.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum InstalledDist {
     /// The distribution was derived from a registry, like `PyPI`.
     Registry(InstalledRegistryDist),
@@ -30,14 +30,14 @@ pub enum InstalledDist {
     LegacyEditable(InstalledLegacyEditable),
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledRegistryDist {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
@@ -47,21 +47,21 @@ pub struct InstalledDirectUrlDist {
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledEggInfoFile {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledEggInfoDirectory {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledLegacyEditable {
     pub name: PackageName,
     pub version: Version,
@@ -136,18 +136,42 @@ impl InstalledDist {
             };
             let file_name = EggInfoFilename::parse(file_stem)?;
 
+            if let Some(version) = file_name.version {
+                if metadata.is_dir() {
+                    return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
+                        name: file_name.name,
+                        version,
+                        path: path.to_path_buf(),
+                    })));
+                }
+
+                if metadata.is_file() {
+                    return Ok(Some(Self::EggInfoFile(InstalledEggInfoFile {
+                        name: file_name.name,
+                        version,
+                        path: path.to_path_buf(),
+                    })));
+                }
+            };
+
             if metadata.is_dir() {
+                let Some(egg_metadata) = read_metadata(&path.join("PKG-INFO")) else {
+                    return Ok(None);
+                };
                 return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
                     name: file_name.name,
-                    version: file_name.version,
+                    version: Version::from_str(&egg_metadata.version)?,
                     path: path.to_path_buf(),
                 })));
             }
 
             if metadata.is_file() {
-                return Ok(Some(Self::EggInfoFile(InstalledEggInfoFile {
+                let Some(egg_metadata) = read_metadata(path) else {
+                    return Ok(None);
+                };
+                return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
                     name: file_name.name,
-                    version: file_name.version,
+                    version: Version::from_str(&egg_metadata.version)?,
                     path: path.to_path_buf(),
                 })));
             }
@@ -189,24 +213,13 @@ impl InstalledDist {
                 .map_err(|()| anyhow!("Invalid `.egg-link` target: {}", target.user_display()))?;
 
             // Mildly unfortunate that we must read metadata to get the version.
-            let content = match fs::read(egg_info.join("PKG-INFO")) {
-                Ok(content) => content,
-                Err(err) => {
-                    warn!("Failed to read metadata for {path:?}: {err}");
-                    return Ok(None);
-                }
-            };
-            let metadata = match pypi_types::Metadata10::parse_pkg_info(&content) {
-                Ok(metadata) => metadata,
-                Err(err) => {
-                    warn!("Failed to parse metadata for {path:?}: {err}");
-                    return Ok(None);
-                }
+            let Some(egg_metadata) = read_metadata(&egg_info.join("PKG-INFO")) else {
+                return Ok(None);
             };
 
             return Ok(Some(Self::LegacyEditable(InstalledLegacyEditable {
-                name: metadata.name,
-                version: Version::from_str(&metadata.version)?,
+                name: egg_metadata.name,
+                version: Version::from_str(&egg_metadata.version)?,
                 egg_link: path.to_path_buf(),
                 target,
                 target_url: url,
@@ -410,4 +423,23 @@ impl InstalledMetadata for InstalledDist {
             Self::LegacyEditable(dist) => dist.installed_version(),
         }
     }
+}
+
+fn read_metadata(path: &Path) -> Option<pypi_types::Metadata10> {
+    let content = match fs::read(path) {
+        Ok(content) => content,
+        Err(err) => {
+            warn!("Failed to read metadata for {path:?}: {err}");
+            return None;
+        }
+    };
+    let metadata = match pypi_types::Metadata10::parse_pkg_info(&content) {
+        Ok(metadata) => metadata,
+        Err(err) => {
+            warn!("Failed to parse metadata for {path:?}: {err}");
+            return None;
+        }
+    };
+
+    Some(metadata)
 }

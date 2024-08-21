@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, PreviewMode, Reinstall, SetupPyStrategy, SourceStrategy, Upgrade,
+    IndexStrategy, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -48,7 +48,6 @@ pub(crate) async fn pip_sync(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    setup_py: SetupPyStrategy,
     allow_empty_requirements: bool,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -67,7 +66,6 @@ pub(crate) async fn pip_sync(
     sources: SourceStrategy,
     concurrency: Concurrency,
     native_tls: bool,
-    preview: PreviewMode,
     cache: Cache,
     dry_run: bool,
     printer: Printer,
@@ -259,7 +257,6 @@ pub(crate) async fn pip_sync(
         &state.git,
         &state.in_flight,
         index_strategy,
-        setup_py,
         config_settings,
         build_isolation,
         link_mode,
@@ -267,7 +264,6 @@ pub(crate) async fn pip_sync(
         exclude_newer,
         sources,
         concurrency,
-        preview,
     );
 
     // Determine the set of installed packages.
@@ -296,7 +292,7 @@ pub(crate) async fn pip_sync(
         &reinstall,
         &upgrade,
         Some(&tags),
-        ResolverMarkers::SpecificEnvironment((*markers).clone()),
+        ResolverMarkers::specific_environment((*markers).clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -306,7 +302,6 @@ pub(crate) async fn pip_sync(
         options,
         Box::new(DefaultResolveLogger),
         printer,
-        preview,
     )
     .await
     {
@@ -340,7 +335,6 @@ pub(crate) async fn pip_sync(
         Box::new(DefaultInstallLogger),
         dry_run,
         printer,
-        preview,
     )
     .await?;
 

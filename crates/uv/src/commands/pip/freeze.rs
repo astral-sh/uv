@@ -7,7 +7,6 @@ use tracing::debug;
 
 use distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_cache::Cache;
-use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
@@ -21,7 +20,6 @@ pub(crate) fn pip_freeze(
     strict: bool,
     python: Option<&str>,
     system: bool,
-    _preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {

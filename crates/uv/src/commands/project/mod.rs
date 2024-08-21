@@ -11,9 +11,7 @@ use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{
-    Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
-};
+use uv_configuration::{Concurrency, ExtrasSpecification, Reinstall, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
@@ -60,6 +58,9 @@ pub(crate) enum ProjectError {
     #[error("The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`")]
     LockedPythonIncompatibility(Version, RequiresPython),
 
+    #[error("The current Python platform is not compatible with the lockfile's supported environments: {0}")]
+    LockedPlatformIncompatibility(String),
+
     #[error("The requested Python interpreter ({0}) is incompatible with the project Python requirement: `{1}`")]
     RequestedPythonIncompatibility(Version, RequiresPython),
 
@@ -71,6 +72,9 @@ pub(crate) enum ProjectError {
         VersionSpecifiers,
         PathBuf,
     ),
+
+    #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
+    OverlappingMarkers(String, String, String),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),
@@ -101,6 +105,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Tool(#[from] uv_tool::Error),
+
+    #[error(transparent)]
+    Name(#[from] uv_normalize::InvalidNameError),
 
     #[error(transparent)]
     NamedRequirements(#[from] uv_requirements::NamedRequirementsError),
@@ -388,7 +395,6 @@ pub(crate) async fn resolve_names(
     interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
     state: &SharedState,
-    preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -445,7 +451,6 @@ pub(crate) async fn resolve_names(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let hasher = HashStrategy::default();
-    let setup_py = SetupPyStrategy::default();
     let flat_index = FlatIndex::default();
     let build_constraints = [];
 
@@ -461,7 +466,6 @@ pub(crate) async fn resolve_names(
         &state.git,
         &state.in_flight,
         *index_strategy,
-        setup_py,
         config_setting,
         build_isolation,
         *link_mode,
@@ -469,7 +473,6 @@ pub(crate) async fn resolve_names(
         *exclude_newer,
         *sources,
         concurrency,
-        preview,
     );
 
     // Initialize the resolver.
@@ -477,7 +480,7 @@ pub(crate) async fn resolve_names(
         requirements,
         &hasher,
         &state.index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
     )
     .with_reporter(ResolverReporter::from(printer));
 
@@ -491,7 +494,6 @@ pub(crate) async fn resolve_environment<'a>(
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
-    preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -572,7 +574,6 @@ pub(crate) async fn resolve_environment<'a>(
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
-    let setup_py = SetupPyStrategy::default();
     let build_constraints = [];
 
     // When resolving from an interpreter, we assume an empty environment, so reinstalls and
@@ -599,7 +600,6 @@ pub(crate) async fn resolve_environment<'a>(
         &state.git,
         &state.in_flight,
         index_strategy,
-        setup_py,
         config_setting,
         build_isolation,
         link_mode,
@@ -607,7 +607,6 @@ pub(crate) async fn resolve_environment<'a>(
         exclude_newer,
         sources,
         concurrency,
-        preview,
     );
 
     // Resolve the requirements.
@@ -626,7 +625,7 @@ pub(crate) async fn resolve_environment<'a>(
         &reinstall,
         &upgrade,
         Some(tags),
-        ResolverMarkers::SpecificEnvironment(markers.clone()),
+        ResolverMarkers::specific_environment(markers.clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -636,7 +635,6 @@ pub(crate) async fn resolve_environment<'a>(
         options,
         logger,
         printer,
-        preview,
     )
     .await?)
 }
@@ -648,7 +646,6 @@ pub(crate) async fn sync_environment(
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn InstallLogger>,
-    preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -704,7 +701,6 @@ pub(crate) async fn sync_environment(
     let build_constraints = [];
     let dry_run = false;
     let hasher = HashStrategy::default();
-    let setup_py = SetupPyStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -725,7 +721,6 @@ pub(crate) async fn sync_environment(
         &state.git,
         &state.in_flight,
         index_strategy,
-        setup_py,
         config_setting,
         build_isolation,
         link_mode,
@@ -733,7 +728,6 @@ pub(crate) async fn sync_environment(
         exclude_newer,
         sources,
         concurrency,
-        preview,
     );
 
     // Sync the environment.
@@ -757,7 +751,6 @@ pub(crate) async fn sync_environment(
         logger,
         dry_run,
         printer,
-        preview,
     )
     .await?;
 
@@ -791,7 +784,6 @@ pub(crate) async fn update_environment(
     state: &SharedState,
     resolve: Box<dyn ResolveLogger>,
     install: Box<dyn InstallLogger>,
-    preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -901,7 +893,6 @@ pub(crate) async fn update_environment(
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
-    let setup_py = SetupPyStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -922,7 +913,6 @@ pub(crate) async fn update_environment(
         &state.git,
         &state.in_flight,
         *index_strategy,
-        setup_py,
         config_setting,
         build_isolation,
         *link_mode,
@@ -930,7 +920,6 @@ pub(crate) async fn update_environment(
         *exclude_newer,
         *sources,
         concurrency,
-        preview,
     );
 
     // Resolve the requirements.
@@ -949,7 +938,7 @@ pub(crate) async fn update_environment(
         reinstall,
         upgrade,
         Some(tags),
-        ResolverMarkers::SpecificEnvironment(markers.clone()),
+        ResolverMarkers::specific_environment(markers.clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -959,7 +948,6 @@ pub(crate) async fn update_environment(
         options,
         resolve,
         printer,
-        preview,
     )
     .await
     {
@@ -988,7 +976,6 @@ pub(crate) async fn update_environment(
         install,
         dry_run,
         printer,
-        preview,
     )
     .await?;
 

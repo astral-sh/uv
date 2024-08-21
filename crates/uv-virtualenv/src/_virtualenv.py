@@ -11,7 +11,7 @@ VIRTUALENV_PATCH_FILE = os.path.join(__file__)
 def patch_dist(dist):
     """
     Distutils allows user to configure some arguments via a configuration file:
-    https://docs.python.org/3/install/index.html#distutils-configuration-files.
+    https://docs.python.org/3.11/install/index.html#distutils-configuration-files.
 
     Some of this arguments though don't make sense in context of the virtual environment files, let's fix them up.
     """  # noqa: D205

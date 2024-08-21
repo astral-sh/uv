@@ -82,7 +82,6 @@ mod resolver {
     use std::sync::LazyLock;
 
     use anyhow::Result;
-    use chrono::NaiveDate;
 
     use distribution_types::IndexLocations;
     use install_wheel_rs::linker::LinkMode;
@@ -92,8 +91,7 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, IndexStrategy, PreviewMode, SetupPyStrategy,
-        SourceStrategy,
+        BuildOptions, Concurrency, ConfigSettings, IndexStrategy, SourceStrategy,
     };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
@@ -145,11 +143,10 @@ mod resolver {
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
         let exclude_newer = Some(
-            NaiveDate::from_ymd_opt(2024, 8, 8)
+            jiff::civil::date(2024, 8, 8)
+                .to_zoned(jiff::tz::TimeZone::UTC)
                 .unwrap()
-                .and_hms_opt(0, 0, 0)
-                .unwrap()
-                .and_utc()
+                .timestamp()
                 .into(),
         );
         let flat_index = FlatIndex::default();
@@ -183,7 +180,6 @@ mod resolver {
             &git,
             &in_flight,
             IndexStrategy::default(),
-            SetupPyStrategy::default(),
             &config_settings,
             build_isolation,
             LinkMode::default(),
@@ -191,7 +187,6 @@ mod resolver {
             exclude_newer,
             sources,
             concurrency,
-            PreviewMode::Disabled,
         );
 
         let markers = if universal {
@@ -211,12 +206,7 @@ mod resolver {
             &hashes,
             &build_context,
             installed_packages,
-            DistributionDatabase::new(
-                client,
-                &build_context,
-                concurrency.downloads,
-                PreviewMode::Disabled,
-            ),
+            DistributionDatabase::new(client, &build_context, concurrency.downloads),
         )?;
 
         Ok(resolver.resolve().await?)

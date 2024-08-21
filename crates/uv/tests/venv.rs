@@ -351,6 +351,64 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
 }
 
 #[test]
+fn create_venv_ignores_missing_pyproject_metadata() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r"[tool.no.project.here]" })?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
+fn create_venv_warns_user_on_requires_python_discovery_error() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r"invalid toml" })?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 1, column 9
+        |
+      1 | invalid toml
+        |         ^
+      expected `.`, `=`
+
+    warning: Failed to parse: `pyproject.toml`
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
 fn create_venv_explicit_request_takes_priority_over_python_version_file() {
     let context = TestContext::new_with_versions(&["3.11", "3.12"]);
 
@@ -444,7 +502,7 @@ fn create_venv_unknown_python_minor() {
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.100 in system path or `py` launcher
+          × No interpreter found for Python 3.100 in managed installations, system path, or `py` launcher
         "###
         );
     } else {
@@ -454,7 +512,7 @@ fn create_venv_unknown_python_minor() {
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.100 in system path
+          × No interpreter found for Python 3.100 in managed installations or system path
         "###
         );
     }
@@ -482,7 +540,7 @@ fn create_venv_unknown_python_patch() {
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.12.100 in system path or `py` launcher
+          × No interpreter found for Python 3.12.100 in managed installations, system path, or `py` launcher
         "###
         );
     } else {
@@ -492,7 +550,7 @@ fn create_venv_unknown_python_patch() {
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.12.100 in system path
+          × No interpreter found for Python 3.12.100 in managed installations or system path
         "###
         );
     }

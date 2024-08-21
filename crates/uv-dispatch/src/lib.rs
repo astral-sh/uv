@@ -16,11 +16,10 @@ use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
+use uv_configuration::Concurrency;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall,
-    SetupPyStrategy, SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall, SourceStrategy,
 };
-use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
@@ -44,7 +43,6 @@ pub struct BuildDispatch<'a> {
     index: &'a InMemoryIndex,
     git: &'a GitResolver,
     in_flight: &'a InFlight,
-    setup_py: SetupPyStrategy,
     build_isolation: BuildIsolation<'a>,
     link_mode: install_wheel_rs::linker::LinkMode,
     build_options: &'a BuildOptions,
@@ -54,7 +52,6 @@ pub struct BuildDispatch<'a> {
     build_extra_env_vars: FxHashMap<OsString, OsString>,
     sources: SourceStrategy,
     concurrency: Concurrency,
-    preview_mode: PreviewMode,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -69,7 +66,6 @@ impl<'a> BuildDispatch<'a> {
         git: &'a GitResolver,
         in_flight: &'a InFlight,
         index_strategy: IndexStrategy,
-        setup_py: SetupPyStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
         link_mode: install_wheel_rs::linker::LinkMode,
@@ -77,7 +73,6 @@ impl<'a> BuildDispatch<'a> {
         exclude_newer: Option<ExcludeNewer>,
         sources: SourceStrategy,
         concurrency: Concurrency,
-        preview_mode: PreviewMode,
     ) -> Self {
         Self {
             client,
@@ -90,7 +85,6 @@ impl<'a> BuildDispatch<'a> {
             git,
             in_flight,
             index_strategy,
-            setup_py,
             config_settings,
             build_isolation,
             link_mode,
@@ -100,7 +94,6 @@ impl<'a> BuildDispatch<'a> {
             build_extra_env_vars: FxHashMap::default(),
             sources,
             concurrency,
-            preview_mode,
         }
     }
 
@@ -155,19 +148,14 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .index_strategy(self.index_strategy)
                 .build(),
             &python_requirement,
-            ResolverMarkers::SpecificEnvironment(markers.clone()),
+            ResolverMarkers::specific_environment(markers.clone()),
             Some(tags),
             self.flat_index,
             self.index,
             &HashStrategy::None,
             self,
             EmptyInstalledPackages,
-            DistributionDatabase::new(
-                self.client,
-                self,
-                self.concurrency.downloads,
-                self.preview_mode,
-            ),
+            DistributionDatabase::new(self.client, self, self.concurrency.downloads),
         )?;
         let graph = resolver.resolve().await.with_context(|| {
             format!(
@@ -250,12 +238,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 tags,
                 &HashStrategy::None,
                 self.build_options,
-                DistributionDatabase::new(
-                    self.client,
-                    self,
-                    self.concurrency.downloads,
-                    self.preview_mode,
-                ),
+                DistributionDatabase::new(self.client, self, self.concurrency.downloads),
             );
 
             debug!(
@@ -339,7 +322,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self,
             self.source_build_context.clone(),
             version_id.to_string(),
-            self.setup_py,
             self.config_settings.clone(),
             self.build_isolation,
             build_kind,

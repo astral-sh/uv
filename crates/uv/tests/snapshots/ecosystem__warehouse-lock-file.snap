@@ -4,7 +4,7 @@ expression: lock
 ---
 version = 1
 requires-python = "==3.11.*"
-environment-markers = [
+resolution-markers = [
     "python_full_version < '3.12'",
     "python_full_version < '3.13'",
     "python_full_version >= '3.13' and python_full_version < '4'",
@@ -12,7 +12,7 @@ environment-markers = [
 ]
 
 [options]
-exclude-newer = "2024-08-08 00:00:00 UTC"
+exclude-newer = "2024-08-08T00:00:00Z"
 
 [[package]]
 name = "alabaster"

@@ -20,7 +20,7 @@ An extremely fast Python package and project manager, written in Rust.
 - ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
 - 🐍 [Installs and manages](#python-management) Python versions.
 - 🛠️ [Runs and installs](#tool-management) Python applications.
-- ❇️ [Runs scripts](./guides/scripts.md), with support for
+- ❇️ [Runs scripts](#script-support), with support for
   [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
 - 🗂️ Provides [comprehensive project management](#project-management), with a
   [universal lockfile](./concepts/projects.md#lockfile).
@@ -157,6 +157,30 @@ Pinned `.python-version` to `pypy@3.11`
 ```
 
 See the [installing Python guide](./guides/install-python.md) to get started.
+
+### Script support
+
+uv manages dependencies and environments for single-file scripts.
+
+Create a new script and add inline metadata declaring its dependencies:
+
+```console
+$ echo 'import requests; print(requests.get("https://astral.sh"))' > example.py
+
+$ uv add --script example.py requests
+Updated `example.py`
+```
+
+Then, run the script in an isolated virtual environment:
+
+```
+$ uv run example.py
+Reading inline script metadata from: example.py
+Installed 5 packages in 12ms
+<Response [200]>
+```
+
+See the [scripts guide](./guides/scripts.md) to get started.
 
 ## The pip interface
 

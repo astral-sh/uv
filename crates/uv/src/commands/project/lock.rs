@@ -14,9 +14,7 @@ use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{
-    Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
-};
+use uv_configuration::{Concurrency, ExtrasSpecification, Reinstall, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
@@ -24,18 +22,16 @@ use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
-use uv_requirements::NamedRequirementsResolver;
 use uv_resolver::{
     FlatIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython, ResolverManifest,
     ResolverMarkers, SatisfiesResult,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, Workspace};
+use uv_warnings::warn_user;
+use uv_workspace::{DiscoveryOptions, SupportedEnvironments, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
-use crate::commands::reporters::ResolverReporter;
 use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
@@ -71,7 +67,7 @@ pub(crate) async fn lock(
     frozen: bool,
     python: Option<String>,
     settings: ResolverSettings,
-    preview: PreviewMode,
+
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -80,10 +76,6 @@ pub(crate) async fn lock(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv lock` is experimental and may change without warning");
-    }
-
     // Find the project requirements.
     let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
 
@@ -109,7 +101,6 @@ pub(crate) async fn lock(
         &interpreter,
         settings.as_ref(),
         Box::new(DefaultResolveLogger),
-        preview,
         connectivity,
         concurrency,
         native_tls,
@@ -143,7 +134,7 @@ pub(super) async fn do_safe_lock(
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
     logger: Box<dyn ResolveLogger>,
-    preview: PreviewMode,
+
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -181,7 +172,6 @@ pub(super) async fn do_safe_lock(
             settings,
             &state,
             logger,
-            preview,
             connectivity,
             concurrency,
             native_tls,
@@ -208,7 +198,6 @@ pub(super) async fn do_safe_lock(
             settings,
             &state,
             logger,
-            preview,
             connectivity,
             concurrency,
             native_tls,
@@ -234,7 +223,7 @@ async fn do_lock(
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
-    preview: PreviewMode,
+
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -264,13 +253,8 @@ async fn do_lock(
     let requirements = workspace
         .members_requirements()
         .chain(workspace.root_requirements())
-        .map(UnresolvedRequirementSpecification::from)
         .collect::<Vec<_>>();
-    let overrides = workspace
-        .overrides()
-        .into_iter()
-        .map(UnresolvedRequirementSpecification::from)
-        .collect::<Vec<_>>();
+    let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
     let constraints = workspace.constraints();
     let dev = vec![DEV_DEPENDENCIES.clone()];
     let source_trees = vec![];
@@ -288,6 +272,42 @@ async fn do_lock(
         }
 
         members
+    };
+
+    // Collect the list of supported environments.
+    let environments = {
+        let environments = workspace.environments();
+
+        // Ensure that the environments are disjoint.
+        if let Some(environments) = &environments {
+            for (lhs, rhs) in environments
+                .as_markers()
+                .iter()
+                .zip(environments.as_markers().iter().skip(1))
+            {
+                if !lhs.is_disjoint(rhs) {
+                    let mut hint = lhs.negate();
+                    hint.and(rhs.clone());
+
+                    let lhs = lhs
+                        .contents()
+                        .map(|contents| contents.to_string())
+                        .unwrap_or("true".to_string());
+                    let rhs = rhs
+                        .contents()
+                        .map(|contents| contents.to_string())
+                        .unwrap_or("true".to_string());
+                    let hint = hint
+                        .contents()
+                        .map(|contents| contents.to_string())
+                        .unwrap_or("true".to_string());
+
+                    return Err(ProjectError::OverlappingMarkers(lhs, rhs, hint));
+                }
+            }
+        }
+
+        environments
     };
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
@@ -356,7 +376,6 @@ async fn do_lock(
     // optional on the downstream APIs.
     let build_constraints = [];
     let extras = ExtrasSpecification::default();
-    let setup_py = SetupPyStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -377,7 +396,6 @@ async fn do_lock(
         &state.git,
         &state.in_flight,
         index_strategy,
-        setup_py,
         config_setting,
         build_isolation,
         link_mode,
@@ -385,42 +403,35 @@ async fn do_lock(
         exclude_newer,
         sources,
         concurrency,
-        preview,
     );
 
-    let database =
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview);
-
-    // Annoyingly, we have to resolve any unnamed overrides upfront.
-    let overrides = NamedRequirementsResolver::new(
-        overrides,
-        &hasher,
-        &state.index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve()
-    .await?;
+    let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
-        Some(
-            ValidatedLock::validate(
-                existing_lock,
-                workspace,
-                &members,
-                &constraints,
-                &overrides,
-                interpreter,
-                &requires_python,
-                index_locations,
-                upgrade,
-                &options,
-                &database,
-                printer,
-            )
-            .await?,
+        match ValidatedLock::validate(
+            existing_lock,
+            workspace,
+            &members,
+            &constraints,
+            &overrides,
+            environments,
+            interpreter,
+            &requires_python,
+            index_locations,
+            upgrade,
+            &options,
+            &database,
+            printer,
         )
+        .await
+        {
+            Ok(result) => Some(result),
+            Err(err) => {
+                warn_user!("Failed to validate existing lockfile: {err}");
+                None
+            }
+        }
     } else {
         None
     };
@@ -439,14 +450,15 @@ async fn do_lock(
         _ => {
             debug!("Starting clean resolution");
 
+            // Determine whether we can reuse the existing package versions.
+            let reusable_lock = existing_lock.as_ref().and_then(|lock| match &lock {
+                ValidatedLock::Preferable(lock) => Some(lock),
+                ValidatedLock::Satisfies(lock) => Some(lock),
+                ValidatedLock::Unusable(_) => None,
+            });
+
             // If an existing lockfile exists, build up a set of preferences.
-            let LockedRequirements { preferences, git } = existing_lock
-                .as_ref()
-                .and_then(|lock| match &lock {
-                    ValidatedLock::Preferable(lock) => Some(lock),
-                    ValidatedLock::Satisfies(lock) => Some(lock),
-                    ValidatedLock::Unusable(_) => None,
-                })
+            let LockedRequirements { preferences, git } = reusable_lock
                 .map(|lock| read_lock_requirements(lock, upgrade))
                 .unwrap_or_default();
 
@@ -457,23 +469,28 @@ async fn do_lock(
             }
 
             // When we run the same resolution from the lockfile again, we could get a different result the
-            // second time due to the preferences causing us to skip a fork point (see
-            // "preferences-dependent-forking" packse scenario). To avoid this, we store the forks in the
+            // second time due to the preferences causing us to skip a fork point (see the
+            // `preferences-dependent-forking` packse scenario). To avoid this, we store the forks in the
             // lockfile. We read those after all the lockfile filters, to allow the forks to change when
             // the environment changed, e.g. the python bound check above can lead to different forking.
-            let resolver_markers = ResolverMarkers::universal(if upgrade.is_all() {
-                // We're discarding all preferences, so we're also discarding the existing forks.
-                vec![]
-            } else {
-                existing_lock
-                    .as_ref()
-                    .map(|existing_lock| existing_lock.lock().fork_markers().to_vec())
-                    .unwrap_or_default()
-            });
+            let resolver_markers = ResolverMarkers::universal(
+                reusable_lock
+                    .map(|lock| lock.fork_markers().to_vec())
+                    .unwrap_or_else(|| {
+                        environments
+                            .cloned()
+                            .map(SupportedEnvironments::into_markers)
+                            .unwrap_or_default()
+                    }),
+            );
 
             // Resolve the requirements.
             let resolution = pip::operations::resolve(
-                requirements,
+                requirements
+                    .iter()
+                    .cloned()
+                    .map(UnresolvedRequirementSpecification::from)
+                    .collect(),
                 constraints.clone(),
                 overrides
                     .iter()
@@ -501,7 +518,6 @@ async fn do_lock(
                 options,
                 Box::new(SummaryResolveLogger),
                 printer,
-                preview,
             )
             .await?;
 
@@ -513,7 +529,13 @@ async fn do_lock(
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
             let lock = Lock::from_resolution_graph(&resolution)?
-                .with_manifest(ResolverManifest::new(members, constraints, overrides));
+                .with_manifest(ResolverManifest::new(members, constraints, overrides))
+                .with_supported_environments(
+                    environments
+                        .cloned()
+                        .map(SupportedEnvironments::into_markers)
+                        .unwrap_or_default(),
+                );
 
             Ok(LockResult::Changed(previous, lock))
         }
@@ -539,6 +561,7 @@ impl ValidatedLock {
         members: &[PackageName],
         constraints: &[Requirement],
         overrides: &[Requirement],
+        environments: Option<&SupportedEnvironments>,
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
         index_locations: &IndexLocations,
@@ -596,11 +619,31 @@ impl ValidatedLock {
             }
         }
 
-        // If the user specified `--upgrade`, then at best we can prefer some of the existing
-        // versions.
-        if !upgrade.is_none() {
-            debug!("Ignoring existing lockfile due to `--upgrade`");
-            return Ok(Self::Preferable(lock));
+        // If the set of supported environments has changed, we have to perform a clean resolution.
+        if lock.supported_environments()
+            != environments
+                .map(SupportedEnvironments::as_markers)
+                .unwrap_or_default()
+        {
+            let _ = writeln!(
+                printer.stderr(),
+                "Ignoring existing lockfile due to change in supported environments"
+            );
+            return Ok(Self::Unusable(lock));
+        }
+
+        match upgrade {
+            Upgrade::None => {}
+            Upgrade::All => {
+                // If the user specified `--upgrade`, then we can't use the existing lockfile.
+                debug!("Ignoring existing lockfile due to `--upgrade`");
+                return Ok(Self::Unusable(lock));
+            }
+            Upgrade::Packages(_) => {
+                // If the user specified `--upgrade-package`, then at best we can prefer some of
+                // the existing versions.
+                return Ok(Self::Preferable(lock));
+            }
         }
 
         // If the Requires-Python bound in the lockfile is weaker or equivalent to the
@@ -622,7 +665,7 @@ impl ValidatedLock {
         // file), don't use the existing lockfile if it references any registries that are no longer
         // included in the current configuration.
         //
-        // However, iIf _no_ indexes were provided, we assume that the user wants to reuse the existing
+        // However, if _no_ indexes were provided, we assume that the user wants to reuse the existing
         // distributions, even though a failure to reuse the lockfile will result in re-resolving
         // against PyPI by default.
         let indexes = if index_locations.is_none() {
@@ -699,15 +742,6 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
-        }
-    }
-
-    /// Return the inner [`Lock`].
-    fn lock(&self) -> &Lock {
-        match self {
-            ValidatedLock::Unusable(lock) => lock,
-            ValidatedLock::Satisfies(lock) => lock,
-            ValidatedLock::Preferable(lock) => lock,
         }
     }
 

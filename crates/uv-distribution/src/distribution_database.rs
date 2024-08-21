@@ -25,7 +25,6 @@ use uv_cache::{ArchiveId, ArchiveTimestamp, CacheBucket, CacheEntry, Timestamp, 
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::PreviewMode;
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_types::BuildContext;
@@ -61,11 +60,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         client: &'a RegistryClient,
         build_context: &'a Context,
         concurrent_downloads: usize,
-        preview_mode: PreviewMode,
     ) -> Self {
         Self {
             build_context,
-            builder: SourceDistributionBuilder::new(build_context, preview_mode),
+            builder: SourceDistributionBuilder::new(build_context),
             locks: Rc::new(Locks::default()),
             client: ManagedClient::new(client, concurrent_downloads),
             reporter: None,
@@ -598,8 +596,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        // If the archive is missing the required hashes, force a refresh.
-        let archive = if archive.has_digests(hashes) {
+        // If the archive is missing the required hashes, or has since been removed, force a refresh.
+        let archive = Some(archive)
+            .filter(|archive| archive.has_digests(hashes))
+            .filter(|archive| archive.exists(self.build_context.cache()));
+
+        let archive = if let Some(archive) = archive {
             archive
         } else {
             self.client
@@ -748,12 +750,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        // If the archive is missing the required hashes, force a refresh.
-        let archive = if archive.has_digests(hashes) {
+        // If the archive is missing the required hashes, or has since been removed, force a refresh.
+        let archive = Some(archive)
+            .filter(|archive| archive.has_digests(hashes))
+            .filter(|archive| archive.exists(self.build_context.cache()));
+
+        let archive = if let Some(archive) = archive {
             archive
         } else {
             self.client
-                .managed(|client| async move {
+                .managed(|client| async {
                     client
                         .cached_client()
                         .skip_cache(self.request(url)?, &http_entry, download)

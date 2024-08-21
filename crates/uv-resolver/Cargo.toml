@@ -36,7 +36,6 @@ uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
-chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 dashmap = { workspace = true }
 derivative = { workspace = true }
@@ -44,6 +43,7 @@ either = { workspace = true }
 futures = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
+jiff = { workspace = true, features = ["serde"] }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }

@@ -14,6 +14,7 @@ use uv_fs::{absolutize_path, normalize_path, relative_to, Simplified};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::warn_user;
 
+use crate::environments::SupportedEnvironments;
 use crate::pyproject::{Project, PyProjectToml, Source, ToolUvWorkspace};
 
 #[derive(thiserror::Error, Debug)]
@@ -365,6 +366,21 @@ impl Workspace {
                 )
             })
             .collect()
+    }
+
+    /// Returns the set of supported environments for the workspace.
+    pub fn environments(&self) -> Option<&SupportedEnvironments> {
+        let workspace_package = self
+            .packages
+            .values()
+            .find(|workspace_package| workspace_package.root() == self.install_path())?;
+
+        workspace_package
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.environments.as_ref())
     }
 
     /// Returns the set of constraints for the workspace.
@@ -1579,6 +1595,7 @@ mod tests {
                       },
                       "managed": null,
                       "dev-dependencies": null,
+                      "environments": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null
                     }
@@ -1651,6 +1668,7 @@ mod tests {
                       },
                       "managed": null,
                       "dev-dependencies": null,
+                      "environments": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null
                     }

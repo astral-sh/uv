@@ -21,7 +21,6 @@ workspace = true
 
 [dependencies]
 boxcar = { workspace = true }
-derivative = { workspace = true }
 itertools = { workspace = true }
 indexmap = { workspace = true }
 pubgrub = { workspace = true }

@@ -1,8 +1,10 @@
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Bound, Deref};
 use std::str::FromStr;
 
+use itertools::Itertools;
 use pubgrub::Range;
 #[cfg(feature = "pyo3")]
 use pyo3::{basic::CompareOp, pyclass, pymethods};
@@ -380,6 +382,15 @@ pub struct StringVersion {
     pub version: Version,
 }
 
+impl From<Version> for StringVersion {
+    fn from(version: Version) -> Self {
+        Self {
+            string: version.to_string(),
+            version,
+        }
+    }
+}
+
 impl FromStr for StringVersion {
     type Err = VersionParseError;
 
@@ -435,6 +446,19 @@ pub enum MarkerExpression {
     Version {
         key: MarkerValueVersion,
         specifier: VersionSpecifier,
+    },
+    /// A version in list expression, e.g. `<version key> in <quoted list of PEP 440 versions>`.
+    ///
+    /// A special case of [`MarkerExpression::String`] with the [`MarkerOperator::In`] operator for
+    /// [`MarkerValueVersion`] values.
+    ///
+    /// See [`parse::parse_version_in_expr`] for details on the supported syntax.
+    ///
+    /// Negated expressions, using "not in" are represented using `negated = true`.
+    VersionIn {
+        key: MarkerValueVersion,
+        versions: Vec<Version>,
+        negated: bool,
     },
     /// An string marker comparison, e.g. `sys_platform == '...'`.
     ///
@@ -534,6 +558,15 @@ impl Display for MarkerExpression {
                 }
                 write!(f, "{key} {op} '{version}'")
             }
+            MarkerExpression::VersionIn {
+                key,
+                versions,
+                negated,
+            } => {
+                let op = if *negated { "not in" } else { "in" };
+                let versions = versions.iter().map(ToString::to_string).join(" ");
+                write!(f, "{key} {op} '{versions}'")
+            }
             MarkerExpression::String {
                 key,
                 operator,
@@ -561,7 +594,7 @@ impl Display for MarkerExpression {
 /// will compare equally. Markers also support efficient polynomial-time operations,
 /// such as conjunction and disjunction.
 // TODO(ibraheem): decide whether we want to implement `Copy` for marker trees
-#[derive(Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub struct MarkerTree(NodeId);
 
 impl Default for MarkerTree {
@@ -652,15 +685,15 @@ impl MarkerTree {
         self.0 = INTERNER.lock().or(self.0, tree.0);
     }
 
-    /// Returns `true` if there is no environment in which both marker trees can both apply,
-    /// i.e. the expression `first and second` is always false.
+    /// Returns `true` if there is no environment in which both marker trees can apply,
+    /// i.e. their conjunction is always `false`.
     ///
     /// If this method returns `true`, it is definitively known that the two markers can
     /// never both evaluate to `true` in a given environment. However, this method may return
     /// false negatives, i.e. it may not be able to detect that two markers are disjoint for
     /// complex expressions.
-    pub fn is_disjoint(&self, tree: &MarkerTree) -> bool {
-        INTERNER.lock().and(self.0, tree.0).is_false()
+    pub fn is_disjoint(&self, other: &MarkerTree) -> bool {
+        INTERNER.lock().is_disjoint(self.0, other.0)
     }
 
     /// Returns the contents of this marker tree, if it contains at least one expression.
@@ -1069,7 +1102,8 @@ impl MarkerTree {
     #[allow(clippy::needless_pass_by_value)]
     pub fn simplify_python_versions(self, python_version: Range<Version>) -> MarkerTree {
         MarkerTree(INTERNER.lock().restrict_versions(self.0, &|var| match var {
-            // Note that `python_version` is normalized to `python_full_version`.
+            // Note that `python_version` is normalized to `python_full_version` internally by the
+            // decision diagram.
             Variable::Version(MarkerValueVersion::PythonFullVersion) => {
                 Some(python_version.clone())
             }
@@ -1131,12 +1165,24 @@ impl fmt::Debug for MarkerTree {
     }
 }
 
+impl PartialOrd for MarkerTree {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MarkerTree {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.kind().cmp(&other.kind())
+    }
+}
+
 /// The underlying kind of an arbitrary node in a [`MarkerTree`].
 ///
 /// A marker tree is represented as an algebraic decision tree with two terminal nodes
 /// `True` or `False`. The edges of a given node correspond to a particular assignment of
 /// a value to that variable.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, PartialOrd, Ord)]
 pub enum MarkerTreeKind<'a> {
     /// An empty marker that always evaluates to `true`.
     True,
@@ -1176,6 +1222,20 @@ impl VersionMarkerTree<'_> {
     }
 }
 
+impl PartialOrd for VersionMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for VersionMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key()
+            .cmp(other.key())
+            .then_with(|| self.edges().cmp(other.edges()))
+    }
+}
+
 /// A string marker node, such as `os_name == 'Linux'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct StringMarkerTree<'a> {
@@ -1195,6 +1255,20 @@ impl StringMarkerTree<'_> {
         self.map
             .iter()
             .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
+    }
+}
+
+impl PartialOrd for StringMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for StringMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key()
+            .cmp(other.key())
+            .then_with(|| self.children().cmp(other.children()))
     }
 }
 
@@ -1233,6 +1307,21 @@ impl InMarkerTree<'_> {
     }
 }
 
+impl PartialOrd for InMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for InMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key()
+            .cmp(other.key())
+            .then_with(|| self.value().cmp(other.value()))
+            .then_with(|| self.children().cmp(other.children()))
+    }
+}
+
 /// A string marker node with inverse of the `in` operator, such as `'nux' in os_name`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ContainsMarkerTree<'a> {
@@ -1268,6 +1357,21 @@ impl ContainsMarkerTree<'_> {
     }
 }
 
+impl PartialOrd for ContainsMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ContainsMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key()
+            .cmp(other.key())
+            .then_with(|| self.value().cmp(other.value()))
+            .then_with(|| self.children().cmp(other.children()))
+    }
+}
+
 /// A node representing the existence or absence of a given extra, such as `extra == 'bar'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ExtraMarkerTree<'a> {
@@ -1294,6 +1398,20 @@ impl ExtraMarkerTree<'_> {
         } else {
             MarkerTree(self.low)
         }
+    }
+}
+
+impl PartialOrd for ExtraMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ExtraMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name()
+            .cmp(other.name())
+            .then_with(|| self.children().cmp(other.children()))
     }
 }
 
@@ -1539,6 +1657,69 @@ mod test {
         assert!(marker2.evaluate(&env37, &[]));
         assert!(marker3.evaluate(&env27, &[]));
         assert!(!marker3.evaluate(&env37, &[]));
+    }
+
+    #[test]
+    fn test_version_in_evaluation() {
+        let env27 = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "",
+            implementation_version: "2.7",
+            os_name: "linux",
+            platform_machine: "",
+            platform_python_implementation: "",
+            platform_release: "",
+            platform_system: "",
+            platform_version: "",
+            python_full_version: "2.7",
+            python_version: "2.7",
+            sys_platform: "linux",
+        })
+        .unwrap();
+        let env37 = env37();
+
+        let marker = MarkerTree::from_str("python_version in \"2.7 3.2 3.3\"").unwrap();
+        assert!(marker.evaluate(&env27, &[]));
+        assert!(!marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("python_version in \"2.7 3.7\"").unwrap();
+        assert!(marker.evaluate(&env27, &[]));
+        assert!(marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("python_version in \"2.4 3.8 4.0\"").unwrap();
+        assert!(!marker.evaluate(&env27, &[]));
+        assert!(!marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("python_version not in \"2.7 3.2 3.3\"").unwrap();
+        assert!(!marker.evaluate(&env27, &[]));
+        assert!(marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("python_version not in \"2.7 3.7\"").unwrap();
+        assert!(!marker.evaluate(&env27, &[]));
+        assert!(!marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("python_version not in \"2.4 3.8 4.0\"").unwrap();
+        assert!(marker.evaluate(&env27, &[]));
+        assert!(marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("python_full_version in \"2.7\"").unwrap();
+        assert!(marker.evaluate(&env27, &[]));
+        assert!(!marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("implementation_version in \"2.7 3.2 3.3\"").unwrap();
+        assert!(marker.evaluate(&env27, &[]));
+        assert!(!marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("implementation_version in \"2.7 3.7\"").unwrap();
+        assert!(marker.evaluate(&env27, &[]));
+        assert!(marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("implementation_version not in \"2.7 3.7\"").unwrap();
+        assert!(!marker.evaluate(&env27, &[]));
+        assert!(!marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("implementation_version not in \"2.4 3.8 4.0\"").unwrap();
+        assert!(marker.evaluate(&env27, &[]));
+        assert!(marker.evaluate(&env37, &[]));
     }
 
     #[test]
@@ -1803,10 +1984,66 @@ mod test {
 
     #[test]
     fn test_marker_simplification() {
+        assert_false("python_version == '3.9.1'");
+        assert_false("python_version == '3.9.0.*'");
+        assert_true("python_version != '3.9.1'");
+
+        // Technically these is are valid substring comparison, but we do not allow them.
+        // e.g., using a version with patch components with `python_version` is considered
+        // impossible to satisfy since the value it is truncated at the minor version
+        assert_false("python_version in '3.9.0'");
+        // e.g., using a version that is not PEP 440 compliant is considered arbitrary
+        assert_true("python_version in 'foo'");
+        // e.g., including `*` versions, which would require tracking a version specifier
+        assert_true("python_version in '3.9.*'");
+        // e.g., when non-whitespace separators are present
+        assert_true("python_version in '3.9, 3.10'");
+        assert_true("python_version in '3.9,3.10'");
+        assert_true("python_version in '3.9 or 3.10'");
+
+        // e.g, when one of the values cannot be true
+        // TODO(zanieb): This seems like a quirk of the `python_full_version` normalization, this
+        // should just act as though the patch version isn't present
+        assert_false("python_version in '3.9 3.10.0 3.11'");
+
         assert_simplifies("python_version == '3.9'", "python_full_version == '3.9.*'");
         assert_simplifies(
             "python_version == '3.9.0'",
             "python_full_version == '3.9.*'",
+        );
+
+        // `<version> in`
+        // e.g., when the range is not contiguous
+        assert_simplifies(
+            "python_version in '3.9 3.11'",
+            "python_full_version == '3.9.*' or python_full_version == '3.11.*'",
+        );
+        // e.g., when the range is contiguous
+        assert_simplifies(
+            "python_version in '3.9 3.10 3.11'",
+            "python_full_version >= '3.9' and python_full_version < '3.12'",
+        );
+        // e.g., with `implementation_version` instead of `python_version`
+        assert_simplifies(
+            "implementation_version in '3.9 3.11'",
+            "implementation_version == '3.9' or implementation_version == '3.11'",
+        );
+
+        // '<version> not in'
+        // e.g., when the range is not contiguous
+        assert_simplifies(
+            "python_version not in '3.9 3.11'",
+            "python_full_version < '3.9' or python_full_version == '3.10.*' or python_full_version >= '3.12'",
+        );
+        // e.g, when the range is contiguous
+        assert_simplifies(
+            "python_version not in '3.9 3.10 3.11'",
+            "python_full_version < '3.9' or python_full_version >= '3.12'",
+        );
+        // e.g., with `implementation_version` instead of `python_version`
+        assert_simplifies(
+            "implementation_version not in '3.9 3.11'",
+            "implementation_version != '3.9' and implementation_version != '3.11'",
         );
 
         assert_simplifies("python_version != '3.9'", "python_full_version != '3.9.*'");
@@ -1865,14 +2102,14 @@ mod test {
         );
 
         assert_simplifies(
-             "(python_version > '3.17' or python_version > '3.16') and python_version > '3.15' and implementation_version == '1'",
-             "implementation_version == '1' and python_full_version >= '3.17'",
-         );
+            "(python_version > '3.17' or python_version > '3.16') and python_version > '3.15' and implementation_version == '1'",
+            "implementation_version == '1' and python_full_version >= '3.17'",
+        );
 
         assert_simplifies(
-             "('3.17' < python_version or '3.16' < python_version) and '3.15' < python_version and implementation_version == '1'",
-             "implementation_version == '1' and python_full_version >= '3.17'",
-         );
+            "('3.17' < python_version or '3.16' < python_version) and '3.15' < python_version and implementation_version == '1'",
+            "implementation_version == '1' and python_full_version >= '3.17'",
+        );
 
         assert_simplifies("extra == 'a' or extra == 'a'", "extra == 'a'");
         assert_simplifies(
@@ -1926,9 +2163,9 @@ mod test {
 
         // post-normalization filtering
         assert_simplifies(
-             "(python_version < '3.1' or python_version < '3.2') and (python_version < '3.2' or python_version == '3.3')",
-             "python_full_version < '3.2'",
-         );
+            "(python_version < '3.1' or python_version < '3.2') and (python_version < '3.2' or python_version == '3.3')",
+            "python_full_version < '3.2'",
+        );
 
         // normalize out redundant ranges
         assert_true("python_version < '3.12.0rc1' or python_version >= '3.12.0rc1'");
@@ -2084,7 +2321,7 @@ mod test {
                 or (os_name != 'Linux' and platform_system == 'win32' and sys_platform == 'x')
                 or (os_name == 'Linux' and platform_system != 'win32' and sys_platform == 'x')
                 or (os_name != 'Linux' and platform_system != 'win32' and sys_platform == 'x')",
-            "(os_name != 'Linux' and sys_platform == 'x') or (platform_system != 'win32' and sys_platform == 'x') or (os_name == 'Linux' and platform_system == 'win32')"
+            "(os_name != 'Linux' and sys_platform == 'x') or (platform_system != 'win32' and sys_platform == 'x') or (os_name == 'Linux' and platform_system == 'win32')",
         );
 
         assert_simplifies("python_version > '3.7'", "python_full_version >= '3.8'");
@@ -2102,24 +2339,24 @@ mod test {
                 or (os_name != 'Linux' and sys_platform == 'win32' and python_version == '3.8')",
             "(python_full_version < '3.7' and os_name == 'Linux' and sys_platform == 'win32') \
                 or (python_full_version >= '3.9' and os_name == 'Linux' and sys_platform == 'win32') \
-                or (python_full_version >= '3.7' and python_full_version < '3.9' and sys_platform == 'win32')"
+                or (python_full_version >= '3.7' and python_full_version < '3.9' and sys_platform == 'win32')",
         );
 
         assert_simplifies(
             "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
-            "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')"
+            "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
         );
 
         assert_simplifies(
             "(sys_platform == 'darwin' or sys_platform == 'win32')
                 and ((implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32'))",
-            "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')"
+            "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
         );
 
         assert_simplifies(
             "(sys_platform == 'darwin' or sys_platform == 'win32')
                 and ((platform_version != '1' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32'))",
-            "(os_name == 'nt' and platform_version != '1' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')"
+            "(os_name == 'nt' and platform_version != '1' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
         );
 
         assert_simplifies(
@@ -2127,12 +2364,12 @@ mod test {
                 or (os_name != 'nt' and platform_version == '1' and (sys_platform == 'win32' or sys_platform == 'win64'))",
             "(platform_version == '1' and sys_platform == 'win32') \
                 or (os_name != 'nt' and platform_version == '1' and sys_platform == 'win64') \
-                or (os_name == 'nt' and sys_platform == 'win32')"
+                or (os_name == 'nt' and sys_platform == 'win32')",
         );
 
         assert_simplifies(
             "(os_name == 'nt' and sys_platform == 'win32') or (os_name != 'nt' and (sys_platform == 'win32' or sys_platform == 'win64'))",
-            "(os_name != 'nt' and sys_platform == 'win64') or sys_platform == 'win32'"
+            "(os_name != 'nt' and sys_platform == 'win64') or sys_platform == 'win32'",
         );
     }
 
@@ -2205,6 +2442,26 @@ mod test {
 
         assert!(!is_disjoint(
             "python_full_version == '3.7.*'",
+            "python_full_version == '3.7.1'"
+        ));
+
+        assert!(is_disjoint(
+            "python_version == '3.7'",
+            "python_full_version == '3.8'"
+        ));
+
+        assert!(!is_disjoint(
+            "python_version == '3.7'",
+            "python_full_version == '3.7.2'"
+        ));
+
+        assert!(is_disjoint(
+            "python_version > '3.7'",
+            "python_full_version == '3.7.1'"
+        ));
+
+        assert!(!is_disjoint(
+            "python_version <= '3.7'",
             "python_full_version == '3.7.1'"
         ));
     }
@@ -2285,6 +2542,19 @@ mod test {
             "sys_platform == 'bar' or implementation_name == 'foo'",
             "sys_platform == 'darwin' and implementation_name == 'pypy'",
         ));
+
+        assert!(is_disjoint(
+            "python_version >= '3.7' and implementation_name == 'pypy'",
+            "python_version < '3.7'"
+        ));
+        assert!(is_disjoint(
+            "implementation_name == 'pypy' and python_version >= '3.7'",
+            "implementation_name != 'pypy'"
+        ));
+        assert!(is_disjoint(
+            "implementation_name != 'pypy' and python_version >= '3.7'",
+            "implementation_name == 'pypy'"
+        ));
     }
 
     #[test]
@@ -2363,7 +2633,12 @@ mod test {
         assert!(m(marker).is_true(), "{marker} != true");
     }
 
+    fn assert_false(marker: &str) {
+        assert!(m(marker).is_false(), "{marker} != false");
+    }
+
     fn is_disjoint(left: impl AsRef<str>, right: impl AsRef<str>) -> bool {
-        m(left.as_ref()).is_disjoint(&m(right.as_ref()))
+        let (left, right) = (m(left.as_ref()), m(right.as_ref()));
+        left.is_disjoint(&right) && right.is_disjoint(&left)
     }
 }

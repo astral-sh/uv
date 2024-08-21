@@ -73,7 +73,6 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###
     );
@@ -86,7 +85,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
@@ -111,8 +110,8 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=1" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=1" },
         ]
         "###
         );
@@ -191,7 +190,6 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###
     );
@@ -291,7 +289,6 @@ fn fork_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###
     );
@@ -304,7 +301,7 @@ fn fork_basic() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
@@ -314,7 +311,7 @@ fn fork_basic() -> Result<()> {
         name = "package-a"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_basic_a-1.0.0.tar.gz", hash = "sha256:9bd6d9d74d8928854f79ea3ed4cd0d8a4906eeaa40f5f3d63460a1c2d5f6d773" }
@@ -326,7 +323,7 @@ fn fork_basic() -> Result<()> {
         name = "package-a"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_basic_a-2.0.0.tar.gz", hash = "sha256:c0ce6dfb6d712eb42a4bbe9402a1f823627b9d3773f31d259c49478fc7d8d082" }
@@ -345,8 +342,8 @@ fn fork_basic() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -426,14 +423,13 @@ fn conflict_in_fork() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies for split (sys_platform == 'darwin'):
       ╰─▶ Because only package-b==1.0.0 is available and package-b==1.0.0 depends on package-d==1, we can conclude that all versions of package-b depend on package-d==1.
           And because package-c==1.0.0 depends on package-d==2 and only package-c==1.0.0 is available, we can conclude that all versions of package-b and all versions of package-c are incompatible.
           And because package-a{sys_platform == 'darwin'}==1.0.0 depends on package-b and package-c, we can conclude that package-a{sys_platform == 'darwin'}==1.0.0 cannot be used.
           And because only the following versions of package-a{sys_platform == 'darwin'} are available:
               package-a{sys_platform == 'darwin'}==1.0.0
-              package-a{sys_platform == 'darwin'}>=2
+              package-a{sys_platform == 'darwin'}>2
           and your project depends on package-a{sys_platform == 'darwin'}<2, we can conclude that your project's requirements are unsatisfiable.
     "###
     );
@@ -495,7 +491,6 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on package-a>=2 and package-a<2, we can conclude that your project's requirements are unsatisfiable.
     "###
@@ -579,7 +574,6 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 7 packages in [TIME]
     "###
     );
@@ -592,7 +586,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
             "sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
@@ -602,7 +596,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         name = "package-a"
         version = "4.3.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_a-4.3.0.tar.gz", hash = "sha256:5389f0927f61393ba8bd940622329299d769e79b725233604a6bdac0fd088c49" }
@@ -614,7 +608,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         name = "package-a"
         version = "4.4.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_a-4.4.0.tar.gz", hash = "sha256:7dbb8575aec8f87063954917b6ee628191cd53ca233ec810f6d926b4954e578b" }
@@ -650,7 +644,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         name = "package-d"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_d-1.0.0.tar.gz", hash = "sha256:cc1af60e53faf957fd0542349441ea79a909cd5feb30fb8933c39dc33404e4b2" }
@@ -662,7 +656,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         name = "package-d"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_d-2.0.0.tar.gz", hash = "sha256:68e380efdea5206363f5397e4cd560a64f5f4927396dc0b6f6f36dd3f026281f" }
@@ -683,8 +677,8 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = "==4.4.0" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "==4.3.0" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = "==4.4.0" },
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = "==1.0.0" },
             { name = "package-c", marker = "sys_platform == 'darwin'", specifier = "==1.0.0" },
         ]
@@ -758,7 +752,6 @@ fn fork_upgrade() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###
     );
@@ -879,7 +872,6 @@ fn fork_incomplete_markers() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -892,7 +884,7 @@ fn fork_incomplete_markers() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "python_full_version < '3.10'",
             "python_full_version == '3.10.*'",
             "python_full_version >= '3.11'",
@@ -902,7 +894,7 @@ fn fork_incomplete_markers() -> Result<()> {
         name = "package-a"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "python_full_version < '3.10'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_a-1.0.0.tar.gz", hash = "sha256:dd56de2e560b3f95c529c44cbdae55d9b1ada826ddd3e19d3ea45438224ad603" }
@@ -914,7 +906,7 @@ fn fork_incomplete_markers() -> Result<()> {
         name = "package-a"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "python_full_version >= '3.11'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_a-2.0.0.tar.gz", hash = "sha256:580f1454a172036c89f5cfbefe52f175b011806a61f243eb476526bcc186e0be" }
@@ -1033,7 +1025,6 @@ fn fork_marker_accrue() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###
     );
@@ -1167,7 +1158,6 @@ fn fork_marker_disjoint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies for split (sys_platform == 'linux'):
       ╰─▶ Because your project depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that your project's requirements are unsatisfiable.
     "###
@@ -1238,7 +1228,6 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###
     );
@@ -1251,7 +1240,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
@@ -1263,7 +1252,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         name = "package-a"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
@@ -1281,7 +1270,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         name = "package-a"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_a-2.0.0.tar.gz", hash = "sha256:0dcb58c8276afbe439e1c94708fb71954fb8869cc65c230ce8f462c911992ceb" }
@@ -1293,7 +1282,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         name = "package-b"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
@@ -1308,7 +1297,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         name = "package-b"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_b-2.0.0.tar.gz", hash = "sha256:4533845ba671575a25ceb32f10f0bc6836949bef37b7da6e7dd37d9be389871c" }
@@ -1336,8 +1325,8 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -1419,7 +1408,6 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -1432,7 +1420,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
@@ -1444,7 +1432,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         name = "package-a"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
@@ -1462,7 +1450,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         name = "package-a"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_a-2.0.0.tar.gz", hash = "sha256:9d48383b0699f575af15871f6f7a928b835cd5ad4e13f91a675ee5aba722dabc" }
@@ -1474,7 +1462,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         name = "package-b"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_b-1.0.0.tar.gz", hash = "sha256:d44b87bd8d39240bca55eaae84a245e74197ed0b7897c27af9f168c713cc63bd" }
@@ -1486,7 +1474,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         name = "package-b"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_b-2.0.0.tar.gz", hash = "sha256:75a48bf2d44a0a0be6ca33820f5076665765be7b43dabf5f94f7fd5247071097" }
@@ -1505,8 +1493,8 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -1589,7 +1577,6 @@ fn fork_marker_inherit_combined() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -1602,7 +1589,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
@@ -1614,7 +1601,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
         name = "package-a"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
@@ -1632,7 +1619,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
         name = "package-a"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_a-2.0.0.tar.gz", hash = "sha256:47958d1659220ee7722b0f26e8c1fe41217a2816881ffa929f0ba794a87ceebf" }
@@ -1644,7 +1631,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
         name = "package-b"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_b-1.0.0.tar.gz", hash = "sha256:6992d194cb5a0f0eed9ed6617d3212af4e3ff09274bf7622c8a1008b072128da" }
@@ -1656,7 +1643,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
         name = "package-b"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_b-2.0.0.tar.gz", hash = "sha256:e340061505d621a340d10ec1dbaf02dfce0c66358ee8190f61f78018f9999989" }
@@ -1675,8 +1662,8 @@ fn fork_marker_inherit_combined() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -1752,7 +1739,6 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###
     );
@@ -1765,7 +1751,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
@@ -1775,7 +1761,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         name = "package-a"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_isolated_a-1.0.0.tar.gz", hash = "sha256:724ffc24debfa2bc6b5c2457df777c523638ec3586cc953f8509dad581aa6887" }
@@ -1787,7 +1773,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         name = "package-a"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         dependencies = [
@@ -1818,8 +1804,8 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -1901,7 +1887,6 @@ fn fork_marker_inherit_transitive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -1914,7 +1899,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
@@ -1924,7 +1909,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         name = "package-a"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
         ]
         dependencies = [
@@ -1939,7 +1924,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         name = "package-a"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_transitive_a-2.0.0.tar.gz", hash = "sha256:4437ac14c340fec0b451cbc9486f5b8e106568634264ecad339a8de565a93be6" }
@@ -1979,8 +1964,8 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -2058,7 +2043,6 @@ fn fork_marker_inherit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###
     );
@@ -2071,7 +2055,7 @@ fn fork_marker_inherit() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
@@ -2081,7 +2065,7 @@ fn fork_marker_inherit() -> Result<()> {
         name = "package-a"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_a-1.0.0.tar.gz", hash = "sha256:177511ec69a2f04de39867d43f167a33194ae983e8f86a1cc9b51f59fc379d4b" }
@@ -2093,7 +2077,7 @@ fn fork_marker_inherit() -> Result<()> {
         name = "package-a"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_a-2.0.0.tar.gz", hash = "sha256:43e24ce6fcbfbbff1db5eb20b583c20c2aa0888138bfafeab205c4ccc6e7e0a4" }
@@ -2112,8 +2096,8 @@ fn fork_marker_inherit() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -2197,7 +2181,6 @@ fn fork_marker_limited_inherit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -2210,7 +2193,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
@@ -2220,7 +2203,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
         name = "package-a"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_limited_inherit_a-1.0.0.tar.gz", hash = "sha256:ab1fde8d0acb9a2fe99b7a005939962b1c26c6d876e4a55e81fb9d1a1e5e9f76" }
@@ -2232,7 +2215,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
         name = "package-a"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_limited_inherit_a-2.0.0.tar.gz", hash = "sha256:009fdb8872cf52324c1bcdebef31feaba3c262fd76d150a753152aeee3d55b10" }
@@ -2273,8 +2256,8 @@ fn fork_marker_limited_inherit() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-b" },
         ]
         "###
@@ -2353,7 +2336,6 @@ fn fork_marker_selection() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###
     );
@@ -2366,7 +2348,7 @@ fn fork_marker_selection() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
@@ -2385,7 +2367,7 @@ fn fork_marker_selection() -> Result<()> {
         name = "package-b"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_selection_b-1.0.0.tar.gz", hash = "sha256:6f5ea28cadb8b5dfa15d32c9e38818f8f7150fc4f9a58e49aec4e10b23342be4" }
@@ -2397,7 +2379,7 @@ fn fork_marker_selection() -> Result<()> {
         name = "package-b"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_selection_b-2.0.0.tar.gz", hash = "sha256:d32033ecdf37d605e4b3b3e88df6562bb7ca01c6ed3fb9a55ec078eccc1df9d1" }
@@ -2418,8 +2400,8 @@ fn fork_marker_selection() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "package-a" },
-            { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
         "###
         );
@@ -2509,7 +2491,6 @@ fn fork_marker_track() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -2522,7 +2503,7 @@ fn fork_marker_track() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
@@ -2544,7 +2525,7 @@ fn fork_marker_track() -> Result<()> {
         name = "package-b"
         version = "2.7"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_track_b-2.7.tar.gz", hash = "sha256:855bf45837a4ba669a5850b14b0253cb138925fdd2b06a2f15c6582b8fabb8a0" }
@@ -2556,7 +2537,7 @@ fn fork_marker_track() -> Result<()> {
         name = "package-b"
         version = "2.8"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_track_b-2.8.tar.gz", hash = "sha256:2e14b0ff1fb7f5cf491bd31d876218adee1d6a208ff197dc30363cdf25262e80" }
@@ -2586,8 +2567,8 @@ fn fork_marker_track() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "package-a" },
-            { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2.8" },
             { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2.8" },
+            { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2.8" },
         ]
         "###
         );
@@ -2662,7 +2643,6 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###
     );
@@ -2797,7 +2777,6 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because package-b{sys_platform == 'darwin'}==1.0.0 depends on package-c>=2.0.0 and package-a{sys_platform == 'linux'}==1.0.0 depends on package-c<2.0.0, we can conclude that package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
           And because your project depends on package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
@@ -2870,12 +2849,11 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}>=2.0.0 and only package-c{sys_platform == 'darwin'}<=2.0.0 is available, we can conclude that package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}==2.0.0.
           And because only the following versions of package-c{sys_platform == 'linux'} are available:
               package-c{sys_platform == 'linux'}==1.0.0
-              package-c{sys_platform == 'linux'}>=2.0.0
+              package-c{sys_platform == 'linux'}>2.0.0
           and package-a==1.0.0 depends on package-c{sys_platform == 'linux'}<2.0.0, we can conclude that package-a==1.0.0 and package-b==1.0.0 are incompatible.
           And because your project depends on package-a==1.0.0 and package-b==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "###
@@ -2964,7 +2942,6 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###
     );
@@ -2977,7 +2954,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "python_full_version < '3.10'",
             "python_full_version == '3.10.*'",
             "python_full_version >= '3.11'",
@@ -3132,7 +3109,6 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     "###
     );
@@ -3145,7 +3121,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
             "sys_platform != 'linux'",
         ]
@@ -3169,7 +3145,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         name = "package-fork-if-not-forked"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform != 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_fork_if_not_forked-2.0.0.tar.gz", hash = "sha256:1f130c437449e7f0752938bff562addd287b6df96784122885e83563f7624798" }
@@ -3181,7 +3157,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         name = "package-fork-if-not-forked"
         version = "3.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_fork_if_not_forked-3.0.0.tar.gz", hash = "sha256:72aee18148130c3287f2e07f31cd8883f1b35d91d6ef5230961e5fcc57667943" }
@@ -3205,7 +3181,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         name = "package-reject-cleaver1"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_reject_cleaver1-1.0.0.tar.gz", hash = "sha256:bf19f244de469bb73c7fb9dc438bca2fac829d865e546327694b2f292192c042" }
@@ -3217,7 +3193,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         name = "package-reject-cleaver1"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform != 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_reject_cleaver1-2.0.0.tar.gz", hash = "sha256:b671f6112e6829557bec5c1aa86e55e79a9883a28117025523a132ff24cd9be3" }
@@ -3369,7 +3345,6 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###
     );
@@ -3512,7 +3487,6 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 11 packages in [TIME]
     "###
     );
@@ -3525,7 +3499,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
             "sys_platform != 'linux'",
         ]
@@ -3534,7 +3508,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "package-bar"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform != 'linux'",
         ]
         dependencies = [
@@ -3550,7 +3524,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "package-bar"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_bar-2.0.0.tar.gz", hash = "sha256:cc856e6aca342176e6ba518a298198258b7be3ee7a6b86319c1d8b731e54991e" }
@@ -3562,7 +3536,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "package-c"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_c-2.0.0.tar.gz", hash = "sha256:f0d941b83146d72e05fde266be4a500400683e6c62ae86dab11af78c2d26587b" }
@@ -3574,7 +3548,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "package-c"
         version = "3.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform != 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_c-3.0.0.tar.gz", hash = "sha256:3531c0ec88cc79cde8106e949c7062854bbd48e3bc60803246372cdc4f4c4864" }
@@ -3638,7 +3612,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "package-unrelated-dep2"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_unrelated_dep2-1.0.0.tar.gz", hash = "sha256:bbeb0f558aff8c48bac6fdab42ed52f49d68d2b51a7de82ff9357925a6e5023a" }
@@ -3650,7 +3624,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "package-unrelated-dep2"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform != 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_unrelated_dep2-2.0.0.tar.gz", hash = "sha256:ac23c6208b6340b2542e730e1df770ed4ca65f234de86d2216add6c2b975f95c" }
@@ -3796,7 +3770,6 @@ fn preferences_dependent_forking() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -3809,7 +3782,7 @@ fn preferences_dependent_forking() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
             "sys_platform != 'linux'",
         ]
@@ -3818,7 +3791,7 @@ fn preferences_dependent_forking() -> Result<()> {
         name = "package-bar"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform != 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-1.0.0.tar.gz", hash = "sha256:7eef4e0c910b9e4cadf6c707e60a2151f7dc6407d815112ec93a467d76226f5e" }
@@ -3830,7 +3803,7 @@ fn preferences_dependent_forking() -> Result<()> {
         name = "package-bar"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'linux'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-2.0.0.tar.gz", hash = "sha256:f440dbb8c3b848be467c9d3cd4970963fae3144de12454fd48fe9077eb76e9ea" }
@@ -3971,7 +3944,6 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###
     );
@@ -3984,7 +3956,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "os_name == 'darwin' and sys_platform == 'illumos'",
             "os_name == 'linux' and sys_platform == 'illumos'",
             "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
@@ -3996,7 +3968,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         name = "package-a"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "os_name == 'darwin' and sys_platform == 'illumos'",
             "os_name == 'linux' and sys_platform == 'illumos'",
             "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
@@ -4014,7 +3986,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         name = "package-a"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'windows'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_remaining_universe_partitioning_a-2.0.0.tar.gz", hash = "sha256:c6166efba9da6cbe32221dd425873c9de605343db1cd8d732c4c1624635944b0" }
@@ -4026,7 +3998,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         name = "package-b"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "os_name == 'darwin' and sys_platform == 'illumos'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_remaining_universe_partitioning_b-1.0.0.tar.gz", hash = "sha256:83755cf4f9d97909bc295a3fbb10006747c02b2344f3f017cff276fa7922b756" }
@@ -4038,7 +4010,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         name = "package-b"
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
+        resolution-markers = [
             "os_name == 'linux' and sys_platform == 'illumos'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_remaining_universe_partitioning_b-2.0.0.tar.gz", hash = "sha256:32cf6efcab24453f11a3bf2c230536b99a41e9611f5e96b2eee589c0d81f2348" }
@@ -4057,8 +4029,8 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'windows'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'illumos'", specifier = "<2" },
+            { name = "package-a", marker = "sys_platform == 'windows'", specifier = ">=2" },
         ]
         "###
         );
@@ -4124,7 +4096,6 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 1 package in [TIME]
     "###
     );
@@ -4209,7 +4180,6 @@ fn fork_requires_python_full() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 1 package in [TIME]
     "###
     );
@@ -4298,7 +4268,6 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###
     );
@@ -4392,7 +4361,6 @@ fn fork_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 1 package in [TIME]
     "###
     );

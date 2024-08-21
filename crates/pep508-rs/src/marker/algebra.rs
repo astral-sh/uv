@@ -168,11 +168,32 @@ impl InternerGuard<'_> {
                 ),
                 Err(node) => return node,
             },
+            MarkerExpression::VersionIn {
+                key: MarkerValueVersion::PythonVersion,
+                versions,
+                negated,
+            } => match Edges::from_python_versions(versions, negated) {
+                Ok(edges) => (
+                    Variable::Version(MarkerValueVersion::PythonFullVersion),
+                    edges,
+                ),
+                Err(node) => return node,
+            },
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
             MarkerExpression::Version { key, specifier } => {
                 (Variable::Version(key), Edges::from_specifier(specifier))
             }
+            // A variable representing the output of a version key. Edges correspond
+            // to disjoint version ranges.
+            MarkerExpression::VersionIn {
+                key,
+                versions,
+                negated,
+            } => (
+                Variable::Version(key),
+                Edges::from_versions(&versions, negated),
+            ),
             // The `in` and `contains` operators are a bit different than other operators.
             // In particular, they do not represent a particular value for the corresponding
             // variable, and can overlap. For example, `'nux' in os_name` and `os_name == 'Linux'`
@@ -233,22 +254,20 @@ impl InternerGuard<'_> {
 
     // Returns a decision node representing the conjunction of two nodes.
     pub(crate) fn and(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
-        if xi == NodeId::TRUE {
+        if xi.is_true() {
             return yi;
         }
-        if yi == NodeId::TRUE {
+        if yi.is_true() {
             return xi;
         }
         if xi == yi {
             return xi;
         }
-        if xi == NodeId::FALSE || yi == NodeId::FALSE {
+        if xi.is_false() || yi.is_false() {
             return NodeId::FALSE;
         }
-
-        // X and Y are not equal but refer to the same node.
-        // Thus one is complement but not the other (X and not X).
-        if xi.index() == yi.index() {
+        // `X and not X` is `false` by definition.
+        if xi.not() == yi {
             return NodeId::FALSE;
         }
 
@@ -288,6 +307,43 @@ impl InternerGuard<'_> {
         self.state.cache.insert((xi, yi), node);
 
         node
+    }
+
+    /// Returns `true` if there is no environment in which both marker trees can apply,
+    /// i.e. their conjunction is always `false`.
+    pub(crate) fn is_disjoint(&mut self, xi: NodeId, yi: NodeId) -> bool {
+        // `false` is disjoint with any marker.
+        if xi.is_false() || yi.is_false() {
+            return true;
+        }
+        // `true` is not disjoint with any marker except `false`.
+        if xi.is_true() || yi.is_true() {
+            return false;
+        }
+        // `X` and `X` are not disjoint.
+        if xi == yi {
+            return false;
+        }
+        // `X` and `not X` are disjoint by definition.
+        if xi.not() == yi {
+            return true;
+        }
+
+        let (x, y) = (self.shared.node(xi), self.shared.node(yi));
+        match x.var.cmp(&y.var) {
+            // X is higher order than Y, Y must be disjoint with every child of X.
+            Ordering::Less => x
+                .children
+                .nodes()
+                .all(|x| self.is_disjoint(x.negate(xi), yi)),
+            // Y is higher order than X, X must be disjoint with every child of Y.
+            Ordering::Greater => y
+                .children
+                .nodes()
+                .all(|y| self.is_disjoint(y.negate(yi), xi)),
+            // X and Y represent the same variable, their merged edges must be unsatisifiable.
+            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
+        }
     }
 
     // Restrict the output of a given boolean variable in the tree.
@@ -553,6 +609,50 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
+    ///
+    /// Only for use when the `key` is a `PythonVersion`. Normalizes to `PythonFullVersion`.
+    fn from_python_versions(versions: Vec<Version>, negated: bool) -> Result<Edges, NodeId> {
+        let mut range = Range::empty();
+
+        // TODO(zanieb): We need to make sure this is performant, repeated unions like this do not
+        // seem efficient.
+        for version in versions {
+            let specifier = VersionSpecifier::equals_version(version.clone());
+            let specifier = python_version_to_full_version(specifier)?;
+            let pubgrub_specifier =
+                PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
+            range = range.union(&pubgrub_specifier.into());
+        }
+
+        if negated {
+            range = range.complement();
+        }
+
+        Ok(Edges::Version {
+            edges: Edges::from_range(&range),
+        })
+    }
+
+    /// Returns an [`Edges`] where values in the given range are `true`.
+    fn from_versions(versions: &Vec<Version>, negated: bool) -> Edges {
+        let mut range = Range::empty();
+
+        // TODO(zanieb): We need to make sure this is performant, repeated unions like this do not
+        // seem efficient.
+        for version in versions {
+            range = range.union(&Range::singleton(version.clone()));
+        }
+
+        if negated {
+            range = range.complement();
+        }
+
+        Edges::Version {
+            edges: Edges::from_range(&range),
+        }
+    }
+
+    /// Returns an [`Edges`] where values in the given range are `true`.
     fn from_range<T>(range: &Range<T>) -> SmallVec<(Range<T>, NodeId)>
     where
         T: Ord + Clone,
@@ -619,7 +719,7 @@ impl Edges {
                 high: apply(high.negate(parent), right_high.negate(parent)),
                 low: apply(low.negate(parent), right_low.negate(parent)),
             },
-            _ => unreachable!("cannot apply two `Edges` of different types"),
+            _ => unreachable!("cannot merge two `Edges` of different types"),
         }
     }
 
@@ -691,6 +791,70 @@ impl Edges {
         combined
     }
 
+    // Returns `true` if two [`Edges`] are disjoint.
+    fn is_disjoint(
+        &self,
+        parent: NodeId,
+        right_edges: &Edges,
+        right_parent: NodeId,
+        interner: &mut InternerGuard<'_>,
+    ) -> bool {
+        match (self, right_edges) {
+            // For version or string variables, we have to split and check the overlapping ranges.
+            (Edges::Version { edges }, Edges::Version { edges: right_edges }) => {
+                Edges::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+            }
+            (Edges::String { edges }, Edges::String { edges: right_edges }) => {
+                Edges::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+            }
+            // For boolean variables, we simply check the low and high edges.
+            (
+                Edges::Boolean { high, low },
+                Edges::Boolean {
+                    high: right_high,
+                    low: right_low,
+                },
+            ) => {
+                interner.is_disjoint(high.negate(parent), right_high.negate(parent))
+                    && interner.is_disjoint(low.negate(parent), right_low.negate(parent))
+            }
+            _ => unreachable!("cannot merge two `Edges` of different types"),
+        }
+    }
+
+    // Returns `true` if all intersecting ranges in two range maps are disjoint.
+    fn is_disjoint_ranges<T>(
+        left_edges: &SmallVec<(Range<T>, NodeId)>,
+        left_parent: NodeId,
+        right_edges: &SmallVec<(Range<T>, NodeId)>,
+        right_parent: NodeId,
+        interner: &mut InternerGuard<'_>,
+    ) -> bool
+    where
+        T: Clone + Ord,
+    {
+        // This is similar to the routine in `apply_ranges` except we only care about disjointness,
+        // not the resulting edges.
+        for (left_range, left_child) in left_edges {
+            for (right_range, right_child) in right_edges {
+                let intersection = right_range.intersection(left_range);
+                if intersection.is_empty() {
+                    continue;
+                }
+
+                // Ensure the intersection is disjoint.
+                if !interner.is_disjoint(
+                    left_child.negate(left_parent),
+                    right_child.negate(right_parent),
+                ) {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+
     // Apply the given function to all direct children of this node.
     fn map(&self, parent: NodeId, mut f: impl FnMut(NodeId) -> NodeId) -> Edges {
         match self {
@@ -757,22 +921,26 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
 
     // The decision diagram relies on the assumption that the negation of a marker tree is
     // the complement of the marker space. However, pre-release versions violate this assumption.
-    // For example, the marker `python_full_version > '3.9' or python_full_version <= '3.9'`
-    // does not match `python_full_version == 3.9.0a0`. However, it's negation,
-    // `python_full_version > '3.9' and python_full_version <= '3.9'` also does not include
-    // `3.9.0a0`, and is actually `false`.
     //
-    // For this reason we ignore pre-release versions entirely when evaluating markers.
-    // Note that `python_version` cannot take on pre-release values so this is necessary for
-    // simplifying ranges, but for `python_full_version` this decision is a semantic change.
+    // For example, the marker `python_full_version > '3.9' or python_full_version <= '3.9'`
+    // does not match `python_full_version == 3.9.0a0` and so cannot simplify to `true`. However,
+    // its negation, `python_full_version > '3.9' and python_full_version <= '3.9'`, also does not
+    // match `3.9.0a0` and simplifies to `false`, which violates the algebra decision diagrams
+    // rely on. For this reason we ignore pre-release versions entirely when evaluating markers.
+    //
+    // Note that `python_version` cannot take on pre-release values as it is truncated to just the
+    // major and minor version segments. Thus using release-only specifiers is definitely necessary
+    // for `python_version` to fully simplify any ranges, such as `python_version > '3.9' or python_version <= '3.9'`,
+    // which is always `true` for `python_version`. For `python_full_version` however, this decision
+    // is a semantic change.
     let mut release = version.release();
 
     // Strip any trailing `0`s.
     //
-    // The [`Version`] type ignores trailing `0`s for equality, but still preserves them in it's
+    // The [`Version`] type ignores trailing `0`s for equality, but still preserves them in its
     // [`Display`] output. We must normalize all versions by stripping trailing `0`s to remove the
-    // distinction between versions like `3.9` and `3.9.0`, whose output will depend on which form
-    // was added to the global marker interner first.
+    // distinction between versions like `3.9` and `3.9.0`. Otherwise, their output would depend on
+    // which form was added to the global marker interner first.
     //
     // Note that we cannot strip trailing `0`s for star equality, as `==3.0.*` is different from `==3.*`.
     if !operator.is_star() {
@@ -786,20 +954,31 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
     VersionSpecifier::from_version(operator, Version::new(release)).unwrap()
 }
 
-/// Returns the equivalent `python_full_version` specifier for a `python_version` comparison.
+/// Returns the equivalent `python_full_version` specifier for a `python_version` specifier.
 ///
 /// Returns `Err` with a constant node if the equivalent comparison is always `true` or `false`.
 fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<VersionSpecifier, NodeId> {
+    // Extract the major and minor version segments if the specifier contains exactly
+    // those segments, or if it contains a major segment with an implied minor segment of `0`.
     let major_minor = match *specifier.version().release() {
-        // `python_version == 3.*` is equivalent to `python_full_version == 3.*`
-        // and adding a trailing `0` would be incorrect.
+        // For star operators, we cannot add a trailing `0`.
+        //
+        // `python_version == 3.*` is equivalent to `python_full_version == 3.*`. Adding a
+        // trailing `0` would result in `python_version == 3.0.*`, which is incorrect.
         [_major] if specifier.operator().is_star() => return Ok(specifier),
-        // Note that `python_version == 3` matches `3.0.1`, `3.0.2`, etc.
+        // Add a trailing `0` for the minor version, which is implied.
+        // For example, `python_version == 3` matches `3.0.1`, `3.0.2`, etc.
         [major] => Some((major, 0)),
         [major, minor] => Some((major, minor)),
+        // Specifiers including segments beyond the minor version require separate handling.
         _ => None,
     };
 
+    // Note that the values taken on by `python_version` are truncated to their major and minor
+    // version segments. For example, a python version of `3.7.0`, `3.7.1`, and so on, would all
+    // result in a `python_version` marker of `3.7`. For this reason, we must consider the range
+    // of values that would satisfy a `python_version` specifier when truncated in order to transform
+    // the the specifier into its `python_full_version` equivalent.
     if let Some((major, minor)) = major_minor {
         let version = Version::new([major, minor]);
 
@@ -896,11 +1075,11 @@ where
 
 impl fmt::Debug for NodeId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if *self == NodeId::FALSE {
+        if self.is_false() {
             return write!(f, "false");
         }
 
-        if *self == NodeId::TRUE {
+        if self.is_true() {
             return write!(f, "true");
         }
 

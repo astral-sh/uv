@@ -9,7 +9,6 @@ use pep508_rs::{VerbatimUrl, VersionOrUrl};
 use pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
 use thiserror::Error;
 use url::Url;
-use uv_configuration::PreviewMode;
 use uv_fs::{relative_to, Simplified};
 use uv_git::GitReference;
 use uv_normalize::PackageName;
@@ -36,7 +35,6 @@ impl LoweredRequirement {
         project_dir: &Path,
         project_sources: &BTreeMap<PackageName, Source>,
         workspace: &Workspace,
-        preview: PreviewMode,
     ) -> Result<Self, LoweringError> {
         let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), Origin::Project)
@@ -79,10 +77,6 @@ impl LoweredRequirement {
             }
             return Ok(Self(Requirement::from(requirement)));
         };
-
-        if preview.is_disabled() {
-            warn_user_once!("`uv.sources` is experimental and may change without warning");
-        }
 
         let source = match source {
             Source::Git {
@@ -180,17 +174,12 @@ impl LoweredRequirement {
         requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
         dir: &Path,
         sources: &BTreeMap<PackageName, Source>,
-        preview: PreviewMode,
     ) -> Result<Self, LoweringError> {
         let source = sources.get(&requirement.name).cloned();
 
         let Some(source) = source else {
             return Ok(Self(Requirement::from(requirement)));
         };
-
-        if preview.is_disabled() {
-            warn_user_once!("`uv.sources` is experimental and may change without warning");
-        }
 
         let source = match source {
             Source::Git {

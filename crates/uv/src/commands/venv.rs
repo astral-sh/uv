@@ -17,7 +17,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary,
-    NoBuild, PreviewMode, SetupPyStrategy, SourceStrategy,
+    NoBuild, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
@@ -55,8 +55,8 @@ pub(crate) async fn venv(
     seed: bool,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
+    concurrency: Concurrency,
     native_tls: bool,
-    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
@@ -72,11 +72,11 @@ pub(crate) async fn venv(
         system_site_packages,
         connectivity,
         seed,
-        preview,
         python_preference,
         python_downloads,
         allow_existing,
         exclude_newer,
+        concurrency,
         native_tls,
         cache,
         printer,
@@ -124,20 +124,16 @@ async fn venv_impl(
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
-    preview: PreviewMode,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
+    concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
 ) -> miette::Result<ExitStatus> {
-    if preview.is_disabled() && relocatable {
-        warn_user_once!("`--relocatable` is experimental and may change without warning");
-    }
-
     let client_builder = BaseClientBuilder::default()
         .connectivity(connectivity)
         .native_tls(native_tls);
@@ -148,7 +144,7 @@ async fn venv_impl(
     let mut interpreter_request = python_request.map(PythonRequest::parse);
 
     // (2) Request from `.python-version`
-    if preview.is_enabled() && interpreter_request.is_none() {
+    if interpreter_request.is_none() {
         interpreter_request =
             request_from_version_file(&std::env::current_dir().into_diagnostic()?)
                 .await
@@ -156,12 +152,16 @@ async fn venv_impl(
     }
 
     // (3) `Requires-Python` in `pyproject.toml`
-    if preview.is_enabled() && interpreter_request.is_none() {
+    if interpreter_request.is_none() {
         let project = match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
             Ok(project) => Some(project),
+            Err(WorkspaceError::MissingProject(_)) => None,
             Err(WorkspaceError::MissingPyprojectToml) => None,
             Err(WorkspaceError::NonWorkspace(_)) => None,
-            Err(err) => return Err(err).into_diagnostic(),
+            Err(err) => {
+                warn_user_once!("{err}");
+                None
+            }
         };
 
         if let Some(project) = project {
@@ -271,11 +271,9 @@ async fn venv_impl(
         // Initialize any shared state.
         let state = SharedState::default();
 
-        // For seed packages, assume a bunch of default settings and concurrency are sufficient.
+        // For seed packages, assume a bunch of default settings are sufficient.
         let build_constraints = [];
-        let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
-        let setup_py = SetupPyStrategy::default();
         let sources = SourceStrategy::Disabled;
 
         // Do not allow builds
@@ -293,7 +291,6 @@ async fn venv_impl(
             &state.git,
             &state.in_flight,
             index_strategy,
-            setup_py,
             &config_settings,
             BuildIsolation::Isolated,
             link_mode,
@@ -301,7 +298,6 @@ async fn venv_impl(
             exclude_newer,
             sources,
             concurrency,
-            preview,
         );
 
         // Resolve the seed packages.

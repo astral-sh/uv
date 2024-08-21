@@ -562,8 +562,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - flask==3.0.2
-     + flask==3.0.2
+     ~ flask==3.0.2
     "###
     );
 
@@ -1819,8 +1818,7 @@ fn reinstall_no_binary() {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - anyio==4.3.0
-     + anyio==4.3.0
+     ~ anyio==4.3.0
     "###
     );
 
@@ -1925,95 +1923,20 @@ fn install_only_binary_all_and_no_binary_all() {
               anyio>=3.0.0,<=3.6.2
               anyio>=3.7.0,<=3.7.1
               anyio>=4.0.0
-          and anyio==1.0.0 has no usable wheels and building from source is disabled, we can conclude that any of:
+          and all of:
+              anyio>=1.0.0,<=1.4.0
+              anyio>=2.0.0,<=2.2.0
+              anyio>=3.0.0,<=3.6.2
+              anyio>=3.7.0,<=3.7.1
+              anyio>=4.0.0
+          have no usable wheels and building from source is disabled, we can conclude that all of:
               anyio<1.1.0
               anyio>1.4.0,<2.0.0
               anyio>2.2.0,<3.0.0
               anyio>3.6.2,<3.7.0
               anyio>3.7.1,<4.0.0
            cannot be used.
-          And because anyio==1.1.0 has no usable wheels and building from source is disabled and anyio==1.2.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<1.2.1
-              anyio>1.4.0,<2.0.0
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==1.2.1 has no usable wheels and building from source is disabled and anyio==1.2.2 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<1.2.3
-              anyio>1.4.0,<2.0.0
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==1.2.3 has no usable wheels and building from source is disabled and anyio==1.3.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<1.3.1
-              anyio>1.4.0,<2.0.0
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==1.3.1 has no usable wheels and building from source is disabled and anyio==1.4.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<2.0.0
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==2.0.0 has no usable wheels and building from source is disabled and anyio==2.0.1 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<2.0.2
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==2.0.2 has no usable wheels and building from source is disabled and anyio==2.1.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<2.2.0
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==2.2.0 has no usable wheels and building from source is disabled and anyio==3.0.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.0.1
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.0.1 has no usable wheels and building from source is disabled and anyio==3.1.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.2.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.2.0 has no usable wheels and building from source is disabled and anyio==3.2.1 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.3.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.3.0 has no usable wheels and building from source is disabled and anyio==3.3.1 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.3.2
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.3.2 has no usable wheels and building from source is disabled and anyio==3.3.3 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.3.4
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.3.4 has no usable wheels and building from source is disabled and anyio==3.4.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.5.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.5.0 has no usable wheels and building from source is disabled and anyio==3.6.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.6.1
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.6.1 has no usable wheels and building from source is disabled and anyio==3.6.2 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.7.0 has no usable wheels and building from source is disabled and anyio==3.7.1 has no usable wheels and building from source is disabled, we can conclude that anyio<4.0.0 cannot be used.
-          And because anyio==4.0.0 has no usable wheels and building from source is disabled and anyio==4.1.0 has no usable wheels and building from source is disabled, we can conclude that anyio<4.2.0 cannot be used.
-          And because anyio==4.2.0 has no usable wheels and building from source is disabled and anyio==4.3.0 has no usable wheels and building from source is disabled, we can conclude that anyio<4.4.0 cannot be used.
-          And because anyio==4.4.0 has no usable wheels and building from source is disabled and you require anyio, we can conclude that your requirements are unsatisfiable.
+          And because you require anyio, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for anyio in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###
@@ -3043,8 +2966,7 @@ requires-python = ">=3.8"
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
-     - example==0.0.0 (from file://[TEMP_DIR]/editable)
-     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );
 
@@ -3186,8 +3108,7 @@ requires-python = ">=3.8"
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
-     - example==0.0.0 (from file://[TEMP_DIR]/editable)
-     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );
 
@@ -4491,8 +4412,7 @@ fn already_installed_dependent_editable() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
-     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
 }
@@ -4590,8 +4510,7 @@ fn already_installed_local_path_dependent() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
-     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
 
@@ -4720,8 +4639,7 @@ fn already_installed_local_version_of_remote_package() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     ~ anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
     "###
     );
 
@@ -4843,8 +4761,7 @@ fn already_installed_multiple_versions() -> Result<()> {
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
-     - anyio==4.0.0
-     + anyio==4.0.0
+     ~ anyio==4.0.0
     "###
     );
 
@@ -4977,8 +4894,7 @@ fn already_installed_remote_url() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     ~ uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###);
 
     // Request installation again with a different version
@@ -5739,7 +5655,6 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]

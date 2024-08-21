@@ -20,7 +20,6 @@ use uv_cli::{
 use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace};
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace};
-use uv_configuration::Concurrency;
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_scripts::Pep723Script;
@@ -159,7 +158,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         .combine(filesystem);
 
     // Resolve the global settings.
-    let globals = GlobalSettings::resolve(&cli.command, &cli.global_args, filesystem.as_ref());
+    let globals = GlobalSettings::resolve(&cli.global_args, filesystem.as_ref());
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.cache_args, filesystem.as_ref());
@@ -209,6 +208,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         )
     }))?;
 
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(globals.concurrency.installs)
+        .build_global()
+        .expect("failed to initialize global rayon pool");
+
     debug!("uv {}", version::version());
 
     // Write out any resolved settings.
@@ -245,11 +249,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCompileSettings::resolve(args, filesystem);
             show_settings!(args);
-
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(args.settings.concurrency.installs)
-                .build_global()
-                .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(
@@ -307,7 +306,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
-                args.settings.setup_py,
                 args.settings.config_setting,
                 globals.connectivity,
                 args.settings.no_build_isolation,
@@ -323,10 +321,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.python,
                 args.settings.system,
                 globals.python_preference,
-                args.settings.concurrency,
+                globals.concurrency,
                 globals.native_tls,
                 globals.quiet,
-                globals.preview,
                 cache,
                 printer,
             )
@@ -340,11 +337,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, filesystem);
             show_settings!(args);
-
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(args.settings.concurrency.installs)
-                .build_global()
-                .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(
@@ -380,7 +372,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
-                args.settings.setup_py,
                 args.settings.allow_empty_requirements,
                 globals.connectivity,
                 &args.settings.config_setting,
@@ -397,9 +388,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.target,
                 args.settings.prefix,
                 args.settings.sources,
-                args.settings.concurrency,
+                globals.concurrency,
                 globals.native_tls,
-                globals.preview,
                 cache,
                 args.dry_run,
                 printer,
@@ -414,11 +404,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipInstallSettings::resolve(args, filesystem);
             show_settings!(args);
-
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(args.settings.concurrency.installs)
-                .build_global()
-                .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(
@@ -474,7 +459,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
                 args.settings.hash_checking,
-                args.settings.setup_py,
                 globals.connectivity,
                 &args.settings.config_setting,
                 args.settings.no_build_isolation,
@@ -490,9 +474,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.break_system_packages,
                 args.settings.target,
                 args.settings.prefix,
-                args.settings.concurrency,
+                globals.concurrency,
                 globals.native_tls,
-                globals.preview,
                 cache,
                 args.dry_run,
                 printer,
@@ -529,7 +512,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 cache,
                 globals.connectivity,
                 globals.native_tls,
-                globals.preview,
                 args.settings.keyring_provider,
                 printer,
             )
@@ -550,7 +532,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.strict,
                 args.settings.python.as_deref(),
                 args.settings.system,
-                globals.preview,
                 &cache,
                 printer,
             )
@@ -574,7 +555,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.strict,
                 args.settings.python.as_deref(),
                 args.settings.system,
-                globals.preview,
                 &cache,
                 printer,
             )
@@ -594,7 +574,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.strict,
                 args.settings.python.as_deref(),
                 args.settings.system,
-                globals.preview,
                 &cache,
                 printer,
             )
@@ -635,7 +614,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             commands::pip_check(
                 args.settings.python.as_deref(),
                 args.settings.system,
-                globals.preview,
                 &cache,
                 printer,
             )
@@ -701,8 +679,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.seed,
                 args.allow_existing,
                 args.settings.exclude_newer,
+                globals.concurrency,
                 globals.native_tls,
-                globals.preview,
                 &cache,
                 printer,
                 args.relocatable,
@@ -723,8 +701,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             commands::version(output_format, &mut stdout())?;
             Ok(ExitStatus::Success)
         }
-        Commands::GenerateShellCompletion { shell } => {
-            shell.generate(&mut Cli::command(), &mut stdout());
+        Commands::GenerateShellCompletion(args) => {
+            args.shell.generate(&mut Cli::command(), &mut stdout());
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
@@ -738,7 +716,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             };
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolRunSettings::resolve(args, filesystem);
+            let args = settings::ToolRunSettings::resolve(args, filesystem, invocation_source);
             show_settings!(args);
 
             // Initialize the cache.
@@ -768,13 +746,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings,
                 invocation_source,
                 args.isolated,
-                globals.preview,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
-                &cache,
+                cache,
                 printer,
             )
             .await
@@ -813,11 +790,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.force,
                 args.options,
                 args.settings,
-                globals.preview,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,
@@ -834,7 +810,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::tool_list(args.show_paths, globals.preview, &cache, printer).await
+            commands::tool_list(args.show_paths, &cache, printer).await
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Upgrade(args),
@@ -851,10 +827,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 args.args,
                 args.filesystem,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
-                globals.preview,
                 printer,
             )
             .await
@@ -866,12 +841,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let args = settings::ToolUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::tool_uninstall(args.name, globals.preview, printer).await
+            commands::tool_uninstall(args.name, printer).await
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::UpdateShell,
         }) => {
-            commands::tool_update_shell(globals.preview, printer).await?;
+            commands::tool_update_shell(printer).await?;
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
@@ -900,7 +875,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.all_platforms,
                 globals.python_preference,
                 globals.python_downloads,
-                globals.preview,
                 &cache,
                 printer,
             )
@@ -919,7 +893,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 globals.native_tls,
                 globals.connectivity,
-                globals.preview,
                 cli.no_config,
                 printer,
             )
@@ -932,7 +905,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(args.targets, args.all, globals.preview, printer).await
+            commands::python_uninstall(args.targets, args.all, printer).await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),
@@ -943,14 +916,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::python_find(
-                args.request,
-                globals.python_preference,
-                globals.preview,
-                &cache,
-                printer,
-            )
-            .await
+            commands::python_find(args.request, globals.python_preference, &cache).await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Pin(args),
@@ -965,7 +931,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.request,
                 args.resolved,
                 globals.python_preference,
-                globals.preview,
                 args.no_workspace,
                 &cache,
                 printer,
@@ -975,7 +940,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Python(PythonNamespace {
             command: PythonCommand::Dir,
         }) => {
-            commands::python_dir(globals.preview)?;
+            commands::python_dir()?;
             Ok(ExitStatus::Success)
         }
     }
@@ -1021,7 +986,6 @@ async fn run_project(
                 args.no_readme,
                 args.python,
                 args.no_workspace,
-                globals.preview,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
@@ -1048,6 +1012,11 @@ async fn run_project(
                 .into_iter()
                 .map(RequirementsSource::from_package)
                 .chain(
+                    args.with_editable
+                        .into_iter()
+                        .map(RequirementsSource::Editable),
+                )
+                .chain(
                     args.with_requirements
                         .into_iter()
                         .map(RequirementsSource::from_requirements_file),
@@ -1068,11 +1037,10 @@ async fn run_project(
                 args.dev,
                 args.python,
                 args.settings,
-                globals.preview,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,
@@ -1102,9 +1070,8 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 args.settings,
-                globals.preview,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,
@@ -1124,11 +1091,10 @@ async fn run_project(
                 args.frozen,
                 args.python,
                 args.settings,
-                globals.preview,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,
@@ -1147,14 +1113,35 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            commands::add(
+            // Use raw sources if requirements files are provided as input.
+            let raw_sources = if args.requirements.is_empty() {
+                args.raw_sources
+            } else {
+                if args.raw_sources {
+                    warn_user!("`--raw-sources` is a no-op for `requirements.txt` files, which are always treated as raw sources");
+                }
+                true
+            };
+
+            let requirements = args
+                .packages
+                .into_iter()
+                .map(RequirementsSource::Package)
+                .chain(
+                    args.requirements
+                        .into_iter()
+                        .map(RequirementsSource::from_requirements_file),
+                )
+                .collect::<Vec<_>>();
+
+            Box::pin(commands::add(
                 args.locked,
                 args.frozen,
                 args.no_sync,
-                args.requirements,
+                requirements,
                 args.editable,
                 args.dependency_type,
-                args.raw_sources,
+                raw_sources,
                 args.rev,
                 args.tag,
                 args.branch,
@@ -1165,13 +1152,12 @@ async fn run_project(
                 args.script,
                 globals.python_preference,
                 globals.python_downloads,
-                globals.preview,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,
-            )
+            ))
             .await
         }
         ProjectCommand::Remove(args) => {
@@ -1198,9 +1184,8 @@ async fn run_project(
                 script,
                 globals.python_preference,
                 globals.python_downloads,
-                globals.preview,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,
@@ -1230,9 +1215,8 @@ async fn run_project(
                 args.resolver,
                 globals.python_preference,
                 globals.python_downloads,
-                globals.preview,
                 globals.connectivity,
-                Concurrency::default(),
+                globals.concurrency,
                 globals.native_tls,
                 &cache,
                 printer,

@@ -1,12 +1,9 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::path::{Path, PathBuf};
-
 use anyhow::Result;
-use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use common::{deterministic_lock, TestContext};
+use common::TestContext;
 
 mod common;
 
@@ -55,7 +52,7 @@ fn transformers() -> Result<()> {
     if !cfg!(target_os = "linux") && std::env::var_os("CI").is_some() {
         return Ok(());
     }
-    lock_ecosystem_package_non_deterministic("3.12", "transformers")
+    lock_ecosystem_package("3.12", "transformers")
 }
 
 // Source: https://github.com/konstin/warehouse/blob/baae127d90417104c8dee3fdd3855e2ba17aa428/pyproject.toml
@@ -71,7 +68,7 @@ fn warehouse() -> Result<()> {
     if !cfg!(target_os = "linux") && std::env::var_os("CI").is_some() {
         return Ok(());
     }
-    lock_ecosystem_package_non_deterministic("3.11", "warehouse")
+    lock_ecosystem_package("3.11", "warehouse")
 }
 
 // Currently ignored because the project doesn't build with `uv` yet.
@@ -96,42 +93,8 @@ fn pretix() -> Result<()> {
 /// is, there should be a directory at `./ecosystem/{name}` from the
 /// root of the `uv` repository.
 fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
-    let dir = PathBuf::from(format!("../../ecosystem/{name}"));
     let context = TestContext::new(python_version);
-    setup_project_dir(&context, &dir)?;
-
-    deterministic_lock! { context =>
-        let mut cmd = context.lock();
-        cmd.env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER);
-        let (snapshot, _) = common::run_and_format(
-            &mut cmd,
-            context.filters(),
-            name,
-            Some(common::WindowsFilters::Platform),
-        );
-        insta::assert_snapshot!(format!("{name}-uv-lock-output"), snapshot);
-
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(format!("{name}-lock-file"), lock);
-        });
-    }
-    Ok(())
-}
-
-/// This is like `lock_ecosystem_package`, but does not assert that a
-/// re-run of `uv lock` does not change the lock file.
-///
-/// Ideally, this routine would never be used. But it was added as
-/// a stop-gap to enable at least tracking the lock files of some
-/// ecosystem packages even if re-locking is producing different
-/// results.
-fn lock_ecosystem_package_non_deterministic(python_version: &str, name: &str) -> Result<()> {
-    let dir = PathBuf::from(format!("../../ecosystem/{name}"));
-    let context = TestContext::new(python_version);
-    setup_project_dir(&context, &dir)?;
+    context.copy_ecosystem_project(name);
 
     let mut cmd = context.lock();
     cmd.env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER);
@@ -143,36 +106,11 @@ fn lock_ecosystem_package_non_deterministic(python_version: &str, name: &str) ->
     );
     insta::assert_snapshot!(format!("{name}-uv-lock-output"), snapshot);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(format!("{name}-lock-file"), lock);
     });
-    Ok(())
-}
-
-/// Copies the project specific files from `project_dir` into the given
-/// test context.
-fn setup_project_dir(ctx: &TestContext, project_dir: &Path) -> Result<()> {
-    // Ideally I think we'd probably just do a recursive copy,
-    // but for now we just look for the specific files we want.
-    let required_files = ["pyproject.toml"];
-    for file_name in required_files {
-        let file_contents = fs_err::read_to_string(project_dir.join(file_name))?;
-        let test_file = ctx.temp_dir.child(file_name);
-        test_file.write_str(&file_contents)?;
-    }
-
-    let optional_files = ["PKG-INFO"];
-    for file_name in optional_files {
-        let path = project_dir.join(file_name);
-        if !path.exists() {
-            continue;
-        }
-        let file_contents = fs_err::read_to_string(path)?;
-        let test_file = ctx.temp_dir.child(file_name);
-        test_file.write_str(&file_contents)?;
-    }
     Ok(())
 }

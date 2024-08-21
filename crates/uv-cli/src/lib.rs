@@ -247,14 +247,14 @@ pub enum Commands {
     #[command(flatten)]
     Project(Box<ProjectCommand>),
 
-    /// Run and install commands provided by Python packages (experimental).
+    /// Run and install commands provided by Python packages.
     #[command(
         after_help = "Use `uv help tool` for more details.",
         after_long_help = ""
     )]
     Tool(ToolNamespace),
 
-    /// Manage Python versions and installations (experimental)
+    /// Manage Python versions and installations
     ///
     /// Generally, uv first searches for Python in a virtual environment, either
     /// active or in a `.venv` directory  in the current working directory or
@@ -265,8 +265,7 @@ pub enum Commands {
     /// On Windows, the `py` launcher is also invoked to find Python
     /// executables.
     ///
-    /// When preview is enabled, i.e., via `--preview` or by using a preview
-    /// command, uv will download Python if a version cannot be found. This
+    /// By default, uv will download Python if a version cannot be found. This
     /// behavior can be disabled with the `--python-downloads` option.
     ///
     /// The `--python` option allows requesting a different interpreter.
@@ -349,7 +348,7 @@ pub enum Commands {
     },
     /// Generate shell completion
     #[command(alias = "--generate-shell-completion", hide = true)]
-    GenerateShellCompletion { shell: clap_complete_command::Shell },
+    GenerateShellCompletion(GenerateShellCompletionArgs),
     /// Display documentation for a command.
     // To avoid showing the global options when displaying help for the help command, we are
     // responsible for maintaining the options using the `after_help`.
@@ -405,6 +404,19 @@ pub enum CacheCommand {
     /// Prune all unreachable objects from the cache.
     Prune(PruneArgs),
     /// Show the cache directory.
+    ///
+    ///
+    /// By default, the cache is stored in  `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
+    /// `{FOLDERID_LocalAppData}\uv\cache` on Windows.
+    ///
+    /// When `--no-cache` is used, the cache is stored in a temporary directory and discarded when
+    /// the process exits.
+    ///
+    /// An alternative cache directory may be specified via the `cache-dir` setting, the
+    /// `--cache-dir` option, or the `$UV_CACHE_DIR` environment variable.
+    ///
+    /// Note that it is important for performance for the cache directory to be located on the same
+    /// file system as the Python environment uv is operating on.
     Dir,
 }
 
@@ -502,7 +514,7 @@ pub enum PipCommand {
 
 #[derive(Subcommand)]
 pub enum ProjectCommand {
-    /// Run a command or script (experimental).
+    /// Run a command or script.
     ///
     /// Ensures that the command runs in a Python environment.
     ///
@@ -529,7 +541,7 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Run(RunArgs),
-    /// Create a new project (experimental).
+    /// Create a new project.
     ///
     /// Follows the `pyproject.toml` specification.
     ///
@@ -544,34 +556,39 @@ pub enum ProjectCommand {
     /// virtual environment (`.venv`) and lockfile (`uv.lock`) are lazily
     /// created during the first sync.
     Init(InitArgs),
-    /// Add dependencies to the project (experimental).
+    /// Add dependencies to the project.
     ///
     /// Dependencies are added to the project's `pyproject.toml` file.
     ///
-    /// If no constraint or URL is provided for a dependency, a lower bound is
-    /// added equal to the latest compatible version of the package, e.g.,
-    /// `>=1.2.3`, unless `--frozen` is provided, in which case no resolution is
-    /// performed.
+    /// If a given dependency exists already, it will be updated to the new version specifier unless
+    /// it includes markers that differ from the existing specifier in which case another entry for
+    /// the depenedency will be added.
     ///
-    /// The lockfile and project environment will be updated to reflect the
-    /// added dependencies. To skip updating the lockfile, use `--frozen`. To
-    /// skip updating the environment, use `--no-sync`.
+    /// If no constraint or URL is provided for a dependency, a lower bound is added equal to the
+    /// latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in
+    /// which case no resolution is performed.
     ///
-    /// If any of the requested dependencies cannot be found, uv will exit with
-    /// an error, unless the `--frozen` flag is provided, in which case uv will
-    /// add the dependencies verbatim without checking that they exist or are
-    /// compatible with the project.
+    /// The lockfile and project environment will be updated to reflect the added dependencies. To
+    /// skip updating the lockfile, use `--frozen`. To skip updating the environment, use
+    /// `--no-sync`.
     ///
-    /// uv will search for a project in the current directory or any parent
-    /// directory. If a project cannot be found, uv will exit with an error.
+    /// If any of the requested dependencies cannot be found, uv will exit with an error, unless the
+    /// `--frozen` flag is provided, in which case uv will add the dependencies verbatim without
+    /// checking that they exist or are compatible with the project.
+    ///
+    /// uv will search for a project in the current directory or any parent directory. If a project
+    /// cannot be found, uv will exit with an error.
     #[command(
         after_help = "Use `uv help add` for more details.",
         after_long_help = ""
     )]
     Add(AddArgs),
-    /// Remove dependencies from the project (experimental).
+    /// Remove dependencies from the project.
     ///
     /// Dependencies are removed from the project's `pyproject.toml` file.
+    ///
+    /// If multiple entries exist for a given dependency, i.e., each with different markers, all of
+    /// the entries will be removed.
     ///
     /// The lockfile and project environment will be updated to reflect the
     /// removed dependencies. To skip updating the lockfile, use `--frozen`. To
@@ -590,26 +607,33 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Remove(RemoveArgs),
-    /// Update the project's environment (experimental).
+    /// Update the project's environment.
     ///
-    /// Syncing ensures that all project dependencies are installed and
-    /// up-to-date with the lockfile. Syncing also removes packages that are not
-    /// declared as dependencies of the project.
+    /// Syncing ensures that all project dependencies are installed and up-to-date with the
+    /// lockfile.
     ///
-    /// If the project virtual environment (`.venv`) does not exist, it will be
-    /// created.
+    /// By default, an exact sync is performed: uv removes packages that are not declared as
+    /// dependencies of the project. Use the `--inexact` flag to keep extraneous packages. Note that
+    /// if an extraneous package conflicts with a project dependency, it will still be removed.
+    /// Additionally, if `--no-build-isolation` is used, uv will not remove extraneous packages to
+    /// avoid removing possible build dependencies.
     ///
-    /// The project is re-locked before syncing unless the `--locked` or
-    /// `--frozen` flag is provided.
+    /// If the project virtual environment (`.venv`) does not exist, it will be created.
     ///
-    /// uv will search for a project in the current directory or any parent
-    /// directory. If a project cannot be found, uv will exit with an error.
+    /// The project is re-locked before syncing unless the `--locked` or `--frozen` flag is
+    /// provided.
+    ///
+    /// uv will search for a project in the current directory or any parent directory. If a project
+    /// cannot be found, uv will exit with an error.
+    ///
+    /// Note that, when installing from a lockfile, uv will not provide warnings for yanked package
+    /// versions.
     #[command(
         after_help = "Use `uv help sync` for more details.",
         after_long_help = ""
     )]
     Sync(SyncArgs),
-    /// Update the project's lockfile (experimental).
+    /// Update the project's lockfile.
     ///
     /// If the project lockfile (`uv.lock`) does not exist, it will be created.
     /// If a lockfile is present, its contents will be used as preferences for
@@ -622,7 +646,7 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Lock(LockArgs),
-    /// Display the project's dependency tree (experimental).
+    /// Display the project's dependency tree.
     Tree(TreeArgs),
 }
 
@@ -687,10 +711,13 @@ fn parse_maybe_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
 pub struct PipCompileArgs {
     /// Include all packages listed in the given `requirements.in` files.
     ///
-    /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, uv will
-    /// extract the requirements for the relevant project.
+    /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, uv will extract the
+    /// requirements for the relevant project.
     ///
     /// If `-` is provided, then requirements will be read from stdin.
+    ///
+    /// The order of the requirements files and the requirements in them is used to determine
+    /// priority during resolution.
     #[arg(required(true), value_parser = parse_file_path)]
     pub src_file: Vec<PathBuf>,
 
@@ -845,14 +872,6 @@ pub struct PipCompileArgs {
 
     #[arg(long, overrides_with("generate_hashes"), hide = true)]
     pub no_generate_hashes: bool,
-
-    /// Use legacy `setuptools` behavior when building source distributions without a
-    /// `pyproject.toml`.
-    #[arg(long, overrides_with("no_legacy_setup_py"))]
-    pub legacy_setup_py: bool,
-
-    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
-    pub no_legacy_setup_py: bool,
 
     /// Don't build source distributions.
     ///
@@ -1136,14 +1155,6 @@ pub struct PipSyncArgs {
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
 
-    /// Use legacy `setuptools` behavior when building source distributions without a
-    /// `pyproject.toml`.
-    #[arg(long, overrides_with("no_legacy_setup_py"))]
-    pub legacy_setup_py: bool,
-
-    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
-    pub no_legacy_setup_py: bool,
-
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -1236,10 +1247,12 @@ pub struct PipSyncArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct PipInstallArgs {
     /// Install all listed packages.
+    ///
+    /// The order of the packages is used to determine priority during resolution.
     #[arg(group = "sources")]
     pub package: Vec<String>,
 
@@ -1424,14 +1437,6 @@ pub struct PipInstallArgs {
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
 
-    /// Use legacy `setuptools` behavior when building source distributions without a
-    /// `pyproject.toml`.
-    #[arg(long, overrides_with("no_legacy_setup_py"))]
-    pub legacy_setup_py: bool,
-
-    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
-    pub no_legacy_setup_py: bool,
-
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -1517,8 +1522,8 @@ pub struct PipInstallArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct PipUninstallArgs {
     /// Uninstall all listed packages.
     #[arg(group = "sources")]
@@ -1983,8 +1988,8 @@ pub struct VenvArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
+    /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = "UV_EXCLUDE_NEWER")]
     pub exclude_newer: Option<ExcludeNewer>,
 
@@ -2135,6 +2140,14 @@ pub struct RunArgs {
     #[arg(long)]
     pub with: Vec<String>,
 
+    /// Run with the given packages installed as editables
+    ///
+    /// When used in a project, these dependencies will be layered on top of
+    /// the project environment in a separate, ephemeral environment. These
+    /// dependencies are allowed to conflict with those specified by the project.
+    #[arg(long)]
+    pub with_editable: Vec<String>,
+
     /// Run with all packages listed in the given `requirements.txt` files.
     ///
     /// The same environment semantics as `--with` apply.
@@ -2246,16 +2259,19 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
-    /// Do not remove extraneous packages.
+    /// Do not remove extraneous packages present in the environment.
     ///
-    /// When enabled, uv will make the minimum necessary changes to satisfy the
-    /// requirements.
+    /// When enabled, uv will make the minimum necessary changes to satisfy the requirements.
     ///
-    /// By default, syncing will remove any extraneous packages from the
-    /// environment, unless `--no-build-isolation` is enabled, in which case
-    /// extra packages are considered necessary for builds.
-    #[arg(long)]
-    pub no_clean: bool,
+    /// By default, syncing will remove any extraneous packages from the environment, unless
+    /// `--no-build-isolation` is enabled, in which case extra packages are considered necessary for
+    /// builds.
+    #[arg(long, overrides_with("exact"), alias = "no-exact")]
+    pub inexact: bool,
+
+    /// Perform an exact sync, removing extraneous packages.
+    #[arg(long, overrides_with("inexact"), hide = true)]
+    pub exact: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
@@ -2358,11 +2374,18 @@ pub struct LockArgs {
 }
 
 #[derive(Args)]
+#[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 #[allow(clippy::struct_excessive_bools)]
 pub struct AddArgs {
     /// The packages to add, as PEP 508 requirements (e.g., `ruff==0.5.0`).
-    #[arg(required = true)]
-    pub requirements: Vec<String>,
+    #[arg(group = "sources")]
+    pub packages: Vec<String>,
+
+    /// Add all packages listed in the given `requirements.txt` files.
+    ///
+    /// Implies `--raw-sources`.
+    #[arg(long, short, group = "sources", value_parser = parse_file_path)]
+    pub requirements: Vec<PathBuf>,
 
     /// Add the requirements as development dependencies.
     #[arg(long, conflicts_with("optional"))]
@@ -2693,11 +2716,15 @@ pub enum ToolCommand {
     UpdateShell,
     /// Show the path to the uv tools directory.
     ///
-    /// The tools directory is used to store environments and metadata for
-    /// installed tools.
+    /// The tools directory is used to store environments and metadata for installed tools.
     ///
-    /// To instead view the directory uv installs executables into, use the
-    /// `--bin` flag.
+    /// By default, tools are stored in the uv data directory at `$XDG_DATA_HOME/uv/tools` or
+    /// `$HOME/.local/share/uv/tools` on Unix and `{FOLDERID_RoamingAppData}\uv\data\tools` on
+    /// Windows.
+    ///
+    /// The tool installation directory may be overridden with `$UV_TOOL_DIR`.
+    ///
+    /// To instead view the directory uv installs executables into, use the `--bin` flag.
     Dir(ToolDirArgs),
 }
 
@@ -2830,7 +2857,15 @@ pub struct ToolDirArgs {
     ///
     /// By default, `uv tool dir` shows the directory into which the tool Python environments
     /// themselves are installed, rather than the directory containing the linked executables.
-    #[arg(long)]
+    ///
+    /// The tool executable directory is determined according to the XDG standard and is derived
+    /// from the following environment variables, in order of preference:
+    ///
+    /// - `$UV_TOOL_BIN_DIR`
+    /// - `$XDG_BIN_HOME`
+    /// - `$XDG_DATA_HOME/../bin`
+    /// - `$HOME/.local/bin`
+    #[arg(long, verbatim_doc_comment)]
     pub bin: bool,
 }
 
@@ -2920,6 +2955,12 @@ pub enum PythonCommand {
     Pin(PythonPinArgs),
 
     /// Show the uv Python installation directory.
+    ///
+    /// By default, Python installations are stored in the uv data directory at
+    /// `$XDG_DATA_HOME/uv/python` or `$HOME/.local/share/uv/python` on Unix and
+    /// `{FOLDERID_RoamingAppData}\uv\data\python` on Windows.
+    ///
+    /// The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
     Dir,
 
     /// Uninstall Python versions.
@@ -3023,6 +3064,45 @@ pub struct PythonPinArgs {
     /// the workspace's `requires-python` constraint.
     #[arg(long)]
     pub no_workspace: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct GenerateShellCompletionArgs {
+    /// The shell to generate the completion script for
+    pub shell: clap_complete_command::Shell,
+
+    // Hide unused global options.
+    #[arg(long, short, hide = true)]
+    pub no_cache: bool,
+    #[arg(long, hide = true)]
+    pub cache_dir: Option<PathBuf>,
+
+    #[arg(long, hide = true)]
+    pub python_preference: Option<PythonPreference>,
+    #[arg(long, hide = true)]
+    pub no_python_downloads: bool,
+
+    #[arg(long, short, conflicts_with = "verbose", hide = true)]
+    pub quiet: bool,
+    #[arg(long, short, action = clap::ArgAction::Count, conflicts_with = "quiet", hide = true)]
+    pub verbose: u8,
+    #[arg(long, default_value = "auto", conflicts_with = "no_color", hide = true)]
+    pub color: ColorChoice,
+    #[arg(long, hide = true)]
+    pub native_tls: bool,
+    #[arg(long, hide = true)]
+    pub offline: bool,
+    #[arg(long, hide = true)]
+    pub no_progress: bool,
+    #[arg(long, hide = true)]
+    pub config_file: Option<PathBuf>,
+    #[arg(long, hide = true)]
+    pub no_config: bool,
+    #[arg(long, short, action = clap::ArgAction::HelpShort, hide = true)]
+    pub help: Option<bool>,
+    #[arg(short = 'V', long, hide = true)]
+    pub version: bool,
 }
 
 #[derive(Args)]
@@ -3224,8 +3304,8 @@ pub struct InstallerArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
+    /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = "UV_EXCLUDE_NEWER", help_heading = "Resolver options")]
     pub exclude_newer: Option<ExcludeNewer>,
 
@@ -3398,8 +3478,8 @@ pub struct ResolverArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
+    /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = "UV_EXCLUDE_NEWER", help_heading = "Resolver options")]
     pub exclude_newer: Option<ExcludeNewer>,
 
@@ -3570,8 +3650,8 @@ pub struct ResolverInstallerArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
+    /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = "UV_EXCLUDE_NEWER", help_heading = "Resolver options")]
     pub exclude_newer: Option<ExcludeNewer>,
 

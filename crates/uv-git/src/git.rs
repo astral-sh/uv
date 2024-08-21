@@ -626,9 +626,9 @@ enum FastPathRev {
     /// date with what this rev resolves to on GitHub's server.
     UpToDate,
     /// The following SHA must be fetched in order for the local rev to become
-    /// up to date.
+    /// up-to-date.
     NeedsFetch(GitOid),
-    /// Don't know whether local rev is up to date. We'll fetch _all_ branches
+    /// Don't know whether local rev is up-to-date. We'll fetch _all_ branches
     /// and tags from the server and see what happens.
     Indeterminate,
 }

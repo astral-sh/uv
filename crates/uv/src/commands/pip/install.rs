@@ -14,7 +14,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, PreviewMode, Reinstall, SetupPyStrategy, SourceStrategy, Upgrade,
+    IndexStrategy, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -57,7 +57,6 @@ pub(crate) async fn pip_install(
     link_mode: LinkMode,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
-    setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
@@ -75,7 +74,6 @@ pub(crate) async fn pip_install(
     prefix: Option<Prefix>,
     concurrency: Concurrency,
     native_tls: bool,
-    preview: PreviewMode,
     cache: Cache,
     dry_run: bool,
     printer: Printer,
@@ -313,7 +311,6 @@ pub(crate) async fn pip_install(
         &state.git,
         &state.in_flight,
         index_strategy,
-        setup_py,
         config_settings,
         build_isolation,
         link_mode,
@@ -321,7 +318,6 @@ pub(crate) async fn pip_install(
         exclude_newer,
         sources,
         concurrency,
-        preview,
     );
 
     let options = OptionsBuilder::new()
@@ -348,7 +344,7 @@ pub(crate) async fn pip_install(
         &reinstall,
         &upgrade,
         Some(&tags),
-        ResolverMarkers::SpecificEnvironment((*markers).clone()),
+        ResolverMarkers::specific_environment((*markers).clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -358,7 +354,6 @@ pub(crate) async fn pip_install(
         options,
         Box::new(DefaultResolveLogger),
         printer,
-        preview,
     )
     .await
     {
@@ -392,7 +387,6 @@ pub(crate) async fn pip_install(
         Box::new(DefaultInstallLogger),
         dry_run,
         printer,
-        preview,
     )
     .await?;
 

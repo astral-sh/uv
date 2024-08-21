@@ -119,8 +119,14 @@ Python recently added a standard format for
 [inline script metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata).
 This allows the dependencies for a script to be declared in the script itself.
 
-To use inline script metadata, include a `script` section at the top of the script and declare the
-dependencies using TOML:
+uv supports adding and updating inline script metadata for you. Use `uv add --script` to declare the
+dependencies for the script:
+
+```console
+$ uv add --script example.py 'requests<3' 'rich'
+```
+
+This will add a `script` section at the top of the script declaring the dependencies using TOML:
 
 ```python title="example.py"
 # /// script

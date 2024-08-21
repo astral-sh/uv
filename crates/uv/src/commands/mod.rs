@@ -113,11 +113,13 @@ pub(super) enum ChangeEventKind {
     Removed,
     /// The package was added to the environment.
     Added,
+    /// The package was reinstalled without changing versions.
+    Reinstalled,
 }
 
 #[derive(Debug)]
-pub(super) struct ChangeEvent<T: InstalledMetadata> {
-    dist: T,
+pub(super) struct ChangeEvent<'a, T: InstalledMetadata> {
+    dist: &'a T,
     kind: ChangeEventKind,
 }
 

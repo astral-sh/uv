@@ -15,12 +15,19 @@ use tokio::sync::Notify;
 ///
 /// Note that this always clones the value out of the underlying map. Because
 /// of this, it's common to wrap the `V` in an `Arc<V>` to make cloning cheap.
-pub struct OnceMap<K, V, H = RandomState> {
-    items: DashMap<K, Value<V>, H>,
+pub struct OnceMap<K, V, S = RandomState> {
+    items: DashMap<K, Value<V>, S>,
 }
 
 impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
-    // Create a [`OnceMap`] with the specified capacity and hasher.
+    /// Create a [`OnceMap`] with the specified hasher.
+    pub fn with_hasher(hasher: H) -> OnceMap<K, V, H> {
+        OnceMap {
+            items: DashMap::with_hasher(hasher),
+        }
+    }
+
+    /// Create a [`OnceMap`] with the specified capacity and hasher.
     pub fn with_capacity_and_hasher(capacity: usize, hasher: H) -> OnceMap<K, V, H> {
         OnceMap {
             items: DashMap::with_capacity_and_hasher(capacity, hasher),

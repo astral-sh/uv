@@ -14,8 +14,8 @@ use uv_cli::{
     ToolUpgradeArgs,
 };
 use uv_cli::{
-    AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs,
-    Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
+    AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
+    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolDirArgs,
     ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
@@ -23,12 +23,11 @@ use uv_cli::{
 use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
-    SourceStrategy, TargetTriple, Upgrade,
+    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy,
+    TargetTriple, Upgrade,
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
-use uv_requirements::RequirementsSource;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_settings::{
     Combine, FilesystemOptions, Options, PipOptions, ResolverInstallerOptions, ResolverOptions,
@@ -37,6 +36,7 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 
 use crate::commands::pip::operations::Modifications;
+use crate::commands::ToolRunCommand;
 
 /// The resolved global settings to use for any invocation of the CLI.
 #[allow(clippy::struct_excessive_bools)]
@@ -46,6 +46,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) verbose: u8,
     pub(crate) color: ColorChoice,
     pub(crate) native_tls: bool,
+    pub(crate) concurrency: Concurrency,
     pub(crate) connectivity: Connectivity,
     pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
@@ -56,29 +57,12 @@ pub(crate) struct GlobalSettings {
 
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
-        command: &Commands,
-        args: &GlobalArgs,
-        workspace: Option<&FilesystemOptions>,
-    ) -> Self {
+    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
         let preview = PreviewMode::from(
             flag(args.preview, args.no_preview)
                 .combine(workspace.and_then(|workspace| workspace.globals.preview))
                 .unwrap_or(false),
         );
-
-        // Always use preview mode python preferences during preview commands
-        // TODO(zanieb): There should be a cleaner way to do this, we should probably resolve
-        // force preview to true for these commands but it would break our experimental warning
-        // right now
-        let default_python_preference = if matches!(
-            command,
-            Commands::Project(_) | Commands::Python(_) | Commands::Tool(_)
-        ) {
-            PythonPreference::default_from(PreviewMode::Enabled)
-        } else {
-            PythonPreference::default_from(preview)
-        };
 
         Self {
             quiet: args.quiet,
@@ -103,6 +87,20 @@ impl GlobalSettings {
             native_tls: flag(args.native_tls, args.no_native_tls)
                 .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
                 .unwrap_or(false),
+            concurrency: Concurrency {
+                downloads: env(env::CONCURRENT_DOWNLOADS)
+                    .combine(workspace.and_then(|workspace| workspace.globals.concurrent_downloads))
+                    .map(NonZeroUsize::get)
+                    .unwrap_or(Concurrency::DEFAULT_DOWNLOADS),
+                builds: env(env::CONCURRENT_BUILDS)
+                    .combine(workspace.and_then(|workspace| workspace.globals.concurrent_builds))
+                    .map(NonZeroUsize::get)
+                    .unwrap_or_else(Concurrency::threads),
+                installs: env(env::CONCURRENT_INSTALLS)
+                    .combine(workspace.and_then(|workspace| workspace.globals.concurrent_installs))
+                    .map(NonZeroUsize::get)
+                    .unwrap_or_else(Concurrency::threads),
+            },
             connectivity: if flag(args.offline, args.no_offline)
                 .combine(workspace.and_then(|workspace| workspace.globals.offline))
                 .unwrap_or(false)
@@ -116,7 +114,7 @@ impl GlobalSettings {
             python_preference: args
                 .python_preference
                 .combine(workspace.and_then(|workspace| workspace.globals.python_preference))
-                .unwrap_or(default_python_preference),
+                .unwrap_or_else(PythonPreference::default_from_env),
             python_downloads: flag(args.allow_python_downloads, args.no_python_downloads)
                 .map(PythonDownloads::from)
                 .combine(workspace.and_then(|workspace| workspace.globals.python_downloads))
@@ -195,6 +193,7 @@ pub(crate) struct RunSettings {
     pub(crate) dev: bool,
     pub(crate) command: ExternalCommand,
     pub(crate) with: Vec<String>,
+    pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
@@ -217,6 +216,7 @@ impl RunSettings {
             no_dev,
             command,
             with,
+            with_editable,
             with_requirements,
             isolated,
             locked,
@@ -240,6 +240,7 @@ impl RunSettings {
             dev: flag(dev, no_dev).unwrap_or(true),
             command,
             with,
+            with_editable,
             with_requirements: with_requirements
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -276,7 +277,11 @@ pub(crate) struct ToolRunSettings {
 impl ToolRunSettings {
     /// Resolve the [`ToolRunSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolRunArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: ToolRunArgs,
+        filesystem: Option<FilesystemOptions>,
+        invocation_source: ToolRunCommand,
+    ) -> Self {
         let ToolRunArgs {
             command,
             from,
@@ -289,6 +294,16 @@ impl ToolRunSettings {
             refresh,
             python,
         } = args;
+
+        // If `--upgrade` was passed explicitly, warn.
+        if installer.upgrade || !installer.upgrade_package.is_empty() {
+            warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool");
+        }
+
+        // If `--reinstall` was passed explicitly, warn.
+        if installer.reinstall || !installer.reinstall_package.is_empty() {
+            warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool");
+        }
 
         Self {
             command,
@@ -615,7 +630,8 @@ impl SyncSettings {
             no_all_extras,
             dev,
             no_dev,
-            no_clean,
+            inexact,
+            exact,
             installer,
             build,
             refresh,
@@ -628,9 +644,11 @@ impl SyncSettings {
             filesystem,
         );
 
+        let exact = flag(exact, inexact).unwrap_or(true);
+
         // By default, sync with exact semantics, unless the user set `--no-build-isolation`;
         // otherwise, we'll end up removing build dependencies.
-        let modifications = if no_clean || settings.no_build_isolation {
+        let modifications = if !exact || settings.no_build_isolation {
             Modifications::Sufficient
         } else {
             Modifications::Exact
@@ -694,7 +712,8 @@ pub(crate) struct AddSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) no_sync: bool,
-    pub(crate) requirements: Vec<RequirementsSource>,
+    pub(crate) packages: Vec<String>,
+    pub(crate) requirements: Vec<PathBuf>,
     pub(crate) dependency_type: DependencyType,
     pub(crate) editable: Option<bool>,
     pub(crate) extras: Vec<ExtraName>,
@@ -714,6 +733,7 @@ impl AddSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: AddArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let AddArgs {
+            packages,
             requirements,
             dev,
             optional,
@@ -735,11 +755,6 @@ impl AddSettings {
             python,
         } = args;
 
-        let requirements = requirements
-            .into_iter()
-            .map(RequirementsSource::Package)
-            .collect::<Vec<_>>();
-
         let dependency_type = if let Some(group) = optional {
             DependencyType::Optional(group)
         } else if dev {
@@ -752,6 +767,7 @@ impl AddSettings {
             locked,
             frozen,
             no_sync,
+            packages,
             requirements,
             dependency_type,
             raw_sources,
@@ -927,8 +943,6 @@ impl PipCompileSettings {
             no_system,
             generate_hashes,
             no_generate_hashes,
-            legacy_setup_py,
-            no_legacy_setup_py,
             no_build,
             build,
             no_binary,
@@ -1013,7 +1027,6 @@ impl PipCompileSettings {
                     no_header: flag(no_header, header),
                     custom_compile_command,
                     generate_hashes: flag(generate_hashes, no_generate_hashes),
-                    legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
                     python_version,
                     python_platform,
                     universal: flag(universal, no_universal),
@@ -1024,9 +1037,6 @@ impl PipCompileSettings {
                     emit_marker_expression: flag(emit_marker_expression, no_emit_marker_expression),
                     emit_index_annotation: flag(emit_index_annotation, no_emit_index_annotation),
                     annotation_style,
-                    concurrent_builds: env(env::CONCURRENT_BUILDS),
-                    concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
-                    concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::from(resolver)
                 },
                 filesystem,
@@ -1069,8 +1079,6 @@ impl PipSyncSettings {
             prefix,
             allow_empty_requirements,
             no_allow_empty_requirements,
-            legacy_setup_py,
-            no_legacy_setup_py,
             no_build,
             build,
             no_binary,
@@ -1111,13 +1119,9 @@ impl PipSyncSettings {
                         allow_empty_requirements,
                         no_allow_empty_requirements,
                     ),
-                    legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
                     python_version,
                     python_platform,
                     strict: flag(strict, no_strict),
-                    concurrent_builds: env(env::CONCURRENT_BUILDS),
-                    concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
-                    concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::from(installer)
                 },
                 filesystem,
@@ -1171,8 +1175,6 @@ impl PipInstallSettings {
             no_break_system_packages,
             target,
             prefix,
-            legacy_setup_py,
-            no_legacy_setup_py,
             no_build,
             build,
             no_binary,
@@ -1247,14 +1249,10 @@ impl PipInstallSettings {
                     extra,
                     all_extras: flag(all_extras, no_all_extras),
                     no_deps: flag(no_deps, deps),
-                    legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
                     python_version,
                     python_platform,
                     require_hashes: flag(require_hashes, no_require_hashes),
                     verify_hashes: flag(verify_hashes, no_verify_hashes),
-                    concurrent_builds: env(env::CONCURRENT_BUILDS),
-                    concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
-                    concurrent_installs: env(env::CONCURRENT_INSTALLS),
                     ..PipOptions::from(installer)
                 },
                 filesystem,
@@ -1838,7 +1836,6 @@ pub(crate) struct PipSettings {
     pub(crate) no_header: bool,
     pub(crate) custom_compile_command: Option<String>,
     pub(crate) generate_hashes: bool,
-    pub(crate) setup_py: SetupPyStrategy,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
@@ -1857,7 +1854,6 @@ pub(crate) struct PipSettings {
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
-    pub(crate) concurrency: Concurrency,
 }
 
 impl PipSettings {
@@ -1898,7 +1894,6 @@ impl PipSettings {
             no_header,
             custom_compile_command,
             generate_hashes,
-            legacy_setup_py,
             config_settings,
             python_version,
             python_platform,
@@ -1920,9 +1915,6 @@ impl PipSettings {
             upgrade_package,
             reinstall,
             reinstall_package,
-            concurrent_builds,
-            concurrent_downloads,
-            concurrent_installs,
         } = pip.unwrap_or_default();
 
         let ResolverInstallerOptions {
@@ -2028,15 +2020,6 @@ impl PipSettings {
                 .allow_empty_requirements
                 .combine(allow_empty_requirements)
                 .unwrap_or_default(),
-            setup_py: if args
-                .legacy_setup_py
-                .combine(legacy_setup_py)
-                .unwrap_or_default()
-            {
-                SetupPyStrategy::Setuptools
-            } else {
-                SetupPyStrategy::Pep517
-            },
             no_build_isolation: args
                 .no_build_isolation
                 .combine(no_build_isolation)
@@ -2117,23 +2100,6 @@ impl PipSettings {
                     .combine(reinstall_package)
                     .unwrap_or_default(),
             ),
-            concurrency: Concurrency {
-                downloads: args
-                    .concurrent_downloads
-                    .combine(concurrent_downloads)
-                    .map(NonZeroUsize::get)
-                    .unwrap_or(Concurrency::DEFAULT_DOWNLOADS),
-                builds: args
-                    .concurrent_builds
-                    .combine(concurrent_builds)
-                    .map(NonZeroUsize::get)
-                    .unwrap_or_else(Concurrency::threads),
-                installs: args
-                    .concurrent_installs
-                    .combine(concurrent_installs)
-                    .map(NonZeroUsize::get)
-                    .unwrap_or_else(Concurrency::threads),
-            },
             build_options: BuildOptions::new(
                 NoBinary::from_pip_args(args.no_binary.combine(no_binary).unwrap_or_default())
                     .combine(NoBinary::from_args(

@@ -154,6 +154,11 @@ impl Cache {
         &self.root
     }
 
+    /// Return the [`Refresh`] policy for the cache.
+    pub fn refresh(&self) -> &Refresh {
+        &self.refresh
+    }
+
     /// The folder for a specific cache bucket
     pub fn bucket(&self, cache_bucket: CacheBucket) -> PathBuf {
         self.root.join(cache_bucket.to_str())
@@ -1008,6 +1013,15 @@ impl Refresh {
                     Self::Packages(refresh_package, timestamp)
                 }
             }
+        }
+    }
+
+    /// Return the [`Timestamp`] associated with the refresh policy.
+    pub fn timestamp(&self) -> Timestamp {
+        match self {
+            Self::None(timestamp) => *timestamp,
+            Self::Packages(_, timestamp) => *timestamp,
+            Self::All(timestamp) => *timestamp,
         }
     }
 

@@ -51,7 +51,7 @@ To run a command in the project environment, use `uv run`. Alternatively the pro
 be activated as normal for a virtual environment.
 
 When `uv run` is invoked, it will create the project environment if it does not exist yet or ensure
-it is up to date if it exists. The project environment can also be explicitly created with
+it is up-to-date if it exists. The project environment can also be explicitly created with
 `uv sync`.
 
 It is _not_ recommended to modify the project environment manually, e.g., with `uv pip install`. For
@@ -63,8 +63,26 @@ use [`uvx`](../guides/tools.md) or
 
 uv creates a `uv.lock` file next to the `pyproject.toml`.
 
-`uv.lock` is a _universal_ lockfile that captures the packages that would be installed across all
-possible Python markers such as operating system, architecture, and Python version.
+`uv.lock` is a _universal_ or _cross-platform_ lockfile that captures the packages that would be
+installed across all possible Python markers such as operating system, architecture, and Python
+version.
+
+If your project supports a more limited set of platforms or Python versions, you can constrain the
+set of solved platforms via the `environments` setting, which accepts a list of PEP 508 environment
+markers. For example, to constrain the lockfile to macOS and Linux, and exclude Windows:
+
+```toml title="pyproject.toml"
+[tool.uv]
+environments = [
+    "sys_platform == 'darwin'",
+    "sys_platform == 'linux'",
+]
+```
+
+Entries in the `environments` setting must be disjoint (i.e., they must not overlap). For example,
+`sys_platform == 'darwin'` and `sys_platform == 'linux'` are disjoint, but
+`sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the
+same time.
 
 Unlike the `pyproject.toml`, which is used to specify the broad requirements of your project, the
 lockfile contains the exact resolved versions that are installed in the project environment. This
@@ -80,11 +98,11 @@ The lockfile is created and updated during uv invocations that use the project e
 
 `uv.lock` is a human-readable TOML file but is managed by uv and should not be edited manually.
 There is no Python standard for lockfiles at this time, so the format of this file is specific to uv
-and not generally usable by other tools.
+and not usable by other tools.
 
 To avoid updating the lockfile during `uv sync` and `uv run` invocations, use the `--frozen` flag.
 
-To assert the lockfile is up to date, use the `--locked` flag. If the lockfile is not up to date, an
+To assert the lockfile is up-to-date, use the `--locked` flag. If the lockfile is not up-to-date, an
 error will be raised instead of updating the lockfile.
 
 ## Managing dependencies
@@ -146,7 +164,7 @@ environment:
 $ uv run python -c "import example"
 ```
 
-When using `run`, uv will ensure that the project environment is up to date before running the given
+When using `run`, uv will ensure that the project environment is up-to-date before running the given
 command.
 
 The given command can be provided by the project environment or exist outside of it, e.g.:

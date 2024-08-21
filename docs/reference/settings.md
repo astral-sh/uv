@@ -61,6 +61,87 @@ ignore errors.
 
 ---
 
+#### [`concurrent-builds`](#concurrent-builds) {: #concurrent-builds }
+
+The maximum number of source distributions that uv will build concurrently at any given
+time.
+
+Defaults to the number of available CPU cores.
+
+**Default value**: `None`
+
+**Type**: `int`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    concurrent-builds = 4
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    concurrent-builds = 4
+    ```
+
+---
+
+#### [`concurrent-downloads`](#concurrent-downloads) {: #concurrent-downloads }
+
+The maximum number of in-flight concurrent downloads that uv will perform at any given
+time.
+
+**Default value**: `50`
+
+**Type**: `int`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    concurrent-downloads = 4
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    concurrent-downloads = 4
+    ```
+
+---
+
+#### [`concurrent-installs`](#concurrent-installs) {: #concurrent-installs }
+
+The number of threads used when installing and unzipping packages.
+
+Defaults to the number of available CPU cores.
+
+**Default value**: `None`
+
+**Type**: `int`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    concurrent-installs = 4
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    concurrent-installs = 4
+    ```
+
+---
+
 #### [`config-settings`](#config-settings) {: #config-settings }
 
 Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend,
@@ -87,12 +168,70 @@ specified as `KEY=VALUE` pairs.
 
 ---
 
+#### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
+
+The project's development dependencies. Development dependencies will be installed by
+default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    dev_dependencies = ["ruff==0.5.0"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    dev_dependencies = ["ruff==0.5.0"]
+    ```
+
+---
+
+#### [`environments`](#environments) {: #environments }
+
+A list of supported environments against which to resolve dependencies.
+
+By default, uv will resolve for all possible environments during a `uv lock` operation.
+However, you can restrict the set of supported environments to improve performance and avoid
+unsatisfiable branches in the solution space.
+
+**Default value**: `[]`
+
+**Type**: `str | list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    # Resolve for macOS, but not for Linux or Windows.
+    environments = ["sys_platform == 'darwin'"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    # Resolve for macOS, but not for Linux or Windows.
+    environments = ["sys_platform == 'darwin'"]
+    ```
+
+---
+
 #### [`exclude-newer`](#exclude-newer) {: #exclude-newer }
 
 Limit candidate packages to those that were uploaded prior to the given date.
 
 Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-`2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).
+`2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
+system's configured time zone.
 
 **Default value**: `None`
 
@@ -1047,90 +1186,6 @@ ignore errors.
 
 ---
 
-#### [`concurrent-builds`](#pip_concurrent-builds) {: #pip_concurrent-builds }
-<span id="concurrent-builds"></span>
-
-The maximum number of source distributions that uv will build concurrently at any given
-time.
-
-Defaults to the number of available CPU cores.
-
-**Default value**: `None`
-
-**Type**: `int`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    concurrent-builds = 4
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    concurrent-builds = 4
-    ```
-
----
-
-#### [`concurrent-downloads`](#pip_concurrent-downloads) {: #pip_concurrent-downloads }
-<span id="concurrent-downloads"></span>
-
-The maximum number of in-flight concurrent downloads that uv will perform at any given
-time.
-
-**Default value**: `50`
-
-**Type**: `int`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    concurrent-downloads = 4
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    concurrent-downloads = 4
-    ```
-
----
-
-#### [`concurrent-installs`](#pip_concurrent-installs) {: #pip_concurrent-installs }
-<span id="concurrent-installs"></span>
-
-The number of threads used when installing and unzipping packages.
-
-Defaults to the number of available CPU cores.
-
-**Default value**: `None`
-
-**Type**: `int`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    concurrent-installs = 4
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    concurrent-installs = 4
-    ```
-
----
-
 #### [`config-settings`](#pip_config-settings) {: #pip_config-settings }
 <span id="config-settings"></span>
 
@@ -1328,7 +1383,8 @@ be correct.
 Limit candidate packages to those that were uploaded prior to the given date.
 
 Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-`2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).
+`2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
+system's configured time zone.
 
 **Default value**: `None`
 
@@ -1565,33 +1621,6 @@ use the `keyring` CLI to handle authentication.
     ```toml
     [pip]
     keyring-provider = "subprocess"
-    ```
-
----
-
-#### [`legacy-setup-py`](#pip_legacy-setup-py) {: #pip_legacy-setup-py }
-<span id="legacy-setup-py"></span>
-
-Use legacy `setuptools` behavior when building source distributions without a
-`pyproject.toml`.
-
-**Default value**: `false`
-
-**Type**: `bool`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    legacy-setup-py = true
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    legacy-setup-py = true
     ```
 
 ---

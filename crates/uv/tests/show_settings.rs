@@ -52,6 +52,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -138,7 +143,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: true,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -163,11 +167,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -188,6 +187,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -274,7 +278,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: true,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -299,11 +302,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -325,6 +323,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -411,7 +414,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -436,11 +438,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -494,6 +491,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -580,7 +582,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: true,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -605,11 +606,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -632,6 +628,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -695,7 +696,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -720,11 +720,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -756,6 +751,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -842,7 +842,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: true,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -867,11 +866,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -917,6 +911,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1026,7 +1025,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -1051,11 +1049,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1078,6 +1071,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1209,7 +1207,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -1234,11 +1231,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1284,6 +1276,11 @@ fn resolve_find_links() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1370,7 +1367,6 @@ fn resolve_find_links() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -1395,11 +1391,6 @@ fn resolve_find_links() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1444,6 +1435,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1507,7 +1503,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -1532,11 +1527,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1574,6 +1564,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1682,7 +1677,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -1707,11 +1701,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1732,6 +1721,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1840,7 +1834,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -1865,11 +1858,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1914,6 +1902,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1977,7 +1970,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -2002,11 +1994,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2034,6 +2021,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2097,7 +2089,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: true,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -2122,11 +2113,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2154,6 +2140,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2217,7 +2208,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -2242,11 +2232,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2276,6 +2261,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2339,7 +2329,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -2364,11 +2353,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2417,6 +2401,11 @@ fn resolve_tool() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2563,6 +2552,11 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2626,7 +2620,6 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -2651,11 +2644,6 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2711,6 +2699,11 @@ fn resolve_both() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2797,7 +2790,6 @@ fn resolve_both() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: true,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -2822,11 +2814,6 @@ fn resolve_both() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2874,6 +2861,11 @@ fn resolve_config_file() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2960,7 +2952,6 @@ fn resolve_config_file() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: true,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -2985,11 +2976,6 @@ fn resolve_config_file() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -3112,6 +3098,11 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -3175,7 +3166,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -3200,11 +3190,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -3235,6 +3220,11 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -3298,7 +3288,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             no_header: false,
             custom_compile_command: None,
             generate_hashes: false,
-            setup_py: Pep517,
             config_setting: ConfigSettings(
                 {},
             ),
@@ -3323,11 +3312,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 

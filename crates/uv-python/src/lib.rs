@@ -1610,6 +1610,48 @@ mod tests {
             "We should find the `bar` executable"
         );
 
+        // With [`EnvironmentPreference::OnlyVirtual`], we should not allow the interpreter
+        let result = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("bar"),
+                EnvironmentPreference::ExplicitSystem,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })?;
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
+            "We should not allow a system interpreter; got {result:?}"
+        );
+
+        // Unless it's a virtual environment interpreter
+        let mut context = TestContext::new()?;
+        let python = context.tempdir.child("foo").join("bar");
+        TestContext::create_mock_interpreter(
+            &python,
+            &PythonVersion::from_str("3.10.0").unwrap(),
+            ImplementationName::default(),
+            false, // Not a system interpreter
+        )?;
+        context.add_to_search_path(context.tempdir.child("foo").to_path_buf());
+
+        let python = context
+            .run(|| {
+                find_python_installation(
+                    &PythonRequest::parse("bar"),
+                    EnvironmentPreference::ExplicitSystem,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should find the `bar` executable"
+        );
+
         Ok(())
     }
 

@@ -1,10 +1,13 @@
+use std::fmt::Write;
+
 use anyhow::{Context, Result};
 
+use owo_colors::OwoColorize;
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
-use uv_fs::CWD;
+use uv_configuration::{Concurrency, ExtrasSpecification};
+use uv_fs::{Simplified, CWD};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::Pep723Script;
 use uv_warnings::{warn_user, warn_user_once};
@@ -32,17 +35,13 @@ pub(crate) async fn remove(
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    preview: PreviewMode,
+
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv remove` is experimental and may change without warning");
-    }
-
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
         if package.is_some() {
@@ -141,9 +140,17 @@ pub(crate) async fn remove(
         return Ok(ExitStatus::Success);
     }
 
-    // If `--script`, exit early. There's no reason to lock and sync.
-    let Target::Project(project) = target else {
-        return Ok(ExitStatus::Success);
+    let project = match target {
+        Target::Project(project) => project,
+        // If `--script`, exit early. There's no reason to lock and sync.
+        Target::Script(script) => {
+            writeln!(
+                printer.stderr(),
+                "Updated `{}`",
+                script.path.user_display().cyan()
+            )?;
+            return Ok(ExitStatus::Success);
+        }
     };
 
     // Discover or create the virtual environment.
@@ -167,7 +174,6 @@ pub(crate) async fn remove(
         venv.interpreter(),
         settings.as_ref().into(),
         Box::new(DefaultResolveLogger),
-        preview,
         connectivity,
         concurrency,
         native_tls,
@@ -199,7 +205,6 @@ pub(crate) async fn remove(
         settings.as_ref().into(),
         &state,
         Box::new(DefaultInstallLogger),
-        preview,
         connectivity,
         concurrency,
         native_tls,
@@ -225,7 +230,7 @@ enum Target {
 /// This is useful when a dependency of the user-specified type was not found, but it may be present
 /// elsewhere.
 fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
-    for dep_ty in pyproject.find_dependency(name) {
+    for dep_ty in pyproject.find_dependency(name, None) {
         match dep_ty {
             DependencyType::Production => {
                 warn_user!("`{name}` is a production dependency");
@@ -235,7 +240,7 @@ fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
             }
             DependencyType::Optional(group) => {
                 warn_user!(
-                    "`{name}` is an optional dependency; try calling `uv remove --optional {group}`"
+                    "`{name}` is an optional dependency; try calling `uv remove --optional {group}`",
                 );
             }
         }

@@ -32,14 +32,13 @@ fn lock_wheel_registry() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 4 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -52,7 +51,7 @@ fn lock_wheel_registry() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -106,7 +105,6 @@ fn lock_wheel_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -118,7 +116,6 @@ fn lock_wheel_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -129,7 +126,6 @@ fn lock_wheel_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -158,14 +154,13 @@ fn lock_sdist_registry() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -204,7 +199,6 @@ fn lock_sdist_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -215,7 +209,6 @@ fn lock_sdist_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
@@ -246,15 +239,13 @@ fn lock_sdist_git() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-            success: true
-            exit_code: 0
-            ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-            ----- stderr -----
-            warning: `uv lock` is experimental and may change without warning
-            warning: `uv.sources` is experimental and may change without warning
-            Resolved 2 packages in [TIME]
-            "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -267,7 +258,7 @@ fn lock_sdist_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -295,8 +286,6 @@ fn lock_sdist_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -308,8 +297,6 @@ fn lock_sdist_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -320,7 +307,6 @@ fn lock_sdist_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
@@ -343,15 +329,13 @@ fn lock_sdist_git() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        warning: `uv.sources` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -364,7 +348,7 @@ fn lock_sdist_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -401,15 +385,13 @@ fn lock_sdist_git() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        warning: `uv.sources` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -422,7 +404,7 @@ fn lock_sdist_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -459,15 +441,13 @@ fn lock_sdist_git() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        warning: `uv.sources` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -480,7 +460,7 @@ fn lock_sdist_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -522,14 +502,13 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -542,7 +521,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "example-pkg-a"
@@ -570,7 +549,6 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -581,7 +559,6 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + example-pkg-a==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a)
@@ -609,14 +586,13 @@ fn lock_sdist_git_pep508() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -629,7 +605,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -657,7 +633,6 @@ fn lock_sdist_git_pep508() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -674,14 +649,13 @@ fn lock_sdist_git_pep508() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -694,7 +668,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -728,14 +702,13 @@ fn lock_sdist_git_pep508() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -748,7 +721,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -782,14 +755,13 @@ fn lock_sdist_git_pep508() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -802,7 +774,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -843,14 +815,13 @@ fn lock_wheel_url() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 4 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -863,7 +834,7 @@ fn lock_wheel_url() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -938,7 +909,6 @@ fn lock_wheel_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -949,7 +919,6 @@ fn lock_wheel_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     error: Failed to download: `anyio @ https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
       Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
     "###);
@@ -961,7 +930,6 @@ fn lock_wheel_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 3 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0 (from https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
@@ -990,14 +958,13 @@ fn lock_sdist_url() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 4 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -1010,7 +977,7 @@ fn lock_sdist_url() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -1083,7 +1050,6 @@ fn lock_sdist_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -1094,7 +1060,6 @@ fn lock_sdist_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
@@ -1126,14 +1091,13 @@ fn lock_project_extra() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 5 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -1146,7 +1110,7 @@ fn lock_project_extra() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -1217,7 +1181,6 @@ fn lock_project_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -1228,7 +1191,6 @@ fn lock_project_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -1244,7 +1206,6 @@ fn lock_project_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
@@ -1277,7 +1238,6 @@ fn lock_project_with_overrides() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 9 packages in [TIME]
     "###);
 
@@ -1288,7 +1248,6 @@ fn lock_project_with_overrides() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 9 packages in [TIME]
     "###);
 
@@ -1299,7 +1258,6 @@ fn lock_project_with_overrides() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + blinker==1.7.0
@@ -1340,7 +1298,6 @@ fn lock_project_with_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -1351,7 +1308,6 @@ fn lock_project_with_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -1362,7 +1318,6 @@ fn lock_project_with_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -1391,14 +1346,13 @@ fn lock_dependency_extra() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 10 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -1411,7 +1365,7 @@ fn lock_dependency_extra() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "blinker"
@@ -1545,7 +1499,6 @@ fn lock_dependency_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 10 packages in [TIME]
     "###);
 
@@ -1556,7 +1509,6 @@ fn lock_dependency_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 9 packages in [TIME]
     Installed 9 packages in [TIME]
      + blinker==1.7.0
@@ -1592,14 +1544,13 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     let lockfile = context.temp_dir.join("uv.lock");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 7 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -1610,13 +1561,13 @@ fn lock_conditional_dependency_extra() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.7"
-        environment-markers = [
+        resolution-markers = [
             "python_full_version < '3.10'",
             "python_full_version >= '3.10'",
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "certifi"
@@ -1798,7 +1749,6 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     // ----- stdout -----
     //
     // ----- stderr -----
-    // warning: `uv lock` is experimental and may change without warning
     // Resolved 7 packages in [TIME]
     // error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     // "###);
@@ -1810,7 +1760,6 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + certifi==2024.2.2
@@ -1834,7 +1783,6 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 7 packages in [TIME]
     "###);
 
@@ -1845,7 +1793,6 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + certifi==2024.2.2
@@ -1877,15 +1824,14 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 9 packages in [TIME]
-        warning: The package `flask==3.0.2` does not have an extra named `foo`
-        "###);
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    warning: The package `flask==3.0.2` does not have an extra named `foo`
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -1898,7 +1844,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "blinker"
@@ -2018,7 +1964,6 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 9 packages in [TIME]
     "###);
 
@@ -2029,7 +1974,6 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + blinker==1.7.0
@@ -2062,14 +2006,13 @@ fn lock_upgrade_log() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 3 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -2082,7 +2025,7 @@ fn lock_upgrade_log() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -2124,7 +2067,6 @@ fn lock_upgrade_log() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -2147,7 +2089,6 @@ fn lock_upgrade_log() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     Removed iniconfig v2.0.0
     Updated markupsafe v1.1.1 -> v2.1.5
@@ -2165,7 +2106,7 @@ fn lock_upgrade_log() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "markupsafe"
@@ -2233,14 +2174,13 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 3 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -2251,19 +2191,19 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform != 'win32'",
             "sys_platform == 'win32'",
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "markupsafe"
         version = "1.1.1"
         source = { registry = "https://pypi.org/simple" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform != 'win32'",
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151 }
@@ -2272,7 +2212,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         name = "markupsafe"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'win32'",
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/67/6a/5b3ed5c122e20c33d2562df06faf895a6b91b0a6b96a4626440ffe1d5c8e/MarkupSafe-2.0.0.tar.gz", hash = "sha256:4fae0677f712ee090721d8b17f412f1cbceefbf0dc180fe91bab3232f38b4527", size = 18466 }
@@ -2302,7 +2242,6 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -2324,7 +2263,6 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Updated markupsafe v1.1.1, v2.0.0 -> v2.1.5
     "###);
@@ -2340,7 +2278,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "markupsafe"
@@ -2394,14 +2332,13 @@ fn lock_preference() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -2414,7 +2351,7 @@ fn lock_preference() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -2459,7 +2396,6 @@ fn lock_preference() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -2474,7 +2410,7 @@ fn lock_preference() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -2505,7 +2441,6 @@ fn lock_preference() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Updated iniconfig v1.1.1 -> v2.0.0
     "###);
@@ -2521,7 +2456,7 @@ fn lock_preference() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -2575,7 +2510,7 @@ fn lock_git_sha() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -2613,20 +2548,18 @@ fn lock_git_sha() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
     // Relock with `--upgrade`.
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("uv-public-pypackage"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -2641,7 +2574,7 @@ fn lock_git_sha() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -2685,28 +2618,27 @@ fn lock_requires_python() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: false
-        exit_code: 1
-        ----- stdout -----
+    success: false
+    exit_code: 1
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-          × No solution found when resolving dependencies:
-          ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and the requested Python version (>=3.7) does not satisfy Python>=3.7.9,<3.8, we can conclude that Python>=3.7.9 is incompatible.
-              And because pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4 and only pygls<=1.3.0 is available, we can conclude that any of:
-                  pygls>=1.1.0,<1.3.0
-                  pygls>1.3.0
-               cannot be used. (1)
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and the requested Python version (>=3.7) does not satisfy Python>=3.7.9,<3.8, we can conclude that Python>=3.7.9 is incompatible.
+          And because pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4 and only pygls<=1.3.0 is available, we can conclude that all of:
+              pygls>=1.1.0,<1.3.0
+              pygls>1.3.0
+           cannot be used. (1)
 
-              Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls==1.3.0 depends on Python>=3.8, we can conclude that pygls==1.3.0 cannot be used.
-              And because we know from (1) that any of:
-                  pygls>=1.1.0,<1.3.0
-                  pygls>1.3.0
-               cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
-              And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
+          Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls==1.3.0 depends on Python>=3.8, we can conclude that pygls==1.3.0 cannot be used.
+          And because we know from (1) that all of:
+              pygls>=1.1.0,<1.3.0
+              pygls>1.3.0
+           cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
+          And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
-              hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
-        "###);
+          hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
+    "###);
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
     pyproject_toml.write_str(
@@ -2720,14 +2652,13 @@ fn lock_requires_python() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 10 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -2740,7 +2671,7 @@ fn lock_requires_python() -> Result<()> {
         requires-python = ">=3.7"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "attrs"
@@ -2872,14 +2803,13 @@ fn lock_requires_python() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 9 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -2892,7 +2822,7 @@ fn lock_requires_python() -> Result<()> {
         requires-python = ">=3.7.9"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "attrs"
@@ -3014,14 +2944,13 @@ fn lock_requires_python() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 5 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -3034,7 +2963,7 @@ fn lock_requires_python() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "attrs"
@@ -3118,7 +3047,6 @@ fn lock_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -3130,7 +3058,6 @@ fn lock_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     error: No interpreter found for Python >=3.12 in system path
     "###);
 
@@ -3157,15 +3084,14 @@ fn lock_requires_python_wheels() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -3178,7 +3104,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         requires-python = "==3.12.*"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "frozenlist"
@@ -3225,7 +3151,6 @@ fn lock_requires_python_wheels() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
     "###);
@@ -3242,15 +3167,14 @@ fn lock_requires_python_wheels() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -3263,7 +3187,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         requires-python = "==3.11.*"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "frozenlist"
@@ -3325,7 +3249,6 @@ fn lock_requires_python_wheels() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Resolved 2 packages in [TIME]
     "###);
@@ -3353,14 +3276,13 @@ fn lock_requires_python_star() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 6 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -3373,7 +3295,7 @@ fn lock_requires_python_star() -> Result<()> {
         requires-python = "==3.11.*"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "attrs"
@@ -3449,7 +3371,6 @@ fn lock_requires_python_star() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###);
 
@@ -3477,14 +3398,13 @@ fn lock_requires_python_pre() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 6 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -3497,7 +3417,7 @@ fn lock_requires_python_pre() -> Result<()> {
         requires-python = ">=3.11"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "attrs"
@@ -3573,7 +3493,6 @@ fn lock_requires_python_pre() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###);
 
@@ -3599,15 +3518,14 @@ fn lock_requires_python_unbounded() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        warning: The workspace `requires-python` value does not contain a lower bound: `<=3.12`. Set a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    warning: The workspace `requires-python` value does not contain a lower bound: `<=3.12`. Set a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -3620,7 +3538,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
         requires-python = "<=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -3652,7 +3570,6 @@ fn lock_requires_python_unbounded() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     warning: The workspace `requires-python` value does not contain a lower bound: `<=3.12`. Set a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
     Resolved 2 packages in [TIME]
     "###);
@@ -3692,14 +3609,13 @@ fn lock_python_version_marker_complement() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 4 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -3710,7 +3626,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
-        environment-markers = [
+        resolution-markers = [
             "python_full_version < '3.10'",
             "python_full_version == '3.10'",
             "python_full_version > '3.10' and python_full_version < '3.11'",
@@ -3718,7 +3634,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "attrs"
@@ -3777,7 +3693,6 @@ fn lock_python_version_marker_complement() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -3804,14 +3719,13 @@ fn lock_dev() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 3 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -3824,7 +3738,7 @@ fn lock_dev() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -3872,7 +3786,6 @@ fn lock_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -3883,7 +3796,6 @@ fn lock_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
@@ -3897,7 +3809,6 @@ fn lock_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Installed 1 package in [TIME]
      + typing-extensions==4.12.2 (from https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl)
     "###);
@@ -3922,14 +3833,13 @@ fn lock_conditional_unconditional() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -3942,7 +3852,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -3977,7 +3887,6 @@ fn lock_conditional_unconditional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -4001,14 +3910,13 @@ fn lock_multiple_markers() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -4021,7 +3929,7 @@ fn lock_multiple_markers() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -4042,8 +3950,8 @@ fn lock_multiple_markers() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "iniconfig", marker = "implementation_name == 'cpython'" },
             { name = "iniconfig", marker = "python_full_version < '3.12'" },
+            { name = "iniconfig", marker = "implementation_name == 'cpython'" },
         ]
         "###
         );
@@ -4056,7 +3964,6 @@ fn lock_multiple_markers() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -4140,7 +4047,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         requires-python = ">=3.11, <3.13"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "a"
@@ -4177,8 +4084,6 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -4202,14 +4107,13 @@ fn lock_cycles() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 11 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -4222,7 +4126,7 @@ fn lock_cycles() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "argparse"
@@ -4361,7 +4265,6 @@ fn lock_cycles() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 11 packages in [TIME]
     "###);
 
@@ -4372,7 +4275,6 @@ fn lock_cycles() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 11 packages in [TIME]
     Installed 11 packages in [TIME]
      + argparse==1.4.0
@@ -4427,7 +4329,7 @@ fn lock_new_extras() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "certifi"
@@ -4516,7 +4418,6 @@ fn lock_new_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###);
 
@@ -4552,7 +4453,7 @@ fn lock_new_extras() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "certifi"
@@ -4655,7 +4556,6 @@ fn lock_new_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 7 packages in [TIME]
     "###);
 
@@ -4734,7 +4634,6 @@ fn lock_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -4746,7 +4645,6 @@ fn lock_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: idna==3.6
       Caused by: Hash mismatch for `idna==3.6`
@@ -4779,14 +4677,13 @@ fn lock_resolution_mode() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 4 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -4799,7 +4696,7 @@ fn lock_resolution_mode() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -4853,7 +4750,6 @@ fn lock_resolution_mode() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -4864,7 +4760,6 @@ fn lock_resolution_mode() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
     Resolved 4 packages in [TIME]
     Updated anyio v4.3.0 -> v3.0.0
@@ -4882,7 +4777,7 @@ fn lock_resolution_mode() -> Result<()> {
 
         [options]
         resolution-mode = "lowest-direct"
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -4936,7 +4831,6 @@ fn lock_resolution_mode() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -4966,7 +4860,6 @@ fn lock_requires_python_no_wheels() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because dearpygui==1.9.1 has no wheels with a matching Python ABI tag and your project depends on dearpygui==1.9.1, we can conclude that your project's requirements are unsatisfiable.
     "###);
@@ -5028,7 +4921,6 @@ fn lock_same_version_multiple_urls() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 7 packages in [TIME]
     "###);
 
@@ -5041,19 +4933,19 @@ fn lock_same_version_multiple_urls() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform != 'darwin'",
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
         version = "3.0.0"
         source = { registry = "https://pypi.org/simple" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform != 'darwin'",
         ]
         dependencies = [
@@ -5069,7 +4961,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "anyio"
         version = "3.7.0"
         source = { registry = "https://pypi.org/simple" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
         ]
         dependencies = [
@@ -5085,7 +4977,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "dependency"
         version = "0.0.1"
         source = { directory = "[TEMP_DIR]/v1" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
         ]
         dependencies = [
@@ -5099,7 +4991,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "dependency"
         version = "0.0.1"
         source = { directory = "[TEMP_DIR]/v2" }
-        environment-markers = [
+        resolution-markers = [
             "sys_platform != 'darwin'",
         ]
         dependencies = [
@@ -5152,7 +5044,6 @@ fn lock_same_version_multiple_urls() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 7 packages in [TIME]
     "###);
 
@@ -5186,7 +5077,6 @@ fn lock_unsafe_lowest() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -5197,7 +5087,6 @@ fn lock_unsafe_lowest() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -5247,9 +5136,7 @@ fn lock_exclusion() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -5264,7 +5151,7 @@ fn lock_exclusion() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "child"
@@ -5292,7 +5179,6 @@ fn lock_exclusion() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
     "###);
 
@@ -5366,9 +5252,7 @@ fn lock_dev_transitive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -5383,7 +5267,7 @@ fn lock_dev_transitive() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -5461,7 +5345,6 @@ fn lock_dev_transitive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     error: No `pyproject.toml` found in current directory or any parent directory
     "###);
 
@@ -5490,7 +5373,6 @@ fn lock_redact_https() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -5506,7 +5388,7 @@ fn lock_redact_https() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "foo"
@@ -5538,7 +5420,6 @@ fn lock_redact_https() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -5549,7 +5430,6 @@ fn lock_redact_https() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: iniconfig==2.0.0
       Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
@@ -5562,7 +5442,6 @@ fn lock_redact_https() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: iniconfig==2.0.0
       Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
@@ -5575,7 +5454,6 @@ fn lock_redact_https() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + foo==0.1.0 (from file://[TEMP_DIR]/)
@@ -5603,12 +5481,10 @@ fn lock_redact_https() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - foo==0.1.0 (from file://[TEMP_DIR]/)
-     + foo==0.1.0 (from file://[TEMP_DIR]/)
+     ~ foo==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
@@ -5643,7 +5519,6 @@ fn lock_redact_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -5658,7 +5533,7 @@ fn lock_redact_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "foo"
@@ -5686,7 +5561,6 @@ fn lock_redact_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -5697,7 +5571,6 @@ fn lock_redact_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + foo==0.1.0 (from file://[TEMP_DIR]/)
@@ -5732,7 +5605,6 @@ fn lock_relative_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -5747,7 +5619,7 @@ fn lock_relative_index() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "foo"
@@ -5779,7 +5651,6 @@ fn lock_relative_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -5790,7 +5661,6 @@ fn lock_relative_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + foo==0.1.0 (from file://[TEMP_DIR]/)
@@ -5839,8 +5709,6 @@ fn lock_no_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -5855,7 +5723,7 @@ fn lock_no_sources() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -5898,8 +5766,6 @@ fn lock_no_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -5910,7 +5776,6 @@ fn lock_no_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Updated anyio v0.1.0 -> v4.3.0
     Added idna v3.6
@@ -5929,7 +5794,7 @@ fn lock_no_sources() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -5983,7 +5848,6 @@ fn lock_no_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -6014,7 +5878,7 @@ fn lock_migrate() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[distribution-term-we-dont-know]]
         name = "anyio"
@@ -6063,7 +5927,6 @@ fn lock_migrate() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Added anyio v4.3.0
     Added idna v3.6
@@ -6082,7 +5945,7 @@ fn lock_migrate() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -6156,7 +6019,6 @@ fn lock_upgrade_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -6167,7 +6029,6 @@ fn lock_upgrade_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -6182,7 +6043,7 @@ fn lock_upgrade_package() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -6252,7 +6113,6 @@ fn lock_upgrade_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Updated anyio v2.0.0 -> v4.3.0
     "###);
@@ -6264,7 +6124,6 @@ fn lock_upgrade_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -6279,7 +6138,7 @@ fn lock_upgrade_package() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -6337,7 +6196,6 @@ fn lock_upgrade_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Updated idna v3.0 -> v3.6
     "###);
@@ -6349,7 +6207,6 @@ fn lock_upgrade_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -6364,7 +6221,7 @@ fn lock_upgrade_package() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -6440,7 +6297,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .assert()
         .success();
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
-    assert!(lock.contains("environment-markers"));
+    assert!(lock.contains("resolution-markers"));
 
     // Remove the bound and lock with `--upgrade`.
     pyproject_toml.write_str(&requirements.replace("fork-upgrade-foo==1", "fork-upgrade-foo"))?;
@@ -6453,7 +6310,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .assert()
         .success();
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
-    assert!(!lock.contains("environment-markers"));
+    assert!(!lock.contains("resolution-markers"));
     Ok(())
 }
 
@@ -6479,7 +6336,6 @@ fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     warning: The transitive dependency `packaging` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
     warning: The transitive dependency `colorama` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
@@ -6514,7 +6370,6 @@ fn lock_find_links_local_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -6529,7 +6384,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -6560,7 +6415,6 @@ fn lock_find_links_local_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -6571,7 +6425,6 @@ fn lock_find_links_local_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
@@ -6606,7 +6459,6 @@ fn lock_find_links_local_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -6621,7 +6473,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -6650,7 +6502,6 @@ fn lock_find_links_local_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -6661,7 +6512,6 @@ fn lock_find_links_local_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
@@ -6697,7 +6547,6 @@ fn lock_find_links_http_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -6712,7 +6561,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "packaging"
@@ -6744,7 +6593,6 @@ fn lock_find_links_http_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -6755,7 +6603,6 @@ fn lock_find_links_http_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
      + packaging==23.2
@@ -6791,7 +6638,6 @@ fn lock_find_links_http_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -6806,7 +6652,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "packaging"
@@ -6838,7 +6684,6 @@ fn lock_find_links_http_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -6849,7 +6694,6 @@ fn lock_find_links_http_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
      + packaging==23.2
@@ -6911,7 +6755,6 @@ fn lock_local_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -6960,7 +6803,6 @@ fn lock_local_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -6971,7 +6813,6 @@ fn lock_local_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
@@ -7007,7 +6848,6 @@ fn lock_sources_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -7022,7 +6862,7 @@ fn lock_sources_url() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -7088,7 +6928,6 @@ fn lock_sources_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -7099,7 +6938,6 @@ fn lock_sources_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -7146,7 +6984,6 @@ fn lock_sources_archive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -7161,7 +6998,7 @@ fn lock_sources_archive() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -7226,7 +7063,6 @@ fn lock_sources_archive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -7237,7 +7073,6 @@ fn lock_sources_archive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -7299,8 +7134,6 @@ fn lock_sources_source_tree() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -7315,7 +7148,7 @@ fn lock_sources_source_tree() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -7354,8 +7187,6 @@ fn lock_sources_source_tree() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -7366,7 +7197,6 @@ fn lock_sources_source_tree() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==0.1.0 (from file://[TEMP_DIR]/workspace/anyio)
@@ -7432,8 +7262,6 @@ fn lock_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -7448,7 +7276,7 @@ fn lock_editable() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -7493,8 +7321,6 @@ fn lock_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -7515,8 +7341,6 @@ fn lock_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -7531,7 +7355,7 @@ fn lock_editable() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -7576,8 +7400,6 @@ fn lock_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -7588,7 +7410,6 @@ fn lock_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + library==0.1.0 (from file://[TEMP_DIR]/library)
@@ -7675,9 +7496,7 @@ fn lock_mixed_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###);
 
@@ -7692,7 +7511,7 @@ fn lock_mixed_extras() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -7781,9 +7600,7 @@ fn lock_mixed_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###);
 
@@ -7795,7 +7612,6 @@ fn lock_mixed_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Prepared 4 packages in [TIME]
@@ -7815,7 +7631,6 @@ fn lock_mixed_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
@@ -7871,9 +7686,7 @@ fn lock_transitive_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -7888,7 +7701,7 @@ fn lock_transitive_extra() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -7959,9 +7772,7 @@ fn lock_transitive_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -7973,7 +7784,6 @@ fn lock_transitive_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Prepared 2 packages in [TIME]
@@ -7990,7 +7800,6 @@ fn lock_transitive_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
@@ -8028,8 +7837,6 @@ fn lock_mismatched_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     error: Failed to build: `project @ file://[TEMP_DIR]/`
       Caused by: Failed to parse entry for: `uv-public-pypackage`
       Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
@@ -8068,8 +7875,6 @@ fn lock_mismatched_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -8084,7 +7889,7 @@ fn lock_mismatched_versions() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -8112,8 +7917,6 @@ fn lock_mismatched_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -8124,7 +7927,6 @@ fn lock_mismatched_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
@@ -8160,7 +7962,6 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on datasets<2.19 and datasets>=2.19, we can conclude that your project's requirements are unsatisfiable.
     "###);
@@ -8190,7 +7991,6 @@ fn lock_change_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -8205,7 +8005,7 @@ fn lock_change_index() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -8237,7 +8037,6 @@ fn lock_change_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -8252,7 +8051,7 @@ fn lock_change_index() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -8284,7 +8083,6 @@ fn lock_change_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -8332,8 +8130,6 @@ fn lock_remove_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -8348,7 +8144,7 @@ fn lock_remove_member() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -8419,8 +8215,6 @@ fn lock_remove_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -8442,7 +8236,6 @@ fn lock_remove_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -8454,7 +8247,6 @@ fn lock_remove_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Removed anyio v4.3.0
     Removed idna v3.6
@@ -8473,7 +8265,7 @@ fn lock_remove_member() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -8516,7 +8308,6 @@ fn lock_add_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 1 package in [TIME]
     "###);
 
@@ -8531,7 +8322,7 @@ fn lock_add_member() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -8548,7 +8339,6 @@ fn lock_add_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 1 package in [TIME]
     "###);
 
@@ -8585,7 +8375,6 @@ fn lock_add_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -8597,12 +8386,11 @@ fn lock_add_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the cache and leaf depends on anyio>3, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "###);
 
     // Re-run without `--locked`.
@@ -8612,7 +8400,6 @@ fn lock_add_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     Added anyio v4.3.0
     Added idna v3.6
@@ -8627,7 +8414,6 @@ fn lock_add_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -8642,7 +8428,7 @@ fn lock_add_member() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -8731,7 +8517,6 @@ fn lock_redundant_add_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -8746,7 +8531,7 @@ fn lock_redundant_add_member() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -8800,7 +8585,6 @@ fn lock_redundant_add_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -8826,7 +8610,6 @@ fn lock_redundant_add_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -8838,7 +8621,6 @@ fn lock_redundant_add_member() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -8853,7 +8635,7 @@ fn lock_redundant_add_member() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -8930,7 +8712,6 @@ fn lock_new_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -8945,7 +8726,7 @@ fn lock_new_constraints() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -8999,7 +8780,6 @@ fn lock_new_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -9026,7 +8806,6 @@ fn lock_new_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -9038,7 +8817,6 @@ fn lock_new_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Updated anyio v4.3.0 -> v4.2.0
     "###);
@@ -9054,7 +8832,7 @@ fn lock_new_constraints() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "anyio", specifier = "<4.3" }]
@@ -9140,7 +8918,6 @@ fn lock_remove_member_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -9155,7 +8932,7 @@ fn lock_remove_member_virtual() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -9214,7 +8991,6 @@ fn lock_remove_member_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -9233,7 +9009,6 @@ fn lock_remove_member_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 0 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -9245,7 +9020,6 @@ fn lock_remove_member_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 0 packages in [TIME]
     Removed anyio v4.3.0
     Removed idna v3.6
@@ -9264,7 +9038,7 @@ fn lock_remove_member_virtual() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###
         );
     });
@@ -9296,7 +9070,6 @@ fn lock_rename_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -9311,7 +9084,7 @@ fn lock_rename_project() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -9343,7 +9116,6 @@ fn lock_rename_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -9365,7 +9137,6 @@ fn lock_rename_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -9377,7 +9148,6 @@ fn lock_rename_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Removed project v0.1.0
     Added renamed v0.1.0
@@ -9394,7 +9164,7 @@ fn lock_rename_project() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -9446,7 +9216,7 @@ fn lock_missing_metadata() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -9490,14 +9260,13 @@ fn lock_missing_metadata() -> Result<()> {
 
     // Re-locking should add `[package.metadata]`.
     uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 4 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -9510,7 +9279,7 @@ fn lock_missing_metadata() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -9583,7 +9352,6 @@ fn lock_reorder() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -9598,7 +9366,7 @@ fn lock_reorder() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -9665,7 +9433,6 @@ fn lock_reorder() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -9687,7 +9454,6 @@ fn lock_reorder() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
@@ -9730,8 +9496,6 @@ fn lock_narrowed_python_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -9744,14 +9508,14 @@ fn lock_narrowed_python_version() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.7"
-        environment-markers = [
+        resolution-markers = [
             "python_full_version < '3.9'",
             "python_full_version >= '3.9' and python_full_version < '3.11'",
             "python_full_version >= '3.11'",
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "dependency"
@@ -9797,8 +9561,6 @@ fn lock_narrowed_python_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     "###);
 
@@ -9836,7 +9598,6 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -9849,13 +9610,13 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        environment-markers = [
+        resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform != 'darwin'",
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -9880,8 +9641,8 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "anyio", marker = "sys_platform == 'darwin'" },
             { name = "anyio", marker = "python_full_version >= '3.11'" },
+            { name = "anyio", marker = "sys_platform == 'darwin'" },
         ]
 
         [[package]]
@@ -9912,8 +9673,356 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// Lock with a user-provided constraint on the space of supported environments.
+#[test]
+fn lock_constrained_environment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["black"]
+
+        [tool.uv]
+        environments = "platform_system != 'Windows'"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    // Because we're _not_ locking for Windows, `colorama` should not be included.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_system != 'Windows'",
+        ]
+        supported-markers = [
+            "platform_system != 'Windows'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "black"
+        version = "24.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "click", marker = "platform_system != 'Windows'" },
+            { name = "mypy-extensions", marker = "platform_system != 'Windows'" },
+            { name = "packaging", marker = "platform_system != 'Windows'" },
+            { name = "pathspec", marker = "platform_system != 'Windows'" },
+            { name = "platformdirs", marker = "platform_system != 'Windows'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f", size = 1600822 },
+            { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11", size = 1429987 },
+            { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4", size = 1755319 },
+            { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", hash = "sha256:56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5", size = 1385180 },
+            { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", hash = "sha256:41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93", size = 201493 },
+        ]
+
+        [[package]]
+        name = "click"
+        version = "8.1.7"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
+        ]
+
+        [[package]]
+        name = "mypy-extensions"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782", size = 4433 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d", size = 4695 },
+        ]
+
+        [[package]]
+        name = "packaging"
+        version = "24.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488 },
+        ]
+
+        [[package]]
+        name = "pathspec"
+        version = "0.12.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191 },
+        ]
+
+        [[package]]
+        name = "platformdirs"
+        version = "4.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", hash = "sha256:ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768", size = 20055 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "black", marker = "platform_system != 'Windows'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "black" }]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "###);
+
+    // Re-run with `--offline`. We shouldn't need a network connection to validate an
+    // already-correct lockfile with immutable metadata.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "###);
+
+    // Rewrite with a list, rather than a string.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["black"]
+
+        [tool.uv]
+        environments = ["platform_system != 'Windows'"]
+        "#,
+    )?;
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "###);
+
+    // Re-lock without the environment constraint.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["black"]
+        "#,
+    )?;
+
+    // Re-run with `--locked`. This should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change in supported environments
+    Resolved 8 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    "###);
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change in supported environments
+    Resolved 8 packages in [TIME]
+    Added colorama v0.4.6
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    // Because we're locking for Windows, `colorama` should be included.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "black"
+        version = "24.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "click" },
+            { name = "mypy-extensions" },
+            { name = "packaging" },
+            { name = "pathspec" },
+            { name = "platformdirs" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f", size = 1600822 },
+            { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11", size = 1429987 },
+            { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4", size = 1755319 },
+            { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", hash = "sha256:56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5", size = 1385180 },
+            { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", hash = "sha256:41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93", size = 201493 },
+        ]
+
+        [[package]]
+        name = "click"
+        version = "8.1.7"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "colorama", marker = "platform_system == 'Windows'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
+        ]
+
+        [[package]]
+        name = "colorama"
+        version = "0.4.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
+        ]
+
+        [[package]]
+        name = "mypy-extensions"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782", size = 4433 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d", size = 4695 },
+        ]
+
+        [[package]]
+        name = "packaging"
+        version = "24.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488 },
+        ]
+
+        [[package]]
+        name = "pathspec"
+        version = "0.12.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191 },
+        ]
+
+        [[package]]
+        name = "platformdirs"
+        version = "4.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", hash = "sha256:ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768", size = 20055 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "black" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "black" }]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// User-provided constraints must be disjoint.
+#[test]
+fn lock_overlapping_environment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = ["black"]
+
+        [tool.uv]
+        environments = ["platform_system != 'Windows'", "python_version > '3.10'"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Supported environments must be disjoint, but the following markers overlap: `platform_system != 'Windows'` and `python_full_version >= '3.11'`.
+
+    hint: replace `python_full_version >= '3.11'` with `python_full_version >= '3.11' and platform_system == 'Windows'`.
     "###);
 
     Ok(())

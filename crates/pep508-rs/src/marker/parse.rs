@@ -132,7 +132,9 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     // Convert a `<marker_value> <marker_op> <marker_value>` expression into it's
     // typed equivalent.
     let expr = match l_value {
-        // The only sound choice for this is `<version key> <version op> <quoted PEP 440 version>`
+        // Either:
+        // - `<version key> <version op> <quoted PEP 440 version>`
+        // - `<version key> in <list of quoted PEP 440 versions>` and ("not in")
         MarkerValue::MarkerEnvVersion(key) => {
             let MarkerValue::QuotedString(value) = r_value else {
                 reporter.report(
@@ -146,6 +148,12 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                 return Ok(None);
             };
 
+            // Check for `in` and `not in` expressions
+            if let Some(expr) = parse_version_in_expr(key.clone(), operator, &value, reporter) {
+                return Ok(Some(expr));
+            }
+
+            // Otherwise, it's a normal version expression
             parse_version_expr(key.clone(), operator, &value, reporter)
         }
         // The only sound choice for this is `<env key> <op> <string>`
@@ -236,6 +244,74 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     };
 
     Ok(expr)
+}
+
+/// Creates an instance of [`MarkerExpression::VersionIn`] with the given values.
+///
+/// Some important caveats apply here.
+///
+/// While the specification defines this operation as a substring search, for versions, we use a
+/// version-aware match so we can perform algebra on the expressions. This means that some markers
+/// will not be evaluated according to the specification, but these marker expressions are
+/// relatively rare so the trade-off is acceptable.
+///
+/// The following limited expression is supported:
+///
+/// ```text
+/// [not] in '<version> [additional versions]'
+/// ```
+///
+/// where the version is PEP 440 compliant. Arbitrary whitespace is allowed between versions.
+///
+/// Returns `None` if the [`MarkerOperator`] is not relevant.
+/// Reports a warning if an invalid version is encountered, and returns `None`.
+fn parse_version_in_expr(
+    key: MarkerValueVersion,
+    operator: MarkerOperator,
+    value: &str,
+    reporter: &mut impl Reporter,
+) -> Option<MarkerExpression> {
+    if !matches!(operator, MarkerOperator::In | MarkerOperator::NotIn) {
+        return None;
+    }
+    let negated = matches!(operator, MarkerOperator::NotIn);
+
+    let mut cursor = Cursor::new(value);
+    let mut versions = Vec::new();
+
+    // Parse all of the values in the list as versions
+    loop {
+        // Allow arbitrary whitespace between versions
+        cursor.eat_whitespace();
+
+        let (start, len) = cursor.take_while(|c| !c.is_whitespace());
+        if len == 0 {
+            break;
+        }
+
+        let version = match Version::from_str(cursor.slice(start, len)) {
+            Ok(version) => version,
+            Err(err) => {
+                reporter.report(
+                    MarkerWarningKind::Pep440Error,
+                    format!(
+                        "Expected PEP 440 versions to compare with {key}, found {value},
+                        will be ignored: {err}"
+                    ),
+                );
+
+                return None;
+            }
+        };
+
+        versions.push(version);
+    }
+
+    Some(MarkerExpression::VersionIn {
+        key,
+        versions,
+        negated,
+    })
 }
 
 /// Creates an instance of [`MarkerExpression::Version`] with the given values.

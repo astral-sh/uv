@@ -91,7 +91,6 @@ fn prune_cached_env() {
     pytest 8.0.0
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -224,8 +223,7 @@ fn prune_unzipped() -> Result<()> {
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - iniconfig==2.0.0
-     - source-distribution==0.0.1
-     + source-distribution==0.0.1
+     ~ source-distribution==0.0.1
     "###);
 
     requirements_txt.write_str(indoc! { r"
@@ -241,14 +239,15 @@ fn prune_unzipped() -> Result<()> {
       ╰─▶ Because only the following versions of iniconfig are available:
               iniconfig<=0.1
               iniconfig>=1.0.0
-          and iniconfig==0.1 network connectivity is disabled, but the metadata wasn't found in the cache, we can conclude that iniconfig<1.0.0 cannot be used.
-          And because iniconfig==1.0.0 network connectivity is disabled, but the metadata wasn't found in the cache and iniconfig==1.0.1 network connectivity is disabled, but the metadata wasn't found in the cache, we can conclude that iniconfig<1.1.0 cannot be used.
-          And because iniconfig==1.1.0 network connectivity is disabled, but the metadata wasn't found in the cache and iniconfig==1.1.1 network connectivity is disabled, but the metadata wasn't found in the cache, we can conclude that iniconfig<2.0.0 cannot be used.
-          And because iniconfig==2.0.0 network connectivity is disabled, but the metadata wasn't found in the cache and you require iniconfig, we can conclude that your requirements are unsatisfiable.
+          and all of:
+              iniconfig<=0.1
+              iniconfig>=1.0.0
+          need to be downloaded from a registry, we can conclude that iniconfig<1.0.0 cannot be used.
+          And because you require iniconfig, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for iniconfig in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
-          hint: Packages were unavailable because the network was disabled
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "###);
 
     Ok(())

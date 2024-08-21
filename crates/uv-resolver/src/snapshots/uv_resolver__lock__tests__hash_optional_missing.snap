@@ -6,6 +6,7 @@ Ok(
     Lock {
         version: 1,
         fork_markers: [],
+        supported_environments: [],
         requires_python: None,
         options: ResolverOptions {
             resolution_mode: Highest,

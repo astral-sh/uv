@@ -165,17 +165,24 @@ version download.
 
 By default, uv will automatically download Python versions when needed.
 
-The `python-downloads` option can be used to disable this behavior. By default, it is set to
-`automatic`; set to `manual` to only allow Python downloads during `uv python install`.
+The [`python-downloads`](../reference/settings.md#python-downloads) option can be used to disable
+this behavior. By default, it is set to `automatic`; set to `manual` to only allow Python downloads
+during `uv python install`.
+
+!!! tip
+
+The `--python-downloads` option can be passed to any uv command, or it can be set in a
+[persistent configuration file](../configuration/files.md) to change the default behavior.
 
 ## Adjusting Python version preferences
 
 By default, uv will attempt to use Python versions found on the system and only download managed
 interpreters when necessary.
 
-The `python-preference` option can be used to adjust this behavior. By default, it is set to
-`managed` which prefers managed Python installations over system Python installations. However,
-system Python installations are still preferred over downloading a managed Python version.
+The [`python-preference`](../reference/settings.md#python-preference) option can be used to adjust
+this behavior. By default, it is set to `managed` which prefers managed Python installations over
+system Python installations. However, system Python installations are still preferred over
+downloading a managed Python version.
 
 The following alternative options are available:
 

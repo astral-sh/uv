@@ -6,12 +6,12 @@ use std::env;
 use std::ffi::OsString;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, ExitStatus, Output};
 use std::str::FromStr;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir, SymlinkToFile};
+use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -29,32 +29,6 @@ use uv_python::{
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
 pub const PACKSE_VERSION: &str = "0.3.34";
-
-/// Wraps a group of `uv lock` snapshots and runs them multiple times in sequence.
-///
-/// This is useful to ensure that resolution runs independent of an existing lockfile
-/// and does not change across repeated calls to `uv lock`.
-///
-/// We squash the `unused_macros` lint since this isn't used in every
-/// grouping of tests.
-#[allow(unused_macros)]
-macro_rules! deterministic_lock {
-    ($context:ident => $($x:tt)*) => {
-        insta::allow_duplicates! {
-            // Run the first resolution.
-            $($x)*
-
-            // Run a second resolution with the new lockfile.
-            $($x)*
-
-            // Run a final clean resolution without a lockfile to ensure identical results.
-            let _ = fs_err::remove_file(&$context.temp_dir.join("uv.lock"));
-            $($x)*
-        }
-    };
-}
-#[allow(unused_imports)]
-pub(crate) use deterministic_lock;
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
@@ -307,9 +281,13 @@ impl TestContext {
                 .map(|pattern| (pattern, "[WORKSPACE]/".to_string())),
         );
 
-        // Make virtual environment activation cross-platform
+        // Make virtual environment activation cross-platform and shell-agnostic
         filters.push((
             r"Activate with: (?:.*)\\Scripts\\activate".to_string(),
+            "Activate with: source .venv/bin/activate".to_string(),
+        ));
+        filters.push((
+            r"Activate with: source .venv/bin/activate(?:\.\w+)".to_string(),
             "Activate with: source .venv/bin/activate".to_string(),
         ));
 
@@ -581,10 +559,26 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv add --no-sync` command for the given requirements.
+    pub fn add_no_sync(&self, reqs: &[&str]) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("add").arg("--no-sync").args(reqs);
+        self.add_shared_args(&mut command);
+        command
+    }
+
     /// Create a `uv remove` command for the given requirements.
     pub fn remove(&self, reqs: &[&str]) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("remove").args(reqs);
+        self.add_shared_args(&mut command);
+        command
+    }
+
+    /// Create a `uv remove --no-sync` command for the given requirements.
+    pub fn remove_no_sync(&self, reqs: &[&str]) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("remove").arg("--no-sync").args(reqs);
         self.add_shared_args(&mut command);
         command
     }
@@ -745,6 +739,66 @@ impl TestContext {
         );
         create_venv_from_executable(&self.venv, &self.cache_dir, &executable);
     }
+
+    /// Copies the files from the ecosystem project given into this text
+    /// context.
+    ///
+    /// This will almost always write at least a `pyproject.toml` into this
+    /// test context.
+    ///
+    /// The given name should correspond to the name of a sub-directory (not a
+    /// path to it) in the top-level `ecosystem` directory.
+    ///
+    /// This panics (fails the current test) for any failure.
+    pub fn copy_ecosystem_project(&self, name: &str) {
+        let project_dir = PathBuf::from(format!("../../ecosystem/{name}"));
+        self.temp_dir.copy_from(project_dir, &["*"]).unwrap();
+    }
+
+    /// Creates a way to compare the changes made to a lock file.
+    ///
+    /// This routine starts by copying (not moves) the generated lock file to
+    /// memory. It then calls the given closure with this test context to get a
+    /// `Command` and runs the command. The diff between the old lock file and
+    /// the new one is then returned.
+    ///
+    /// This assumes that a lock has already been performed.
+    pub fn diff_lock(&self, change: impl Fn(&TestContext) -> Command) -> String {
+        static TRIM_TRAILING_WHITESPACE: std::sync::LazyLock<Regex> =
+            std::sync::LazyLock::new(|| Regex::new(r"(?m)^\s+$").unwrap());
+
+        let lock_path = ChildPath::new(self.temp_dir.join("uv.lock"));
+        let old_lock = fs_err::read_to_string(&lock_path).unwrap();
+        let (snapshot, _, status) = run_and_format_with_status(
+            change(self),
+            self.filters(),
+            "diff_lock",
+            Some(crate::common::WindowsFilters::Platform),
+        );
+        assert!(status.success(), "{snapshot}");
+        let new_lock = fs_err::read_to_string(&lock_path).unwrap();
+        diff_snapshot(&old_lock, &new_lock)
+    }
+}
+
+/// Creates a "unified" diff between the two line-oriented strings suitable
+/// for snapshotting.
+pub fn diff_snapshot(old: &str, new: &str) -> String {
+    static TRIM_TRAILING_WHITESPACE: std::sync::LazyLock<Regex> =
+        std::sync::LazyLock::new(|| Regex::new(r"(?m)^\s+$").unwrap());
+
+    let diff = similar::TextDiff::from_lines(old, new);
+    let unified = diff
+        .unified_diff()
+        .context_radius(10)
+        .header("old", "new")
+        .to_string();
+    // Not totally clear why, but some lines end up containing only
+    // whitespace in the diff, even though they don't appear in the
+    // original data. So just strip them here.
+    TRIM_TRAILING_WHITESPACE
+        .replace_all(&unified, "")
+        .into_owned()
 }
 
 pub fn site_packages_path(venv: &Path, python: &str) -> PathBuf {
@@ -876,11 +930,25 @@ pub enum WindowsFilters {
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
 pub fn run_and_format<T: AsRef<str>>(
-    mut command: impl BorrowMut<Command>,
+    command: impl BorrowMut<Command>,
     filters: impl AsRef<[(T, T)]>,
     function_name: &str,
     windows_filters: Option<WindowsFilters>,
 ) -> (String, Output) {
+    let (snapshot, output, _) =
+        run_and_format_with_status(command, filters, function_name, windows_filters);
+    (snapshot, output)
+}
+
+/// Execute the command and format its output status, stdout and stderr into a snapshot string.
+///
+/// This function is derived from `insta_cmd`s `spawn_with_info`.
+pub fn run_and_format_with_status<T: AsRef<str>>(
+    mut command: impl BorrowMut<Command>,
+    filters: impl AsRef<[(T, T)]>,
+    function_name: &str,
+    windows_filters: Option<WindowsFilters>,
+) -> (String, Output, ExitStatus) {
     let program = command
         .borrow_mut()
         .get_program()
@@ -926,12 +994,12 @@ pub fn run_and_format<T: AsRef<str>>(
     // cause the set of dependencies to be the same across platforms.
     if cfg!(windows) {
         if let Some(windows_filters) = windows_filters {
-            // The optional leading +/- is for install logs, the optional next line is for lockfiles
+            // The optional leading +/-/~ is for install logs, the optional next line is for lockfiles
             let windows_only_deps = [
-                ("( [+-] )?colorama==\\d+(\\.[\\d+])+( \\\\\n    --hash=.*)?\n(    # via .*\n)?"),
-                ("( [+-] )?colorama==\\d+(\\.[\\d+])+(\\s+# via .*)?\n"),
-                ("( [+-] )?tzdata==\\d+(\\.[\\d+])+( \\\\\n    --hash=.*)?\n(    # via .*\n)?"),
-                ("( [+-] )?tzdata==\\d+(\\.[\\d+])+(\\s+# via .*)?\n"),
+                ("( [+-~] )?colorama==\\d+(\\.[\\d+])+( \\\\\n    --hash=.*)?\n(    # via .*\n)?"),
+                ("( [+-~] )?colorama==\\d+(\\.[\\d+])+(\\s+# via .*)?\n"),
+                ("( [+-~] )?tzdata==\\d+(\\.[\\d+])+( \\\\\n    --hash=.*)?\n(    # via .*\n)?"),
+                ("( [+-~] )?tzdata==\\d+(\\.[\\d+])+(\\s+# via .*)?\n"),
             ];
             let mut removed_packages = 0;
             for windows_only_dep in windows_only_deps {
@@ -962,7 +1030,8 @@ pub fn run_and_format<T: AsRef<str>>(
         }
     }
 
-    (snapshot, output)
+    let status = output.status;
+    (snapshot, output, status)
 }
 
 /// Recursively copy a directory and its contents.

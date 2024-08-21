@@ -7,7 +7,7 @@ theme:
     - navigation.instant
     - navigation.instant.prefetch
     - navigation.instant.progress
-    - navigation.expand
+    - navigation.sections
     - navigation.indexes
     - navigation.tracking
     - content.code.annotate
@@ -82,6 +82,7 @@ extra:
 nav:
   - Introduction: index.md
   - Getting started:
+      - getting-started/index.md
       - Installation: getting-started/installation.md
       - First steps: getting-started/first-steps.md
       - Features: getting-started/features.md
@@ -122,9 +123,11 @@ nav:
       - Locking environments: pip/compile.md
       - Compatibility with pip: pip/compatibility.md
   - Reference:
+      - reference/index.md
       - Commands: reference/cli.md
       - Settings: reference/settings.md
       - Resolver: reference/resolver-internals.md
+      - Benchmarks: reference/benchmarks.md
       - Versioning: reference/versioning.md
       - Platform support: reference/platforms.md
 validation:

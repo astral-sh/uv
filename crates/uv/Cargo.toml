@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.2.36"
+version = "0.3.0"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -47,7 +47,6 @@ uv-workspace = { workspace = true }
 anstream = { workspace = true }
 anyhow = { workspace = true }
 axoupdater = { workspace = true, features = ["github_releases", "tokio"], optional = true }
-chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
@@ -56,6 +55,7 @@ indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
+jiff = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
 owo-colors = { workspace = true }
 rayon = { workspace = true }
@@ -93,6 +93,7 @@ insta = { version = "1.36.1", features = ["filters", "json"] }
 predicates = { version = "3.0.4" }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
+similar = { version = "2.6.0" }
 zip = { workspace = true }
 
 [package.metadata.cargo-shear]

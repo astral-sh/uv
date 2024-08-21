@@ -61,6 +61,12 @@ To run a tool at a specific version, use `command@<version>`:
 $ uvx ruff@0.3.0 check
 ```
 
+To run a tool at the latest version, use `command@latest`:
+
+```console
+$ uvx ruff@latest check
+```
+
 The `--from` option can also be used to specify package versions, as above:
 
 ```console

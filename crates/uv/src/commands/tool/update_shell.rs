@@ -7,21 +7,15 @@ use owo_colors::OwoColorize;
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
 
-use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_shell::Shell;
 use uv_tool::find_executable_directory;
-use uv_warnings::warn_user_once;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Ensure that the executable directory is in PATH.
-pub(crate) async fn update_shell(preview: PreviewMode, printer: Printer) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv tool update-shell` is experimental and may change without warning");
-    }
-
+pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
     let executable_directory = find_executable_directory()?;
     debug!(
         "Ensuring that the executable directory is in PATH: {}",

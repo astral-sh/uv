@@ -57,3 +57,15 @@ configuration files (e.g., user-level configuration will be ignored).
 ## Settings
 
 See the [settings reference](../reference/settings.md) for an enumeration of the available settings.
+
+## Configuring the pip interface
+
+A dedicated [`[uv.pip]`](../reference/settings.md#pip) section is provided for configuring _just_
+the `uv pip` command line interface. Settings in this section will not apply to `uv` commands
+outside of the `uv pip` namespace. However, many of the settings in this section have corollaries in
+the top-level namespace which _do_ apply to the `uv pip` interface unless they are overridden by a
+value in the `uv.pip` section.
+
+The `uv.pip` settings are designed to adhere closely to pip's interface and are declared separately
+to retain compatibility while allowing the global settings to use alternate designs (e.g.,
+`--no-build`).

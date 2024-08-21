@@ -31,7 +31,6 @@ fn add_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -71,7 +70,7 @@ fn add_registry() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -125,7 +124,6 @@ fn add_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 4 packages in [TIME]
     "###);
 
@@ -153,7 +151,6 @@ fn add_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -163,7 +160,6 @@ fn add_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -192,8 +188,7 @@ fn add_git() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
@@ -230,7 +225,7 @@ fn add_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -293,7 +288,6 @@ fn add_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 5 packages in [TIME]
     "###);
 
@@ -362,7 +356,7 @@ fn add_git_private_source() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -390,7 +384,6 @@ fn add_git_private_source() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 2 packages in [TIME]
     "###);
 
@@ -461,7 +454,7 @@ fn add_git_private_raw() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -489,7 +482,6 @@ fn add_git_private_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 2 packages in [TIME]
     "###);
 
@@ -516,7 +508,6 @@ fn add_git_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 1 package in [TIME]
     "###);
 
@@ -526,7 +517,6 @@ fn add_git_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
@@ -576,7 +566,6 @@ fn add_git_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -586,7 +575,6 @@ fn add_git_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -606,8 +594,7 @@ fn add_git_raw() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
@@ -641,7 +628,7 @@ fn add_git_raw() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -704,7 +691,6 @@ fn add_git_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 5 packages in [TIME]
     "###);
 
@@ -732,7 +718,6 @@ fn add_git_implicit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -742,7 +727,6 @@ fn add_git_implicit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -762,8 +746,7 @@ fn add_git_implicit() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###);
 
@@ -794,7 +777,7 @@ fn add_raw_error() -> Result<()> {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--raw-sources'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <REQUIREMENTS>...
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
     "###);
@@ -864,7 +847,7 @@ fn add_unnamed() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -892,7 +875,6 @@ fn add_unnamed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 2 packages in [TIME]
     "###);
 
@@ -919,7 +901,6 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -962,7 +943,7 @@ fn add_remove_dev() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -1020,7 +1001,6 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 4 packages in [TIME]
     "###);
 
@@ -1031,7 +1011,6 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     warning: `anyio` is a development dependency; try calling `uv remove --dev`
     error: The dependency `anyio` could not be found in `dependencies`
     "###);
@@ -1043,15 +1022,13 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 4 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - idna==3.6
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - sniffio==1.3.1
     "###);
 
@@ -1085,7 +1062,7 @@ fn add_remove_dev() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -1102,7 +1079,6 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 1 package in [TIME]
     "###);
 
@@ -1129,7 +1105,6 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -1172,7 +1147,7 @@ fn add_remove_optional() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -1229,7 +1204,6 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Uninstalled 3 packages in [TIME]
      - anyio==3.7.0
      - idna==3.6
@@ -1243,7 +1217,6 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     warning: `anyio` is an optional dependency; try calling `uv remove --optional io`
     error: The dependency `anyio` could not be found in `dependencies`
     "###);
@@ -1255,13 +1228,11 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -1294,7 +1265,7 @@ fn add_remove_optional() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -1311,7 +1282,6 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 1 package in [TIME]
     "###);
 
@@ -1420,7 +1390,7 @@ fn add_remove_workspace() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -1454,7 +1424,6 @@ fn add_remove_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 2 packages in [TIME]
     "###);
 
@@ -1465,13 +1434,11 @@ fn add_remove_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
-     - child1==0.1.0 (from file://[TEMP_DIR]/child1)
-     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     ~ child1==0.1.0 (from file://[TEMP_DIR]/child1)
      - child2==0.1.0 (from file://[TEMP_DIR]/child2)
     "###);
 
@@ -1504,7 +1471,7 @@ fn add_remove_workspace() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -1532,7 +1499,6 @@ fn add_remove_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 1 package in [TIME]
     "###);
 
@@ -1621,7 +1587,7 @@ fn add_workspace_editable() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -1655,7 +1621,6 @@ fn add_workspace_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 2 packages in [TIME]
     "###);
 
@@ -1685,7 +1650,6 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###);
 
@@ -1695,7 +1659,6 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + certifi==2024.2.2
@@ -1713,13 +1676,11 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -1747,14 +1708,12 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     Prepared 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 3 packages in [TIME]
      + chardet==5.2.0
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + pysocks==1.7.1
     "###);
 
@@ -1770,7 +1729,8 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security,socks,use-chardet-on-py3]==2.31.0 ; python_full_version >= '3.8'",
+            "requests[security]==2.31.0",
+            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
         "###
         );
@@ -1784,14 +1744,11 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - requests==2.31.0
      + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068)
     "###);
@@ -1808,7 +1765,8 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security,socks,use-chardet-on-py3]==2.31.0 ; python_full_version >= '3.8'",
+            "requests[security]==2.31.0",
+            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
 
         [tool.uv.sources]
@@ -1828,7 +1786,7 @@ fn update() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "certifi"
@@ -1890,7 +1848,10 @@ fn update() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "requests", extras = ["security", "socks", "use-chardet-on-py3"], marker = "python_full_version >= '3.8'", git = "https://github.com/psf/requests?tag=v2.32.3" }]
+        requires-dist = [
+            { name = "requests", extras = ["security"], git = "https://github.com/psf/requests?tag=v2.32.3" },
+            { name = "requests", extras = ["socks", "use-chardet-on-py3"], marker = "python_full_version >= '3.8'", git = "https://github.com/psf/requests?tag=v2.32.3" },
+        ]
 
         [[package]]
         name = "pysocks"
@@ -1939,9 +1900,231 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 8 packages in [TIME]
     "###);
+
+    Ok(())
+}
+
+/// Add and update a requirement, with different markers
+#[test]
+fn add_update_marker() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'"
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###);
+
+    // Restrict the `requests` version for Python <3.11
+    uv_snapshot!(context.filters(), context.add(&["requests>=2.0,<2.29; python_version < '3.11'"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should add a new line for the dependency since the marker does not match an existing one
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.0,<2.29 ; python_full_version < '3.11'",
+        ]
+        "###
+        );
+    });
+
+    // Change the restricted `requests` version for Python <3.11
+    uv_snapshot!(context.filters(), context.add(&["requests>=2.0,<2.20; python_version < '3.11'"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should mutate the existing dependency since the marker matches
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+        ]
+        "###
+        );
+    });
+
+    // Restrict the `requests` version on Windows and Python >3.11
+    uv_snapshot!(context.filters(), context.add(&["requests>=2.31 ; sys_platform == 'win32' and python_version > '3.11'"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     - idna==3.6
+     + idna==2.7
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+     - urllib3==2.2.1
+     + urllib3==1.23
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should add a new line for the dependency since the marker does not match an existing one
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+            "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
+        ]
+        "###
+        );
+    });
+
+    // Restrict the `requests` version on Windows
+    uv_snapshot!(context.filters(), context.add(&["requests>=2.10 ; sys_platform == 'win32'"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should add a new line for the dependency since the marker does not exactly match an existing
+    // one — although it is a subset of the existing marker.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+            "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
+            "requests>=2.10 ; sys_platform == 'win32'",
+        ]
+        "###
+        );
+    });
+
+    // Remove `requests`
+    uv_snapshot!(context.filters(), context.remove(&["requests"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 6 packages in [TIME]
+    Installed 1 package in [TIME]
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==2.7
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+     - requests==2.31.0
+     - urllib3==1.23
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should remove all variants of `requests`
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = []
+        "###
+        );
+    });
 
     Ok(())
 }
@@ -1969,8 +2152,6 @@ fn update_source_replace_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -2006,9 +2187,9 @@ fn update_source_replace_url() -> Result<()> {
     Ok(())
 }
 
-/// Adding a dependency does not clean the environment.
+/// Adding a dependency does not remove untracked dependencies from the environment.
 #[test]
-fn add_no_clean() -> Result<()> {
+fn add_inexact() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -2028,7 +2209,6 @@ fn add_no_clean() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -2038,7 +2218,6 @@ fn add_no_clean() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -2062,14 +2241,12 @@ fn add_no_clean() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -2101,7 +2278,7 @@ fn add_no_clean() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -2126,25 +2303,23 @@ fn add_no_clean() -> Result<()> {
         );
     });
 
-    // Install from the lockfile without cleaning the environment.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-clean"), @r###"
+    // Install from the lockfile without removing extraneous packages from the environment.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--inexact"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 2 packages in [TIME]
     "###);
 
-    // Install from the lockfile, cleaning the environment.
+    // Install from the lockfile, performing an exact sync.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Uninstalled 3 packages in [TIME]
      - anyio==3.7.0
      - idna==3.6
@@ -2174,7 +2349,6 @@ fn remove_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -2184,7 +2358,6 @@ fn remove_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -2199,15 +2372,13 @@ fn remove_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 4 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - idna==3.6
-     - project==0.1.0 (from file://[TEMP_DIR]/)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - sniffio==1.3.1
     "###);
 
@@ -2238,7 +2409,7 @@ fn remove_registry() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -2255,7 +2426,6 @@ fn remove_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 1 package in [TIME]
     "###);
 
@@ -2284,7 +2454,6 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -2340,7 +2509,6 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -2397,7 +2565,6 @@ fn add_frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -2445,7 +2612,6 @@ fn add_no_sync() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -2492,7 +2658,7 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--branch <BRANCH>'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <REQUIREMENTS>...
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
     "###
@@ -2513,7 +2679,7 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--rev <REV>'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <REQUIREMENTS>...
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
     "###
@@ -2534,7 +2700,7 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used multiple times
 
-    Usage: uv add [OPTIONS] <REQUIREMENTS>...
+    Usage: uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
     "###
@@ -2562,7 +2728,6 @@ fn add_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
@@ -2574,7 +2739,6 @@ fn add_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     "###);
 
     let lock = context.temp_dir.join("uv.lock");
@@ -2604,7 +2768,6 @@ fn add_lower_bound() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -2657,7 +2820,6 @@ fn add_lower_bound_existing() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -2709,7 +2871,6 @@ fn add_lower_bound_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -2761,7 +2922,6 @@ fn add_lower_bound_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -2816,7 +2976,6 @@ fn add_lower_bound_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -2858,7 +3017,7 @@ fn add_lower_bound_optional() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -2931,7 +3090,6 @@ fn add_lower_bound_local() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -3012,7 +3170,6 @@ fn add_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     error: Found a virtual workspace root, but virtual projects do not support production dependencies (instead, use: `uv add --dev`)
     "###);
 
@@ -3024,7 +3181,6 @@ fn add_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     error: Found a virtual workspace root, but virtual projects do not support optional dependencies (instead, use: `uv add --dev`)
     "###);
 
@@ -3035,7 +3191,6 @@ fn add_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3070,7 +3225,7 @@ fn add_virtual() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -3108,7 +3263,6 @@ fn add_repeat() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3143,7 +3297,6 @@ fn add_repeat() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Audited 4 packages in [TIME]
     "###);
@@ -3166,6 +3319,106 @@ fn add_repeat() -> Result<()> {
         "###
         );
     });
+
+    Ok(())
+}
+
+/// Add from requirement file.
+#[test]
+fn add_requirements_file() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("Flask==2.3.2\ngit+https://github.com/agronholm/anyio.git@4.4.0")?;
+
+    uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.4.0 (from git+https://github.com/agronholm/anyio.git@053e8f0a0f7b0f4a47a012eb5c6b1d9d84344e6a)
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==2.3.2
+     + idna==3.6
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+     + werkzeug==3.0.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = [
+            "flask==2.3.2",
+            "anyio @ git+https://github.com/agronholm/anyio.git@4.4.0",
+        ]
+        "###
+        );
+    });
+
+    // Using `--raw-sources` with `-r` should warn.
+    uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("requirements.txt").arg("--raw-sources"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `--raw-sources` is a no-op for `requirements.txt` files, which are always treated as raw sources
+    Resolved [N] packages in [TIME]
+    Audited [N] packages in [TIME]
+    "###);
+
+    // Passing a `setup.py` should fail.
+    uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("setup.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Adding requirements from a `setup.py` is not supported in `uv add`
+    "###);
+
+    // Passing nothing should fail.
+    uv_snapshot!(context.filters(), context.add(&[]), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the following required arguments were not provided:
+      <PACKAGES|--requirements <REQUIREMENTS>>
+
+    Usage: uv add --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
+
+    For more information, try '--help'.
+    "###);
 
     Ok(())
 }
@@ -3193,13 +3446,13 @@ fn add_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3245,13 +3498,13 @@ fn add_script_without_metadata_table() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3296,13 +3549,13 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3348,13 +3601,13 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3408,13 +3661,13 @@ fn remove_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3466,13 +3719,13 @@ fn remove_last_dep_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove(&["rich"]).arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.remove(&["rich"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3547,6 +3800,7 @@ fn add_git_to_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;

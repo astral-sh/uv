@@ -66,6 +66,10 @@ pub struct Options {
 
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
+    environments: serde::de::IgnoredAny,
+
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     managed: serde::de::IgnoredAny,
 }
 
@@ -164,6 +168,39 @@ pub struct GlobalOptions {
         possible_values = true
     )]
     pub python_downloads: Option<PythonDownloads>,
+    /// The maximum number of in-flight concurrent downloads that uv will perform at any given
+    /// time.
+    #[option(
+        default = "50",
+        value_type = "int",
+        example = r#"
+            concurrent-downloads = 4
+        "#
+    )]
+    pub concurrent_downloads: Option<NonZeroUsize>,
+    /// The maximum number of source distributions that uv will build concurrently at any given
+    /// time.
+    ///
+    /// Defaults to the number of available CPU cores.
+    #[option(
+        default = "None",
+        value_type = "int",
+        example = r#"
+            concurrent-builds = 4
+        "#
+    )]
+    pub concurrent_builds: Option<NonZeroUsize>,
+    /// The number of threads used when installing and unzipping packages.
+    ///
+    /// Defaults to the number of available CPU cores.
+    #[option(
+        default = "None",
+        value_type = "int",
+        example = r#"
+            concurrent-installs = 4
+        "#
+    )]
+    pub concurrent_installs: Option<NonZeroUsize>,
 }
 
 /// Settings relevant to all installer operations.
@@ -379,7 +416,8 @@ pub struct ResolverInstallerOptions {
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-    /// `2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).
+    /// `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
+    /// system's configured time zone.
     #[option(
         default = "None",
         value_type = "str",
@@ -910,16 +948,6 @@ pub struct PipOptions {
         "#
     )]
     pub generate_hashes: Option<bool>,
-    /// Use legacy `setuptools` behavior when building source distributions without a
-    /// `pyproject.toml`.
-    #[option(
-        default = "false",
-        value_type = "bool",
-        example = r#"
-            legacy-setup-py = true
-        "#
-    )]
-    pub legacy_setup_py: Option<bool>,
     /// Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend,
     /// specified as `KEY=VALUE` pairs.
     #[option(
@@ -974,7 +1002,8 @@ pub struct PipOptions {
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-    /// `2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).
+    /// `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
+    /// system's configured time zone.
     #[option(
         default = "None",
         value_type = "str",
@@ -1170,39 +1199,6 @@ pub struct PipOptions {
         "#
     )]
     pub reinstall_package: Option<Vec<PackageName>>,
-    /// The maximum number of in-flight concurrent downloads that uv will perform at any given
-    /// time.
-    #[option(
-        default = "50",
-        value_type = "int",
-        example = r#"
-            concurrent-downloads = 4
-        "#
-    )]
-    pub concurrent_downloads: Option<NonZeroUsize>,
-    /// The maximum number of source distributions that uv will build concurrently at any given
-    /// time.
-    ///
-    /// Defaults to the number of available CPU cores.
-    #[option(
-        default = "None",
-        value_type = "int",
-        example = r#"
-            concurrent-builds = 4
-        "#
-    )]
-    pub concurrent_builds: Option<NonZeroUsize>,
-    /// The number of threads used when installing and unzipping packages.
-    ///
-    /// Defaults to the number of available CPU cores.
-    #[option(
-        default = "None",
-        value_type = "int",
-        example = r#"
-            concurrent-installs = 4
-        "#
-    )]
-    pub concurrent_installs: Option<NonZeroUsize>,
 }
 
 impl From<ResolverInstallerOptions> for ResolverOptions {

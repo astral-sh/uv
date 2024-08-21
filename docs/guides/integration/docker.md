@@ -18,22 +18,76 @@ FROM python:3.12-slim-bullseye
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 ```
 
-Or with the standalone installer:
+Or, with the installer:
 
 ```dockerfile title="Dockerfile"
 FROM python:3.12-slim-bullseye
-RUN apt-get update && apt-get install -y curl --no-install-recommends
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# The installer requires curl (and certificates) to download the release archive
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+
+# Download the latest installer
+ADD https://astral.sh/uv/install.sh /uv-installer.sh
+
+# Run the installer then remove it
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+
+# Ensure the installed binary is on the `PATH`
 ENV PATH="/root/.cargo/bin/:$PATH"
 ```
 
 Note this requires `curl` to be available.
 
-In either case, it is best practice to pin to a specific uv version.
+In either case, it is best practice to pin to a specific uv version, e.g., with:
 
-## Installing a package
+```dockerfile
+COPY --from=ghcr.io/astral-sh/uv:0.3.0 /uv /bin/uv
+```
 
-Once uv is installed in an image, it can be used to install some packages.
+Or, with the installer:
+
+```dockerfile
+ADD https://astral.sh/uv/0.3.0/install.sh /uv-installer.sh
+```
+
+## Installing a project
+
+If you're using uv to manage your project, you can copy it into the image and install it:
+
+```dockerfile title="Dockerfile"
+# Copy the project into the image
+ADD . /app
+WORKDIR /app
+
+# Sync the project into a new environment
+RUN uv sync
+```
+
+Once the project is installed, you can either _activate_ the virtual environment:
+
+```dockerfile title="Dockerfile"
+# Use the virtual environment automatically
+ENV VIRTUAL_ENV=/app/.venv
+# Place executables in the environment at the front of the path
+ENV PATH="/app/.venv/bin:$PATH"
+```
+
+Or, you can use `uv run` to run commands in the environment:
+
+```dockerfile title="Dockerfile"
+RUN uv run some_script.py
+```
+
+And, to start your application by default:
+
+```dockerfile title="Dockerfile"
+# Presuming there is a `my_app` command provided by the project
+CMD ["uv", "run", "my_app"]
+```
+
+## Using the pip interface
+
+### Installing a package
 
 The system Python environment is safe to use this context, since a container is already isolated.
 The `--system` flag can be used to install in the system environment:
@@ -64,7 +118,7 @@ When using a virtual environment, the `--system` flag should be omitted from uv 
 RUN uv pip install ruff
 ```
 
-## Installing requirements
+### Installing requirements
 
 To install requirements files, copy them into the container:
 
@@ -73,7 +127,7 @@ COPY requirements.txt .
 RUN uv pip install -r requirements.txt
 ```
 
-## Installing a project
+### Installing a project
 
 When installing a project alongside requirements, it is prudent to separate copying the requirements
 from the rest of the source code. This allows the dependencies of the project (which do not change
