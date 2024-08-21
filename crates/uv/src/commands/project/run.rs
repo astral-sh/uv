@@ -593,8 +593,13 @@ pub(crate) async fn run(
         )?;
     }
 
+    // Determine the Python interpreter to use for the command, if necessary.
+    let interpreter = ephemeral_env
+        .as_ref()
+        .map_or_else(|| &base_interpreter, |env| env.interpreter());
+
     debug!("Running `{command}`");
-    let mut process = Command::from(&command);
+    let mut process = command.as_command(interpreter);
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
@@ -616,12 +621,9 @@ pub(crate) async fn run(
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
-    let mut handle = process.spawn().with_context(|| {
-        format!(
-            "Failed to spawn: `{}`",
-            command.executable().to_string_lossy()
-        )
-    })?;
+    let mut handle = process
+        .spawn()
+        .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
 
     // Ignore signals in the parent process, deferring them to the child. This is safe as long as
     // the command is the last thing that runs in this process; otherwise, we'd need to restore the
@@ -712,11 +714,29 @@ enum RunCommand {
 }
 
 impl RunCommand {
-    /// Return the name of the target executable.
-    fn executable(&self) -> Cow<'_, OsString> {
+    /// Return the name of the target executable, for display purposes.
+    fn display_executable(&self) -> Cow<'_, str> {
         match self {
-            Self::Python(_, _) | Self::Empty => Cow::Owned(OsString::from("python")),
-            Self::External(executable, _) => Cow::Borrowed(executable),
+            Self::Python(_, _) | Self::Empty => Cow::Borrowed("python"),
+            Self::External(executable, _) => executable.to_string_lossy(),
+        }
+    }
+
+    /// Convert a [`RunCommand`] into a [`Command`].
+    fn as_command(&self, interpreter: &Interpreter) -> Command {
+        match self {
+            Self::Python(target, args) => {
+                let mut process = Command::new(interpreter.sys_executable());
+                process.arg(target);
+                process.args(args);
+                process
+            }
+            Self::External(executable, args) => {
+                let mut process = Command::new(executable);
+                process.args(args);
+                process
+            }
+            Self::Empty => Command::new(interpreter.sys_executable()),
         }
     }
 }
@@ -766,25 +786,6 @@ impl From<&ExternalCommand> for RunCommand {
                 target.clone(),
                 args.iter().map(std::clone::Clone::clone).collect(),
             )
-        }
-    }
-}
-
-impl From<&RunCommand> for Command {
-    fn from(command: &RunCommand) -> Self {
-        match command {
-            RunCommand::Python(target, args) => {
-                let mut process = Command::new("python");
-                process.arg(target);
-                process.args(args);
-                process
-            }
-            RunCommand::External(executable, args) => {
-                let mut process = Command::new(executable);
-                process.args(args);
-                process
-            }
-            RunCommand::Empty => Command::new("python"),
         }
     }
 }
