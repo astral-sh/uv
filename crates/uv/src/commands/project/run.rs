@@ -441,8 +441,16 @@ pub(crate) async fn run(
                     .connectivity(connectivity)
                     .native_tls(native_tls);
 
+                // (1) Explicit request from user
+                let python_request = if let Some(request) = python.as_deref() {
+                    Some(PythonRequest::parse(request))
+                // (2) Request from `.python-version`
+                } else {
+                    request_from_version_file(&CWD).await?
+                };
+
                 let python = PythonInstallation::find_or_download(
-                    python.as_deref().map(PythonRequest::parse),
+                    python_request,
                     // No opt-in is required for system environments, since we are not mutating it.
                     EnvironmentPreference::Any,
                     python_preference,
