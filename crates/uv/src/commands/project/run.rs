@@ -27,6 +27,7 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_scripts::{Pep723Error, Pep723Script};
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
+use which::which_in_global;
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
@@ -606,9 +607,6 @@ pub(crate) async fn run(
         .as_ref()
         .map_or_else(|| &base_interpreter, |env| env.interpreter());
 
-    debug!("Running `{command}`");
-    let mut process = command.as_command(interpreter);
-
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
         ephemeral_env
@@ -624,6 +622,9 @@ pub(crate) async fn run(
                     .flat_map(std::env::split_paths),
             ),
     )?;
+
+    debug!("Running `{command}`");
+    let mut process = command.as_command(&new_path, interpreter);
     process.env("PATH", new_path);
 
     // Spawn and wait for completion
@@ -731,7 +732,7 @@ impl RunCommand {
     }
 
     /// Convert a [`RunCommand`] into a [`Command`].
-    fn as_command(&self, interpreter: &Interpreter) -> Command {
+    fn as_command(&self, path: &OsString, interpreter: &Interpreter) -> Command {
         match self {
             Self::Python(target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
@@ -740,6 +741,20 @@ impl RunCommand {
                 process
             }
             Self::External(executable, args) => {
+                // If the executable is `python` and it's not on the path, rename it to the
+                // path reported by the interpreter.
+                let executable = if executable.eq_ignore_ascii_case("python")
+                    && which_in_global(executable, Some(&path))
+                        .ok()
+                        .into_iter()
+                        .flatten()
+                        .next()
+                        .is_none()
+                {
+                    interpreter.sys_executable().as_os_str()
+                } else {
+                    executable
+                };
                 let mut process = Command::new(executable);
                 process.args(args);
                 process
