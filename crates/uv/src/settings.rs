@@ -564,15 +564,22 @@ impl PythonUninstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PythonFindSettings {
     pub(crate) request: Option<String>,
+    pub(crate) no_project: bool,
 }
 
 impl PythonFindSettings {
     /// Resolve the [`PythonFindSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonFindArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let PythonFindArgs { request } = args;
+        let PythonFindArgs {
+            request,
+            no_project,
+        } = args;
 
-        Self { request }
+        Self {
+            request,
+            no_project,
+        }
     }
 }
 

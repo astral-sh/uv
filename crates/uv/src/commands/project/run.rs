@@ -52,11 +52,11 @@ pub(crate) async fn run(
     isolated: bool,
     package: Option<PackageName>,
     no_project: bool,
+    no_config: bool,
     extras: ExtrasSpecification,
     dev: bool,
     python: Option<String>,
     settings: ResolverInstallerSettings,
-
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -449,7 +449,9 @@ pub(crate) async fn run(
                     Some(PythonRequest::parse(request))
                 // (2) Request from `.python-version`
                 } else {
-                    request_from_version_file(&CWD).await?
+                    PythonVersionFile::discover(&*CWD, no_config)
+                        .await?
+                        .and_then(PythonVersionFile::into_version)
                 };
 
                 let python = PythonInstallation::find_or_download(
