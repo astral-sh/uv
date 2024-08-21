@@ -239,10 +239,13 @@ pub(crate) async fn install(
         for (key, err) in errors {
             writeln!(
                 printer.stderr(),
-                "{}: Failed to install {}: {err}",
+                "{}: Failed to install {}",
                 "error".red().bold(),
-                key.green(),
+                key.green()
             )?;
+            for err in anyhow::Error::new(err).chain() {
+                writeln!(printer.stderr(), "  {}: {}", "Caused by".red().bold(), err)?;
+            }
         }
         return Ok(ExitStatus::Failure);
     }
