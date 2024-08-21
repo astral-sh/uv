@@ -954,6 +954,7 @@ fn init_from_project_raw_sources() -> Result<()> {
         [project.optional-dependencies]
         foo = [
             "flask",
+            "black"
         ]
         bar = [
             "black",
@@ -1020,6 +1021,7 @@ fn init_from_project_raw_sources() -> Result<()> {
         [project.optional-dependencies]
         foo = [
             "flask",
+            "black",
         ]
         bar = [
             "black",
@@ -1036,6 +1038,114 @@ fn init_from_project_raw_sources() -> Result<()> {
     Ok(())
 }
 
+/// Test init --from-project for poetry project
+#[test]
+fn init_from_project_poetry() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.poetry]
+        name = "packse"
+        version = "0.0.0"
+        description = ""
+        authors = ["Zanie <contact@zanie.dev>"]
+        keywords = ["uv", "packse", "requirements", "packaging", "testing"]
+
+        [tool.poetry.scripts]
+        packse = "packse.cli:entrypoint"
+
+        [tool.poetry.dependencies]
+        python = "^3.12"
+        msgspec = "^0.18.4"
+        pypiserver = { version = "^2.0.1", optional = true }
+        watchfiles = { version = "^0.21.0", optional = true }
+        pyyaml = { version = "^6.0.1", optional = true }
+
+        [tool.poetry.extras]
+        two = ["pypiserver", "pyyaml"]
+        bar = ["pyyaml"]
+        serve = ["pypiserver", "watchfiles", "pyyaml"]
+
+        [tool.poetry.group.dev.dependencies]
+        psutil = "^5.9.7"
+
+        [build-system]
+        requires = ["poetry-core"]
+        build-backend = "poetry.core.masonry.api"
+
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.init()
+        .current_dir(&context.temp_dir)
+        .arg("--from-project")
+        .arg(pyproject_toml.to_path_buf())
+        .arg("--raw-sources")
+        .arg("--name")
+        .arg("project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `project`
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + msgspec==0.18.6
+     + pip==24.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + pypiserver==2.0.1
+     + pyyaml==6.0.1
+     + sniffio==1.3.1
+     + watchfiles==0.21.0
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = [
+            "msgspec>=0.18.4,<0.19.0",
+        ]
+
+        [project.optional-dependencies]
+        serve = [
+            "pypiserver>=2.0.1,<3.0.0",
+            "pyyaml>=6.0.1,<7.0.0",
+            "watchfiles>=0.21.0,<0.22.0",
+        ]
+        two = [
+            "pypiserver>=2.0.1,<3.0.0",
+            "pyyaml>=6.0.1,<7.0.0",
+        ]
+        bar = [
+            "pyyaml>=6.0.1,<7.0.0",
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "###
+        );
+    });
+
+    Ok(())
+}
 #[test]
 fn init_project_inside_project() -> Result<()> {
     let context = TestContext::new("3.12");

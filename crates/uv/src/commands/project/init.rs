@@ -6,7 +6,7 @@ use cache_key::RepositoryUrl;
 use owo_colors::OwoColorize;
 
 use pep440_rs::Version;
-use pep508_rs::{MarkerExpression, PackageName, Requirement};
+use pep508_rs::{ExtraName, MarkerExpression, PackageName, Requirement};
 use pypi_types::redact_git_credentials;
 use tracing::debug;
 use uv_auth::{store_credentials_from_url, Credentials};
@@ -239,8 +239,12 @@ pub(crate) async fn init(
         .with_reporter(ResolverReporter::from(printer))
         .resolve()
         .await?;
-        let resolution = resolutions.first().unwrap();
-        let requirements = resolution.requirements.clone();
+
+        let requirements = if let Some(resolution) = resolutions.first() {
+            resolution.requirements.clone()
+        } else {
+            return Ok(ExitStatus::Success);
+        };
         let mut toml = PyProjectTomlMut::from_toml(
             &project.pyproject_toml().raw,
             DependencyTarget::PyProjectToml,
@@ -249,14 +253,19 @@ pub(crate) async fn init(
         let mut edits = Vec::with_capacity(requirements.len());
 
         for requirement in requirements {
-            let extra = if let Some(MarkerExpression::Extra { name, .. }) =
-                requirement.marker.top_level_extra()
-            {
-                Some(name)
-            } else {
-                None
-            };
-
+            let extras: Vec<ExtraName> = requirement
+                .marker
+                .to_dnf()
+                .iter()
+                .flatten()
+                .filter_map(|marker| {
+                    if let MarkerExpression::Extra { name, .. } = marker {
+                        Some(name.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             let (requirement, source) = {
                 let workspace = project
                     .workspace()
@@ -265,14 +274,11 @@ pub(crate) async fn init(
                 resolve_requirement(requirement, workspace, None, None, None, None)?
             };
 
-            let requirement = match extra {
-                // Evaluate the `extras` expression in any markers, but preserve the remaining marker
-                // conditions.
-                Some(ref extra) => Requirement {
-                    marker: requirement.marker.simplify_extras(&[extra.clone()]),
-                    ..requirement
-                },
-                None => requirement,
+            // Evaluate the `extras` expression in any markers, but preserve the remaining marker
+            // conditions.
+            let requirement = Requirement {
+                marker: requirement.marker.simplify_extras(&extras),
+                ..requirement
             };
 
             // Redact any credentials. By default, we avoid writing sensitive credentials to files that
@@ -308,24 +314,26 @@ pub(crate) async fn init(
             };
 
             // Update the `pyproject.toml`.
-            let (edit, dependency_type) = match extra {
-                None => (
-                    toml.add_dependency(&requirement, source.as_ref())?,
+            if extras.is_empty() {
+                let edit = toml.add_dependency(&requirement, source.as_ref())?;
+                edits.push(DependencyEdit::new(
                     DependencyType::Production,
-                ),
-                Some(group) => (
-                    toml.add_optional_dependency(&group, &requirement, source.as_ref())?,
-                    DependencyType::Optional(group),
-                ),
-            };
-
-            // Keep track of the exact location of the edit.
-            edits.push(DependencyEdit::new(
-                dependency_type,
-                requirement,
-                source,
-                edit,
-            ));
+                    requirement,
+                    source,
+                    edit,
+                ));
+            } else {
+                for extra in extras {
+                    let edit =
+                        toml.add_optional_dependency(&extra, &requirement, source.as_ref())?;
+                    edits.push(DependencyEdit::new(
+                        DependencyType::Optional(extra),
+                        requirement.clone(),
+                        source.clone(),
+                        edit,
+                    ));
+                }
+            }
         }
 
         let content = toml.to_string();
