@@ -306,7 +306,7 @@ pub enum Commands {
     Python(PythonNamespace),
     /// Manage Python packages with a pip-compatible interface.
     #[command(
-        after_help = "Use `uv help pip`` for more details.",
+        after_help = "Use `uv help pip` for more details.",
         after_long_help = ""
     )]
     Pip(PipNamespace),
