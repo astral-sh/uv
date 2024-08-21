@@ -20,12 +20,10 @@ use crate::{
     version, Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError,
 };
 
-/// A thin wrapper around `Vec<VersionSpecifier>` with a serde implementation
+/// Sorted version specifiers, such as `>=2.1,<3`.
 ///
 /// Python requirements can contain multiple version specifier so we need to store them in a list,
 /// such as `>1.2,<2.0` being `[">1.2", "<2.0"]`.
-///
-/// You can use the serde implementation to e.g. parse `requires-python` from pyproject.toml
 ///
 /// ```rust
 /// # use std::str::FromStr;
@@ -77,11 +75,19 @@ impl VersionSpecifiers {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// Sort the specifiers.
+    fn from_unsorted(mut specifiers: Vec<VersionSpecifier>) -> Self {
+        // TODO(konsti): This seems better than sorting on insert and not getting the size hint,
+        // but i haven't measured it.
+        specifiers.sort_by(|a, b| a.version().cmp(b.version()));
+        Self(specifiers)
+    }
 }
 
 impl FromIterator<VersionSpecifier> for VersionSpecifiers {
     fn from_iter<T: IntoIterator<Item = VersionSpecifier>>(iter: T) -> Self {
-        Self(iter.into_iter().collect())
+        Self::from_unsorted(iter.into_iter().collect())
     }
 }
 
@@ -89,7 +95,7 @@ impl FromStr for VersionSpecifiers {
     type Err = VersionSpecifiersParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse_version_specifiers(s).map(Self)
+        parse_version_specifiers(s).map(Self::from_unsorted)
     }
 }
 
@@ -1742,7 +1748,7 @@ mod tests {
             VersionSpecifiers::from_str(">=3.7, <      4.0, != 3.9.0")
                 .unwrap()
                 .to_string(),
-            ">=3.7, <4.0, !=3.9.0"
+            ">=3.7, !=3.9.0, <4.0"
         );
     }
 

@@ -204,7 +204,7 @@ uvloop = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp", marker = "implementation_name == 'pypy' and sys_platform == 'win32' and extra == 'd'", specifier = "!=3.9.0,>=3.7.4" },
+    { name = "aiohttp", marker = "implementation_name == 'pypy' and sys_platform == 'win32' and extra == 'd'", specifier = ">=3.7.4,!=3.9.0" },
     { name = "aiohttp", marker = "(implementation_name != 'pypy' and extra == 'd') or (sys_platform != 'win32' and extra == 'd')", specifier = ">=3.7.4" },
     { name = "click", specifier = ">=8.0.0" },
     { name = "colorama", marker = "extra == 'colorama'", specifier = ">=0.4.3" },
