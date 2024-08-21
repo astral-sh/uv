@@ -624,7 +624,7 @@ fn resolve_requirement(
     let source = match result {
         Ok(source) => source,
         Err(SourceError::UnresolvedReference(rev)) => {
-            anyhow::bail!(
+            bail!(
                 "Cannot resolve Git reference `{rev}` for requirement `{name}`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw-sources` flag.",
                 name = requirement.name
             )

@@ -1113,16 +1113,6 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            // Use raw sources if requirements files are provided as input.
-            let raw_sources = if args.requirements.is_empty() {
-                args.raw_sources
-            } else {
-                if args.raw_sources {
-                    warn_user!("`--raw-sources` is a no-op for `requirements.txt` files, which are always treated as raw sources");
-                }
-                true
-            };
-
             let requirements = args
                 .packages
                 .into_iter()
@@ -1141,7 +1131,7 @@ async fn run_project(
                 requirements,
                 args.editable,
                 args.dependency_type,
-                raw_sources,
+                args.raw_sources,
                 args.rev,
                 args.tag,
                 args.branch,

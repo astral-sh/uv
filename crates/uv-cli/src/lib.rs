@@ -2382,8 +2382,6 @@ pub struct AddArgs {
     pub packages: Vec<String>,
 
     /// Add all packages listed in the given `requirements.txt` files.
-    ///
-    /// Implies `--raw-sources`.
     #[arg(long, short, group = "sources", value_parser = parse_file_path)]
     pub requirements: Vec<PathBuf>,
 
