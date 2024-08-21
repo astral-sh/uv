@@ -94,10 +94,19 @@ impl Tags {
         python_version: (u8, u8),
         implementation_name: &str,
         implementation_version: (u8, u8),
+        manylinux_compatible: bool,
         gil_disabled: bool,
     ) -> Result<Self, TagsError> {
         let implementation = Implementation::parse(implementation_name, gil_disabled)?;
-        let platform_tags = compatible_tags(platform)?;
+
+        // Determine the compatible tags for the current platform.
+        let platform_tags = {
+            let mut platform_tags = compatible_tags(platform)?;
+            if matches!(platform.os(), Os::Manylinux { .. }) && !manylinux_compatible {
+                platform_tags.retain(|tag| !tag.starts_with("manylinux"));
+            }
+            platform_tags
+        };
 
         let mut tags = Vec::with_capacity(5 * platform_tags.len());
 
@@ -931,6 +940,64 @@ mod tests {
         );
     }
 
+    /// Ensure the tags returned do not include the `manylinux` tags
+    /// when `manylinux_incompatible` is set to `false`.
+    #[test]
+    fn test_manylinux_incompatible() {
+        let tags = Tags::from_env(
+            &Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 28,
+                },
+                Arch::X86_64,
+            ),
+            (3, 9),
+            "cpython",
+            (3, 9),
+            false,
+            false,
+        )
+        .unwrap();
+        assert_snapshot!(
+            tags,
+            @r###"
+        cp39-cp39-linux_x86_64
+        cp39-abi3-linux_x86_64
+        cp39-none-linux_x86_64
+        cp38-abi3-linux_x86_64
+        cp37-abi3-linux_x86_64
+        cp36-abi3-linux_x86_64
+        cp35-abi3-linux_x86_64
+        cp34-abi3-linux_x86_64
+        cp33-abi3-linux_x86_64
+        cp32-abi3-linux_x86_64
+        py39-none-linux_x86_64
+        py3-none-linux_x86_64
+        py38-none-linux_x86_64
+        py37-none-linux_x86_64
+        py36-none-linux_x86_64
+        py35-none-linux_x86_64
+        py34-none-linux_x86_64
+        py33-none-linux_x86_64
+        py32-none-linux_x86_64
+        py31-none-linux_x86_64
+        py30-none-linux_x86_64
+        cp39-none-any
+        py39-none-any
+        py3-none-any
+        py38-none-any
+        py37-none-any
+        py36-none-any
+        py35-none-any
+        py34-none-any
+        py33-none-any
+        py32-none-any
+        py31-none-any
+        py30-none-any
+        "###);
+    }
+
     /// Check full tag ordering.
     /// The list is displayed in decreasing priority.
     ///
@@ -951,6 +1018,7 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
+            true,
             false,
         )
         .unwrap();
@@ -1574,6 +1642,7 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
+            false,
             false,
         )
         .unwrap();

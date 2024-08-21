@@ -33,6 +33,7 @@ pub struct Interpreter {
     markers: Box<MarkerEnvironment>,
     scheme: Scheme,
     virtualenv: Scheme,
+    manylinux_compatible: bool,
     sys_prefix: PathBuf,
     sys_base_exec_prefix: PathBuf,
     sys_base_prefix: PathBuf,
@@ -63,6 +64,7 @@ impl Interpreter {
             markers: Box::new(info.markers),
             scheme: info.scheme,
             virtualenv: info.virtualenv,
+            manylinux_compatible: info.manylinux_compatible,
             sys_prefix: info.sys_prefix,
             sys_base_exec_prefix: info.sys_base_exec_prefix,
             pointer_size: info.pointer_size,
@@ -176,6 +178,7 @@ impl Interpreter {
                 self.python_tuple(),
                 self.implementation_name(),
                 self.implementation_tuple(),
+                self.manylinux_compatible,
                 self.gil_disabled,
             )?;
             self.tags.set(tags).expect("tags should not be set");
@@ -373,6 +376,11 @@ impl Interpreter {
         &self.virtualenv
     }
 
+    /// Return whether this interpreter is `manylinux` compatible.
+    pub fn manylinux_compatible(&self) -> bool {
+        self.manylinux_compatible
+    }
+
     /// Return the [`PointerSize`] of the Python interpreter (i.e., 32- vs. 64-bit).
     pub fn pointer_size(&self) -> PointerSize {
         self.pointer_size
@@ -555,6 +563,7 @@ struct InterpreterInfo {
     markers: MarkerEnvironment,
     scheme: Scheme,
     virtualenv: Scheme,
+    manylinux_compatible: bool,
     sys_prefix: PathBuf,
     sys_base_exec_prefix: PathBuf,
     sys_base_prefix: PathBuf,
@@ -785,6 +794,7 @@ mod tests {
                     },
                     "arch": "x86_64"
                 },
+                "manylinux_compatible": false,
                 "markers": {
                     "implementation_name": "cpython",
                     "implementation_version": "3.12.0",

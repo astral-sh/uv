@@ -346,6 +346,34 @@ reuse any binary distributions that are already present in the local cache.
 Additionally, and in contrast to pip, uv's resolver will still read metadata from pre-built binary
 distributions when `--no-binary` is provided.
 
+## `manylinux_compatible` enforcement
+
+[PEP 600](https://peps.python.org/pep-0600/#package-installers) describes a mechanism through which
+Python distributors can opt out of `manylinux` compatibility by defining a `manylinux_compatible`
+function on the `_manylinux` standard library module.
+
+uv respects `manylinux_compatible`, but only tests against the current glibc version, and applies
+the return value of `manylinux_compatible` globally.
+
+In other words, if `manylinux_compatible` returns `True`, uv will treat the system as
+`manylinux`-compatible; if it returns `False`, uv will treat the system as `manylinux`-incompatible,
+without calling `manylinux_compatible` for every glibc version.
+
+This approach is not a complete implementation of the spec, but is compatible with common blanket
+`manylinux_compatible` implementations like
+[`no-manylinux`](https://pypi.org/project/no-manylinux/):
+
+```python
+from __future__ import annotations
+manylinux1_compatible = False
+manylinux2010_compatible = False
+manylinux2014_compatible = False
+
+
+def manylinux_compatible(*_, **__):  # PEP 600
+    return False
+```
+
 ## Bytecode compilation
 
 Unlike pip, uv does not compile `.py` files to `.pyc` files during installation by default (i.e., uv

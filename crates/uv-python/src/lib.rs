@@ -210,6 +210,7 @@ mod tests {
                             },
                             "arch": "x86_64"
                         },
+                        "manylinux_compatible": true,
                         "markers": {
                             "implementation_name": "{IMPLEMENTATION}",
                             "implementation_version": "{FULL_VERSION}",
