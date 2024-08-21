@@ -757,6 +757,285 @@ fn init_no_workspace_warning() -> Result<()> {
     Ok(())
 }
 
+/// Test init --from-project
+#[test]
+fn init_from_project() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "a"
+        version = "0.0.0"
+        dependencies = [
+            "idna"
+        ]
+        requires-python = ">3.8"
+
+        [project.optional-dependencies]
+        foo = [
+            "flask",
+        ]
+        bar = [
+            "black",
+            "aiohttp; sys_platform != 'win32' or implementation_name != 'pypy'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.init()
+        .current_dir(&context.temp_dir)
+        .arg("--from-project")
+        .arg(pyproject_toml.to_path_buf())
+        .arg("--name")
+        .arg("project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `project`
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + aiohttp==3.9.3
+     + aiosignal==1.3.1
+     + attrs==23.2.0
+     + black==24.3.0
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + frozenlist==1.4.1
+     + idna==3.6
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + multidict==6.0.5
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + werkzeug==3.0.1
+     + yarl==1.9.4
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = [
+            "idna>=3.6",
+        ]
+
+        [project.optional-dependencies]
+        foo = [
+            "flask>=3.0.2",
+        ]
+        bar = [
+            "black>=24.3.0",
+            "aiohttp>=3.9.3 ; implementation_name != 'pypy' or sys_platform != 'win32'",
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Test init --from-project --no-sync
+#[test]
+fn init_from_project_no_sync() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "a"
+        version = "0.0.0"
+        dependencies = [
+            "idna"
+        ]
+        requires-python = ">3.8"
+
+        [project.optional-dependencies]
+        foo = [
+            "flask",
+        ]
+        bar = [
+            "black",
+            "aiohttp; sys_platform != 'win32' or implementation_name != 'pypy'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.init()
+        .current_dir(&context.temp_dir)
+        .arg("--from-project")
+        .arg(pyproject_toml.to_path_buf())
+        .arg("--no-sync")
+        .arg("--name")
+        .arg("project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `project`
+    Resolved [N] packages in [TIME]
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = [
+            "idna>=3.6",
+        ]
+
+        [project.optional-dependencies]
+        foo = [
+            "flask>=3.0.2",
+        ]
+        bar = [
+            "black>=24.3.0",
+            "aiohttp>=3.9.3 ; implementation_name != 'pypy' or sys_platform != 'win32'",
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "###
+        );
+    });
+
+    Ok(())
+}
+/// Test init --from-project with --raw-sources avoids setting a lower bound
+#[test]
+fn init_from_project_raw_sources() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "a"
+        version = "0.0.0"
+        dependencies = [
+            "idna"
+        ]
+        requires-python = ">3.8"
+
+        [project.optional-dependencies]
+        foo = [
+            "flask",
+        ]
+        bar = [
+            "black",
+            "aiohttp; sys_platform != 'win32' or implementation_name != 'pypy'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.init()
+        .current_dir(&context.temp_dir)
+        .arg("--from-project")
+        .arg(pyproject_toml.to_path_buf())
+        .arg("--raw-sources")
+        .arg("--name")
+        .arg("project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `project`
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + aiohttp==3.9.3
+     + aiosignal==1.3.1
+     + attrs==23.2.0
+     + black==24.3.0
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + frozenlist==1.4.1
+     + idna==3.6
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + multidict==6.0.5
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + werkzeug==3.0.1
+     + yarl==1.9.4
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = [
+            "idna",
+        ]
+
+        [project.optional-dependencies]
+        foo = [
+            "flask",
+        ]
+        bar = [
+            "black",
+            "aiohttp ; implementation_name != 'pypy' or sys_platform != 'win32'",
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 #[test]
 fn init_project_inside_project() -> Result<()> {
     let context = TestContext::new("3.12");

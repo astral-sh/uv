@@ -980,17 +980,22 @@ async fn run_project(
             let cache = cache.init()?;
 
             commands::init(
+                args.no_sync,
+                args.raw_sources,
                 args.path,
                 args.name,
                 args.r#virtual,
                 args.no_readme,
                 args.python,
+                args.from_project,
                 args.no_workspace,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
                 globals.native_tls,
                 &cache,
+                args.settings,
+                globals.concurrency,
                 printer,
             )
             .await

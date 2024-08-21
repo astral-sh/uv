@@ -2044,6 +2044,10 @@ pub struct InitArgs {
     /// parent, unless `--no-workspace` is provided.
     pub path: Option<String>,
 
+    /// Add all packages listed in the given `pyproject.toml` file.
+    #[arg(long, value_parser = parse_file_path)]
+    pub from_project: Option<PathBuf>,
+
     /// The name of the project.
     ///
     /// Defaults to the name of the directory.
@@ -2082,6 +2086,25 @@ pub struct InitArgs {
         help_heading = "Python options"
     )]
     pub python: Option<String>,
+
+    #[command(flatten)]
+    pub installer: ResolverInstallerArgs,
+
+    #[command(flatten)]
+    pub build: BuildArgs,
+
+    /// Adds source requirements to `project.dependencies` instead of `tool.uv.sources`.
+    ///
+    /// By default, uv records source information for Git, local, editable, and direct URL requirements
+    /// under `tool.uv.sources`. This option is only applicable when the `from-project` option is used.
+    #[arg(long)]
+    pub raw_sources: bool,
+
+    /// Skips syncing the virtual environment after re-locking the project.
+    ///
+    /// This option is only applicable when the `from-project` option is used.
+    #[arg(long)]
+    pub no_sync: bool,
 }
 
 #[derive(Args)]

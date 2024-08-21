@@ -1,42 +1,64 @@
 use std::fmt::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use cache_key::RepositoryUrl;
 use owo_colors::OwoColorize;
+
 use pep440_rs::Version;
-use pep508_rs::PackageName;
+use pep508_rs::{MarkerExpression, PackageName, Requirement};
+use pypi_types::redact_git_credentials;
 use tracing::debug;
+use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity};
+use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_configuration::{Concurrency, SourceStrategy};
+use uv_dispatch::BuildDispatch;
+use uv_distribution::DistributionDatabase;
 use uv_fs::{absolutize_path, Simplified, CWD};
+use uv_git::GIT_STORE;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     VersionRequest,
 };
-use uv_resolver::RequiresPython;
+use uv_requirements::SourceTreeResolver;
+use uv_resolver::{FlatIndex, RequiresPython};
+use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
+use uv_workspace::pyproject::{DependencyType, Source};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{check_nested_workspaces, DiscoveryOptions, Workspace, WorkspaceError};
+use uv_workspace::{
+    check_nested_workspaces, DiscoveryOptions, VirtualProject, Workspace, WorkspaceError,
+};
 
+use crate::commands::pip::resolution_environment;
 use crate::commands::project::find_requires_python;
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::ExitStatus;
+use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
+use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
+
+use super::add::{process_project_and_sync, resolve_requirement, DependencyEdit};
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
+    no_sync: bool,
+    raw_sources: bool,
     explicit_path: Option<String>,
     name: Option<PackageName>,
     r#virtual: bool,
     no_readme: bool,
     python: Option<String>,
+    from_project: Option<PathBuf>,
     no_workspace: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
     native_tls: bool,
     cache: &Cache,
+    settings: ResolverInstallerSettings,
+    concurrency: Concurrency,
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Default to the current directory if a path was not provided.
@@ -77,7 +99,7 @@ pub(crate) async fn init(
             &path,
             &name,
             no_readme,
-            python,
+            python.clone(),
             no_workspace,
             python_preference,
             python_downloads,
@@ -124,7 +146,223 @@ pub(crate) async fn init(
         }
     }
 
-    Ok(ExitStatus::Success)
+    if r#virtual {
+        return Ok(ExitStatus::Success);
+    }
+
+    if let Some(from_project) = from_project {
+        let project = VirtualProject::discover(&path, &DiscoveryOptions::default()).await?;
+
+        // Discover or create the virtual environment.
+        let venv = super::get_or_init_environment(
+            project.workspace(),
+            python.as_deref().map(PythonRequest::parse),
+            python_preference,
+            python_downloads,
+            connectivity,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?;
+
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls)
+            .keyring(settings.keyring_provider);
+
+        // TODO(charlie): These are all default values. We should consider whether we want to make them
+        // optional on the downstream APIs.
+        let python_version = None;
+        let python_platform = None;
+        let hasher = HashStrategy::default();
+        let build_isolation = BuildIsolation::default();
+
+        // Determine the environment for the resolution.
+        let (tags, markers) =
+            resolution_environment(python_version, python_platform, venv.interpreter())?;
+
+        // Add all authenticated sources to the cache.
+        for url in settings.index_locations.urls() {
+            store_credentials_from_url(url);
+        }
+
+        // Initialize the registry client.
+        let client = RegistryClientBuilder::from(client_builder)
+            .index_urls(settings.index_locations.index_urls())
+            .index_strategy(settings.index_strategy)
+            .markers(&markers)
+            .platform(venv.interpreter().platform())
+            .build();
+
+        // Initialize any shared state.
+        let state = SharedState::default();
+
+        // Resolve the flat indexes from `--find-links`.
+        let flat_index = {
+            let client = FlatIndexClient::new(&client, cache);
+            let entries = client.fetch(settings.index_locations.flat_index()).await?;
+            FlatIndex::from_entries(entries, Some(&tags), &hasher, &settings.build_options)
+        };
+
+        let build_constraints = [];
+        let sources = SourceStrategy::Enabled;
+
+        // Create a build dispatch.
+        let build_dispatch = BuildDispatch::new(
+            &client,
+            cache,
+            &build_constraints,
+            venv.interpreter(),
+            &settings.index_locations,
+            &flat_index,
+            &state.index,
+            &state.git,
+            &state.in_flight,
+            settings.index_strategy,
+            &settings.config_setting,
+            build_isolation,
+            settings.link_mode,
+            &settings.build_options,
+            settings.exclude_newer,
+            sources,
+            concurrency,
+        );
+
+        let resolutions = SourceTreeResolver::new(
+            vec![from_project],
+            &uv_configuration::ExtrasSpecification::default(),
+            &hasher,
+            &state.index,
+            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+        )
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve()
+        .await?;
+        let resolution = resolutions.first().unwrap();
+        let requirements = resolution.requirements.clone();
+        let mut toml = PyProjectTomlMut::from_toml(
+            &project.pyproject_toml().raw,
+            DependencyTarget::PyProjectToml,
+        )?;
+
+        let mut edits = Vec::with_capacity(requirements.len());
+
+        for requirement in requirements {
+            let extra = if let Some(MarkerExpression::Extra { name, .. }) =
+                requirement.marker.top_level_extra()
+            {
+                Some(name)
+            } else {
+                None
+            };
+
+            let (requirement, source) = {
+                let workspace = project
+                    .workspace()
+                    .packages()
+                    .contains_key(&requirement.name);
+                resolve_requirement(requirement, workspace, None, None, None, None)?
+            };
+
+            let requirement = match extra {
+                // Evaluate the `extras` expression in any markers, but preserve the remaining marker
+                // conditions.
+                Some(ref extra) => Requirement {
+                    marker: requirement.marker.simplify_extras(&[extra.clone()]),
+                    ..requirement
+                },
+                None => requirement,
+            };
+
+            // Redact any credentials. By default, we avoid writing sensitive credentials to files that
+            // will be checked into version control (e.g., `pyproject.toml` and `uv.lock`). Instead,
+            // we store the credentials in a global store, and reuse them during resolution. The
+            // expectation is that subsequent resolutions steps will succeed by reading from (e.g.) the
+            // user's credentials store, rather than by reading from the `pyproject.toml` file.
+            let source = match source {
+                Some(Source::Git {
+                    mut git,
+                    subdirectory,
+                    rev,
+                    tag,
+                    branch,
+                }) => {
+                    let credentials = Credentials::from_url(&git);
+                    if let Some(credentials) = credentials {
+                        debug!("Caching credentials for: {git}");
+                        GIT_STORE.insert(RepositoryUrl::new(&git), credentials);
+
+                        // Redact the credentials.
+                        redact_git_credentials(&mut git);
+                    };
+                    Some(Source::Git {
+                        git,
+                        subdirectory,
+                        rev,
+                        tag,
+                        branch,
+                    })
+                }
+                _ => source,
+            };
+
+            // Update the `pyproject.toml`.
+            let (edit, dependency_type) = match extra {
+                None => (
+                    toml.add_dependency(&requirement, source.as_ref())?,
+                    DependencyType::Production,
+                ),
+                Some(group) => (
+                    toml.add_optional_dependency(&group, &requirement, source.as_ref())?,
+                    DependencyType::Optional(group),
+                ),
+            };
+
+            // Keep track of the exact location of the edit.
+            edits.push(DependencyEdit::new(
+                dependency_type,
+                requirement,
+                source,
+                edit,
+            ));
+        }
+
+        let content = toml.to_string();
+        let modified = {
+            if content == *project.pyproject_toml().raw {
+                debug!("No changes to dependencies; skipping update");
+                false
+            } else {
+                let pyproject_path = project.root().join("pyproject.toml");
+                fs_err::write(pyproject_path, &content)?;
+                true
+            }
+        };
+        process_project_and_sync(
+            &project,
+            &mut toml,
+            &content,
+            false,
+            false,
+            raw_sources,
+            &edits,
+            uv_configuration::ExtrasSpecification::All,
+            false,
+            &venv,
+            &settings,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+            no_sync,
+            modified,
+        )
+        .await
+    } else {
+        Ok(ExitStatus::Success)
+    }
 }
 
 /// Initialize a virtual workspace at the given path.
