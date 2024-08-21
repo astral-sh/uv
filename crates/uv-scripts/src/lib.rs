@@ -94,11 +94,7 @@ impl Pep723Script {
     pub async fn write(&self, metadata: &str) -> Result<(), Pep723Error> {
         let content = format!(
             "{}{}{}",
-            if self.prelude.is_empty() {
-                String::new()
-            } else {
-                format!("{}\n", self.prelude)
-            },
+            self.prelude,
             serialize_metadata(metadata),
             self.postlude
         );
