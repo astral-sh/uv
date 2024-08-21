@@ -10,7 +10,6 @@ use itertools::Itertools;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
-use tracing::debug;
 use url::Url;
 
 use cache_key::RepositoryUrl;
@@ -692,10 +691,6 @@ impl Lock {
             let expected = members.iter().cloned().collect::<BTreeSet<_>>();
             let actual = &self.manifest.members;
             if expected != *actual {
-                debug!(
-                    "Mismatched members:\n  expected: {:?}\n  found: {:?}",
-                    expected, actual
-                );
                 return Ok(SatisfiesResult::MismatchedMembers(expected, actual));
             }
         }
@@ -715,10 +710,6 @@ impl Lock {
                 .map(|requirement| normalize_requirement(requirement, workspace))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
-                debug!(
-                    "Mismatched requirements:\n  expected: {:?}\n  found: {:?}",
-                    expected, actual
-                );
                 return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
             }
         }
@@ -738,10 +729,6 @@ impl Lock {
                 .map(|requirement| normalize_requirement(requirement, workspace))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
-                debug!(
-                    "Mismatched constraints:\n  expected: {:?}\n  found: {:?}",
-                    expected, actual
-                );
                 return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
             }
         }
@@ -761,10 +748,6 @@ impl Lock {
                 .map(|requirement| normalize_requirement(requirement, workspace))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
-                debug!(
-                    "Mismatched overrides:\n  expected: {:?}\n  found: {:?}",
-                    expected, actual
-                );
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
             }
         }
@@ -787,7 +770,6 @@ impl Lock {
 
             let Some(root) = root else {
                 // The package is not in the lockfile, so it can't be satisfied.
-                debug!("Workspace package `{root_name}` not found in lockfile");
                 return Ok(SatisfiesResult::MissingRoot(root_name.clone()));
             };
 
@@ -822,7 +804,6 @@ impl Lock {
                 .get_or_build_wheel_metadata(&dist, HashPolicy::None)
                 .await
             else {
-                debug!("Failed to get metadata for: {}", package.id);
                 return Ok(SatisfiesResult::MissingMetadata(
                     &package.id.name,
                     &package.id.version,
@@ -846,10 +827,6 @@ impl Lock {
                     .collect::<Result<_, _>>()?;
 
                 if expected != actual {
-                    debug!(
-                        "Mismatched `requires-dist` for {}:\n  expected: {:?}\n  found: {:?}",
-                        package.id, expected, actual
-                    );
                     return Ok(SatisfiesResult::MismatchedRequiresDist(
                         &package.id.name,
                         &package.id.version,
@@ -892,10 +869,6 @@ impl Lock {
                     .collect::<Result<_, _>>()?;
 
                 if expected != actual {
-                    debug!(
-                        "Mismatched `requires-dev` for {}:\n  expected: {:?}\n  found: {:?}",
-                        package.id, expected, actual
-                    );
                     return Ok(SatisfiesResult::MismatchedDevDependencies(
                         &package.id.name,
                         &package.id.version,
