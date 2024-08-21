@@ -1,5 +1,5 @@
 use std::ffi::OsString;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -2283,6 +2283,14 @@ impl Deref for ExternalCommand {
     type Target = Vec<OsString>;
 
     fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Cmd(cmd) => cmd,
+        }
+    }
+}
+
+impl DerefMut for ExternalCommand {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
             Self::Cmd(cmd) => cmd,
         }
