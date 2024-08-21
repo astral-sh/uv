@@ -648,7 +648,7 @@ pub(crate) async fn parse_script(
     // Parse the input command.
     let command = RunCommand::from(command);
 
-    let RunCommand::Python(target, _) = &command else {
+    let RunCommand::PythonScript(target, _) = &command else {
         return Ok(None);
     };
 
@@ -705,8 +705,10 @@ fn can_skip_ephemeral(
 
 #[derive(Debug)]
 enum RunCommand {
+    /// Execute `python`.
+    Python(Vec<OsString>),
     /// Execute a `python` script.
-    Python(PathBuf, Vec<OsString>),
+    PythonScript(PathBuf, Vec<OsString>),
     /// Execute an external command.
     External(OsString, Vec<OsString>),
     /// Execute an empty command (in practice, `python` with no arguments).
@@ -717,7 +719,8 @@ impl RunCommand {
     /// Return the name of the target executable, for display purposes.
     fn display_executable(&self) -> Cow<'_, str> {
         match self {
-            Self::Python(_, _) | Self::Empty => Cow::Borrowed("python"),
+            Self::Python(_) => Cow::Borrowed("python"),
+            Self::PythonScript(_, _) | Self::Empty => Cow::Borrowed("python"),
             Self::External(executable, _) => executable.to_string_lossy(),
         }
     }
@@ -725,7 +728,12 @@ impl RunCommand {
     /// Convert a [`RunCommand`] into a [`Command`].
     fn as_command(&self, interpreter: &Interpreter) -> Command {
         match self {
-            Self::Python(target, args) => {
+            Self::Python(args) => {
+                let mut process = Command::new(interpreter.sys_executable());
+                process.args(args);
+                process
+            }
+            Self::PythonScript(target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg(target);
                 process.args(args);
@@ -744,7 +752,14 @@ impl RunCommand {
 impl std::fmt::Display for RunCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Python(target, args) => {
+            Self::Python(args) => {
+                write!(f, "python")?;
+                for arg in args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                Ok(())
+            }
+            Self::PythonScript(target, args) => {
                 write!(f, "python {}", target.display())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
@@ -775,12 +790,14 @@ impl From<&ExternalCommand> for RunCommand {
         };
 
         let target_path = PathBuf::from(&target);
-        if target_path
+        if target.eq_ignore_ascii_case("python") {
+            Self::Python(args.to_vec())
+        } else if target_path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
             && target_path.exists()
         {
-            Self::Python(target_path, args.to_vec())
+            Self::PythonScript(target_path, args.to_vec())
         } else {
             Self::External(
                 target.clone(),
