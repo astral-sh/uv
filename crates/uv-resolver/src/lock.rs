@@ -25,7 +25,10 @@ use distribution_types::{
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
-use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement, RequirementSource};
+use pypi_types::{
+    redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
+    RequirementSource,
+};
 use uv_configuration::ExtrasSpecification;
 use uv_distribution::DistributionDatabase;
 use uv_fs::{relative_to, PortablePath, PortablePathBuf, Simplified};
@@ -2367,8 +2370,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
     let mut url = git_dist.git.repository().clone();
 
     // Redact the credentials.
-    let _ = url.set_username("");
-    let _ = url.set_password(None);
+    redact_git_credentials(&mut url);
 
     // Clear out any existing state.
     url.set_fragment(None);
@@ -2830,14 +2832,12 @@ fn normalize_requirement(
             subdirectory,
             url,
         } => {
-            // Redact the repository URL.
-            let _ = repository.set_password(None);
-            let _ = repository.set_username("");
+            // Redact the credentials.
+            redact_git_credentials(&mut repository);
 
             // Redact the PEP 508 URL.
             let mut url = url.to_url();
-            let _ = url.set_password(None);
-            let _ = url.set_username("");
+            redact_git_credentials(&mut url);
             let url = VerbatimUrl::from_url(url);
 
             Ok(Requirement {

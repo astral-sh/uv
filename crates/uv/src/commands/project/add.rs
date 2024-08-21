@@ -6,6 +6,7 @@ use anyhow::{bail, Context, Result};
 use cache_key::RepositoryUrl;
 use owo_colors::OwoColorize;
 use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
+use pypi_types::redact_git_credentials;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 use uv_auth::{store_credentials_from_url, Credentials};
@@ -360,8 +361,9 @@ pub(crate) async fn add(
                 if let Some(credentials) = credentials {
                     debug!("Caching credentials for: {git}");
                     GIT_STORE.insert(RepositoryUrl::new(&git), credentials);
-                    let _ = git.set_username("");
-                    let _ = git.set_password(None);
+
+                    // Redact the credentials.
+                    redact_git_credentials(&mut git);
                 };
                 Some(Source::Git {
                     git,
