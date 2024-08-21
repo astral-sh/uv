@@ -249,11 +249,8 @@ async fn do_lock(
         sources,
     } = settings;
 
-    // When locking, include the project itself (as editable).
-    let requirements = workspace
-        .members_requirements()
-        .chain(workspace.root_requirements())
-        .collect::<Vec<_>>();
+    // Collect the requirements, etc.
+    let requirements = workspace.root_requirements().collect::<Vec<_>>();
     let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
     let constraints = workspace.constraints();
     let dev = vec![DEV_DEPENDENCIES.clone()];
@@ -413,6 +410,7 @@ async fn do_lock(
             existing_lock,
             workspace,
             &members,
+            &requirements,
             &constraints,
             &overrides,
             environments,
@@ -486,9 +484,9 @@ async fn do_lock(
 
             // Resolve the requirements.
             let resolution = pip::operations::resolve(
-                requirements
-                    .iter()
-                    .cloned()
+                workspace
+                    .members_requirements()
+                    .chain(requirements.iter().cloned())
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
                 constraints.clone(),
@@ -529,7 +527,12 @@ async fn do_lock(
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
             let lock = Lock::from_resolution_graph(&resolution)?
-                .with_manifest(ResolverManifest::new(members, constraints, overrides))
+                .with_manifest(ResolverManifest::new(
+                    members,
+                    requirements,
+                    constraints,
+                    overrides,
+                ))
                 .with_supported_environments(
                     environments
                         .cloned()
@@ -559,6 +562,7 @@ impl ValidatedLock {
         lock: Lock,
         workspace: &Workspace,
         members: &[PackageName],
+        requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
         environments: Option<&SupportedEnvironments>,
@@ -679,6 +683,7 @@ impl ValidatedLock {
             .satisfies(
                 workspace,
                 members,
+                requirements,
                 constraints,
                 overrides,
                 indexes,
@@ -694,6 +699,13 @@ impl ValidatedLock {
             SatisfiesResult::MismatchedMembers(expected, actual) => {
                 debug!(
                     "Ignoring existing lockfile due to mismatched members:\n  Expected: {:?}\n  Actual: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedRequirements(expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched requirements:\n  Expected: {:?}\n  Actual: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))

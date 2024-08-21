@@ -567,6 +567,26 @@ impl Lock {
                 );
             }
 
+            if !self.manifest.requirements.is_empty() {
+                let requirements = self
+                    .manifest
+                    .requirements
+                    .iter()
+                    .map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let requirements = match requirements.as_slice() {
+                    [] => Array::new(),
+                    [requirement] => Array::from_iter([requirement]),
+                    requirements => each_element_on_its_line_array(requirements.iter()),
+                };
+                manifest_table.insert("requirements", value(requirements));
+            }
+
             if !self.manifest.constraints.is_empty() {
                 let constraints = self
                     .manifest
@@ -657,6 +677,7 @@ impl Lock {
         &self,
         workspace: &Workspace,
         members: &[PackageName],
+        requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
         indexes: Option<&IndexLocations>,
@@ -676,6 +697,29 @@ impl Lock {
                     expected, actual
                 );
                 return Ok(SatisfiesResult::MismatchedMembers(expected, actual));
+            }
+        }
+
+        // Validate that the lockfile was generated with the same requirements.
+        {
+            let expected: BTreeSet<_> = requirements
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, workspace))
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeSet<_> = self
+                .manifest
+                .requirements
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, workspace))
+                .collect::<Result<_, _>>()?;
+            if expected != actual {
+                debug!(
+                    "Mismatched requirements:\n  expected: {:?}\n  found: {:?}",
+                    expected, actual
+                );
+                return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
             }
         }
 
@@ -901,6 +945,8 @@ pub enum SatisfiesResult<'lock> {
     Satisfied,
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
+    /// The lockfile uses a different set of requirements.
+    MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of overrides.
@@ -947,6 +993,9 @@ pub struct ResolverManifest {
     /// The workspace members included in the lockfile.
     #[serde(default)]
     members: BTreeSet<PackageName>,
+    /// The requirements provided to the resolver, exclusive of the workspace members.
+    #[serde(default)]
+    requirements: BTreeSet<Requirement>,
     /// The constraints provided to the resolver.
     #[serde(default)]
     constraints: BTreeSet<Requirement>,
@@ -958,11 +1007,13 @@ pub struct ResolverManifest {
 impl ResolverManifest {
     pub fn new(
         members: impl IntoIterator<Item = PackageName>,
+        requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Requirement>,
     ) -> Self {
         Self {
             members: members.into_iter().collect(),
+            requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
             overrides: overrides.into_iter().collect(),
         }

@@ -3227,6 +3227,9 @@ fn add_virtual() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
+        [manifest]
+        requirements = [{ name = "iniconfig" }]
+
         [[package]]
         name = "iniconfig"
         version = "2.0.0"

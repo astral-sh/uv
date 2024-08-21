@@ -86,6 +86,7 @@ Ok(
         },
         manifest: ResolverManifest {
             members: {},
+            requirements: {},
             constraints: {},
             overrides: {},
         },
