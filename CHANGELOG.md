@@ -6,9 +6,6 @@
 
 - Add `--with-editable` support to `uv run` ([#6262](https://github.com/astral-sh/uv/pull/6262))
 - Respect `.python-version` files and `pyproject.toml` in `uv python find` ([#6369](https://github.com/astral-sh/uv/pull/6369))
-
-### Enhancements
-
 - Allow manylinux compatibility override via `_manylinux` module ([#6039](https://github.com/astral-sh/uv/pull/6039))
 
 ### CLI
