@@ -83,7 +83,7 @@ See the [project guide](./guides/projects.md) to get started.
 
 uv executes and installs command-line tools provided by Python packages, similar to `pipx`.
 
-Run a tool in an ephemeral environment with `uvx`:
+Run a tool in an ephemeral environment using `uvx` (an alias for `uv tool run`):
 
 ```console
 $ uvx pycowsay 'hello world!'
