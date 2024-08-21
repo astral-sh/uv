@@ -3,12 +3,13 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
-use cache_key::RepositoryUrl;
 use owo_colors::OwoColorize;
-use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
-use pypi_types::redact_git_credentials;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
+
+use cache_key::RepositoryUrl;
+use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
+use pypi_types::redact_git_credentials;
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -235,7 +236,8 @@ pub(crate) async fn add(
     let python_version = None;
     let python_platform = None;
     let hasher = HashStrategy::default();
-    let build_isolation = BuildIsolation::default();
+    let build_constraints = [];
+    let sources = SourceStrategy::Enabled;
 
     // Determine the environment for the resolution.
     let (tags, markers) =
@@ -254,6 +256,18 @@ pub(crate) async fn add(
         .platform(target.interpreter().platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let environment;
+    let build_isolation = if settings.no_build_isolation {
+        environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+        BuildIsolation::Shared(&environment)
+    } else if settings.no_build_isolation_package.is_empty() {
+        BuildIsolation::Isolated
+    } else {
+        environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+        BuildIsolation::SharedPackage(&environment, &settings.no_build_isolation_package)
+    };
+
     // Initialize any shared state.
     let state = SharedState::default();
 
@@ -263,9 +277,6 @@ pub(crate) async fn add(
         let entries = client.fetch(settings.index_locations.flat_index()).await?;
         FlatIndex::from_entries(entries, Some(&tags), &hasher, &settings.build_options)
     };
-
-    let build_constraints = [];
-    let sources = SourceStrategy::Enabled;
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
