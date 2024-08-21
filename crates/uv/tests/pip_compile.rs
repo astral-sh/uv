@@ -10537,7 +10537,7 @@ requires-python = ">3.8"
         # via -r requirements.in
     idna==3.6
         # via anyio
-    lib @ file://[TEMP_DIR]/lib
+    lib @ file://[TEMP_DIR]/lib/
         # via example
 
     ----- stderr -----

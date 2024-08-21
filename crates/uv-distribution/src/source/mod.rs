@@ -535,6 +535,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
+        let source_dist_entry = cache_shard.entry(filename);
+
+        // If the metadata is static, return it.
+        if let Some(metadata) =
+            Self::read_static_metadata(source, source_dist_entry.path(), subdirectory).await?
+        {
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(metadata),
+                hashes: revision.into_hashes(),
+            });
+        }
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -547,8 +558,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Otherwise, we either need to build the metadata or the wheel.
-        let source_dist_entry = cache_shard.entry(filename);
-
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_metadata(source, source_dist_entry.path(), subdirectory)
@@ -764,6 +773,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
+        let source_entry = cache_shard.entry("source");
+
+        // If the metadata is static, return it.
+        if let Some(metadata) =
+            Self::read_static_metadata(source, source_entry.path(), None).await?
+        {
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(metadata),
+                hashes: revision.into_hashes(),
+            });
+        }
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -774,8 +794,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 hashes: revision.into_hashes(),
             });
         }
-
-        let source_entry = cache_shard.entry("source");
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
@@ -983,6 +1001,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
+
+        if let Some(metadata) =
+            Self::read_static_metadata(source, &resource.install_path, None).await?
+        {
+            return Ok(ArchiveMetadata::from(
+                Metadata::from_workspace(
+                    metadata,
+                    resource.install_path.as_ref(),
+                    resource.lock_path.as_ref(),
+                    self.build_context.sources(),
+                )
+                .await?,
+            ));
+        }
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -1210,8 +1242,24 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         let _lock = lock_shard(&cache_shard).await?;
 
+        let path = if let Some(subdirectory) = resource.subdirectory {
+            Cow::Owned(fetch.path().join(subdirectory))
+        } else {
+            Cow::Borrowed(fetch.path())
+        };
+
+        if let Some(metadata) =
+            Self::read_static_metadata(source, fetch.path(), resource.subdirectory).await?
+        {
+            return Ok(ArchiveMetadata::from(
+                Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
+                    .await?,
+            ));
+        }
+
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
+
         if self
             .build_context
             .cache()
@@ -1247,12 +1295,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
                 .await
                 .map_err(Error::CacheWrite)?;
-
-            let path = if let Some(subdirectory) = resource.subdirectory {
-                Cow::Owned(fetch.path().join(subdirectory))
-            } else {
-                Cow::Borrowed(fetch.path())
-            };
 
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
@@ -1471,6 +1513,47 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<Option<Metadata23>, Error> {
         debug!("Preparing metadata for: {source}");
 
+        // Setup the builder.
+        let mut builder = self
+            .build_context
+            .setup_build(
+                source_root,
+                subdirectory,
+                &source.to_string(),
+                source.as_dist(),
+                if source.is_editable() {
+                    BuildKind::Editable
+                } else {
+                    BuildKind::Wheel
+                },
+            )
+            .await
+            .map_err(Error::Build)?;
+
+        // Build the metadata.
+        let dist_info = builder.metadata().await.map_err(Error::Build)?;
+        let Some(dist_info) = dist_info else {
+            return Ok(None);
+        };
+
+        // Read the metadata from disk.
+        debug!("Prepared metadata for: {source}");
+        let content = fs::read(dist_info.join("METADATA"))
+            .await
+            .map_err(Error::CacheRead)?;
+        let metadata = Metadata23::parse_metadata(&content)?;
+
+        // Validate the metadata.
+        validate(source, &metadata)?;
+
+        Ok(Some(metadata))
+    }
+
+    async fn read_static_metadata(
+        source: &BuildableSource<'_>,
+        source_root: &Path,
+        subdirectory: Option<&Path>,
+    ) -> Result<Option<Metadata23>, Error> {
         // Attempt to read static metadata from the `PKG-INFO` file.
         match read_pkg_info(source_root, subdirectory).await {
             Ok(metadata) => {
@@ -1521,40 +1604,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Err(err) => return Err(err),
         }
 
-        // Setup the builder.
-        let mut builder = self
-            .build_context
-            .setup_build(
-                source_root,
-                subdirectory,
-                &source.to_string(),
-                source.as_dist(),
-                if source.is_editable() {
-                    BuildKind::Editable
-                } else {
-                    BuildKind::Wheel
-                },
-            )
-            .await
-            .map_err(Error::Build)?;
-
-        // Build the metadata.
-        let dist_info = builder.metadata().await.map_err(Error::Build)?;
-        let Some(dist_info) = dist_info else {
-            return Ok(None);
-        };
-
-        // Read the metadata from disk.
-        debug!("Prepared metadata for: {source}");
-        let content = fs::read(dist_info.join("METADATA"))
-            .await
-            .map_err(Error::CacheRead)?;
-        let metadata = Metadata23::parse_metadata(&content)?;
-
-        // Validate the metadata.
-        validate(source, &metadata)?;
-
-        Ok(Some(metadata))
+        Ok(None)
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.

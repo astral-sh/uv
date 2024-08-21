@@ -791,3 +791,38 @@ fn sync_environment() -> Result<()> {
 
     Ok(())
 }
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/6316>.
+///
+/// Previously, we would read metadata statically from pyproject.toml and write that to `uv.lock`. In
+/// this sync pass, we had also built the project with hatchling, which sorts specifiers by python
+/// string sort through packaging. On the second run, we read the cache that now has the hatchling
+/// sorting, changing the lockfile.
+#[test]
+fn read_metadata_statically_over_the_cache() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        # Python string sorting is the other way round.
+        dependencies = ["anyio>=4,<5"]
+        "#,
+    )?;
+
+    context.sync().assert().success();
+    let lock1 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    // Assert we're reading static metadata.
+    assert!(lock1.contains(">=4,<5"));
+    assert!(!lock1.contains("<5,>=4"));
+    context.sync().assert().success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    // Assert stability.
+    assert_eq!(lock1, lock2);
+
+    Ok(())
+}
