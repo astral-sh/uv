@@ -916,7 +916,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::python_find(args.request, globals.python_preference, &cache).await
+            commands::python_find(
+                args.request,
+                args.no_project,
+                cli.no_config,
+                globals.python_preference,
+                &cache,
+            )
+            .await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Pin(args),

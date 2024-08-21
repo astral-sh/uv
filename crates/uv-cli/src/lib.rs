@@ -3031,6 +3031,13 @@ pub struct PythonFindArgs {
     ///
     /// See `uv help python` to view supported request formats.
     pub request: Option<String>,
+
+    /// Avoid discovering a project or workspace.
+    ///
+    /// Otherwise, when no request is provided, the Python requirement of a project in the current
+    /// directory or parent directories will be used.
+    #[arg(long, alias = "no_workspace")]
+    pub no_project: bool,
 }
 
 #[derive(Args)]
