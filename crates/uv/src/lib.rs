@@ -689,7 +689,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Project(project) => {
             Box::pin(run_project(
-                project, script, globals, filesystem, cache, printer,
+                project,
+                script,
+                globals,
+                cli.no_config,
+                filesystem,
+                cache,
+                printer,
             ))
             .await
         }
@@ -916,7 +922,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::python_find(args.request, globals.python_preference, &cache).await
+            commands::python_find(
+                args.request,
+                args.no_project,
+                cli.no_config,
+                globals.python_preference,
+                &cache,
+            )
+            .await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Pin(args),
@@ -951,6 +964,8 @@ async fn run_project(
     project_command: Box<ProjectCommand>,
     script: Option<Pep723Script>,
     globals: GlobalSettings,
+    // TODO(zanieb): Determine a better story for passing `no_config` in here
+    no_config: bool,
     filesystem: Option<FilesystemOptions>,
     cache: Cache,
     printer: Printer,
@@ -1033,6 +1048,7 @@ async fn run_project(
                 args.isolated,
                 args.package,
                 args.no_project,
+                no_config,
                 args.extras,
                 args.dev,
                 args.python,
