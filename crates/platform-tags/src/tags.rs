@@ -99,18 +99,17 @@ impl Tags {
     ) -> Result<Self, TagsError> {
         let implementation = Implementation::parse(implementation_name, gil_disabled)?;
 
-        // If the interpreter is manylinux incompatible, we return an empty vector.
-        // This is the path that gets hit when user overrides the manylinux compatibility
-        // via adding `_manylinux` module to their standard library.
-        // See https://github.com/astral-sh/uv/issues/5915 for more details.
-        let platform_tags =
+        // Determine the compatible tags for the current platform.
+        let platform_tags = {
+            let mut platform_tags = compatible_tags(platform)?;
             if matches!(platform.os(), Os::Manylinux { .. }) && !manylinux_compatible {
-                Vec::new()
-            } else {
-                compatible_tags(platform)?
-            };
+                platform_tags.retain(|tag| !tag.starts_with("manylinux"));
+            }
+            platform_tags
+        };
 
         let mut tags = Vec::with_capacity(5 * platform_tags.len());
+
         // 1. This exact c api version
         for platform_tag in &platform_tags {
             tags.push((
@@ -963,6 +962,27 @@ mod tests {
         assert_snapshot!(
             tags,
             @r###"
+        cp39-cp39-linux_x86_64
+        cp39-abi3-linux_x86_64
+        cp39-none-linux_x86_64
+        cp38-abi3-linux_x86_64
+        cp37-abi3-linux_x86_64
+        cp36-abi3-linux_x86_64
+        cp35-abi3-linux_x86_64
+        cp34-abi3-linux_x86_64
+        cp33-abi3-linux_x86_64
+        cp32-abi3-linux_x86_64
+        py39-none-linux_x86_64
+        py3-none-linux_x86_64
+        py38-none-linux_x86_64
+        py37-none-linux_x86_64
+        py36-none-linux_x86_64
+        py35-none-linux_x86_64
+        py34-none-linux_x86_64
+        py33-none-linux_x86_64
+        py32-none-linux_x86_64
+        py31-none-linux_x86_64
+        py30-none-linux_x86_64
         cp39-none-any
         py39-none-any
         py3-none-any

@@ -377,7 +377,6 @@ impl Interpreter {
     }
 
     /// Return whether this interpreter is `manylinux` compatible.
-    /// Used to determine whether manylinux wheels should be pulled or built locally.
     pub fn manylinux_compatible(&self) -> bool {
         self.manylinux_compatible
     }
