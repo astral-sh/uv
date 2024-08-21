@@ -8,8 +8,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_fs::{Simplified, CWD};
 use uv_python::{
-    request_from_version_file, requests_from_version_file, write_version_file,
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest,
+    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
     PYTHON_VERSION_FILENAME,
 };
 use uv_warnings::warn_user_once;
@@ -39,14 +38,16 @@ pub(crate) async fn pin(
         }
     };
 
+    let version_file = PythonVersionFile::discover(&*CWD, false).await;
+
     let Some(request) = request else {
         // Display the current pinned Python version
-        if let Some(pins) = requests_from_version_file(&CWD).await? {
-            for pin in pins {
+        if let Some(file) = version_file? {
+            for pin in file.versions() {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
                 if let Some(virtual_project) = &virtual_project {
                     warn_if_existing_pin_incompatible_with_project(
-                        &pin,
+                        pin,
                         virtual_project,
                         python_preference,
                         cache,
@@ -106,38 +107,46 @@ pub(crate) async fn pin(
         };
     }
 
-    let output = if resolved {
+    let request = if resolved {
         // SAFETY: We exit early if Python is not found and resolved is `true`
-        python
-            .unwrap()
-            .interpreter()
-            .sys_executable()
-            .user_display()
-            .to_string()
+        // TODO(zanieb): Maybe avoid reparsing here?
+        PythonRequest::parse(
+            &python
+                .unwrap()
+                .interpreter()
+                .sys_executable()
+                .user_display()
+                .to_string(),
+        )
     } else {
-        request.to_canonical_string()
+        request
     };
 
-    let existing = request_from_version_file(&CWD).await.ok().flatten();
-    write_version_file(&output).await?;
+    let existing = version_file.ok().flatten();
+    // TODO(zanieb): Allow updating the discovered version file with an `--update` flag.
+    let new =
+        PythonVersionFile::new(CWD.join(PYTHON_VERSION_FILENAME)).with_versions(vec![request]);
+
+    new.write().await?;
 
     if let Some(existing) = existing
-        .map(|existing| existing.to_canonical_string())
-        .filter(|existing| existing != &output)
+        .as_ref()
+        .and_then(PythonVersionFile::version)
+        .filter(|version| *version != new.version().unwrap())
     {
         writeln!(
             printer.stdout(),
             "Updated `{}` from `{}` -> `{}`",
-            PYTHON_VERSION_FILENAME.cyan(),
-            existing.green(),
-            output.green()
+            new.path().user_display().cyan(),
+            existing.to_canonical_string().green(),
+            new.version().unwrap().to_canonical_string().green()
         )?;
     } else {
         writeln!(
             printer.stdout(),
             "Pinned `{}` to `{}`",
-            PYTHON_VERSION_FILENAME.cyan(),
-            output.green()
+            new.path().user_display().cyan(),
+            new.version().unwrap().to_canonical_string().green()
         )?;
     }
 

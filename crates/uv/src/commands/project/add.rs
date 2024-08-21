@@ -20,8 +20,8 @@ use uv_fs::{Simplified, CWD};
 use uv_git::GIT_STORE;
 use uv_normalize::PackageName;
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, Interpreter, PythonDownloads,
-    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
+    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, RequiresPython};
@@ -125,7 +125,10 @@ pub(crate) async fn add(
             let python_request = if let Some(request) = python.as_deref() {
                 // (1) Explicit request from user
                 PythonRequest::parse(request)
-            } else if let Some(request) = request_from_version_file(&CWD).await? {
+            } else if let Some(request) = PythonVersionFile::discover(&*CWD, false)
+                .await?
+                .and_then(PythonVersionFile::into_version)
+            {
                 // (2) Request from `.python-version`
                 request
             } else {
@@ -153,7 +156,10 @@ pub(crate) async fn add(
         let python_request = if let Some(request) = python.as_deref() {
             // (1) Explicit request from user
             Some(PythonRequest::parse(request))
-        } else if let Some(request) = request_from_version_file(&CWD).await? {
+        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false)
+            .await?
+            .and_then(PythonVersionFile::into_version)
+        {
             // (2) Request from `.python-version`
             Some(request)
         } else {

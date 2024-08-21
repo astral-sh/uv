@@ -20,8 +20,8 @@ use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, Interpreter, PythonDownloads,
-    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
+    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_scripts::{Pep723Error, Pep723Script};
@@ -109,7 +109,10 @@ pub(crate) async fn run(
         let python_request = if let Some(request) = python.as_deref() {
             Some(PythonRequest::parse(request))
             // (2) Request from `.python-version`
-        } else if let Some(request) = request_from_version_file(&CWD).await? {
+        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false)
+            .await?
+            .and_then(PythonVersionFile::into_version)
+        {
             Some(request)
             // (3) `Requires-Python` in `pyproject.toml`
         } else {
