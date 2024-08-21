@@ -99,7 +99,7 @@ See the [project documentation](https://docs.astral.sh/uv/guides/projects/) to g
 
 uv executes and installs command-line tools provided by Python packages, similar to `pipx`.
 
-Run a tool in an ephemeral environment using uvx (an alias for `uv tool run`):
+Run a tool in an ephemeral environment using `uvx` (an alias for `uv tool run`):
 
 ```console
 $ uvx pycowsay 'hello world!'
