@@ -80,11 +80,15 @@ impl Pep723Script {
         let metadata = Pep723Metadata::from_str(&default_metadata)?;
 
         //  Extract the shebang and script content.
-        let (prelude, postlude) = extract_shebang(&contents)?;
+        let (shebang, postlude) = extract_shebang(&contents)?;
 
         Ok(Self {
             path: file.as_ref().to_path_buf(),
-            prelude,
+            prelude: if shebang.is_empty() {
+                String::new()
+            } else {
+                format!("{shebang}\n")
+            },
             metadata,
             postlude,
         })
