@@ -4,15 +4,13 @@ use std::{
     process::{Command, ExitCode, ExitStatus},
 };
 
-use anyhow::{bail, Error};
-
 /// Spawns a command exec style.
-fn exec_spawn(cmd: &mut Command) -> Result<Infallible, Error> {
+fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
         let err = cmd.exec();
-        Err(err.into())
+        Err(err)
     }
     #[cfg(windows)]
     {
@@ -24,10 +22,13 @@ fn exec_spawn(cmd: &mut Command) -> Result<Infallible, Error> {
     }
 }
 
-fn run() -> Result<ExitStatus, Error> {
+fn run() -> std::io::Result<ExitStatus> {
     let current_exe = std::env::current_exe()?;
     let Some(bin) = current_exe.parent() else {
-        bail!("Could not determine the location of the `uvx` binary")
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Could not determine the location of the `uvx` binary",
+        ));
     };
     let uv = bin.join("uv");
     let args = ["tool", "uvx"]
@@ -49,11 +50,7 @@ fn main() -> ExitCode {
         // Fail with 2 if the status cannot be cast to an exit code
         Ok(status) => u8::try_from(status.code().unwrap_or(2)).unwrap_or(2).into(),
         Err(err) => {
-            let mut causes = err.chain();
-            eprintln!("error: {}", causes.next().unwrap());
-            for err in causes {
-                eprintln!("  Caused by: {err}");
-            }
+            eprintln!("error: {err}");
             ExitCode::from(2)
         }
     }
