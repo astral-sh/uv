@@ -38,7 +38,7 @@ pub(crate) async fn pin(
         }
     };
 
-    let version_file = PythonVersionFile::discover(&*CWD, false).await;
+    let version_file = PythonVersionFile::discover(&*CWD, false, false).await;
 
     let Some(request) = request else {
         // Display the current pinned Python version

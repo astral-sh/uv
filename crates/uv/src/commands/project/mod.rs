@@ -177,9 +177,10 @@ impl WorkspacePython {
         let python_request = if let Some(request) = python_request {
             Some(request)
             // (2) Request from `.python-version`
-        } else if let Some(request) = PythonVersionFile::discover(workspace.install_path(), false)
-            .await?
-            .and_then(PythonVersionFile::into_version)
+        } else if let Some(request) =
+            PythonVersionFile::discover(workspace.install_path(), false, false)
+                .await?
+                .and_then(PythonVersionFile::into_version)
         {
             Some(request)
             // (3) `Requires-Python` in `pyproject.toml`

@@ -109,7 +109,7 @@ pub(crate) async fn run(
         let python_request = if let Some(request) = python.as_deref() {
             Some(PythonRequest::parse(request))
             // (2) Request from `.python-version`
-        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false)
+        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
             .await?
             .and_then(PythonVersionFile::into_version)
         {
@@ -449,7 +449,7 @@ pub(crate) async fn run(
                     Some(PythonRequest::parse(request))
                 // (2) Request from `.python-version`
                 } else {
-                    PythonVersionFile::discover(&*CWD, no_config)
+                    PythonVersionFile::discover(&*CWD, no_config, false)
                         .await?
                         .and_then(PythonVersionFile::into_version)
                 };

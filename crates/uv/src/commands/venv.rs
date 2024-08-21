@@ -146,7 +146,7 @@ async fn venv_impl(
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
         // TODO(zanieb): Support `--no-config` here
-        interpreter_request = PythonVersionFile::discover(&*CWD, false)
+        interpreter_request = PythonVersionFile::discover(&*CWD, false, false)
             .await
             .into_diagnostic()?
             .and_then(PythonVersionFile::into_version);
