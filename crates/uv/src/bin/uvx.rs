@@ -1,11 +1,30 @@
+use std::convert::Infallible;
 use std::{
     ffi::OsString,
     process::{Command, ExitCode, ExitStatus},
 };
 
-use anyhow::bail;
+use anyhow::{bail, Error};
 
-fn run() -> Result<ExitStatus, anyhow::Error> {
+/// Spawns a command exec style.
+fn exec_spawn(cmd: &mut Command) -> Result<Infallible, Error> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        let err = cmd.exec();
+        Err(err.into())
+    }
+    #[cfg(windows)]
+    {
+        cmd.stdin(std::process::Stdio::inherit());
+        let status = cmd.status()?;
+
+        #[allow(clippy::exit)]
+        std::process::exit(status.code().unwrap())
+    }
+}
+
+fn run() -> Result<ExitStatus, Error> {
     let current_exe = std::env::current_exe()?;
     let Some(bin) = current_exe.parent() else {
         bail!("Could not determine the location of the `uvx` binary")
@@ -18,7 +37,9 @@ fn run() -> Result<ExitStatus, anyhow::Error> {
         .chain(std::env::args_os().skip(1))
         .collect::<Vec<_>>();
 
-    Ok(Command::new(uv).args(&args).status()?)
+    let mut cmd = Command::new(uv);
+    cmd.args(&args);
+    match exec_spawn(&mut cmd)? {}
 }
 
 #[allow(clippy::print_stderr)]
