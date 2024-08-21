@@ -112,7 +112,7 @@ pub struct ToolUv {
         default = r#"[]"#,
         value_type = "list[str]",
         example = r#"
-            dev_dependencies = ["ruff==0.5.0"]
+            dev-dependencies = ["ruff==0.5.0"]
         "#
     )]
     pub dev_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
