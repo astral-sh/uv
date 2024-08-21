@@ -727,10 +727,7 @@ fn parse_file_path(input: &str) -> Result<PathBuf, String> {
         url.to_file_path()
             .map_err(|()| "invalid file URL".to_string())
     } else {
-        match PathBuf::from_str(input) {
-            Ok(path) => Ok(path),
-            Err(err) => Err(err.to_string()),
-        }
+        Ok(PathBuf::from(input))
     }
 }
 
