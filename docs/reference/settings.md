@@ -183,13 +183,13 @@ default in `uv run` and `uv sync`, but will not appear in the project's publishe
 
     ```toml
     [tool.uv]
-    dev_dependencies = ["ruff==0.5.0"]
+    dev-dependencies = ["ruff==0.5.0"]
     ```
 === "uv.toml"
 
     ```toml
     
-    dev_dependencies = ["ruff==0.5.0"]
+    dev-dependencies = ["ruff==0.5.0"]
     ```
 
 ---
