@@ -2129,9 +2129,14 @@ fn run_script_without_build_system() -> Result<()> {
 }
 
 #[test]
-fn run_remote_pep723_script() -> Result<()> {
-    let context = TestContext::new("3.12");
-    uv_snapshot!(context.filters(), context.run().arg("https://gist.githubusercontent.com/manzt/cb24f3066c32983672025b04b9f98d1f/raw/d675b26fe8b3a8e301705af80a53fe5de15a0273/pep723.py"), @r###"
+fn run_remote_pep723_script() {
+    let context = TestContext::new("3.12").with_filtered_python_names();
+    let mut filters = context.filters();
+    filters.push((
+        r"(?m)^Reading inline script metadata from:.*\.py$",
+        "Reading inline script metadata from: [TEMP_PATH].py",
+    ));
+    uv_snapshot!(filters, context.run().arg("https://gist.githubusercontent.com/manzt/cb24f3066c32983672025b04b9f98d1f/raw/d675b26fe8b3a8e301705af80a53fe5de15a0273/pep723.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2149,7 +2154,7 @@ fn run_remote_pep723_script() -> Result<()> {
     ]
 
     ----- stderr -----
-    Reading inline script metadata from: /var/folders/gs/j5y7yv816z71dzy18r4qmy3h0000gq/T/.tmpFt2irE.py
+    Reading inline script metadata from: [TEMP_PATH].py
     Resolved 9 packages in [TIME]
     Prepared 9 packages in [TIME]
     Installed 9 packages in [TIME]
@@ -2163,6 +2168,4 @@ fn run_remote_pep723_script() -> Result<()> {
      + rich==13.7.1
      + urllib3==2.2.1
     "###);
-
-    Ok(())
 }
