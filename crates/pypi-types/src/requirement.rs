@@ -80,14 +80,12 @@ impl Requirement {
                 subdirectory,
                 url,
             } => {
-                // Redact the repository URL.
-                let _ = repository.set_password(None);
-                let _ = repository.set_username("");
+                // Redact the repository URL, but allow `git@`.
+                redact_git_credentials(&mut repository);
 
                 // Redact the PEP 508 URL.
                 let mut url = url.to_url();
-                let _ = url.set_password(None);
-                let _ = url.set_username("");
+                redact_git_credentials(&mut url);
                 let url = VerbatimUrl::from_url(url);
 
                 Self {
@@ -598,8 +596,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 let mut url = repository;
 
                 // Redact the credentials.
-                let _ = url.set_username("");
-                let _ = url.set_password(None);
+                redact_git_credentials(&mut url);
 
                 // Clear out any existing state.
                 url.set_fragment(None);
@@ -699,8 +696,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 repository.set_query(None);
 
                 // Redact the credentials.
-                let _ = repository.set_username("");
-                let _ = repository.set_password(None);
+                redact_git_credentials(&mut repository);
 
                 // Create a PEP 508-compatible URL.
                 let mut url = Url::parse(&format!("git+{repository}"))?;
@@ -763,6 +759,18 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
         }
     }
+}
+
+/// Remove the credentials from a Git URL, allowing the generic `git` username (without a password)
+/// in SSH URLs, as in, `ssh://git@github.com/...`.
+pub fn redact_git_credentials(url: &mut Url) {
+    // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
+    // username.
+    if url.scheme() == "ssh" && url.username() == "git" && url.password().is_none() {
+        return;
+    }
+    let _ = url.set_password(None);
+    let _ = url.set_username("");
 }
 
 #[cfg(test)]
