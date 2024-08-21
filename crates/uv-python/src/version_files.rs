@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use fs_err as fs;
 use itertools::Itertools;
 use tracing::debug;
+use uv_fs::Simplified;
 
 use crate::PythonRequest;
 
@@ -22,31 +23,48 @@ pub struct PythonVersionFile {
 }
 
 impl PythonVersionFile {
-    /// Find a Python version file in the given directory.
+    /// Find a Python version file in the given directory or any of its parents.
     pub async fn discover(
         working_directory: impl AsRef<Path>,
         no_config: bool,
     ) -> Result<Option<Self>, std::io::Error> {
-        let versions_path = working_directory.as_ref().join(PYTHON_VERSIONS_FILENAME);
-        let version_path = working_directory.as_ref().join(PYTHON_VERSION_FILENAME);
+        let Some(path) = Self::find_nearest(working_directory) else {
+            return Ok(None);
+        };
 
         if no_config {
-            if version_path.exists() {
-                debug!("Ignoring `.python-version` file due to `--no-config`");
-            } else if versions_path.exists() {
-                debug!("Ignoring `.python-versions` file due to `--no-config`");
-            };
+            debug!(
+                "Ignoring Python version file at `{}` due to `--no-config`",
+                path.user_display()
+            );
             return Ok(None);
         }
 
-        if let Some(result) = Self::try_from_path(version_path).await? {
-            return Ok(Some(result));
-        };
-        if let Some(result) = Self::try_from_path(versions_path).await? {
-            return Ok(Some(result));
-        };
+        // Use `try_from_path` instead of `from_path` to avoid TOCTOU failures.
+        Self::try_from_path(path).await
+    }
 
-        Ok(None)
+    fn find_nearest(working_directory: impl AsRef<Path>) -> Option<PathBuf> {
+        let mut current = working_directory.as_ref();
+        loop {
+            let version_path = current.join(PYTHON_VERSION_FILENAME);
+            let versions_path = current.join(PYTHON_VERSIONS_FILENAME);
+
+            if version_path.exists() {
+                return Some(version_path);
+            }
+            if versions_path.exists() {
+                return Some(versions_path);
+            }
+
+            if let Some(parent) = current.parent() {
+                current = parent;
+            } else {
+                break;
+            }
+        }
+
+        None
     }
 
     /// Try to read a Python version file at the given path.

@@ -3201,6 +3201,10 @@ uv python find [OPTIONS] [REQUEST]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-project</code></dt><dd><p>Avoid discovering a project or workspace.</p>
+
+<p>Otherwise, when no request is provided, the Python requirement of a project in the current directory or parent directories will be used.</p>
+
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>

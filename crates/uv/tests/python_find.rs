@@ -1,7 +1,7 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use assert_fs::fixture::FileWriteStr;
 use assert_fs::prelude::PathChild;
+use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
 
 use common::{uv_snapshot, TestContext};
@@ -189,6 +189,38 @@ fn python_find_pin() {
 
     // Or `--no-config` is used
     uv_snapshot!(context.filters(), context.python_find().arg("--no-config"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    "###);
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all().unwrap();
+
+    // We should also find pinned versions in the parent directory
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.11").current_dir(&child_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `.python-version` from `3.12` -> `3.11`
+
+    ----- stderr -----
+    "###);
+
+    // Unless the child directory also has a pin
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
