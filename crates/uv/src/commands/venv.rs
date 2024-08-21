@@ -57,6 +57,7 @@ pub(crate) async fn venv(
     exclude_newer: Option<ExcludeNewer>,
     concurrency: Concurrency,
     native_tls: bool,
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
@@ -78,6 +79,7 @@ pub(crate) async fn venv(
         exclude_newer,
         concurrency,
         native_tls,
+        no_config,
         cache,
         printer,
         relocatable,
@@ -130,6 +132,7 @@ async fn venv_impl(
     exclude_newer: Option<ExcludeNewer>,
     concurrency: Concurrency,
     native_tls: bool,
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
@@ -145,8 +148,7 @@ async fn venv_impl(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        // TODO(zanieb): Support `--no-config` here
-        interpreter_request = PythonVersionFile::discover(&*CWD, false)
+        interpreter_request = PythonVersionFile::discover(&*CWD, no_config)
             .await
             .into_diagnostic()?
             .and_then(PythonVersionFile::into_version);

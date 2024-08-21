@@ -681,6 +681,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.exclude_newer,
                 globals.concurrency,
                 globals.native_tls,
+                cli.no_config,
                 &cache,
                 printer,
                 args.relocatable,
