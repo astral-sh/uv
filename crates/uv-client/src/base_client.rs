@@ -142,7 +142,7 @@ impl<'a> BaseClientBuilder<'a> {
                 if !path_exists {
                     warn_user_once!(
                         "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
-                        path.simplified_display()
+                        path.simplified_display().cyan()
                     );
                 }
                 path_exists

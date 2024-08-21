@@ -1011,8 +1011,7 @@ fn warn_on_requirements_txt_setting(
         if let Some(index_url) = index_url {
             if settings.index_locations.index() != Some(index_url) {
                 warn_user_once!(
-                    "Ignoring `--index-url` from requirements file: `{}`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.",
-                    index_url
+                    "Ignoring `--index-url` from requirements file: `{index_url}`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file."
                 );
             }
         }
@@ -1023,16 +1022,15 @@ fn warn_on_requirements_txt_setting(
                 .contains(extra_index_url)
             {
                 warn_user_once!(
-                    "Ignoring `--extra-index-url` from requirements file: `{}`. Instead, use the `--extra-index-url` command-line argument, or set `extra-index-url` in a `uv.toml` or `pyproject.toml` file.`",
-                    extra_index_url
+                    "Ignoring `--extra-index-url` from requirements file: `{extra_index_url}`. Instead, use the `--extra-index-url` command-line argument, or set `extra-index-url` in a `uv.toml` or `pyproject.toml` file.`"
+
                 );
             }
         }
         for find_link in find_links {
             if !settings.index_locations.flat_index().contains(find_link) {
                 warn_user_once!(
-                    "Ignoring `--find-links` from requirements file: `{}`. Instead, use the `--find-links` command-line argument, or set `find-links` in a `uv.toml` or `pyproject.toml` file.`",
-                    find_link
+                    "Ignoring `--find-links` from requirements file: `{find_link}`. Instead, use the `--find-links` command-line argument, or set `find-links` in a `uv.toml` or `pyproject.toml` file.`"
                 );
             }
         }

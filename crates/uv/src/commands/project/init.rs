@@ -3,9 +3,9 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-
 use pep440_rs::Version;
 use pep508_rs::PackageName;
+use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_fs::{absolutize_path, Simplified, CWD};
@@ -172,22 +172,34 @@ async fn init_project(
         )
         .await
         {
-            Ok(workspace) => Some(workspace),
-            Err(WorkspaceError::MissingPyprojectToml) => None,
-            Err(WorkspaceError::NonWorkspace(_)) => None,
-            Err(err) => return Err(err.into()),
+            Ok(workspace) => {
+                // Ignore the current workspace, if `--no-workspace` was provided.
+                if no_workspace {
+                    debug!("Ignoring discovered workspace due to `--no-workspace`");
+                    None
+                } else {
+                    Some(workspace)
+                }
+            }
+            Err(WorkspaceError::MissingPyprojectToml | WorkspaceError::NonWorkspace(_)) => {
+                // If the user runs with `--no-workspace` and we can't find a workspace, warn.
+                if no_workspace {
+                    warn_user_once!("`--no-workspace` was provided, but no workspace was found");
+                }
+                None
+            }
+            Err(err) => {
+                // If the user runs with `--no-workspace`, ignore the error.
+                if no_workspace {
+                    warn_user_once!(
+                        "Ignoring workspace discovery error due to `--no-workspace`: {err}"
+                    );
+                    None
+                } else {
+                    return Err(err.into());
+                }
+            }
         }
-    };
-
-    // Ignore the current workspace, if `--no-workspace` was provided.
-    let workspace = if no_workspace {
-        // If the user runs with `--no-workspace` and we can't find a workspace, warn.
-        if workspace.is_none() {
-            warn_user_once!("`--no-workspace` was provided, but no workspace was found");
-        }
-        None
-    } else {
-        workspace
     };
 
     // Add a `requires-python` field to the `pyproject.toml`.
