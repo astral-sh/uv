@@ -866,7 +866,7 @@ Whether to allow Python downloads.
 Whether to prefer using Python installations that are already present on the system, or
 those that are downloaded and installed by uv.
 
-**Default value**: `"only-system" (stable) or "managed" (preview)`
+**Default value**: `"managed"`
 
 **Possible values**:
 
