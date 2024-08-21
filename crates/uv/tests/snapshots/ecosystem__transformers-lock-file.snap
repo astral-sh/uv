@@ -5443,7 +5443,6 @@ all = [
     { name = "pillow" },
     { name = "protobuf" },
     { name = "pyctcdecode" },
-    { name = "ray" },
     { name = "ray", extra = ["tune"] },
     { name = "sentencepiece" },
     { name = "sigopt" },
@@ -5542,7 +5541,6 @@ dev-dependencies = [
     { name = "pytest" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
-    { name = "ray" },
     { name = "ray", extra = ["tune"] },
     { name = "rhoknp" },
     { name = "rjieba" },
@@ -5592,7 +5590,6 @@ docs = [
     { name = "pillow" },
     { name = "protobuf" },
     { name = "pyctcdecode" },
-    { name = "ray" },
     { name = "ray", extra = ["tune"] },
     { name = "sentencepiece" },
     { name = "sigopt" },
@@ -5628,7 +5625,6 @@ ftfy = [
 ]
 integrations = [
     { name = "optuna" },
-    { name = "ray" },
     { name = "ray", extra = ["tune"] },
     { name = "sigopt" },
 ]
@@ -5668,7 +5664,6 @@ quality = [
     { name = "urllib3" },
 ]
 ray = [
-    { name = "ray" },
     { name = "ray", extra = ["tune"] },
 ]
 retrieval = [

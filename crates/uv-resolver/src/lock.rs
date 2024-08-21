@@ -1154,10 +1154,15 @@ impl Package {
         annotated_dist: &AnnotatedDist,
         marker: MarkerTree,
     ) {
-        self.optional_dependencies
-            .entry(extra)
-            .or_default()
-            .push(Dependency::from_annotated_dist(annotated_dist, marker));
+        let dep = Dependency::from_annotated_dist(annotated_dist, marker);
+        let optional_deps = self.optional_dependencies.entry(extra).or_default();
+        for existing_dep in &mut *optional_deps {
+            if existing_dep.package_id == dep.package_id && existing_dep.marker == dep.marker {
+                existing_dep.extra.extend(dep.extra);
+                return;
+            }
+        }
+        optional_deps.push(dep);
     }
 
     /// Add the [`AnnotatedDist`] as a development dependency of the [`Package`].
@@ -1167,10 +1172,15 @@ impl Package {
         annotated_dist: &AnnotatedDist,
         marker: MarkerTree,
     ) {
-        self.dev_dependencies
-            .entry(dev)
-            .or_default()
-            .push(Dependency::from_annotated_dist(annotated_dist, marker));
+        let dep = Dependency::from_annotated_dist(annotated_dist, marker);
+        let dev_deps = self.dev_dependencies.entry(dev).or_default();
+        for existing_dep in &mut *dev_deps {
+            if existing_dep.package_id == dep.package_id && existing_dep.marker == dep.marker {
+                existing_dep.extra.extend(dep.extra);
+                return;
+            }
+        }
+        dev_deps.push(dep);
     }
 
     /// Convert the [`Package`] to a [`Dist`] that can be used in installation.
