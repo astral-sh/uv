@@ -129,7 +129,10 @@ Ok(
                             ),
                         },
                         extra: {},
-                        marker: true,
+                        simplified_marker: SimplifiedMarkerTree(
+                            true,
+                        ),
+                        complexified_marker: python_full_version >= '3.12',
                     },
                 ],
                 optional_dependencies: {},
