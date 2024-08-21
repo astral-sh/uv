@@ -18,7 +18,7 @@ An extremely fast Python package and project manager, written in Rust.
 </p>
 
 <p align="center">
-  <i>Installing the Trio dependencies with a warm cache.</i>
+  <i>Installing <a href="https://trio.readthedocs.io/">Trio</a>'s dependencies with a warm cache.</i>
 </p>
 
 ## Highlights
