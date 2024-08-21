@@ -1,14 +1,16 @@
 use std::{
     ffi::OsString,
+    io,
     process::{Command, ExitCode, ExitStatus},
 };
 
-use anyhow::bail;
-
-fn run() -> Result<ExitStatus, anyhow::Error> {
+fn run() -> io::Result<ExitStatus> {
     let current_exe = std::env::current_exe()?;
     let Some(bin) = current_exe.parent() else {
-        bail!("Could not determine the location of the `uvx` binary")
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Could not determine the location of the `uvx` binary",
+        ));
     };
     let uv = bin.join("uv");
     let args = ["tool", "uvx"]
