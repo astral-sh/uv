@@ -81,11 +81,11 @@ In addition, uv respects the following environment variables:
   different source for PyPy installations. The provided URL will replace
   `https://downloads.python.org/pypy` in, e.g.,
   `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
-- `XDG_CONFIG_HOME`: Used to specify the path to uv user-level configuration directory on Linux
-  _and_ macOS systems.
-- `XDG_CACHE_HOME`: Used to specify the directory where uv stores cache files on Linux system.
+- `XDG_CONFIG_HOME`: Used to specify the path to uv user-level configuration directory on Unix
+  systems.
+- `XDG_CACHE_HOME`: Used to specify the directory where uv stores cache files on Unix systems.
 - `XDG_DATA_HOME`: Used to specify the directory where uv stores managed Python installations and
-  managed tools on Linux system.
+  managed tools on Unix systems.
 - `XDG_BIN_HOME`: Used to specify the directory where executables are installed into.
 - `SSL_CERT_FILE`: If set, uv will use this file as the certificate bundle instead of the system's
   trust store.
