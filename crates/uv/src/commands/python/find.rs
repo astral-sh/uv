@@ -26,7 +26,7 @@ pub(crate) async fn find(
 
     // (2) Request from `.python-version`
     if request.is_none() {
-        request = PythonVersionFile::discover(&*CWD, no_config)
+        request = PythonVersionFile::discover(&*CWD, no_config, false)
             .await?
             .and_then(PythonVersionFile::into_version);
     }

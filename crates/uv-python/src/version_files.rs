@@ -25,7 +25,9 @@ impl PythonVersionFile {
     /// Find a Python version file in the given directory.
     pub async fn discover(
         working_directory: impl AsRef<Path>,
+        // TODO(zanieb): Create a `DiscoverySettings` struct for these options
         no_config: bool,
+        prefer_versions: bool,
     ) -> Result<Option<Self>, std::io::Error> {
         let versions_path = working_directory.as_ref().join(PYTHON_VERSIONS_FILENAME);
         let version_path = working_directory.as_ref().join(PYTHON_VERSION_FILENAME);
@@ -39,12 +41,16 @@ impl PythonVersionFile {
             return Ok(None);
         }
 
-        if let Some(result) = Self::try_from_path(version_path).await? {
-            return Ok(Some(result));
+        let paths = if prefer_versions {
+            [versions_path, version_path]
+        } else {
+            [version_path, versions_path]
         };
-        if let Some(result) = Self::try_from_path(versions_path).await? {
-            return Ok(Some(result));
-        };
+        for path in paths {
+            if let Some(result) = Self::try_from_path(path).await? {
+                return Ok(Some(result));
+            };
+        }
 
         Ok(None)
     }

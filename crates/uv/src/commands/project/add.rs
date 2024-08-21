@@ -125,7 +125,7 @@ pub(crate) async fn add(
             let python_request = if let Some(request) = python.as_deref() {
                 // (1) Explicit request from user
                 PythonRequest::parse(request)
-            } else if let Some(request) = PythonVersionFile::discover(&*CWD, false)
+            } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
                 .await?
                 .and_then(PythonVersionFile::into_version)
             {
@@ -156,7 +156,7 @@ pub(crate) async fn add(
         let python_request = if let Some(request) = python.as_deref() {
             // (1) Explicit request from user
             Some(PythonRequest::parse(request))
-        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false)
+        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
             .await?
             .and_then(PythonVersionFile::into_version)
         {

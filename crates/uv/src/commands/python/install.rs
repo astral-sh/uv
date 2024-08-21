@@ -38,7 +38,7 @@ pub(crate) async fn install(
 
     let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {
-        PythonVersionFile::discover(&*CWD, no_config)
+        PythonVersionFile::discover(&*CWD, no_config, true)
             .await?
             .map(uv_python::PythonVersionFile::into_versions)
             .unwrap_or_else(|| vec![PythonRequest::Any])
