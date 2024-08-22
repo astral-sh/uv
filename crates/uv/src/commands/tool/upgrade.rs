@@ -116,10 +116,9 @@ pub(crate) async fn upgrade(
             }
         };
 
-        let mut recreated_venv = false;
         if let Some(python_request) = &python_request {
             if !python_request.satisfied(existing_environment.interpreter(), cache) {
-                debug!("Requested `{python_request}`, not satisfied; reinstalling");
+                debug!("Requested `{python_request}` not satisfied; reinstalling");
 
                 let client_builder = BaseClientBuilder::new()
                     .connectivity(connectivity)
@@ -140,7 +139,6 @@ pub(crate) async fn upgrade(
                 .into_interpreter();
 
                 existing_environment = installed_tools.create_environment(&name, interpreter)?;
-                recreated_venv = true;
             }
         }
 
@@ -175,10 +173,10 @@ pub(crate) async fn upgrade(
         )
         .await?;
 
-        did_upgrade |= !changelog.is_empty() || recreated_venv;
+        did_upgrade |= !changelog.is_empty();
 
         // If we modified the target tool, reinstall the entrypoints.
-        if changelog.includes(&name) || recreated_venv {
+        if changelog.includes(&name) {
             // At this point, we updated the existing environment, so we should remove any of its
             // existing executables.
             remove_entrypoints(&existing_tool_receipt);
