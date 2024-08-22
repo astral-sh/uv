@@ -618,6 +618,7 @@ pub(crate) struct SyncSettings {
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
+    pub(crate) no_install_project: bool,
     pub(crate) modifications: Modifications,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
@@ -630,8 +631,6 @@ impl SyncSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: SyncArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let SyncArgs {
-            locked,
-            frozen,
             extra,
             all_extras,
             no_all_extras,
@@ -639,6 +638,9 @@ impl SyncSettings {
             no_dev,
             inexact,
             exact,
+            no_install_project,
+            locked,
+            frozen,
             installer,
             build,
             refresh,
@@ -669,6 +671,7 @@ impl SyncSettings {
                 extra.unwrap_or_default(),
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
+            no_install_project,
             modifications,
             package,
             python,

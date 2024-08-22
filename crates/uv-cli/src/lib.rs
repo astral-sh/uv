@@ -2273,6 +2273,16 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("inexact"), hide = true)]
     pub exact: bool,
 
+    /// Do not install the current project.
+    ///
+    /// By default, the current project is installed into the environment with all of its
+    /// dependencies. The `--no-install-project` option allows the project to be excluded, but all of
+    /// its dependencies are still installed. This is particularly useful in situations like
+    /// building Docker images where installing the project separately from its dependencies
+    /// allows optimal layer caching.
+    #[arg(long)]
+    pub no_install_project: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or

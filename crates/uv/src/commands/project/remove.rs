@@ -190,6 +190,7 @@ pub(crate) async fn remove(
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
     let extras = ExtrasSpecification::All;
     let dev = true;
+    let no_install_project = false;
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -200,6 +201,7 @@ pub(crate) async fn remove(
         &lock,
         &extras,
         dev,
+        no_install_project,
         Modifications::Exact,
         settings.as_ref().into(),
         &state,
