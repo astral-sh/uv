@@ -2891,6 +2891,19 @@ pub struct ToolUpgradeArgs {
 
     #[command(flatten)]
     pub build: BuildArgs,
+
+    /// The Python interpreter to use to install the tool environment.
+    ///
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
+    pub python: Option<String>,
 }
 
 #[derive(Args)]

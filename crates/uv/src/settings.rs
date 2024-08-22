@@ -391,6 +391,7 @@ impl ToolInstallSettings {
 pub(crate) struct ToolUpgradeSettings {
     pub(crate) name: Option<PackageName>,
     pub(crate) args: ResolverInstallerOptions,
+    pub(crate) python: Option<String>,
     pub(crate) filesystem: ResolverInstallerOptions,
 }
 
@@ -400,6 +401,7 @@ impl ToolUpgradeSettings {
     pub(crate) fn resolve(args: ToolUpgradeArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let ToolUpgradeArgs {
             name,
+            python,
             all,
             mut installer,
             build,
@@ -422,6 +424,7 @@ impl ToolUpgradeSettings {
         Self {
             name: name.filter(|_| !all),
             args,
+            python,
             filesystem,
         }
     }

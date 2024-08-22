@@ -423,3 +423,49 @@ fn test_tool_upgrade_with() {
      + pytz==2024.1
     "###);
 }
+
+/// Upgrade a tool, with a different requested Python version.
+#[test]
+fn test_tool_upgrade_python_version() {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `babel` with Python 3.11.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel")
+        .arg("--python=3.11")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.14.0
+    Installed 1 executable: pybabel
+    "###);
+
+    // Upgrade `babel` with Python 3.12.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--python=3.12")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Added babel v2.14.0
+     + babel==2.14.0
+    Installed 1 executable: pybabel
+    "###);
+}
