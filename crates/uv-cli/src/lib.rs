@@ -115,16 +115,30 @@ pub struct GlobalArgs {
         global = true,
         long,
         help_heading = "Python options",
-        display_order = 700
+        display_order = 700,
+        env = "UV_PYTHON_PREFERENCE"
     )]
     pub python_preference: Option<PythonPreference>,
 
     /// Allow automatically downloading Python when required.
-    #[arg(global = true, long, help_heading = "Python options", hide = true)]
+    #[arg(
+        global = true,
+        long,
+        help_heading = "Python options",
+        hide = true,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        env = "UV_ALLOW_PYTHON_DOWNLOADS"
+    )]
     pub allow_python_downloads: bool,
 
     /// Disable automatic downloads of Python.
-    #[arg(global = true, long, help_heading = "Python options")]
+    #[arg(
+        global = true,
+        long,
+        help_heading = "Python options",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        env = "UV_NO_PYTHON_DOWNLOADS"
+    )]
     pub no_python_downloads: bool,
 
     /// Deprecated version of [`Self::python_downloads`].

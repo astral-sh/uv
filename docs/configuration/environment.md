@@ -69,6 +69,10 @@ In addition, uv respects the following environment variables:
   packages.
 - `UV_TOOL_DIR`: Used to specify the directory where uv will store managed tools.
 - `UV_TOOL_BIN_DIR`: Used to specify the "bin" directory where uv will install tool executables.
+- `UV_NO_PYTHON_DOWNLOADS`: Disable automatic downloads of Python.
+- `UV_ALLOW_PYTHON_DOWNLOADS`: Allow automatically downloading Python when required.
+- `UV_PYTHON_PREFERENCE`: Whether to prefer using Python installations that are already present on
+  the system, or those that are downloaded and installed by uv.
 - `UV_PYTHON_INSTALL_DIR`: Used to specify the directory where uv will store managed Python
   installations.
 - `UV_PYTHON_INSTALL_MIRROR`: Managed Python installations are downloaded from
