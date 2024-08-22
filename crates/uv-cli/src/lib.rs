@@ -120,11 +120,13 @@ pub struct GlobalArgs {
     )]
     pub python_preference: Option<PythonPreference>,
 
-    /// Allow automatically downloading Python when required.
+    #[allow(clippy::doc_markdown)]
+    /// Allow automatically downloading Python when required. [env: "UV_PYTHON_DOWNLOADS=auto"]
     #[arg(global = true, long, help_heading = "Python options", hide = true)]
     pub allow_python_downloads: bool,
 
-    /// Disable automatic downloads of Python.
+    #[allow(clippy::doc_markdown)]
+    /// Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
     #[arg(global = true, long, help_heading = "Python options")]
     pub no_python_downloads: bool,
 

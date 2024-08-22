@@ -235,7 +235,7 @@ uv run [OPTIONS] <COMMAND>
 
 <p>If a virtual environment is active or found in a current or parent directory, it will be used as if there was no project or workspace.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
@@ -406,7 +406,7 @@ uv init [OPTIONS] [PATH]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-readme</code></dt><dd><p>Do not create a <code>README.md</code> file</p>
 
@@ -634,7 +634,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
@@ -908,7 +908,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
@@ -1174,7 +1174,7 @@ uv sync [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
@@ -1412,7 +1412,7 @@ uv lock [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
@@ -1645,7 +1645,7 @@ uv tree [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
@@ -1966,7 +1966,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
@@ -2206,7 +2206,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
@@ -2444,7 +2444,7 @@ uv tool upgrade [OPTIONS] <NAME>
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
@@ -2639,7 +2639,7 @@ uv tool uninstall [OPTIONS] <NAME>
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -2726,7 +2726,7 @@ uv tool update-shell [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -2831,7 +2831,7 @@ uv tool dir [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -2992,7 +2992,7 @@ uv python list [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -3097,7 +3097,7 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -3198,7 +3198,7 @@ uv python find [OPTIONS] [REQUEST]
 
 <p>Otherwise, when no request is provided, the Python requirement of a project in the current directory or parent directories will be used.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -3293,7 +3293,7 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-workspace</code></dt><dd><p>Avoid validating the Python pin is compatible with the workspace.</p>
 
@@ -3388,7 +3388,7 @@ uv python dir [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -3479,7 +3479,7 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -3740,7 +3740,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
@@ -4067,7 +4067,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
@@ -4374,7 +4374,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
@@ -4621,7 +4621,7 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -4722,7 +4722,7 @@ uv pip freeze [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -4835,7 +4835,7 @@ uv pip list [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -4936,7 +4936,7 @@ uv pip show [OPTIONS] [PACKAGE]...
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -5038,7 +5038,7 @@ uv pip tree [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-system</code></dt><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -5139,7 +5139,7 @@ uv pip check [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -5317,7 +5317,7 @@ uv venv [OPTIONS] [NAME]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -5452,7 +5452,7 @@ uv cache clean [OPTIONS] [PACKAGE]...
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -5539,7 +5539,7 @@ uv cache prune [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -5628,7 +5628,7 @@ uv cache dir [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -5709,7 +5709,7 @@ uv version [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -5814,7 +5814,7 @@ uv help [OPTIONS] [COMMAND]...
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 

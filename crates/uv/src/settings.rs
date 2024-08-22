@@ -117,6 +117,7 @@ impl GlobalSettings {
                 .unwrap_or_else(PythonPreference::default_from_env),
             python_downloads: flag(args.allow_python_downloads, args.no_python_downloads)
                 .map(PythonDownloads::from)
+                .combine(env(env::UV_PYTHON_DOWNLOADS))
                 .combine(workspace.and_then(|workspace| workspace.globals.python_downloads))
                 .unwrap_or_default(),
             no_progress: args.no_progress,
@@ -2174,6 +2175,11 @@ mod env {
 
     pub(super) const CONCURRENT_INSTALLS: (&str, &str) =
         ("UV_CONCURRENT_INSTALLS", "a non-zero integer");
+
+    pub(super) const UV_PYTHON_DOWNLOADS: (&str, &str) = (
+        "UV_PYTHON_DOWNLOADS",
+        "one of 'auto', 'true', 'manual', 'never', or 'false'",
+    );
 }
 
 /// Attempt to load and parse an environment variable with the given name.
