@@ -104,4 +104,4 @@ uv determines the cache directory according to, in order:
 
 It is important for performance for the cache directory to be located on the same file system as the
 Python environment uv is operating on. Otherwise, uv will not be able to link files from the cache
-into the environment and uv will need to explicitly use of _copy_ mode with slow operations.
+into the environment and uv will need to explicitly use _copy_ mode which will do slow operations.
