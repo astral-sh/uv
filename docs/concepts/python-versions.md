@@ -171,8 +171,9 @@ during `uv python install`.
 
 !!! tip
 
-    The `--python-downloads` option can be passed to any uv command, or it can be set in a
-    [persistent configuration file](../configuration/files.md) to change the default behavior.
+    The `python-downloads` setting can be set in a
+    [persistent configuration file](../configuration/files.md) to change the default behavior, or
+    the `--no-python-downloads` flag can be passed to any uv command.
 
 ## Adjusting Python version preferences
 
