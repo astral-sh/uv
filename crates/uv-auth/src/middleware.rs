@@ -161,6 +161,13 @@ impl Middleware for AuthMiddleware {
                 // Do not insert already-cached credentials
                 None
             } else if let Some(credentials) = self
+                .cache()
+                .get_url(request.url(), &credentials.to_username())
+            {
+                request = credentials.authenticate(request);
+                // Do not insert already-cached credentials
+                None
+            } else if let Some(credentials) = self
                 .fetch_credentials(Some(&credentials), request.url())
                 .await
             {
