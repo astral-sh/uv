@@ -20,6 +20,11 @@ const REPLACEMENTS: &[(&str, &str)] = &[
         "<code>uv help python</code>",
         "<a href=\"#uv-python\">uv python</a>",
     ),
+    // Drop the manually included `env` section for `--no-python-downloads`
+    // TODO(zanieb): In general, we should show all of the environment variables in the reference
+    // but this one is non-standard so it's the only one included right now. When we tackle the rest
+    // we can fix the formatting.
+    (" [env: &quot;UV<em>PYTHON</em>DOWNLOADS=never&quot;]", ""),
 ];
 
 const SHOW_HIDDEN_COMMANDS: &[&str] = &["generate-shell-completion"];
