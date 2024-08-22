@@ -61,7 +61,6 @@ pub(crate) async fn add(
     script: Option<PathBuf>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
