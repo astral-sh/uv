@@ -35,7 +35,6 @@ pub(crate) async fn sync(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     settings: ResolverInstallerSettings,
-
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -129,7 +128,6 @@ pub(super) async fn do_sync(
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn InstallLogger>,
-
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,

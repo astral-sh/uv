@@ -35,7 +35,6 @@ pub(crate) async fn tree(
     settings: ResolverSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,

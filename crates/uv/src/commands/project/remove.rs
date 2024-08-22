@@ -35,7 +35,6 @@ pub(crate) async fn remove(
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,

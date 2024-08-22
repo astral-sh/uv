@@ -134,7 +134,6 @@ pub(super) async fn do_safe_lock(
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
     logger: Box<dyn ResolveLogger>,
-
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -223,7 +222,6 @@ async fn do_lock(
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
-
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
