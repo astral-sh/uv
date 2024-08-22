@@ -212,6 +212,34 @@ $ uv run --python 3.10 example.py
 See the [Python version request](../concepts/python-versions.md#requesting-a-version) documentation
 for more details on requesting Python versions.
 
+## Executing scripts using a shebang (unix only)
+
+A shebang line (beginning with `#!`) at the top of a script specifies the interpreter that should be
+used to execute a script. This can be used with `uv run` as well, for example:
+
+```python title="example.py"
+#!/usr/bin/env -S uv run --quiet
+
+import sys
+
+print(" ".join(sys.argv[1:]))
+```
+
+```console
+$ # Note: the `chmod` marks the script as executable: this only needs to be run once
+$ chmod +x example.py
+$ ./example.py hello world!
+hello world!
+```
+
+!!! note
+
+    Portability Considerations: the `env` command is available on most Unix-like operating systems, including:
+    - Linux distributions (Ubuntu, Debian, Fedora, etc.)
+    - macOS
+    - BSD variants (FreeBSD, OpenBSD, etc.)
+    However, if you're working in a highly customized or minimal environment, verify the presence of `/usr/bin/env`.
+
 ## Next steps
 
 To learn more about `uv run`, see the [command reference](../reference/cli.md#uv-run).
