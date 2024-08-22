@@ -1645,9 +1645,10 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err(r"name; invalid_name"),
             @"
-            Expected a valid marker name, found 'invalid_name'
+            Expected a quoted string or a valid marker name, found 'invalid_name'
             name; invalid_name
-                  ^^^^^^^^^^^^"
+                  ^^^^^^^^^^^^
+            "
         );
     }
 
@@ -1656,9 +1657,10 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("name; '3.7' <= invalid_name"),
             @"
-            Expected a valid marker name, found 'invalid_name'
+            Expected a quoted string or a valid marker name, found 'invalid_name'
             name; '3.7' <= invalid_name
-                           ^^^^^^^^^^^^"
+                           ^^^^^^^^^^^^
+            "
         );
     }
 
@@ -1670,6 +1672,18 @@ mod tests {
             Expected a valid marker operator (such as '>=' or 'not in'), found 'notin'
             name; '3.7' notin python_version
                         ^^^^^"
+        );
+    }
+
+    #[test]
+    fn error_missing_quote() {
+        assert_snapshot!(
+            parse_pep508_err("name; python_version == 3.10"),
+            @"
+            Expected a quoted string or a valid marker name, found '3.10'
+            name; python_version == 3.10
+                                    ^^^^
+            "
         );
     }
 
