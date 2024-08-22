@@ -103,7 +103,7 @@ pub(crate) fn parse_marker_value<T: Pep508Url>(
             let key = cursor.slice(start, len);
             MarkerValue::from_str(key).map_err(|_| Pep508Error {
                 message: Pep508ErrorSource::String(format!(
-                    "Expected a valid marker name, found '{key}'"
+                    "Expected a quoted string or a valid marker name, found '{key}'"
                 )),
                 start,
                 len,
