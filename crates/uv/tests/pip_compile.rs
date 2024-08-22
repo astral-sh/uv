@@ -9974,7 +9974,7 @@ fn dynamic_dependencies() -> Result<()> {
 /// Since this test was developed on Linux, the marker expression generated is
 /// coupled with the Linux platform. Other tests for other platforms could be
 /// added.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "python-patch"))]
 #[test]
 fn emit_marker_expression_exciting_linux() -> Result<()> {
     let context = TestContext::new("3.12.1");
@@ -10011,7 +10011,7 @@ fn emit_marker_expression_exciting_linux() -> Result<()> {
 ///
 /// NOTE: This test runs on `linux` only because it requires that `sys_platform
 /// == 'linux'` evaluates to `true`.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "python-patch"))]
 #[test]
 fn emit_marker_expression_direct() -> Result<()> {
     let context = TestContext::new("3.12.1");
@@ -10091,7 +10091,7 @@ fn emit_marker_expression_conditional() -> Result<()> {
 /// not clear why. The `tzdata` dependency appears to be an unconditional
 /// dependency. And if anything, I'd expect it to be included on Windows and
 /// excluded everywhere else... Odd.)
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "python-patch"))]
 #[test]
 fn emit_marker_expression_pypy() -> Result<()> {
     let context = TestContext::new("3.12.1");
