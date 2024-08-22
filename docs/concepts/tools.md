@@ -11,21 +11,95 @@ Tools are Python packages that provide command-line interfaces.
 
 uv includes a dedicated interface for interacting with tools. Tools can be invoked without
 installation using `uv tool run`, in which case their dependencies are installed in a temporary
-virtual environment isolated from the current project. Tools can also be installed with
-`uv tool install`, in which case their executables are [available on the `PATH`](#the-path) — an
-isolated virtual environment is still used but it is not treated as disposable.
+virtual environment isolated from the current project.
 
 Because it is very common to run tools without installing them, a `uvx` alias is provided for
 `uv tool run` — the two commands are exactly equivalent. For brevity, the documentation will mostly
 refer to `uvx` instead of `uv tool run`.
 
+Tools can also be installed with `uv tool install`, in which case their executables are
+[available on the `PATH`](#the-path) — an isolated virtual environment is still used, but it is not
+removed when the command completes.
+
+## Execution vs installation
+
+In most cases, executing a tool with `uvx` is more appropriate than installing the tool. Installing
+the tool is useful if you need the tool to be available to other programs on your system, e.g., if
+some script you do not control requires the tool, or if you are in a Docker image and want to make
+the tool available to users.
+
 ## Tool environments
 
 When running a tool with `uvx`, a virtual environment is stored in the uv cache directory and is
-treated as disposable. The environment is cached to reduce the overhead of invocations.
+treated as disposable, i.e., if you run `uv cache clean` the environment will be deleted. The
+environment is only cached to reduce the overhead of repeated invocations. If the environment is
+removed, a new one will be created automatically.
 
 When installing a tool with `uv tool install`, a virtual environment is created in the uv tools
-directory.
+directory. The environment will not be removed unless the tool is uninstalled. If the environment is
+manually deleted, the tool will fail to run.
+
+## Tool versions
+
+Unless a specific version is requested, `uv tool install` will install the latest available of the
+requested tool. `uvx` will use the latest available version of the requested tool _on the first
+invocation_. After that, `uvx` will use the cached version of the tool unless a different version is
+requested, the cache is pruned, or the cache is refreshed.
+
+For example, to run a specific version of Ruff:
+
+```console
+$ uvx ruff@0.6.0 --version
+ruff 0.6.0
+```
+
+A subsequent invocation of `uvx` will use the latest, not the cached, version.
+
+```console
+$ uvx ruff --version
+ruff 0.6.2
+```
+
+But, if a new version of Ruff was released, it would not be used unless the cache was refreshed.
+
+To request the latest version of Ruff and refresh the cache, use the `@latest` suffix:
+
+```console
+$ uvx ruff@latest --version
+0.6.2
+```
+
+Once a tool is installed with `uv tool install`, `uvx` will use the installed version by default.
+
+For example, after installing an older version of Ruff:
+
+```
+$ uv tool install ruff==0.5.0
+```
+
+The version of `ruff` and `uvx ruff` is the same:
+
+```
+$ ruff --version
+ruff 0.5.0
+$ uvx ruff --version
+ruff 0.5.0
+```
+
+However, you can ignore the installed version by requesting the latest version explicitly, e.g.:
+
+```console
+$ uvx ruff@latest --version
+0.6.2
+```
+
+Or, by using the `--isolated` flag, which will avoid refreshing the cache but ignore the installed
+version:
+
+```console
+$ uvx --isolated ruff --version
+0.6.2
+```
 
 ### Tools directory
 
