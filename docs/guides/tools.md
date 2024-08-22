@@ -104,6 +104,11 @@ $ uvx --with mkdocs-material mkdocs --help
 If a tool is used often, it is useful to install it to a persistent environment and add it to the
 `PATH` instead of invoking `uvx` repeatedly.
 
+!!! tip
+
+    `uvx` is a convenient alias for `uv tool run`. All of the other commands for interacting with
+    tools require the full `uv tool` prefix.
+
 To install `ruff`:
 
 ```console

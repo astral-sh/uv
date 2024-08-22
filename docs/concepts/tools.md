@@ -1,21 +1,28 @@
 # Tools
 
-Tools are Python packages that provide command-line interfaces. Tools can be invoked without
-installation using `uvx`, in which case their dependencies are installed in a temporary virtual
-environment isolated from the current project. Tools can also be installed with `uv tool install`,
-in which case their executables are [available on the `PATH`](#the-path) — an isolated virtual
-environment is still used but it is not treated as disposable.
+Tools are Python packages that provide command-line interfaces.
 
 !!! note
 
     See the [tools guide](../guides/tools.md) for an introduction to working with the tools
     interface — this document discusses details of tool management.
 
+## The `uv tool` interface
+
+uv includes a dedicated interface for interacting with tools. Tools can be invoked without
+installation using `uv tool run`, in which case their dependencies are installed in a temporary
+virtual environment isolated from the current project. Tools can also be installed with
+`uv tool install`, in which case their executables are [available on the `PATH`](#the-path) — an
+isolated virtual environment is still used but it is not treated as disposable.
+
+Because it is very common to run tools without installing them, a `uvx` alias is provided for
+`uv tool run` — the two commands are exactly equivalent. For brevity, the documentation will mostly
+refer to `uvx` instead of `uv tool run`.
+
 ## Tool environments
 
-When running a tool with `uvx` or `uv tool run`, a virtual environment is stored in the uv cache
-directory and is treated as disposable. The environment is cached to reduce the overhead of
-invocations.
+When running a tool with `uvx`, a virtual environment is stored in the uv cache directory and is
+treated as disposable. The environment is cached to reduce the overhead of invocations.
 
 When installing a tool with `uv tool install`, a virtual environment is created in the uv tools
 directory.
@@ -85,13 +92,13 @@ Tool upgrades will reinstall the tool executables, even if they have not changed
 
 ### Including additional dependencies
 
-Additional packages can be included during `uv tool run` (`uvx`) invocations:
+Additional packages can be included during tool execution:
 
 ```console
 $ uvx --with <extra-package> <tool>
 ```
 
-And installations:
+And, during tool installation:
 
 ```console
 $ uv tool install --with <extra-package> <tool-package>
@@ -143,7 +150,7 @@ fail. The `--force` flag can be used to override this behavior.
 
 ## Relationship to `uv run`
 
-The invocation `uv tool run <name>` is nearly equivalent to:
+The invocation `uv tool run <name>` (or `uvx <name>`) is nearly equivalent to:
 
 ```console
 $ uv run --no-project --with <name> -- <name>
@@ -156,4 +163,6 @@ However, there are a couple notable differences when using uv's tool interface:
 - The `--no-project` flag is not needed — tools are always run isolated from the project.
 - If a tool is already installed, `uv tool run` will use the installed version but `uv run` will
   not.
-- The project will be built and installed instead of using an editable installation
+
+If the tool should not be isolated from the project, e.g., when running `pytest` or `mypy`, then
+`uv run` should be used instead of `uv tool run`.
