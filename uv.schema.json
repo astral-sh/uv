@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "cache-dir": {
-      "description": "Path to the cache directory.\n\nDefaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux, and `{FOLDERID_LocalAppData}\\uv\\cache` on Windows.",
+      "description": "Path to the cache directory.\n\nDefaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux, and `%LOCALAPPDATA%\\uv\\cache` on Windows.",
       "type": [
         "string",
         "null"
