@@ -39,10 +39,10 @@ fn help() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python [env: UV_NO_PYTHON_DOWNLOADS=]
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -101,10 +101,10 @@ fn help_flag() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python [env: UV_NO_PYTHON_DOWNLOADS=]
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -162,10 +162,10 @@ fn help_short_flag() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python [env: UV_NO_PYTHON_DOWNLOADS=]
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -274,8 +274,6 @@ fn help_subcommand() {
               By default, uv prefers using Python versions it manages. However, it will use system
               Python installations if a uv-managed Python is not installed. This option allows
               prioritizing or ignoring system Python installations.
-              
-              [env: UV_PYTHON_PREFERENCE=]
 
               Possible values:
               - only-managed: Only use managed Python installations; never use system Python
@@ -287,8 +285,6 @@ fn help_subcommand() {
 
           --no-python-downloads
               Disable automatic downloads of Python
-              
-              [env: UV_NO_PYTHON_DOWNLOADS=]
 
     Global options:
       -q, --quiet
@@ -425,8 +421,6 @@ fn help_subsubcommand() {
               By default, uv prefers using Python versions it manages. However, it will use system
               Python installations if a uv-managed Python is not installed. This option allows
               prioritizing or ignoring system Python installations.
-              
-              [env: UV_PYTHON_PREFERENCE=]
 
               Possible values:
               - only-managed: Only use managed Python installations; never use system Python
@@ -438,8 +432,6 @@ fn help_subsubcommand() {
 
           --no-python-downloads
               Disable automatic downloads of Python
-              
-              [env: UV_NO_PYTHON_DOWNLOADS=]
 
     Global options:
       -q, --quiet
@@ -539,10 +531,10 @@ fn help_flag_subcommand() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python [env: UV_NO_PYTHON_DOWNLOADS=]
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -591,10 +583,10 @@ fn help_flag_subsubcommand() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python [env: UV_NO_PYTHON_DOWNLOADS=]
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -723,10 +715,10 @@ fn help_with_global_option() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python [env: UV_NO_PYTHON_DOWNLOADS=]
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -822,10 +814,10 @@ fn help_with_no_pager() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python [env: UV_NO_PYTHON_DOWNLOADS=]
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
