@@ -177,6 +177,11 @@ $ # Running a `bash` script that requires the project to be available
 $ uv run bash scripts/foo.sh
 ```
 
+!!! tip
+
+    Use the `--no-project` option to avoid reading project files like the `pyproject.toml` and `uv.lock`.
+    `uv run --no-project` will still run commands in the `.venv` in the working directory.
+
 ### Running commands with additional dependencies
 
 Additional dependencies or different versions of dependencies can be requested per invocation.
