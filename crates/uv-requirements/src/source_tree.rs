@@ -161,7 +161,11 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         })?;
 
         // If the path is a `pyproject.toml`, attempt to extract the requirements statically.
-        if let Ok(metadata) = self.database.requires_dist(source_tree).await {
+        if let Ok(metadata) = self
+            .database
+            .requires_dist(source_tree, self.database.main_workspace_root())
+            .await
+        {
             return Ok(metadata);
         }
 

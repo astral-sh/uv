@@ -284,6 +284,8 @@ pub(crate) async fn pip_sync(
         dev,
         source_trees,
         project,
+        // No effect (only used for `uv.lock`).
+        None,
         None,
         &extras,
         preferences,
@@ -320,6 +322,8 @@ pub(crate) async fn pip_sync(
         site_packages,
         Modifications::Exact,
         &reinstall,
+        // Not needed, there's no `uv.lock`.
+        None,
         &build_options,
         link_mode,
         compile,

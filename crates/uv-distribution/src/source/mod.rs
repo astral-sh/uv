@@ -46,6 +46,8 @@ mod revision;
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
+    /// The directory containing `uv.lock`, used to compute relative paths in lockfiles.
+    main_workspace_root: Option<PathBuf>,
     reporter: Option<Arc<dyn Reporter>>,
 }
 
@@ -60,9 +62,10 @@ pub(crate) const METADATA: &str = "metadata.msgpack";
 
 impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].
-    pub(crate) fn new(build_context: &'a T) -> Self {
+    pub(crate) fn new(build_context: &'a T, main_workspace_root: Option<&Path>) -> Self {
         Self {
             build_context,
+            main_workspace_root: main_workspace_root.map(Path::to_path_buf),
             reporter: None,
         }
     }
@@ -420,12 +423,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
-    pub(crate) async fn requires_dist(&self, project_root: &Path) -> Result<RequiresDist, Error> {
+
+    pub(crate) async fn requires_dist(
+        &self,
+        project_root: &Path,
+        main_workspace_root: Option<&Path>,
+    ) -> Result<RequiresDist, Error> {
         let requires_dist = read_requires_dist(project_root).await?;
         let requires_dist = RequiresDist::from_project_maybe_workspace(
             requires_dist,
             project_root,
             project_root,
+            main_workspace_root,
             self.build_context.sources(),
         )
         .await?;
@@ -1010,6 +1019,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     metadata,
                     resource.install_path.as_ref(),
                     resource.lock_path.as_ref(),
+                    self.main_workspace_root(),
                     self.build_context.sources(),
                 )
                 .await?,
@@ -1025,6 +1035,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     metadata,
                     resource.install_path.as_ref(),
                     resource.lock_path.as_ref(),
+                    self.main_workspace_root(),
                     self.build_context.sources(),
                 )
                 .await?,
@@ -1050,6 +1061,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     metadata,
                     resource.install_path.as_ref(),
                     resource.lock_path.as_ref(),
+                    self.main_workspace_root(),
                     self.build_context.sources(),
                 )
                 .await?,
@@ -1082,6 +1094,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 metadata,
                 resource.install_path.as_ref(),
                 resource.lock_path.as_ref(),
+                self.main_workspace_root(),
                 self.build_context.sources(),
             )
             .await?,
@@ -1252,8 +1265,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Self::read_static_metadata(source, fetch.path(), resource.subdirectory).await?
         {
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
-                    .await?,
+                Metadata::from_workspace(
+                    metadata,
+                    &path,
+                    &path,
+                    self.main_workspace_root(),
+                    self.build_context.sources(),
+                )
+                .await?,
             ));
         }
 
@@ -1276,8 +1295,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
-                    Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
-                        .await?,
+                    Metadata::from_workspace(
+                        metadata,
+                        &path,
+                        &path,
+                        self.main_workspace_root(),
+                        self.build_context.sources(),
+                    )
+                    .await?,
                 ));
             }
         }
@@ -1297,8 +1322,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
-                    .await?,
+                Metadata::from_workspace(
+                    metadata,
+                    &path,
+                    &path,
+                    self.main_workspace_root(),
+                    self.build_context.sources(),
+                )
+                .await?,
             ));
         }
 
@@ -1328,6 +1359,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 metadata,
                 fetch.path(),
                 fetch.path(),
+                self.main_workspace_root(),
                 self.build_context.sources(),
             )
             .await?,
@@ -1620,6 +1652,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 reqwest::header::HeaderValue::from_static("identity"),
             )
             .build()
+    }
+
+    /// The directory containing `uv.lock`, used to compute relative paths in lockfiles.
+    pub(crate) fn main_workspace_root(&self) -> Option<&Path> {
+        self.main_workspace_root.as_deref()
     }
 }
 

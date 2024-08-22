@@ -155,7 +155,13 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             &HashStrategy::None,
             self,
             EmptyInstalledPackages,
-            DistributionDatabase::new(self.client, self, self.concurrency.downloads),
+            DistributionDatabase::new(
+                self.client,
+                self,
+                // Not needed, there's no `uv.lock`.
+                None,
+                self.concurrency.downloads,
+            ),
         )?;
         let graph = resolver.resolve().await.with_context(|| {
             format!(
@@ -238,7 +244,13 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 tags,
                 &HashStrategy::None,
                 self.build_options,
-                DistributionDatabase::new(self.client, self, self.concurrency.downloads),
+                DistributionDatabase::new(
+                    self.client,
+                    self,
+                    // Not needed, there's no `uv.lock`.
+                    None,
+                    self.concurrency.downloads,
+                ),
             );
 
             debug!(

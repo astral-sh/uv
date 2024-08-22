@@ -1,3 +1,4 @@
+use std::path::Path;
 use tracing::debug;
 
 use cache_key::{cache_digest, hash_digest};
@@ -31,6 +32,7 @@ impl CachedEnvironment {
         spec: RequirementsSpecification,
         interpreter: Interpreter,
         settings: &ResolverInstallerSettings,
+        main_workspace_root: Option<&Path>,
         state: &SharedState,
         resolve: Box<dyn ResolveLogger>,
         install: Box<dyn InstallLogger>,
@@ -60,6 +62,7 @@ impl CachedEnvironment {
         let graph = resolve_environment(
             &interpreter,
             spec,
+            main_workspace_root,
             settings.as_ref().into(),
             state,
             resolve,

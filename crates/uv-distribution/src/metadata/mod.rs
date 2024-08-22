@@ -60,6 +60,7 @@ impl Metadata {
         metadata: Metadata23,
         install_path: &Path,
         lock_path: &Path,
+        main_workspace_root: Option<&Path>,
         sources: SourceStrategy,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
@@ -76,6 +77,7 @@ impl Metadata {
             },
             install_path,
             lock_path,
+            main_workspace_root,
             sources,
         )
         .await?;

@@ -8,6 +8,7 @@ use pep440_rs::VersionSpecifiers;
 use pep508_rs::{VerbatimUrl, VersionOrUrl};
 use pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
 use thiserror::Error;
+use tracing::trace;
 use url::Url;
 use uv_fs::{relative_to, Simplified};
 use uv_git::GitReference;
@@ -35,6 +36,7 @@ impl LoweredRequirement {
         project_dir: &Path,
         project_sources: &BTreeMap<PackageName, Source>,
         workspace: &Workspace,
+        main_workspace_root: Option<&Path>,
     ) -> Result<Self, LoweringError> {
         let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), Origin::Project)
@@ -106,6 +108,7 @@ impl LoweredRequirement {
                     origin,
                     project_dir,
                     workspace.install_path(),
+                    main_workspace_root,
                     editable.unwrap_or(false),
                 )?
             }
@@ -204,7 +207,15 @@ impl LoweredRequirement {
                 if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                     return Err(LoweringError::ConflictingUrls);
                 }
-                path_source(path, Origin::Project, dir, dir, editable.unwrap_or(false))?
+                path_source(
+                    path,
+                    Origin::Project,
+                    dir,
+                    dir,
+                    // Currently unused, but there's no need to discard this information.
+                    Some(dir),
+                    editable.unwrap_or(false),
+                )?
             }
             Source::Registry { index } => registry_source(&requirement, index)?,
             Source::Workspace { .. } => {
@@ -352,9 +363,16 @@ fn path_source(
     origin: Origin,
     project_dir: &Path,
     workspace_root: &Path,
+    main_workspace_root: Option<&Path>,
     editable: bool,
 ) -> Result<RequirementSource, LoweringError> {
     let path = path.as_ref();
+    trace!(
+        "Adding `{}` with project dir `{}` and workspace dir `{}`",
+        path.display(),
+        project_dir.display(),
+        workspace_root.display(),
+    );
     let base = match origin {
         Origin::Project => project_dir,
         Origin::Workspace => workspace_root,
@@ -365,13 +383,18 @@ fn path_source(
         .absolutize_from(base)
         .map_err(|err| LoweringError::Absolutize(path.to_path_buf(), err))?
         .to_path_buf();
-    let relative_to_workspace = if path.is_relative() {
-        // Relative paths in a project are relative to the project root, but the lockfile is
-        // relative to the workspace root.
-        relative_to(&absolute_path, workspace_root).map_err(LoweringError::RelativeTo)?
+    let relative_to_workspace = if let Some(main_workspace_root) = main_workspace_root {
+        if path.is_relative() {
+            // Relative paths in a project are relative to the project root, but path in `uv.lock`
+            // are relative to the root of the main workspace, which contains the lockfile.
+            relative_to(&absolute_path, main_workspace_root).map_err(LoweringError::RelativeTo)?
+        } else {
+            // If the user gave us an absolute path, we respect that.
+            path.to_path_buf()
+        }
     } else {
-        // If the user gave us an absolute path, we respect that.
-        path.to_path_buf()
+        // If we don't have `uv.lock`, we don't need relative paths for locking.
+        absolute_path.clone()
     };
     let is_dir = if let Ok(metadata) = absolute_path.metadata() {
         metadata.is_dir()

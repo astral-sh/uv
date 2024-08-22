@@ -309,7 +309,12 @@ pub(crate) async fn add(
         requirements,
         &hasher,
         &state.index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+        DistributionDatabase::new(
+            &client,
+            &build_dispatch,
+            Some(target.workspace_root()),
+            concurrency.downloads,
+        ),
     )
     .with_reporter(ResolverReporter::from(printer))
     .resolve()
@@ -670,6 +675,13 @@ impl Target {
         match self {
             Self::Script(_, interpreter) => interpreter,
             Self::Project(_, venv) => venv.interpreter(),
+        }
+    }
+
+    fn workspace_root(&self) -> &Path {
+        match self {
+            Target::Script(script, _) => &script.path,
+            Target::Project(project, _) => project.root(),
         }
     }
 }

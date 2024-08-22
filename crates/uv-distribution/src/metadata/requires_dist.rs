@@ -38,6 +38,7 @@ impl RequiresDist {
         metadata: pypi_types::RequiresDist,
         install_path: &Path,
         lock_path: &Path,
+        main_workspace_root: Option<&Path>,
         sources: SourceStrategy,
     ) -> Result<Self, MetadataError> {
         match sources {
@@ -54,7 +55,7 @@ impl RequiresDist {
                     return Ok(Self::from_metadata23(metadata));
                 };
 
-                Self::from_project_workspace(metadata, &project_workspace)
+                Self::from_project_workspace(metadata, &project_workspace, main_workspace_root)
             }
             SourceStrategy::Disabled => Ok(Self::from_metadata23(metadata)),
         }
@@ -63,6 +64,7 @@ impl RequiresDist {
     fn from_project_workspace(
         metadata: pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
+        main_workspace_root: Option<&Path>,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
@@ -94,6 +96,7 @@ impl RequiresDist {
                         project_workspace.project_root(),
                         sources,
                         project_workspace.workspace(),
+                        main_workspace_root,
                     )
                     .map(LoweredRequirement::into_inner)
                     .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
@@ -117,6 +120,7 @@ impl RequiresDist {
                     project_workspace.project_root(),
                     sources,
                     project_workspace.workspace(),
+                    main_workspace_root,
                 )
                 .map(LoweredRequirement::into_inner)
                 .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
@@ -177,6 +181,7 @@ mod test {
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
+            None,
         )?)
     }
 

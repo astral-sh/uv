@@ -539,6 +539,8 @@ async fn get_or_create_environment(
         spec,
         interpreter,
         settings,
+        // Tools don't have a workspace, they should use absolute paths.
+        None,
         &state,
         if show_resolution {
             Box::new(DefaultResolveLogger)

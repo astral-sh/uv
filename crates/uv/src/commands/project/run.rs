@@ -98,7 +98,7 @@ pub(crate) async fn run(
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
-    let script_interpreter = if let Some(script) = script {
+    let script_interpreter = if let Some(script) = &script {
         writeln!(
             printer.stderr(),
             "Reading inline script metadata from: {}",
@@ -116,9 +116,13 @@ pub(crate) async fn run(
             Some(request)
             // (3) `Requires-Python` in `pyproject.toml`
         } else {
-            script.metadata.requires_python.map(|requires_python| {
-                PythonRequest::Version(VersionRequest::Range(requires_python))
-            })
+            script
+                .metadata
+                .requires_python
+                .as_ref()
+                .map(|requires_python| {
+                    PythonRequest::Version(VersionRequest::Range(requires_python.clone()))
+                })
         };
 
         let client_builder = BaseClientBuilder::new()
@@ -138,7 +142,7 @@ pub(crate) async fn run(
         .into_interpreter();
 
         // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-        if let Some(dependencies) = script.metadata.dependencies {
+        if let Some(dependencies) = &script.metadata.dependencies {
             // // Collect any `tool.uv.sources` from the script.
             let empty = BTreeMap::default();
             let script_sources = script
@@ -151,10 +155,10 @@ pub(crate) async fn run(
             let script_dir = script.path.parent().expect("script path has no parent");
 
             let requirements = dependencies
-                .into_iter()
+                .iter()
                 .map(|requirement| {
                     LoweredRequirement::from_non_workspace_requirement(
-                        requirement,
+                        requirement.clone(),
                         script_dir,
                         script_sources,
                     )
@@ -166,6 +170,8 @@ pub(crate) async fn run(
                 spec,
                 interpreter,
                 &settings,
+                // Currently unused, but there's no reason to discard this information.
+                script.path.parent(),
                 &state,
                 if show_resolution {
                     Box::new(DefaultResolveLogger)
@@ -538,6 +544,8 @@ pub(crate) async fn run(
                     spec,
                     base_interpreter.clone(),
                     &settings,
+                    // Currently unused, but there's no reason to discard this information.
+                    script.as_ref().and_then(|script| script.path.parent()),
                     &state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)

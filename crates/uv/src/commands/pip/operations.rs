@@ -5,7 +5,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::debug;
 
 use distribution_types::{
@@ -92,6 +92,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     dev: Vec<GroupName>,
     source_trees: Vec<PathBuf>,
     mut project: Option<PackageName>,
+    main_workspace_root: Option<&Path>,
     workspace_members: Option<BTreeSet<PackageName>>,
     extras: &ExtrasSpecification,
     preferences: Vec<Preference>,
@@ -120,7 +121,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             requirements,
             hasher,
             index,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+            DistributionDatabase::new(
+                client,
+                build_dispatch,
+                main_workspace_root,
+                concurrency.downloads,
+            ),
         )
         .with_reporter(ResolverReporter::from(printer))
         .resolve()
@@ -133,7 +139,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 extras,
                 hasher,
                 index,
-                DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                DistributionDatabase::new(
+                    client,
+                    build_dispatch,
+                    main_workspace_root,
+                    concurrency.downloads,
+                ),
             )
             .with_reporter(ResolverReporter::from(printer))
             .resolve()
@@ -186,7 +197,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         overrides,
         hasher,
         index,
-        DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+        DistributionDatabase::new(
+            client,
+            build_dispatch,
+            main_workspace_root,
+            concurrency.downloads,
+        ),
     )
     .with_reporter(ResolverReporter::from(printer))
     .resolve()
@@ -211,7 +227,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 &dev,
                 hasher,
                 index,
-                DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                DistributionDatabase::new(
+                    client,
+                    build_dispatch,
+                    main_workspace_root,
+                    concurrency.downloads,
+                ),
             )
             .with_reporter(ResolverReporter::from(printer))
             .resolve(&markers)
@@ -257,7 +278,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             hasher,
             build_dispatch,
             installed_packages,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+            DistributionDatabase::new(
+                client,
+                build_dispatch,
+                main_workspace_root,
+                concurrency.downloads,
+            ),
         )?
         .with_reporter(reporter);
 
@@ -344,6 +370,7 @@ pub(crate) async fn install(
     site_packages: SitePackages,
     modifications: Modifications,
     reinstall: &Reinstall,
+    main_workspace_root: Option<&Path>,
     build_options: &BuildOptions,
     link_mode: LinkMode,
     compile: bool,
@@ -426,7 +453,12 @@ pub(crate) async fn install(
             tags,
             hasher,
             build_options,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+            DistributionDatabase::new(
+                client,
+                build_dispatch,
+                main_workspace_root,
+                concurrency.downloads,
+            ),
         )
         .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
 

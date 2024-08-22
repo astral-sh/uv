@@ -310,6 +310,10 @@ pub(crate) async fn pip_compile(
         BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
     };
 
+    // Currently no effect (only used for `uv.lock`), but there's no reason not to preserve this
+    // information.
+    let main_workspace_root = output_file.and_then(|file| file.parent());
+
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -346,6 +350,7 @@ pub(crate) async fn pip_compile(
         dev,
         source_trees,
         project,
+        main_workspace_root,
         None,
         &extras,
         preferences,

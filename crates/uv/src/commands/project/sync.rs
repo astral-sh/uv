@@ -254,6 +254,7 @@ pub(super) async fn do_sync(
         site_packages,
         modifications,
         reinstall,
+        Some(project.root()),
         build_options,
         link_mode,
         compile_bytecode,

@@ -273,6 +273,8 @@ pub(crate) async fn install(
             environment,
             spec,
             &settings,
+            // Tools don't have a workspace, they should use absolute paths.
+            None,
             &state,
             Box::new(DefaultResolveLogger),
             Box::new(DefaultInstallLogger),
@@ -298,6 +300,8 @@ pub(crate) async fn install(
         let resolution = resolve_environment(
             &interpreter,
             spec,
+            // Tools don't have a workspace, they should use absolute paths.
+            None,
             settings.as_ref().into(),
             &state,
             Box::new(DefaultResolveLogger),

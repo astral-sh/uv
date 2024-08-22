@@ -206,7 +206,7 @@ mod resolver {
             &hashes,
             &build_context,
             installed_packages,
-            DistributionDatabase::new(client, &build_context, concurrency.downloads),
+            DistributionDatabase::new(client, &build_context, None, concurrency.downloads),
         )?;
 
         Ok(resolver.resolve().await?)

@@ -128,6 +128,8 @@ pub(crate) async fn upgrade(
             existing_environment,
             spec,
             &settings,
+            // Tools don't have a workspace, they should use absolute paths.
+            None,
             &state,
             Box::new(SummaryResolveLogger),
             Box::new(UpgradeInstallLogger::new(name.clone())),

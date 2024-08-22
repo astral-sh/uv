@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -64,7 +64,7 @@ pub(crate) enum ProjectError {
     #[error("The requested Python interpreter ({0}) is incompatible with the project Python requirement: `{1}`")]
     RequestedPythonIncompatibility(Version, RequiresPython),
 
-    #[error("The requested Python interpreter ({0}) is incompatible with the project Python requirement: `{1}`. However, a workspace member (`{member}`) supports Python {3}. To install the workspace member on its own, navigate to `{path}`, then run `{venv}` followed by `{install}`.", member = _2.cyan(), venv = format!("uv venv --python {_0}").green(), install = "uv pip install -e .".green(), path = _4.user_display().cyan() )]
+    #[error("The requested Python interpreter ({0}) is incompatible with the project Python requirement: `{1}`. However, a workspace member (`{member}`) supports Python {3}. To install the workspace member on its own, navigate to `{path}`, then run `{venv}` followed by `{install}`.", member = _2.cyan(), venv = format!("uv venv --python {_0}").green(), install = "uv pip install -e .".green(), path = _4.user_display().cyan())]
     RequestedMemberPythonIncompatibility(
         Version,
         RequiresPython,
@@ -484,7 +484,13 @@ pub(crate) async fn resolve_names(
         requirements,
         &hasher,
         &state.index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+        DistributionDatabase::new(
+            &client,
+            &build_dispatch,
+            // Not needed, there's no `uv.lock`.
+            None,
+            concurrency.downloads,
+        ),
     )
     .with_reporter(ResolverReporter::from(printer));
 
@@ -495,6 +501,7 @@ pub(crate) async fn resolve_names(
 pub(crate) async fn resolve_environment<'a>(
     interpreter: &Interpreter,
     spec: RequirementsSpecification,
+    main_workspace_root: Option<&Path>,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
@@ -621,6 +628,7 @@ pub(crate) async fn resolve_environment<'a>(
         dev,
         source_trees,
         project,
+        main_workspace_root,
         None,
         &extras,
         preferences,
@@ -740,6 +748,8 @@ pub(crate) async fn sync_environment(
         site_packages,
         Modifications::Exact,
         reinstall,
+        // Not needed, there's no `uv.lock`.
+        None,
         build_options,
         link_mode,
         compile_bytecode,
@@ -785,6 +795,7 @@ pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
     settings: &ResolverInstallerSettings,
+    main_workspace_root: Option<&Path>,
     state: &SharedState,
     resolve: Box<dyn ResolveLogger>,
     install: Box<dyn InstallLogger>,
@@ -934,6 +945,7 @@ pub(crate) async fn update_environment(
         dev,
         source_trees,
         project,
+        main_workspace_root,
         None,
         &extras,
         preferences,
@@ -965,6 +977,7 @@ pub(crate) async fn update_environment(
         site_packages,
         Modifications::Exact,
         reinstall,
+        main_workspace_root,
         build_options,
         *link_mode,
         *compile_bytecode,

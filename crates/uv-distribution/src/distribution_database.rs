@@ -59,11 +59,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub fn new(
         client: &'a RegistryClient,
         build_context: &'a Context,
+        main_workspace_root: Option<&Path>,
         concurrent_downloads: usize,
     ) -> Self {
         Self {
             build_context,
-            builder: SourceDistributionBuilder::new(build_context),
+            builder: SourceDistributionBuilder::new(build_context, main_workspace_root),
             locks: Rc::new(Locks::default()),
             client: ManagedClient::new(client, concurrent_downloads),
             reporter: None,
@@ -79,6 +80,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             builder: self.builder.with_reporter(reporter),
             ..self
         }
+    }
+
+    /// The directory containing `uv.lock`, used to compute relative paths in lockfiles.
+    pub fn main_workspace_root(&self) -> Option<&Path> {
+        self.builder.main_workspace_root()
     }
 
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
@@ -495,8 +501,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
-    pub async fn requires_dist(&self, project_root: &Path) -> Result<RequiresDist, Error> {
-        self.builder.requires_dist(project_root).await
+    pub async fn requires_dist(
+        &self,
+        project_root: &Path,
+        main_workspace_root: Option<&Path>,
+    ) -> Result<RequiresDist, Error> {
+        self.builder
+            .requires_dist(project_root, main_workspace_root)
+            .await
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.

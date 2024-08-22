@@ -336,6 +336,8 @@ pub(crate) async fn pip_install(
         dev,
         source_trees,
         project,
+        // Not needed, there's no `uv.lock`.
+        None,
         None,
         extras,
         preferences,
@@ -372,6 +374,8 @@ pub(crate) async fn pip_install(
         site_packages,
         Modifications::Sufficient,
         &reinstall,
+        // Not needed, there's no `uv.lock`.
+        None,
         &build_options,
         link_mode,
         compile,

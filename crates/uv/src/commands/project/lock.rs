@@ -400,7 +400,13 @@ async fn do_lock(
         concurrency,
     );
 
-    let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
+    let database = DistributionDatabase::new(
+        &client,
+        &build_dispatch,
+        // We want to compute paths relative to `uv.lock`, so we need its absolute location.
+        Some(workspace.install_path()),
+        concurrency.downloads,
+    );
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
@@ -496,6 +502,8 @@ async fn do_lock(
                 dev,
                 source_trees,
                 None,
+                // We want to compute paths relative to `uv.lock`, so we need its absolute location.
+                Some(workspace.install_path()),
                 Some(workspace.packages().keys().cloned().collect()),
                 &extras,
                 preferences,
