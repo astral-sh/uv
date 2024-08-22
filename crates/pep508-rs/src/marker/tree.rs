@@ -1788,8 +1788,8 @@ mod test {
         testing_logger::validate(|captured_logs| {
             assert_eq!(
                 captured_logs[0].body,
-                "Expected PEP 440 version to compare with python_version, found '3.9.', \
-                 will evaluate to false: after parsing '3.9', found '.', which is \
+                "Expected PEP 440 version to compare with python_version, found `3.9.`, \
+                 will evaluate to false: after parsing `3.9`, found `.`, which is \
                  not part of a valid version"
             );
             assert_eq!(captured_logs[0].level, log::Level::Warn);

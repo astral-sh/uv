@@ -604,7 +604,7 @@ fn parse_name<T: Pep508Url>(cursor: &mut Cursor) -> Result<PackageName, Pep508Er
             } else {
                 Err(Pep508Error {
                     message: Pep508ErrorSource::String(format!(
-                        "Expected package name starting with an alphanumeric character, found '{char}'"
+                        "Expected package name starting with an alphanumeric character, found `{char}`"
                     )),
                     start: index,
                     len: char.len_utf8(),
@@ -707,7 +707,7 @@ fn parse_extras_cursor<T: Pep508Url>(
             (Some((pos, ',')), true) => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(
-                        "Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','".to_string()
+                        "Expected either alphanumerical character (starting the extra name) or `]` (ending the extras section), found `,`".to_string()
                     ),
                     start: pos,
                     len: 1,
@@ -721,7 +721,7 @@ fn parse_extras_cursor<T: Pep508Url>(
             (Some((pos, other)), false) => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(
-                        format!("Expected either ',' (separating extras) or ']' (ending the extras section), found '{other}'")
+                        format!("Expected either `,` (separating extras) or `]` (ending the extras section), found `{other}`")
                     ),
                     start: pos,
                     len: 1,
@@ -753,7 +753,7 @@ fn parse_extras_cursor<T: Pep508Url>(
             Some((pos, other)) => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(format!(
-                        "Expected an alphanumeric character starting the extra name, found '{other}'"
+                        "Expected an alphanumeric character starting the extra name, found `{other}`"
                     )),
                     start: pos,
                     len: other.len_utf8(),
@@ -773,7 +773,7 @@ fn parse_extras_cursor<T: Pep508Url>(
             Some((pos, char)) if char != ',' && char != ']' && !char.is_whitespace() => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(format!(
-                        "Invalid character in extras name, expected an alphanumeric character, '-', '_', '.', ',' or ']', found '{char}'"
+                        "Invalid character in extras name, expected an alphanumeric character, `-`, `_`, `.`, `,` or `]`, found `{char}`"
                     )),
                     start: pos,
                     len: char.len_utf8(),
@@ -1045,9 +1045,9 @@ fn parse_pep508_requirement<T: Pep508Url>(
             }
         }
         let message = if marker.is_none() {
-            format!(r#"Expected end of input or ';', found '{char}'"#)
+            format!(r#"Expected end of input or `;`, found `{char}`"#)
         } else {
-            format!(r#"Expected end of input, found '{char}'"#)
+            format!(r#"Expected end of input, found `{char}`"#)
         };
         return Err(Pep508Error {
             message: Pep508ErrorSource::String(message),
@@ -1154,7 +1154,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("_name"),
             @"
-            Expected package name starting with an alphanumeric character, found '_'
+            Expected package name starting with an alphanumeric character, found `_`
             _name
             ^"
         );
@@ -1309,7 +1309,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("black[ö]"),
             @"
-            Expected an alphanumeric character starting the extra name, found 'ö'
+            Expected an alphanumeric character starting the extra name, found `ö`
             black[ö]
                   ^"
         );
@@ -1320,7 +1320,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("black[_d]"),
             @"
-            Expected an alphanumeric character starting the extra name, found '_'
+            Expected an alphanumeric character starting the extra name, found `_`
             black[_d]
                   ^"
         );
@@ -1331,7 +1331,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("black[,]"),
             @"
-            Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','
+            Expected either alphanumerical character (starting the extra name) or `]` (ending the extras section), found `,`
             black[,]
                   ^"
         );
@@ -1342,7 +1342,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("black[jüpyter]"),
             @"
-            Invalid character in extras name, expected an alphanumeric character, '-', '_', '.', ',' or ']', found 'ü'
+            Invalid character in extras name, expected an alphanumeric character, `-`, `_`, `.`, `,` or `]`, found `ü`
             black[jüpyter]
                    ^"
         );
@@ -1383,7 +1383,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("black[d,]"),
             @"
-            Expected an alphanumeric character starting the extra name, found ']'
+            Expected an alphanumeric character starting the extra name, found `]`
             black[d,]
                     ^"
         );
@@ -1489,9 +1489,10 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err(r"numpy; sys_platform"),
             @"
-                Expected a valid marker operator (such as '>=' or 'not in'), found ''
-                numpy; sys_platform
-                                   ^"
+            Expected a valid marker operator (such as `>=` or `not in`), found ``
+            numpy; sys_platform
+                               ^
+            "
         );
     }
 
@@ -1555,7 +1556,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err(r"==0.0"),
             @r"
-        Expected package name starting with an alphanumeric character, found '='
+        Expected package name starting with an alphanumeric character, found `=`
         ==0.0
         ^
         "
@@ -1590,7 +1591,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err(r"name[bar baz]"),
             @"
-            Expected either ',' (separating extras) or ']' (ending the extras section), found 'b'
+            Expected either `,` (separating extras) or `]` (ending the extras section), found `b`
             name[bar baz]
                      ^"
         );
@@ -1601,7 +1602,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err(r"name[bar, baz,]"),
             @"
-            Expected an alphanumeric character starting the extra name, found ']'
+            Expected an alphanumeric character starting the extra name, found `]`
             name[bar, baz,]
                           ^"
         );
@@ -1612,7 +1613,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err(r"name[bar, baz >= 1.0"),
             @"
-            Expected either ',' (separating extras) or ']' (ending the extras section), found '>'
+            Expected either `,` (separating extras) or `]` (ending the extras section), found `>`
             name[bar, baz >= 1.0
                           ^"
         );
@@ -1645,7 +1646,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err(r"name; invalid_name"),
             @"
-            Expected a quoted string or a valid marker name, found 'invalid_name'
+            Expected a quoted string or a valid marker name, found `invalid_name`
             name; invalid_name
                   ^^^^^^^^^^^^
             "
@@ -1657,7 +1658,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("name; '3.7' <= invalid_name"),
             @"
-            Expected a quoted string or a valid marker name, found 'invalid_name'
+            Expected a quoted string or a valid marker name, found `invalid_name`
             name; '3.7' <= invalid_name
                            ^^^^^^^^^^^^
             "
@@ -1669,7 +1670,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("name; '3.7' notin python_version"),
             @"
-            Expected a valid marker operator (such as '>=' or 'not in'), found 'notin'
+            Expected a valid marker operator (such as `>=` or `not in`), found `notin`
             name; '3.7' notin python_version
                         ^^^^^"
         );
@@ -1680,7 +1681,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("name; python_version == 3.10"),
             @"
-            Expected a quoted string or a valid marker name, found '3.10'
+            Expected a quoted string or a valid marker name, found `3.10`
             name; python_version == 3.10
                                     ^^^^
             "
@@ -1692,7 +1693,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("name; '3.6'inpython_version"),
             @"
-            Expected a valid marker operator (such as '>=' or 'not in'), found 'inpython_version'
+            Expected a valid marker operator (such as `>=` or `not in`), found `inpython_version`
             name; '3.6'inpython_version
                        ^^^^^^^^^^^^^^^^"
         );
@@ -1703,7 +1704,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("name; '3.7' not python_version"),
             @"
-            Expected 'i', found 'p'
+            Expected `i`, found `p`
             name; '3.7' not python_version
                             ^"
         );
@@ -1714,7 +1715,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("name; '3.7' ~ python_version"),
             @"
-            Expected a valid marker operator (such as '>=' or 'not in'), found '~'
+            Expected a valid marker operator (such as `>=` or `not in`), found `~`
             name; '3.7' ~ python_version
                         ^"
         );
@@ -1725,7 +1726,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("name==1.0.org1"),
             @r###"
-        after parsing '1.0', found '.org1', which is not part of a valid version
+        after parsing `1.0`, found `.org1`, which is not part of a valid version
         name==1.0.org1
             ^^^^^^^^^^
         "###
@@ -1771,7 +1772,7 @@ mod tests {
         assert_snapshot!(
             parse_unnamed_err("/foo-3.0.0-py3-none-any.whl[d,]"),
             @r###"
-        Expected an alphanumeric character starting the extra name, found ']'
+        Expected an alphanumeric character starting the extra name, found `]`
         /foo-3.0.0-py3-none-any.whl[d,]
                                       ^
         "###
@@ -1842,7 +1843,7 @@ mod tests {
             assert_eq!(url.fragment(), Some("hash=somehash"));
             assert!(
                 url.path().ends_with("/Users/ferris/wheel-0.42.0.whl"),
-                "Expected the path to end with '/Users/ferris/wheel-0.42.0.whl', found '{}'",
+                "Expected the path to end with `/Users/ferris/wheel-0.42.0.whl`, found `{}`",
                 url.path()
             );
         }

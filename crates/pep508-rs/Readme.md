@@ -73,6 +73,6 @@ from pep508_rs import Requirement, MarkerEnvironment
 env = MarkerEnvironment.current()
 Requirement("numpy; python_version >= '3.9.'").evaluate_markers(env, [])
 # This will log:
-# "Expected PEP 440 version to compare with python_version, found '3.9.', "
+# "Expected PEP 440 version to compare with python_version, found `3.9.`, "
 # "evaluating to false: Version `3.9.` doesn't match PEP 440 rules"
 ```

@@ -1187,7 +1187,7 @@ fn compile_python_invalid_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '3.7.x' for '--python-version <PYTHON_VERSION>': Python version `3.7.x` could not be parsed: after parsing '3.7', found '.x', which is not part of a valid version
+    error: invalid value '3.7.x' for '--python-version <PYTHON_VERSION>': Python version `3.7.x` could not be parsed: after parsing `3.7`, found `.x`, which is not part of a valid version
 
     For more information, try '--help'.
     "###
@@ -3658,7 +3658,7 @@ fn error_missing_unnamed_env_var() -> Result<()> {
 
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.in` at position 0
-      Caused by: Expected package name starting with an alphanumeric character, found '$'
+      Caused by: Expected package name starting with an alphanumeric character, found `$`
     ${URL}
     ^
     "###
@@ -11881,7 +11881,7 @@ fn invalid_extra() -> Result<()> {
 
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.in` at position 0
-      Caused by: Expected an alphanumeric character starting the extra name, found '_'
+      Caused by: Expected an alphanumeric character starting the extra name, found `_`
     .[_anyio]
       ^
     "###);

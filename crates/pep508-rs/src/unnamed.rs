@@ -188,9 +188,9 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
             }
         }
         let message = if marker.is_none() {
-            format!(r#"Expected end of input or ';', found '{char}'"#)
+            format!(r#"Expected end of input or `;`, found `{char}`"#)
         } else {
-            format!(r#"Expected end of input, found '{char}'"#)
+            format!(r#"Expected end of input, found `{char}`"#)
         };
         return Err(Pep508Error {
             message: Pep508ErrorSource::String(message),

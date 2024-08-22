@@ -43,7 +43,7 @@ fn parse_marker_operator<T: Pep508Url>(
             Some((pos, other)) => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(format!(
-                        "Expected whitespace after 'not', found '{other}'"
+                        "Expected whitespace after `not`, found `{other}`"
                     )),
                     start: pos,
                     len: other.len_utf8(),
@@ -58,7 +58,7 @@ fn parse_marker_operator<T: Pep508Url>(
     }
     MarkerOperator::from_str(operator).map_err(|_| Pep508Error {
         message: Pep508ErrorSource::String(format!(
-            "Expected a valid marker operator (such as '>=' or 'not in'), found '{operator}'"
+            "Expected a valid marker operator (such as `>=` or `not in`), found `{operator}`"
         )),
         start,
         len,
@@ -103,7 +103,7 @@ pub(crate) fn parse_marker_value<T: Pep508Url>(
             let key = cursor.slice(start, len);
             MarkerValue::from_str(key).map_err(|_| Pep508Error {
                 message: Pep508ErrorSource::String(format!(
-                    "Expected a quoted string or a valid marker name, found '{key}'"
+                    "Expected a quoted string or a valid marker name, found `{key}`"
                 )),
                 start,
                 len,
@@ -343,8 +343,8 @@ fn parse_version_expr(
         reporter.report(
             MarkerWarningKind::Pep440Error,
             format!(
-                "Expected PEP 440 version operator to compare {key} with '{version}',
-                    found '{marker_operator}', will be ignored",
+                "Expected PEP 440 version operator to compare {key} with `{version}`,
+                    found `{marker_operator}`, will be ignored",
                 version = pattern.version()
             ),
         );
@@ -398,8 +398,8 @@ fn parse_inverted_version_expr(
         reporter.report(
             MarkerWarningKind::Pep440Error,
             format!(
-                "Expected PEP 440 version operator to compare {key} with '{version}',
-                    found '{marker_operator}', will be ignored"
+                "Expected PEP 440 version operator to compare {key} with `{version}`,
+                    found `{marker_operator}`, will be ignored"
             ),
         );
 
