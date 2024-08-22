@@ -74,14 +74,24 @@ pub(crate) async fn self_update(printer: Printer) -> Result<ExitStatus> {
     // available version of uv.
     match updater.run().await {
         Ok(Some(result)) => {
+            let version_information = if result.old_version.is_some() {
+                format!(
+                    "from {} to {}",
+                    format!("v{}", result.old_version.unwrap()).bold().white(),
+                    format!("v{}", result.new_version).bold().white(),
+                )
+            } else {
+                format!("to {}", format!("v{}", result.new_version).bold().white())
+            };
+
             writeln!(
                 printer.stderr(),
                 "{}",
                 format_args!(
-                    "{}{} Upgraded uv to {}! {}",
+                    "{}{} Upgraded uv {}! {}",
                     "success".green().bold(),
                     ":".bold(),
-                    format!("v{}", result.new_version).bold().white(),
+                    version_information,
                     format!(
                         "https://github.com/astral-sh/uv/releases/tag/{}",
                         result.new_version_tag
