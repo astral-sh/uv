@@ -32,5 +32,5 @@ option:
 
 ## Dependabot
 
-Support for uv  is not yet available. Progress can be tracked at
+Support for uv is not yet available. Progress can be tracked at
 [dependabot/dependabot-core#10039](https://github.com/dependabot/dependabot-core/issues/10039).
