@@ -722,6 +722,8 @@ enum RunCommand {
     Python(Vec<OsString>),
     /// Execute a `python` script.
     PythonScript(PathBuf, Vec<OsString>),
+    /// Execute a `pythonw` script (Windows only).
+    PythonGuiScript(PathBuf, Vec<OsString>),
     /// Execute an external command.
     External(OsString, Vec<OsString>),
     /// Execute an empty command (in practice, `python` with no arguments).
@@ -734,6 +736,7 @@ impl RunCommand {
         match self {
             Self::Python(_) => Cow::Borrowed("python"),
             Self::PythonScript(_, _) | Self::Empty => Cow::Borrowed("python"),
+            Self::PythonGuiScript(_, _) => Cow::Borrowed("pythonw"),
             Self::External(executable, _) => executable.to_string_lossy(),
         }
     }
@@ -748,6 +751,25 @@ impl RunCommand {
             }
             Self::PythonScript(target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
+                process.arg(target);
+                process.args(args);
+                process
+            }
+            Self::PythonGuiScript(target, args) => {
+                let python_executable = interpreter.sys_executable();
+
+                // Use `pythonw.exe` if it exists, otherwise fall back to `python.exe`.
+                // See `install-wheel-rs::get_script_executable`.gd
+                let pythonw_executable = python_executable
+                    .file_name()
+                    .map(|name| {
+                        let new_name = name.to_string_lossy().replace("python", "pythonw");
+                        python_executable.with_file_name(new_name)
+                    })
+                    .filter(|path| path.is_file())
+                    .unwrap_or_else(|| python_executable.to_path_buf());
+
+                let mut process = Command::new(&pythonw_executable);
                 process.arg(target);
                 process.args(args);
                 process
@@ -774,6 +796,13 @@ impl std::fmt::Display for RunCommand {
             }
             Self::PythonScript(target, args) => {
                 write!(f, "python {}", target.display())?;
+                for arg in args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                Ok(())
+            }
+            Self::PythonGuiScript(target, args) => {
+                write!(f, "pythonw {}", target.display())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
                 }
@@ -811,6 +840,13 @@ impl From<&ExternalCommand> for RunCommand {
             && target_path.exists()
         {
             Self::PythonScript(target_path, args.to_vec())
+        } else if cfg!(windows)
+            && target_path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
+            && target_path.exists()
+        {
+            Self::PythonGuiScript(target_path, args.to_vec())
         } else {
             Self::External(
                 target.clone(),
