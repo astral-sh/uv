@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use pep508_rs::MarkerTree;
+use tracing::debug;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -30,6 +31,7 @@ pub(crate) async fn sync(
     package: Option<PackageName>,
     extras: ExtrasSpecification,
     dev: bool,
+    no_locals: bool,
     modifications: Modifications,
     python: Option<String>,
     python_preference: PythonPreference,
@@ -102,6 +104,7 @@ pub(crate) async fn sync(
         &lock,
         &extras,
         dev,
+        no_locals,
         modifications,
         settings.as_ref().into(),
         &state,
@@ -124,6 +127,7 @@ pub(super) async fn do_sync(
     lock: &Lock,
     extras: &ExtrasSpecification,
     dev: bool,
+    no_locals: bool,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
@@ -186,6 +190,20 @@ pub(super) async fn do_sync(
 
     // Read the lockfile.
     let resolution = lock.to_resolution(project, markers, tags, extras, &dev)?;
+
+    // If `--no-locals` is set, remove any local dependencies.
+    let resolution = if no_locals {
+        let before = resolution.len();
+        let resolution = resolution.filter(|dist| !dist.is_local());
+        let after = resolution.len();
+        debug!(
+            "Removed {} local dependencies due to `--no-locals`",
+            after - before
+        );
+        resolution
+    } else {
+        resolution
+    };
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {

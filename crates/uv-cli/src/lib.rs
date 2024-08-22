@@ -2273,6 +2273,16 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("inexact"), hide = true)]
     pub exact: bool,
 
+    /// Avoid syncing any local packages, including the current project and any workspace members
+    /// or path dependencies in the lockfile.
+    ///
+    /// This is useful for priming an environment with remote dependencies, without relying on any
+    /// local or mutable sources. For example, `uv sync --no-locals` could be used in a Docker image
+    /// to create a highly cacheable intermediate layer prior to installing local packages, which
+    /// change frequently.
+    #[arg(long)]
+    pub no_locals: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or

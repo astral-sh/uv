@@ -70,6 +70,28 @@ impl Resolution {
     pub fn diagnostics(&self) -> &[ResolutionDiagnostic] {
         &self.diagnostics
     }
+
+    /// Filter the resolution to only include packages that match the given predicate.
+    pub fn filter(&self, predicate: impl Fn(&ResolvedDist) -> bool) -> Self {
+        let packages = self
+            .packages
+            .iter()
+            .filter(|(_, dist)| predicate(dist))
+            .map(|(name, dist)| (name.clone(), dist.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let hashes = self
+            .hashes
+            .iter()
+            .filter(|(name, _)| packages.contains_key(name))
+            .map(|(name, hashes)| (name.clone(), hashes.clone()))
+            .collect();
+        let diagnostics = self.diagnostics.clone();
+        Self {
+            packages,
+            hashes,
+            diagnostics,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Hash)]

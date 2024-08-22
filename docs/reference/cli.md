@@ -1170,6 +1170,10 @@ uv sync [OPTIONS]
 
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
+</dd><dt><code>--no-locals</code></dt><dd><p>Avoid syncing any local packages, including the current project and any workspace members or path dependencies in the lockfile.</p>
+
+<p>This is useful for priming an environment with remote dependencies, without relying on any local or mutable sources. For example, <code>uv sync --no-locals</code> could be used in a Docker image to create a highly cacheable intermediate layer prior to installing local packages, which change frequently.</p>
+
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>

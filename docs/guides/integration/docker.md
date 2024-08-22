@@ -59,8 +59,8 @@ If you're using uv to manage your project, you can copy it into the image and in
 ADD . /app
 WORKDIR /app
 
-# Sync the project into a new environment
-RUN uv sync
+# Sync the project into a new environment, using the frozen lockfile
+RUN uv sync --frozen
 ```
 
 Once the project is installed, you can either _activate_ the virtual environment:
@@ -169,3 +169,33 @@ ENV UV_CACHE_DIR=/opt/uv-cache/
 ```
 
 If not mounting the cache, image size can be reduced with `--no-cache` flag.
+
+### Intermediate layers
+
+If you're using uv to manage your project, you can improve build times by moving your transitive
+dependency installation into its own layer via `uv sync --no-locals`.
+
+`uv sync --no-locals` will install all remote dependencies, but ignore any local dependencies,
+including the project itself. Since remote dependencies are typically immutable (whereas local
+dependencies change frequently), installing remote dependencies upfront can be a significant time
+saver.
+
+```dockerfile title="Dockerfile"
+# Install uv
+FROM python:3.12-slim-bullseye
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Copy the lockfile into the image
+ADD uv.lock /app/uv.lock
+
+# Install remote dependencies
+WORKDIR /app
+RUN uv sync --frozen --no-locals
+
+# Copy the project into the image
+ADD . /app
+WORKDIR /app
+
+# Sync the remaining dependencies
+RUN uv sync --frozen
+```
