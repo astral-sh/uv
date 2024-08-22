@@ -34,9 +34,9 @@ drawbacks:
    behavior, and many users may _not_ expect uv to read configuration files intended for other
    tools.
 
-Instead, uv supports its own environment variables, like `UV_INDEX_URL`. uv also
-supports persistent configuration in a `uv.toml` file or a `[tool.uv.pip]` section of `pyproject.toml`.
-For more information, see [Configuration files](../configuration/files.md).
+Instead, uv supports its own environment variables, like `UV_INDEX_URL`. uv also supports persistent
+configuration in a `uv.toml` file or a `[tool.uv.pip]` section of `pyproject.toml`. For more
+information, see [Configuration files](../configuration/files.md).
 
 ## Pre-release compatibility
 
