@@ -421,7 +421,7 @@ pub enum CacheCommand {
     ///
     ///
     /// By default, the cache is stored in  `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
-    /// `{FOLDERID_LocalAppData}\uv\cache` on Windows.
+    /// `%LOCALAPPDATA%\uv\cache` on Windows.
     ///
     /// When `--no-cache` is used, the cache is stored in a temporary directory and discarded when
     /// the process exits.

@@ -92,7 +92,7 @@ uv determines the cache directory according to, in order:
 2. The specific cache directory specified via `--cache-dir`, `UV_CACHE_DIR`, or
    [`tool.uv.cache-dir`](../reference/settings.md#cache-dir).
 3. A system-appropriate cache directory, e.g., `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
-   `{FOLDERID_LocalAppData}\uv\cache` on Windows
+   `%LOCALAPPDATA%\uv\cache` on Windows
 
 !!! note
 
@@ -104,4 +104,4 @@ uv determines the cache directory according to, in order:
 
 It is important for performance for the cache directory to be located on the same file system as the
 Python environment uv is operating on. Otherwise, uv will not be able to link files from the cache
-into the environment and will instead need to fallback to slow copy operations.
+into the environment and you will instead need to use copy mode with slow operations.
