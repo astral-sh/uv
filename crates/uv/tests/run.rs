@@ -356,6 +356,46 @@ fn run_pep723_script() -> Result<()> {
     Ok(())
 }
 
+/// Run a `.pyw` script. The script should be executed with `pythonw.exe`.
+#[test]
+#[cfg(windows)]
+fn run_pythonw_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.pyw");
+    test_script.write_str(indoc! { r"
+        import anyio
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.pyw"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
 /// Run a PEP 723-compatible script with `tool.uv` metadata.
 #[test]
 fn run_pep723_script_metadata() -> Result<()> {
