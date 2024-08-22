@@ -56,9 +56,9 @@ use pep440_rs::{Version, VersionSpecifier};
 use pubgrub::Range;
 use rustc_hash::FxHashMap;
 use std::sync::LazyLock;
-use uv_normalize::ExtraName;
 use uv_pubgrub::PubGrubSpecifier;
 
+use crate::marker::MarkerValueExtra;
 use crate::ExtraOperator;
 use crate::{MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion};
 
@@ -446,7 +446,7 @@ pub(crate) enum Variable {
     ///
     /// We keep extras at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
-    Extra(ExtraName),
+    Extra(MarkerValueExtra),
 }
 
 /// A decision node in an Algebraic Decision Diagram.

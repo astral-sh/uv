@@ -4,6 +4,7 @@ use pep440_rs::{Version, VersionPattern, VersionSpecifier};
 use uv_normalize::ExtraName;
 
 use crate::cursor::Cursor;
+use crate::marker::MarkerValueExtra;
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueVersion,
     MarkerWarningKind, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
@@ -427,14 +428,13 @@ fn parse_extra_expr(
     reporter: &mut impl Reporter,
 ) -> Option<MarkerExpression> {
     let name = match ExtraName::from_str(value) {
-        Ok(name) => name,
+        Ok(name) => MarkerValueExtra::Extra(name),
         Err(err) => {
             reporter.report(
                 MarkerWarningKind::ExtraInvalidComparison,
-                format!("Expected extra name, found '{value}', will be ignored: {err}"),
+                format!("Expected extra name (found `{value}`): {err}"),
             );
-
-            return None;
+            MarkerValueExtra::Arbitrary(value.to_string())
         }
     };
 
