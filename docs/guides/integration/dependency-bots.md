@@ -4,8 +4,16 @@
 
 uv is supported by [Renovate](https://github.com/renovatebot/renovate).
 
-With `lockFileMaintenance` enabled, Renovate will automatically detect `uv.lock` and suggest updates
-to `uv.lock` files.
+Renovate will detect the presence of `uv.lock` file to determine that uv is used for managing
+dependencies, and will suggest updates to
+both [project dependencies](../../concepts/dependencies.md#project-dependencies), [optional dependencies](../../concepts/dependencies.md#optional-dependencies)
+and [development dependencies](../../concepts/dependencies.md#development-dependencies), updating
+`uv.lock` file along the way.
+
+It is also possible to refresh `uv.lock` file on a regular basis (for instance to update transitive
+dependencies) by
+enabling [`lockFileMaintenance`](https://docs.renovatebot.com/configuration-options/#lockfilemaintenance)
+option:
 
 ```json5 title="renovate.json5"
 {
@@ -14,7 +22,6 @@ to `uv.lock` files.
     enabled: true,
   },
 }
-```
 
 !!! note
 
