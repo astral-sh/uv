@@ -4,15 +4,16 @@
 
 uv is supported by [Renovate](https://github.com/renovatebot/renovate).
 
-Renovate will detect the presence of `uv.lock` file to determine that uv is used for managing
-dependencies, and will suggest updates to
-both [project dependencies](../../concepts/dependencies.md#project-dependencies), [optional dependencies](../../concepts/dependencies.md#optional-dependencies)
-and [development dependencies](../../concepts/dependencies.md#development-dependencies), updating
-`uv.lock` file along the way.
+Renovate uses the presence of a `uv.lock` file to determine that uv is used for managing
+dependencies, and will suggest upgrades to
+[project dependencies](../../concepts/dependencies.md#project-dependencies),
+[optional dependencies](../../concepts/dependencies.md#optional-dependencies) and
+[development dependencies](../../concepts/dependencies.md#development-dependencies). Renovate will
+update both the `pyproject.toml` and `uv.lock` files.
 
-It is also possible to refresh `uv.lock` file on a regular basis (for instance to update transitive
-dependencies) by
-enabling [`lockFileMaintenance`](https://docs.renovatebot.com/configuration-options/#lockfilemaintenance)
+The lockfile on also be refreshed on a regular basis (for instance to update transitive
+dependencies) by enabling the
+[`lockFileMaintenance`](https://docs.renovatebot.com/configuration-options/#lockfilemaintenance)
 option:
 
 ```json5 title="renovate.json5"
@@ -22,11 +23,14 @@ option:
     enabled: true,
   },
 }
+```
 
 !!! note
 
     `uv pip compile` outputs such as `requirements.txt` are not yet supported by Renovate.
+    Progress can be tracked at [renovatebot/renovate#30909](https://github.com/renovatebot/renovate/issues/30909).
 
 ## Dependabot
 
-Support for uv is [in progress](https://github.com/dependabot/dependabot-core/issues/10039).
+Support for uv  is not yet available. Progress can be tracked at
+[dependabot/dependabot-core#10039](https://github.com/dependabot/dependabot-core/issues/10039).
