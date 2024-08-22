@@ -426,7 +426,7 @@ impl RegistryClient {
                             WheelLocation::Url(url)
                         }
                     }
-                    FileLocation::Path(path) => WheelLocation::Path(path.clone()),
+                    FileLocation::Path { install_path, lock_path: _ } => WheelLocation::Path(install_path.clone()),
                 };
 
                 match location {

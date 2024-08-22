@@ -1343,6 +1343,8 @@ impl Package {
                     return Ok(None);
                 };
 
+
+
                 let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
@@ -2237,15 +2239,28 @@ impl SourceDist {
             return Ok(None);
         }
 
-        let url = normalize_file_location(&reg_dist.file.url)
-            .map_err(LockErrorKind::InvalidFileUrl)
-            .map_err(LockError::from)?;
-        let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
-        let size = reg_dist.file.size;
-        Ok(Some(SourceDist::Url {
-            url,
-            metadata: SourceDistMetadata { hash, size },
-        }))
+        match &reg_dist.file.url {
+            FileLocation::RelativeUrl(_, _) | FileLocation::AbsoluteUrl(_) => {
+                let url = normalize_file_location(&reg_dist.file.url)
+                    .map_err(LockErrorKind::InvalidFileUrl)
+                    .map_err(LockError::from)?;
+                let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
+                let size = reg_dist.file.size;
+                Ok(Some(SourceDist::Url {
+                    url,
+                    metadata: SourceDistMetadata { hash, size },
+                }))
+            }
+            FileLocation::Path { install_path: _, lock_path  } => {
+                let path = lock_path.simplified().to_path_buf();
+                let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
+                let size = reg_dist.file.size;
+                Ok(Some(SourceDist::Path {
+                    path,
+                    metadata: SourceDistMetadata { hash, size },
+                }))
+            }
+        }
     }
 
     fn from_direct_dist(
@@ -2491,17 +2506,31 @@ impl Wheel {
 
     fn from_registry_wheel(wheel: &RegistryBuiltWheel) -> Result<Wheel, LockError> {
         let filename = wheel.filename.clone();
-        let url = normalize_file_location(&wheel.file.url)
-            .map_err(LockErrorKind::InvalidFileUrl)
-            .map_err(LockError::from)?;
-        let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
-        let size = wheel.file.size;
-        Ok(Wheel {
-            url: WheelWireSource::Url { url },
-            hash,
-            size,
-            filename,
-        })
+        match &wheel.file.url {
+            FileLocation::RelativeUrl(_, _) | FileLocation::AbsoluteUrl(_) => {
+                let url = normalize_file_location(&wheel.file.url)
+                    .map_err(LockErrorKind::InvalidFileUrl)
+                    .map_err(LockError::from)?;
+                let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
+                let size = wheel.file.size;
+                Ok(Wheel {
+                    url: WheelWireSource::Url { url },
+                    hash,
+                    size,
+                    filename,
+                })
+            }
+            FileLocation::Path { install_path: _, lock_path  } => {
+                let path = lock_path.simplified().to_path_buf();
+                Ok(Wheel {
+                    url: WheelWireSource::Path { path },
+                    hash: None,
+                    size: None,
+                    filename,
+                })
+            }
+        }
+
     }
 
     fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {
@@ -2530,6 +2559,12 @@ impl Wheel {
         let filename: WheelFilename = self.filename.clone();
         let url_string = match &self.url {
             WheelWireSource::Url { url } => url.clone(),
+            WheelWireSource::Path { path } => {
+                // Create path relative to the source index.
+                let index = url.to_file_path().expect("url is a file URL");
+                let path = index.join(path);
+                UrlString::from(Url::from_file_path(path).expect("path is a file path"))
+            }
             WheelWireSource::Filename { .. } => {
                 return Err(LockErrorKind::MissingUrl {
                     name: self.filename.name.clone(),
@@ -2585,6 +2620,16 @@ enum WheelWireSource {
         url: UrlString,
     },
     /// Used for path wheels.
+    Path {
+        /// The filename of the wheel.
+        ///
+        /// This isn't part of the wire format since it's redundant with the
+        /// URL. But we do use it for various things, and thus compute it at
+        /// deserialization time. Not being able to extract a wheel filename from a
+        /// wheel URL is thus a deserialization error.
+        path: PathBuf,
+    },
+    /// Used for path wheels.
     ///
     /// We only store the filename for path wheel, since we can't store a relative path in the url
     Filename {
@@ -2604,6 +2649,9 @@ impl Wheel {
             }
             WheelWireSource::Filename { filename } => {
                 table.insert("filename", Value::from(filename.to_string()));
+            }
+            WheelWireSource::Path { path } => {
+                table.insert("path", Value::from(PortablePath::from(path).to_string()));
             }
         }
         if let Some(ref hash) = self.hash {
@@ -2629,6 +2677,14 @@ impl TryFrom<WheelWire> for Wheel {
                 })?
             }
             WheelWireSource::Filename { filename } => filename.clone(),
+            WheelWireSource::Path { path } => {
+                let filename = path.file_name().and_then(|filename| filename.to_str()).ok_or(
+                    "path wheels must have a filename in the path, but this path does not",
+                )?;
+                filename.parse::<WheelFilename>().map_err(|err| {
+                    format!("failed to parse `{filename}` as wheel filename: {err}")
+                })?
+            }
         };
 
         Ok(Wheel {

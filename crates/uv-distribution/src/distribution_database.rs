@@ -151,14 +151,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
-                    FileLocation::Path(path) => {
+                    FileLocation::Path { install_path, lock_path: _}  => {
                         let cache_entry = self.build_context.cache().entry(
                             CacheBucket::Wheels,
                             WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
                             wheel.filename.stem(),
                         );
                         return self
-                            .load_wheel(path, &wheel.filename, cache_entry, dist, hashes)
+                            .load_wheel(install_path, &wheel.filename, cache_entry, dist, hashes)
                             .await;
                     }
                 };

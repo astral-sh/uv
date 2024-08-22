@@ -6542,7 +6542,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
         version = "1000.0.0"
         source = { registry = "file://[WORKSPACE]/scripts/links" }
         wheels = [
-            { url = "file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl" },
+            { path = "tqdm-1000.0.0-py3-none-any.whl" },
         ]
         "###
         );
@@ -6630,7 +6630,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
         name = "tqdm"
         version = "999.0.0"
         source = { registry = "file://[WORKSPACE]/scripts/links" }
-        sdist = { url = "file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz" }
+        sdist = { path = "tqdm-999.0.0.tar.gz" }
         "###
         );
     });

@@ -80,7 +80,12 @@ pub enum FileLocation {
     /// Absolute URL.
     AbsoluteUrl(UrlString),
     /// Absolute path to a file.
-    Path(#[with(rkyv::with::AsString)] PathBuf),
+    Path {
+        #[with(rkyv::with::AsString)]
+        install_path: PathBuf,
+        #[with(rkyv::with::AsString)]
+        lock_path: PathBuf
+    }
 }
 
 impl FileLocation {
@@ -110,26 +115,15 @@ impl FileLocation {
                 Ok(joined)
             }
             FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.to_url()),
-            FileLocation::Path(ref path) => {
-                let path = path
+            FileLocation::Path { ref install_path, lock_path: _ } => {
+                let path = install_path
                     .to_str()
-                    .ok_or_else(|| ToUrlError::PathNotUtf8 { path: path.clone() })?;
+                    .ok_or_else(|| ToUrlError::PathNotUtf8 { path: install_path.clone() })?;
                 let url = Url::from_file_path(path).map_err(|()| ToUrlError::InvalidPath {
                     path: path.to_string(),
                 })?;
                 Ok(url)
             }
-        }
-    }
-
-    /// Convert this location to a URL.
-    ///
-    /// This method is identical to [`FileLocation::to_url`] except it avoids parsing absolute URLs
-    /// as they are already guaranteed to be valid.
-    pub fn to_url_string(&self) -> Result<UrlString, ToUrlError> {
-        match *self {
-            FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.clone()),
-            _ => Ok(self.to_url()?.into()),
         }
     }
 }
@@ -139,7 +133,7 @@ impl Display for FileLocation {
         match self {
             Self::RelativeUrl(_base, url) => Display::fmt(&url, f),
             Self::AbsoluteUrl(url) => Display::fmt(&url.0, f),
-            Self::Path(path) => Display::fmt(&path.display(), f),
+            Self::Path { install_path, lock_path: _ } => Display::fmt(&install_path.display(), f),
         }
     }
 }
