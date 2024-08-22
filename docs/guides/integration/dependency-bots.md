@@ -11,7 +11,7 @@ dependencies, and will suggest upgrades to
 [development dependencies](../../concepts/dependencies.md#development-dependencies). Renovate will
 update both the `pyproject.toml` and `uv.lock` files.
 
-The lockfile on also be refreshed on a regular basis (for instance to update transitive
+The lockfile can also be refreshed on a regular basis (for instance to update transitive
 dependencies) by enabling the
 [`lockFileMaintenance`](https://docs.renovatebot.com/configuration-options/#lockfilemaintenance)
 option:
