@@ -34,9 +34,9 @@ drawbacks:
    behavior, and many users may _not_ expect uv to read configuration files intended for other
    tools.
 
-Instead, uv supports its own environment variables, like `UV_INDEX_URL`. In the future, uv will also
-support persistent configuration in its own configuration file format (e.g., `pyproject.toml` or
-`uv.toml` or similar). For more, see [#651](https://github.com/astral-sh/uv/issues/651).
+Instead, uv supports its own environment variables, like `UV_INDEX_URL`. uv also
+supports persistent configuration in a `uv.toml` file or a `[tool.uv.pip]` section of `pyproject.toml`.
+For more information, see [Configuration files](https://docs.astral.sh/uv/configuration/files/).
 
 ## Pre-release compatibility
 
