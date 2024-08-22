@@ -2866,17 +2866,16 @@ uv tool dir [OPTIONS]
 
 Manage Python versions and installations
 
-Generally, uv first searches for Python in a virtual environment, either
-active or in a `.venv` directory  in the current working directory or
-any parent directory. If a virtual environment is not required, uv will
-then search for a Python interpreter. Python interpreters are found by
-searching for Python executables in the `PATH` environment variable.
+Generally, uv first searches for Python in a virtual environment, either active or in a
+`.venv` directory  in the current working directory or any parent directory. If a virtual
+environment is not required, uv will then search for a Python interpreter. Python
+interpreters are found by searching for Python executables in the `PATH` environment
+variable.
 
-On Windows, the `py` launcher is also invoked to find Python
-executables.
+On Windows, the `py` launcher is also invoked to find Python executables.
 
-By default, uv will download Python if a version cannot be found. This
-behavior can be disabled with the `--python-downloads` option.
+By default, uv will download Python if a version cannot be found. This behavior can be
+disabled with the `--no-python-downloads` flag or the `python-downloads` setting.
 
 The `--python` option allows requesting a different interpreter.
 
@@ -2888,26 +2887,22 @@ The following Python version request formats are supported:
 - `<implementation>@<version>` e.g. `cpython@3.12`
 - `<implementation><version>` e.g. `cpython3.12` or `cp312`
 - `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
-- `<implementation>-<version>-<os>-<arch>-<libc>` e.g.
-  `cpython-3.12.3-macos-aarch64-none`
+- `<implementation>-<version>-<os>-<arch>-<libc>` e.g. `cpython-3.12.3-macos-aarch64-none`
 
-Additionally, a specific system Python interpreter can often be
-requested with:
+Additionally, a specific system Python interpreter can often be requested with:
 
 - `<executable-path>` e.g. `/opt/homebrew/bin/python3`
 - `<executable-name>` e.g. `mypython3`
 - `<install-dir>` e.g. `/some/environment/`
 
-When the `--python` option is used, normal discovery rules apply but
-discovered interpreters are checked for compatibility with the request,
-e.g., if `pypy` is requested, uv will first check if the virtual
-environment contains a PyPy interpreter then check if each executable in
-the path is a PyPy interpreter.
+When the `--python` option is used, normal discovery rules apply but discovered interpreters
+are checked for compatibility with the request, e.g., if `pypy` is requested, uv will first
+check if the virtual environment contains a PyPy interpreter then check if each executable
+in the path is a PyPy interpreter.
 
-uv supports discovering CPython, PyPy, and GraalPy interpreters.
-Unsupported interpreters will be skipped during discovery. If an
-unsupported interpreter implementation is requested, uv will exit with
-an error.
+uv supports discovering CPython, PyPy, and GraalPy interpreters. Unsupported interpreters
+will be skipped during discovery. If an unsupported interpreter implementation is requested,
+uv will exit with an error.
 
 <h3 class="cli-reference">Usage</h3>
 
