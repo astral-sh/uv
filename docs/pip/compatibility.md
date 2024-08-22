@@ -36,7 +36,7 @@ drawbacks:
 
 Instead, uv supports its own environment variables, like `UV_INDEX_URL`. uv also
 supports persistent configuration in a `uv.toml` file or a `[tool.uv.pip]` section of `pyproject.toml`.
-For more information, see [Configuration files](https://docs.astral.sh/uv/configuration/files/).
+For more information, see [Configuration files](../configuration/files.md).
 
 ## Pre-release compatibility
 
