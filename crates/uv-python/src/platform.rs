@@ -184,7 +184,7 @@ impl From<&platform_tags::Os> for Os {
             platform_tags::Os::Haiku { .. } => Self(target_lexicon::OperatingSystem::Haiku),
             platform_tags::Os::Illumos { .. } => Self(target_lexicon::OperatingSystem::Illumos),
             platform_tags::Os::Macos { .. } => Self(target_lexicon::OperatingSystem::Darwin),
-            platform_tags::Os::Manylinux { .. } | platform_tags::Os::Musllinux { .. } => {
+            platform_tags::Os::Manylinux { .. } | platform_tags::Os::Musllinux { .. } | platform_tags::Os::StaticLinux => {
                 Self(target_lexicon::OperatingSystem::Linux)
             }
             platform_tags::Os::NetBsd { .. } => Self(target_lexicon::OperatingSystem::Netbsd),

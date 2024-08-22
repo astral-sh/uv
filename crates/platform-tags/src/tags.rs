@@ -437,6 +437,9 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
                 .extend((1..=*minor).map(|minor| format!("musllinux_{major}_{minor}_{arch}")));
             platform_tags
         }
+        (Os::StaticLinux, _) => {
+            vec![format!("linux_{}", arch)]
+        }
         (Os::Macos { major, minor }, Arch::X86_64) => {
             // Source: https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L346
             let mut platform_tags = vec![];

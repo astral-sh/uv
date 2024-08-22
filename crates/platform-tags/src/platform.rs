@@ -42,6 +42,7 @@ impl Platform {
 pub enum Os {
     Manylinux { major: u16, minor: u16 },
     Musllinux { major: u16, minor: u16 },
+    StaticLinux,
     Windows,
     Macos { major: u16, minor: u16 },
     FreeBsd { release: String },
@@ -57,6 +58,7 @@ impl fmt::Display for Os {
         match *self {
             Self::Manylinux { .. } => write!(f, "Manylinux"),
             Self::Musllinux { .. } => write!(f, "Musllinux"),
+            Self::StaticLinux { .. } => write!(f, "Linux"),
             Self::Windows => write!(f, "Windows"),
             Self::Macos { .. } => write!(f, "MacOS"),
             Self::FreeBsd { .. } => write!(f, "FreeBSD"),
