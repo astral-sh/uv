@@ -115,7 +115,8 @@ pub struct GlobalArgs {
         global = true,
         long,
         help_heading = "Python options",
-        display_order = 700
+        display_order = 700,
+        env = "UV_PYTHON_PREFERENCE"
     )]
     pub python_preference: Option<PythonPreference>,
 

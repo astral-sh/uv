@@ -56,6 +56,8 @@ uv accepts the following command-line arguments as environment variables:
   directories.
 - `UV_EXCLUDE_NEWER`: Equivalent to the `--exclude-newer` command-line argument. If set, uv will
   exclude distributions published after the specified date.
+- `UV_PYTHON_PREFERENCE`: Equivalent to the `--python-preference` command-line argument. Whether uv
+  should prefer system or managed Python versions.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 

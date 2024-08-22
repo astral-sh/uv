@@ -39,8 +39,8 @@ fn help() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
               Disable automatic downloads of Python
 
@@ -101,8 +101,8 @@ fn help_flag() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
               Disable automatic downloads of Python
 
@@ -162,8 +162,8 @@ fn help_short_flag() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
               Disable automatic downloads of Python
 
@@ -269,6 +269,8 @@ fn help_subcommand() {
               By default, uv prefers using Python versions it manages. However, it will use system
               Python installations if a uv-managed Python is not installed. This option allows
               prioritizing or ignoring system Python installations.
+              
+              [env: UV_PYTHON_PREFERENCE=]
 
               Possible values:
               - only-managed: Only use managed Python installations; never use system Python
@@ -416,6 +418,8 @@ fn help_subsubcommand() {
               By default, uv prefers using Python versions it manages. However, it will use system
               Python installations if a uv-managed Python is not installed. This option allows
               prioritizing or ignoring system Python installations.
+              
+              [env: UV_PYTHON_PREFERENCE=]
 
               Possible values:
               - only-managed: Only use managed Python installations; never use system Python
@@ -526,8 +530,8 @@ fn help_flag_subcommand() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
               Disable automatic downloads of Python
 
@@ -578,8 +582,8 @@ fn help_flag_subsubcommand() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
               Disable automatic downloads of Python
 
@@ -710,8 +714,8 @@ fn help_with_global_option() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
               Disable automatic downloads of Python
 
@@ -809,8 +813,8 @@ fn help_with_no_pager() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
               Disable automatic downloads of Python
 
