@@ -37,6 +37,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
+use crate::marker::MarkerValueExtra;
 use cursor::Cursor;
 pub use marker::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
@@ -408,7 +409,7 @@ impl<T: Pep508Url> Requirement<T> {
         self.marker
             .and(MarkerTree::expression(MarkerExpression::Extra {
                 operator: ExtraOperator::Equal,
-                name: extra.clone(),
+                name: MarkerValueExtra::Extra(extra.clone()),
             }));
 
         self
