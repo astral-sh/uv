@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anstream::eprint;
@@ -24,7 +25,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_scripts::{Pep723Error, Pep723Script};
+use uv_scripts::Pep723Script;
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
@@ -44,7 +45,7 @@ use crate::settings::ResolverInstallerSettings;
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     script: Option<Pep723Script>,
-    command: ExternalCommand,
+    command: RunCommand,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
     locked: bool,
@@ -86,9 +87,6 @@ pub(crate) async fn run(
             _ => {}
         }
     }
-
-    // Parse the input command.
-    let command = RunCommand::from(&command);
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -654,21 +652,6 @@ pub(crate) async fn run(
     }
 }
 
-/// Read a [`Pep723Script`] from the given command.
-pub(crate) async fn parse_script(
-    command: &ExternalCommand,
-) -> Result<Option<Pep723Script>, Pep723Error> {
-    // Parse the input command.
-    let command = RunCommand::from(command);
-
-    let RunCommand::PythonScript(target, _) = &command else {
-        return Ok(None);
-    };
-
-    // Read the PEP 723 `script` metadata from the target script.
-    Pep723Script::read(&target).await
-}
-
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.
 fn can_skip_ephemeral(
     spec: Option<&RequirementsSpecification>,
@@ -717,13 +700,15 @@ fn can_skip_ephemeral(
 }
 
 #[derive(Debug)]
-enum RunCommand {
+pub(crate) enum RunCommand {
     /// Execute `python`.
     Python(Vec<OsString>),
     /// Execute a `python` script.
     PythonScript(PathBuf, Vec<OsString>),
     /// Execute a `pythonw` script (Windows only).
     PythonGuiScript(PathBuf, Vec<OsString>),
+    /// Execute a `python` script provided via `stdin`.
+    PythonStdin(Vec<u8>),
     /// Execute an external command.
     External(OsString, Vec<OsString>),
     /// Execute an empty command (in practice, `python` with no arguments).
@@ -737,6 +722,7 @@ impl RunCommand {
             Self::Python(_) => Cow::Borrowed("python"),
             Self::PythonScript(_, _) | Self::Empty => Cow::Borrowed("python"),
             Self::PythonGuiScript(_, _) => Cow::Borrowed("pythonw"),
+            Self::PythonStdin(_) => Cow::Borrowed("python -c"),
             Self::External(executable, _) => executable.to_string_lossy(),
         }
     }
@@ -774,6 +760,24 @@ impl RunCommand {
                 process.args(args);
                 process
             }
+            Self::PythonStdin(script) => {
+                let mut process = Command::new(interpreter.sys_executable());
+                process.arg("-c");
+
+                #[cfg(unix)]
+                {
+                    use std::os::unix::ffi::OsStringExt;
+                    process.arg(OsString::from_vec(script.clone()));
+                }
+
+                #[cfg(not(unix))]
+                {
+                    let script = String::from_utf8(script.clone()).expect("script is valid UTF-8");
+                    process.arg(script);
+                }
+
+                process
+            }
             Self::External(executable, args) => {
                 let mut process = Command::new(executable);
                 process.args(args);
@@ -808,6 +812,10 @@ impl std::fmt::Display for RunCommand {
                 }
                 Ok(())
             }
+            Self::PythonStdin(_) => {
+                write!(f, "python -c")?;
+                Ok(())
+            }
             Self::External(executable, args) => {
                 write!(f, "{}", executable.to_string_lossy())?;
                 for arg in args {
@@ -823,35 +831,41 @@ impl std::fmt::Display for RunCommand {
     }
 }
 
-impl From<&ExternalCommand> for RunCommand {
-    fn from(command: &ExternalCommand) -> Self {
+impl TryFrom<&ExternalCommand> for RunCommand {
+    type Error = std::io::Error;
+
+    fn try_from(command: &ExternalCommand) -> Result<Self, Self::Error> {
         let (target, args) = command.split();
 
         let Some(target) = target else {
-            return Self::Empty;
+            return Ok(Self::Empty);
         };
 
         let target_path = PathBuf::from(&target);
-        if target.eq_ignore_ascii_case("python") {
-            Self::Python(args.to_vec())
+        if target.eq_ignore_ascii_case("-") {
+            let mut buf = Vec::with_capacity(1024);
+            std::io::stdin().read_to_end(&mut buf)?;
+            Ok(Self::PythonStdin(buf))
+        } else if target.eq_ignore_ascii_case("python") {
+            Ok(Self::Python(args.to_vec()))
         } else if target_path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
             && target_path.exists()
         {
-            Self::PythonScript(target_path, args.to_vec())
+            Ok(Self::PythonScript(target_path, args.to_vec()))
         } else if cfg!(windows)
             && target_path
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
             && target_path.exists()
         {
-            Self::PythonGuiScript(target_path, args.to_vec())
+            Ok(Self::PythonGuiScript(target_path, args.to_vec()))
         } else {
-            Self::External(
+            Ok(Self::External(
                 target.clone(),
                 args.iter().map(std::clone::Clone::clone).collect(),
-            )
+            ))
         }
     }
 }
