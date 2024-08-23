@@ -629,6 +629,11 @@ pub(crate) async fn run(
     )?;
     process.env("PATH", new_path);
 
+    // Ensure `VIRTUAL_ENV` is set.
+    if interpreter.is_virtualenv() {
+        process.env("VIRTUAL_ENV", interpreter.sys_prefix().as_os_str());
+    };
+
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
