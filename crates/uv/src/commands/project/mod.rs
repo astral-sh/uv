@@ -662,6 +662,7 @@ pub(crate) async fn sync_environment(
         keyring_provider,
         config_setting,
         no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -696,6 +697,8 @@ pub(crate) async fn sync_environment(
     // Determine whether to enable build isolation.
     let build_isolation = if no_build_isolation {
         BuildIsolation::Shared(&venv)
+    } else if !no_build_isolation_package.is_empty() {
+        BuildIsolation::SharedPackage(&venv, &no_build_isolation_package)
     } else {
         BuildIsolation::Isolated
     };

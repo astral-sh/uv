@@ -398,6 +398,7 @@ impl SourceBuild {
     pub async fn setup(
         source: &Path,
         subdirectory: Option<&Path>,
+        fallback_package_name: Option<&PackageName>,
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
@@ -422,10 +423,13 @@ impl SourceBuild {
         let (pep517_backend, project) =
             Self::extract_pep517_backend(&source_tree, &default_backend).map_err(|err| *err)?;
 
-        let package_name = project.clone().map(|p| p.name);
+        let package_name = project
+            .as_ref()
+            .map(|p| &p.name)
+            .or_else(|| fallback_package_name);
 
         // Create a virtual environment, or install into the shared environment if requested.
-        let venv = if let Some(venv) = build_isolation.shared_environment(package_name.as_ref()) {
+        let venv = if let Some(venv) = build_isolation.shared_environment(package_name) {
             venv.clone()
         } else {
             uv_virtualenv::create_venv(
@@ -440,7 +444,7 @@ impl SourceBuild {
 
         // Setup the build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
-        if build_isolation.is_isolated(package_name.as_ref()) {
+        if build_isolation.is_isolated(package_name) {
             let resolved_requirements = Self::get_resolved_requirements(
                 build_context,
                 source_build_context,
@@ -490,7 +494,7 @@ impl SourceBuild {
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
         let runner = PythonRunner::new(concurrent_builds);
-        if build_isolation.is_isolated(package_name.as_ref()) {
+        if build_isolation.is_isolated(package_name) {
             create_pep517_build_environment(
                 &runner,
                 &source_tree,
