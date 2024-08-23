@@ -560,7 +560,7 @@ pub enum ProjectCommand {
     ///
     /// If a given dependency exists already, it will be updated to the new version specifier unless
     /// it includes markers that differ from the existing specifier in which case another entry for
-    /// the depenedency will be added.
+    /// the dependency will be added.
     ///
     /// If no constraint or URL is provided for a dependency, a lower bound is added equal to the
     /// latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in
