@@ -22,11 +22,11 @@ pub(crate) async fn pin(
     request: Option<String>,
     resolved: bool,
     python_preference: PythonPreference,
-    no_workspace: bool,
+    no_project: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let virtual_project = if no_workspace {
+    let virtual_project = if no_project {
         None
     } else {
         match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {

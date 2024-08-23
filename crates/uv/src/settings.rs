@@ -588,7 +588,7 @@ impl PythonFindSettings {
 pub(crate) struct PythonPinSettings {
     pub(crate) request: Option<String>,
     pub(crate) resolved: bool,
-    pub(crate) no_workspace: bool,
+    pub(crate) no_project: bool,
 }
 
 impl PythonPinSettings {
@@ -599,13 +599,13 @@ impl PythonPinSettings {
             request,
             no_resolved,
             resolved,
-            no_workspace,
+            no_project,
         } = args;
 
         Self {
             request,
             resolved: flag(resolved, no_resolved).unwrap_or(false),
-            no_workspace,
+            no_project,
         }
     }
 }
