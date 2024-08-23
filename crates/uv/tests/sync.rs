@@ -864,8 +864,8 @@ fn no_install_project() -> Result<()> {
     Ok(())
 }
 
-/// Avoid syncing local dependencies for workspace dependencies when `--no-install-project` is provided, but
-/// include the workspace dependency's dependencies.
+/// Avoid syncing workspace members and the project when `--no-install-workspace` is provided, but
+/// include the all of the dependencies.
 #[test]
 fn no_install_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -926,6 +926,59 @@ fn no_install_workspace() -> Result<()> {
      + idna==3.6
      + iniconfig==2.0.0
      + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// Avoid syncing the target package when `--no-install-package` is provided.
+#[test]
+fn no_install_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Running with `--no-install-package anyio` should skip anyio but include everything else
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-package").arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    // Running with `--no-install-package project` should skip the project itself (not as a special
+    // case, that's just the name of the project)
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-package").arg("project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==3.7.0
+     - project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())

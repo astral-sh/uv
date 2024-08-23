@@ -219,5 +219,7 @@ RUN uv sync --frozen
 
 !!! tip
 
-    If you're using a [workspace](../../concepts/workspaces.md), then consider the
+    If you're using a [workspace](../../concepts/workspaces.md), then use the
     `--no-install-workspace` flag which excludes the project _and_ any workspace members.
+
+    If you want to remove specific packages from the sync, use `--no-install-package <name>`.
