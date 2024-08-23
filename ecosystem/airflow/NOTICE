@@ -1,0 +1,29 @@
+Apache Airflow
+Copyright 2016-2024 The Apache Software Foundation
+
+This product includes software developed at The Apache Software
+Foundation (http://www.apache.org/).
+
+=======================================================================
+
+hue:
+-----
+This product contains a modified portion of 'Hue' developed by Cloudera, Inc.
+(https://github.com/cloudera/hue/).
+
+* Copyright 2009-2017 Cloudera Inc.
+
+
+Flask App Builder:
+-----
+This product contains a modified portion of 'Flask App Builder' developed by Daniel Vaz Gaspar.
+(https://github.com/dpgaspar/Flask-AppBuilder).
+
+* Copyright 2013, Daniel Vaz Gaspar
+
+Chakra UI:
+-----
+This product contains a modified portion of 'Chakra UI' developed by Segun Adebayo.
+(https://github.com/chakra-ui/chakra-ui).
+
+* Copyright 2019, Segun Adebayo
