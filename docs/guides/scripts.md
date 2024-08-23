@@ -55,6 +55,14 @@ $ uv run example.py hello world!
 hello world!
 ```
 
+Additionally, your script can be read directly from stdin:
+
+```bash
+uv run - <<EOF
+print("hello world!")
+EOF
+```
+
 Note that if you use `uv run` in a _project_, i.e. a directory with a `pyproject.toml`, it will
 install the current project before running the script. If your script does not depend on the
 project, use the `--no-project` flag to skip this:
