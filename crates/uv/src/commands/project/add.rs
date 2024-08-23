@@ -597,7 +597,7 @@ pub(crate) async fn add(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    project::sync::do_sync(
+    match project::sync::do_sync(
         &project,
         &venv,
         &lock,
@@ -613,7 +613,17 @@ pub(crate) async fn add(
         cache,
         printer,
     )
-    .await?;
+    .await
+    {
+        Err(_) => {
+            // Revert the changes to the `pyproject.toml`, if necessary.
+            if modified {
+                fs_err::write(project.root().join("pyproject.toml"), existing)?;
+            }
+            return Ok(ExitStatus::Failure);
+        }
+        _ => (),
+    }
 
     Ok(ExitStatus::Success)
 }
