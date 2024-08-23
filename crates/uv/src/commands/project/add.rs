@@ -604,6 +604,7 @@ pub(crate) async fn add(
         &extras,
         dev,
         false,
+        false,
         Modifications::Sufficient,
         settings.as_ref().into(),
         &state,

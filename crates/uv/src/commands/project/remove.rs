@@ -191,6 +191,7 @@ pub(crate) async fn remove(
     let extras = ExtrasSpecification::All;
     let dev = true;
     let no_install_project = false;
+    let no_install_workspace = false;
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -202,6 +203,7 @@ pub(crate) async fn remove(
         &extras,
         dev,
         no_install_project,
+        no_install_workspace,
         Modifications::Exact,
         settings.as_ref().into(),
         &state,
