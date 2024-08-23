@@ -405,7 +405,7 @@ pub enum CacheCommand {
     ///
     ///
     /// By default, the cache is stored in  `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
-    /// `{FOLDERID_LocalAppData}\uv\cache` on Windows.
+    /// `%LOCALAPPDATA%\uv\cache` on Windows.
     ///
     /// When `--no-cache` is used, the cache is stored in a temporary directory and discarded when
     /// the process exits.
@@ -2716,7 +2716,7 @@ pub enum ToolCommand {
     /// The tools directory is used to store environments and metadata for installed tools.
     ///
     /// By default, tools are stored in the uv data directory at `$XDG_DATA_HOME/uv/tools` or
-    /// `$HOME/.local/share/uv/tools` on Unix and `{FOLDERID_RoamingAppData}\uv\data\tools` on
+    /// `$HOME/.local/share/uv/tools` on Unix and `%APPDATA%\uv\data\tools` on
     /// Windows.
     ///
     /// The tool installation directory may be overridden with `$UV_TOOL_DIR`.
@@ -2955,7 +2955,7 @@ pub enum PythonCommand {
     ///
     /// By default, Python installations are stored in the uv data directory at
     /// `$XDG_DATA_HOME/uv/python` or `$HOME/.local/share/uv/python` on Unix and
-    /// `{FOLDERID_RoamingAppData}\uv\data\python` on Windows.
+    /// `%APPDATA%\uv\data\python` on Windows.
     ///
     /// The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
     Dir,

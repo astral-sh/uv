@@ -92,7 +92,7 @@ uv determines the cache directory according to, in order:
 2. The specific cache directory specified via `--cache-dir`, `UV_CACHE_DIR`, or
    [`tool.uv.cache-dir`](../reference/settings.md#cache-dir).
 3. A system-appropriate cache directory, e.g., `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
-   `{FOLDERID_LocalAppData}\uv\cache` on Windows
+   `%LOCALAPPDATA%\uv\cache` on Windows
 
 !!! note
 
