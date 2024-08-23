@@ -597,7 +597,7 @@ pub(crate) async fn add(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    match project::sync::do_sync(
+    if let Err(err) = project::sync::do_sync(
         &project,
         &venv,
         &lock,
@@ -615,14 +615,11 @@ pub(crate) async fn add(
     )
     .await
     {
-        Err(err) => {
-            // Revert the changes to the `pyproject.toml`, if necessary.
-            if modified {
-                fs_err::write(project.root().join("pyproject.toml"), existing)?;
-            }
-            return Err(err.into());
+        // Revert the changes to the `pyproject.toml`, if necessary.
+        if modified {
+            fs_err::write(project.root().join("pyproject.toml"), existing)?;
         }
-        _ => (),
+        return Err(err.into());
     }
 
     Ok(ExitStatus::Success)
