@@ -1104,6 +1104,7 @@ async fn run_project(
                 args.dev,
                 args.no_install_project,
                 args.no_install_workspace,
+                args.no_install_package,
                 args.modifications,
                 args.python,
                 globals.python_preference,

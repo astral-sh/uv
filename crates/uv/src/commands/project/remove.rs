@@ -192,6 +192,7 @@ pub(crate) async fn remove(
     let dev = true;
     let no_install_project = false;
     let no_install_workspace = false;
+    let no_install_package = vec![];
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -204,6 +205,7 @@ pub(crate) async fn remove(
         dev,
         no_install_project,
         no_install_workspace,
+        no_install_package,
         Modifications::Exact,
         settings.as_ref().into(),
         &state,

@@ -411,14 +411,19 @@ pub(crate) async fn run(
                 Err(err) => return Err(err.into()),
             };
 
+            let no_install_root = false;
+            let no_install_workspace = false;
+            let no_install_package = vec![];
+
             project::sync::do_sync(
                 &project,
                 &venv,
                 result.lock(),
                 &extras,
                 dev,
-                false,
-                false,
+                no_install_root,
+                no_install_workspace,
+                no_install_package,
                 Modifications::Sufficient,
                 settings.as_ref().into(),
                 &state,

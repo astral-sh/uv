@@ -596,6 +596,9 @@ pub(crate) async fn add(
 
     // Initialize any shared state.
     let state = SharedState::default();
+    let no_install_root = false;
+    let no_install_workspace = false;
+    let no_install_package = vec![];
 
     if let Err(err) = project::sync::do_sync(
         &project,
@@ -603,8 +606,9 @@ pub(crate) async fn add(
         &lock,
         &extras,
         dev,
-        false,
-        false,
+        no_install_root,
+        no_install_workspace,
+        no_install_package,
         Modifications::Sufficient,
         settings.as_ref().into(),
         &state,

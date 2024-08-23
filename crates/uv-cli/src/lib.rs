@@ -2292,6 +2292,14 @@ pub struct SyncArgs {
     #[arg(long)]
     pub no_install_workspace: bool,
 
+    /// Do not install the given package(s).
+    ///
+    /// By default, all of the project's dependencies are installed into the environment. The
+    /// `--no-install-package` option allows exclusion of specific packages. Note this can result
+    /// in a broken environment, and should be used with caution.
+    #[arg(long)]
+    pub no_install_package: Vec<PackageName>,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or
