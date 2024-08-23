@@ -3034,6 +3034,25 @@ pub struct PythonFindArgs {
     /// directory or parent directories will be used.
     #[arg(long, alias = "no_workspace")]
     pub no_project: bool,
+
+    /// Only find system Python interpreters.
+    ///
+    /// By default, uv will report the first Python interpreter it would use, including those in an
+    /// active virtual environment or a virtual environment in the current working directory or any
+    /// parent directory.
+    ///
+    /// The `--system` option instructs uv to skip virtual environment Python interpreters and
+    /// restrict its search to the system path.
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_system")
+    )]
+    pub system: bool,
+
+    #[arg(long, overrides_with("system"), hide = true)]
+    pub no_system: bool,
 }
 
 #[derive(Args)]
