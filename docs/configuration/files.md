@@ -18,7 +18,7 @@ all members.
 If a `pyproject.toml` file is found, uv will read configuration from the `[tool.uv.pip]` table. For
 example, to set a persistent index URL, add the following to a `pyproject.toml`:
 
-```toml title="project.toml"
+```toml title="pyproject.toml"
 [tool.uv.pip]
 index-url = "https://test.pypi.org/simple"
 ```
