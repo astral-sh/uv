@@ -943,6 +943,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.request,
                 args.no_project,
                 cli.no_config,
+                args.system,
                 globals.python_preference,
                 &cache,
             )

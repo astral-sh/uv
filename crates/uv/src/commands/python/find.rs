@@ -18,9 +18,16 @@ pub(crate) async fn find(
     request: Option<String>,
     no_project: bool,
     no_config: bool,
+    system: bool,
     python_preference: PythonPreference,
     cache: &Cache,
 ) -> Result<ExitStatus> {
+    let environment_preference = if system {
+        EnvironmentPreference::OnlySystem
+    } else {
+        EnvironmentPreference::Any
+    };
+
     // (1) Explicit request from user
     let mut request = request.map(|request| PythonRequest::parse(&request));
 
@@ -56,12 +63,15 @@ pub(crate) async fn find(
 
     let python = PythonInstallation::find(
         &request.unwrap_or_default(),
-        EnvironmentPreference::OnlySystem,
+        environment_preference,
         python_preference,
         cache,
     )?;
 
-    println!("{}", python.interpreter().sys_executable().user_display());
+    println!(
+        "{}",
+        uv_fs::absolutize_path(python.interpreter().sys_executable())?.simplified_display()
+    );
 
     Ok(ExitStatus::Success)
 }
