@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, ExtrasSpecification};
+use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions};
 use uv_fs::{Simplified, CWD};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::Pep723Script;
@@ -190,9 +190,7 @@ pub(crate) async fn remove(
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
     let extras = ExtrasSpecification::All;
     let dev = true;
-    let no_install_project = false;
-    let no_install_workspace = false;
-    let no_install_package = vec![];
+    let install_options = InstallOptions::default();
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -203,9 +201,7 @@ pub(crate) async fn remove(
         &lock,
         &extras,
         dev,
-        no_install_project,
-        no_install_workspace,
-        no_install_package,
+        install_options,
         Modifications::Exact,
         settings.as_ref().into(),
         &state,

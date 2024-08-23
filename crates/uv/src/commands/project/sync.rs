@@ -7,7 +7,7 @@ use tracing::debug;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, HashCheckingMode};
+use uv_configuration::{Concurrency, ExtrasSpecification, HashCheckingMode, InstallOptions};
 use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
 use uv_installer::SitePackages;
@@ -33,9 +33,7 @@ pub(crate) async fn sync(
     package: Option<PackageName>,
     extras: ExtrasSpecification,
     dev: bool,
-    no_install_project: bool,
-    no_install_workspace: bool,
-    no_install_package: Vec<PackageName>,
+    install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
     python_preference: PythonPreference,
@@ -108,9 +106,7 @@ pub(crate) async fn sync(
         &lock,
         &extras,
         dev,
-        no_install_project,
-        no_install_workspace,
-        no_install_package,
+        install_options,
         modifications,
         settings.as_ref().into(),
         &state,
@@ -134,9 +130,7 @@ pub(super) async fn do_sync(
     lock: &Lock,
     extras: &ExtrasSpecification,
     dev: bool,
-    no_install_project: bool,
-    no_install_workspace: bool,
-    no_install_package: Vec<PackageName>,
+    install_options: InstallOptions,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
@@ -200,14 +194,8 @@ pub(super) async fn do_sync(
     // Read the lockfile.
     let resolution = lock.to_resolution(project, markers, tags, extras, &dev)?;
 
-    // If `--no-install-project` is set, remove the project itself.
-    let resolution = apply_no_install_project(no_install_project, resolution, project);
-
-    // If `--no-install-workspace` is set, remove the project and any workspace members.
-    let resolution = apply_no_install_workspace(no_install_workspace, resolution, project);
-
-    // If `--no-install-package` is provided, remove the requested packages.
-    let resolution = apply_no_install_package(&no_install_package, resolution);
+    // Set install-specific options.
+    let resolution = apply_install_options(&install_options, resolution, project);
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -295,6 +283,23 @@ pub(super) async fn do_sync(
     .await?;
 
     Ok(())
+}
+
+fn apply_install_options(
+    install_options: &InstallOptions,
+    resolution: distribution_types::Resolution,
+    project: &VirtualProject,
+) -> distribution_types::Resolution {
+    // If `--no-install-project` is set, remove the project itself.
+    let resolution =
+        apply_no_install_project(install_options.no_install_project, resolution, project);
+
+    // If `--no-install-workspace` is set, remove the project and any workspace members.
+    let resolution =
+        apply_no_install_workspace(install_options.no_install_workspace, resolution, project);
+
+    // If `--no-install-package` is provided, remove the requested packages.
+    apply_no_install_package(&install_options.no_install_package, resolution)
 }
 
 fn apply_no_install_project(

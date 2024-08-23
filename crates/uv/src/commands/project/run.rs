@@ -15,7 +15,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, ExtrasSpecification};
+use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions};
 use uv_distribution::LoweredRequirement;
 use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -420,9 +420,7 @@ pub(crate) async fn run(
                 Err(err) => return Err(err.into()),
             };
 
-            let no_install_root = false;
-            let no_install_workspace = false;
-            let no_install_package = vec![];
+            let install_options = InstallOptions::default();
 
             project::sync::do_sync(
                 &project,
@@ -430,9 +428,7 @@ pub(crate) async fn run(
                 result.lock(),
                 &extras,
                 dev,
-                no_install_root,
-                no_install_workspace,
-                no_install_package,
+                install_options,
                 Modifications::Sufficient,
                 settings.as_ref().into(),
                 &state,

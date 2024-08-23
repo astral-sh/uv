@@ -23,8 +23,8 @@ use uv_cli::{
 use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy,
-    TargetTriple, Upgrade,
+    IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
+    SourceStrategy, TargetTriple, Upgrade,
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
@@ -621,9 +621,7 @@ pub(crate) struct SyncSettings {
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
-    pub(crate) no_install_project: bool,
-    pub(crate) no_install_workspace: bool,
-    pub(crate) no_install_package: Vec<PackageName>,
+    pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
@@ -678,9 +676,11 @@ impl SyncSettings {
                 extra.unwrap_or_default(),
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
-            no_install_project,
-            no_install_workspace,
-            no_install_package,
+            install_options: InstallOptions::new(
+                no_install_project,
+                no_install_workspace,
+                no_install_package,
+            ),
             modifications,
             package,
             python,
