@@ -698,7 +698,7 @@ pub(crate) async fn sync_environment(
     let build_isolation = if no_build_isolation {
         BuildIsolation::Shared(&venv)
     } else if !no_build_isolation_package.is_empty() {
-        BuildIsolation::SharedPackage(&venv, &no_build_isolation_package)
+        BuildIsolation::SharedPackage(&venv, no_build_isolation_package)
     } else {
         BuildIsolation::Isolated
     };

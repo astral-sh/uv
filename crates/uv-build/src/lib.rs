@@ -423,10 +423,7 @@ impl SourceBuild {
         let (pep517_backend, project) =
             Self::extract_pep517_backend(&source_tree, &default_backend).map_err(|err| *err)?;
 
-        let package_name = project
-            .as_ref()
-            .map(|p| &p.name)
-            .or_else(|| fallback_package_name);
+        let package_name = project.as_ref().map(|p| &p.name).or(fallback_package_name);
 
         // Create a virtual environment, or install into the shared environment if requested.
         let venv = if let Some(venv) = build_isolation.shared_environment(package_name) {
