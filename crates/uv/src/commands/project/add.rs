@@ -620,7 +620,6 @@ pub(crate) async fn add(
             if modified {
                 fs_err::write(project.root().join("pyproject.toml"), existing)?;
             }
-            eprint!("{err:?}");
             return Err(err.into());
         }
         _ => (),
