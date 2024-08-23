@@ -85,6 +85,32 @@ And, to start your application by default:
 CMD ["uv", "run", "my_app"]
 ```
 
+## Using installed tools
+
+To use installed tools, ensure the [tool bin directory](../../concepts/tools.md#the-bin-directory)
+is on the path:
+
+```dockerfile title="Dockerfile"
+ENV PATH=/root/.local/bin:$PATH
+RUN uv tool install cowsay
+```
+
+```console
+$ docker run -it $(docker build -q .) /bin/bash -c "cowsay -t hello"
+  _____
+| hello |
+  =====
+     \
+      \
+        ^__^
+        (oo)\_______
+        (__)\       )\/\
+            ||----w |
+            ||     ||
+```
+
+To determine the tool bin directory, run `uv tool dir --bin` in the container.
+
 ## Using the pip interface
 
 ### Installing a package
