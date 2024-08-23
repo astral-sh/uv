@@ -267,7 +267,13 @@ pub(crate) async fn run(
                 Ok(project) => Some(project),
                 Err(WorkspaceError::MissingPyprojectToml) => None,
                 Err(WorkspaceError::NonWorkspace(_)) => None,
-                Err(err) => return Err(err.into()),
+                Err(err) => {
+                    if no_project {
+                        None
+                    } else {
+                        return Err(err.into());
+                    }
+                }
             }
         };
 
