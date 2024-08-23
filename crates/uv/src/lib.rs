@@ -944,7 +944,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.request,
                 args.resolved,
                 globals.python_preference,
-                args.no_workspace,
+                args.no_project,
                 &cache,
                 printer,
             )

@@ -3060,13 +3060,13 @@ pub struct PythonPinArgs {
     #[arg(long, overrides_with("no_resolved"), hide = true)]
     pub no_resolved: bool,
 
-    /// Avoid validating the Python pin is compatible with the workspace.
+    /// Avoid validating the Python pin is compatible with the project or workspace.
     ///
-    /// By default, a workspace is discovered in the current directory or any parent
-    /// directory. If a workspace is found, the Python pin is validated against
-    /// the workspace's `requires-python` constraint.
-    #[arg(long)]
-    pub no_workspace: bool,
+    /// By default, a project or workspace is discovered in the current directory or any parent
+    /// directory. If a workspace is found, the Python pin is validated against the workspace's
+    /// `requires-python` constraint.
+    #[arg(long, alias = "no-workspace")]
+    pub no_project: bool,
 }
 
 #[derive(Args)]
