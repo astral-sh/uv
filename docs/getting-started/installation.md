@@ -120,7 +120,7 @@ To enable shell autocompletion for uv commands, run one of the following:
 === "Windows"
 
     ```powershell
-    Add-Content -Path $PROFILE -Value '(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+    Add-Content -Path $PROFILE -Value '(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression'
     ```
 
 Then restart the shell or source the shell config file.
