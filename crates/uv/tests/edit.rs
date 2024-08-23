@@ -169,7 +169,7 @@ fn add_git() -> Result<()> {
     "###);
 
     // Adding with an ambiguous Git reference should treat it as a revision.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]).arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -183,7 +183,7 @@ fn add_git() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -315,7 +315,7 @@ fn add_git_private_source() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]).arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -411,7 +411,7 @@ fn add_git_private_raw() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]).arg("--raw-sources").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]).arg("--raw-sources"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -527,7 +527,7 @@ fn add_git_error() -> Result<()> {
     "###);
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("flask").arg("--tag").arg("0.0.1").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&[]).arg("flask").arg("--tag").arg("0.0.1"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -537,7 +537,7 @@ fn add_git_error() -> Result<()> {
     "###);
 
     // Provide a tag with a non-Git source.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&[]).arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -588,7 +588,7 @@ fn add_git_raw() -> Result<()> {
     "###);
 
     // Use an ambiguous tag reference, which would otherwise not resolve.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]).arg("--raw-sources").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]).arg("--raw-sources"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -740,7 +740,7 @@ fn add_git_implicit() -> Result<()> {
     "###);
 
     // Omit the `git+` prefix.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"]).arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -773,7 +773,7 @@ fn add_raw_error() -> Result<()> {
     "#})?;
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&[]).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -805,7 +805,7 @@ fn add_unnamed() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1325,7 +1325,6 @@ fn add_remove_workspace() -> Result<()> {
     let mut add_cmd =
         context.add(&["child2 @ git+https://github.com/astral-test/uv-public-pypackage"]);
     add_cmd
-        .arg("--preview")
         .arg("--package")
         .arg("child1")
         .current_dir(&context.temp_dir);
@@ -1343,7 +1342,6 @@ fn add_remove_workspace() -> Result<()> {
     let child1 = context.temp_dir.join("child1");
     let mut add_cmd = context.add(&["child2"]);
     add_cmd
-        .arg("--preview")
         .arg("--package")
         .arg("child1")
         .current_dir(&context.temp_dir);
@@ -1540,10 +1538,7 @@ fn add_workspace_editable() -> Result<()> {
 
     let child1 = context.temp_dir.join("child1");
     let mut add_cmd = context.add(&["child2"]);
-    add_cmd
-        .arg("--editable")
-        .arg("--preview")
-        .current_dir(&child1);
+    add_cmd.arg("--editable").current_dir(&child1);
 
     uv_snapshot!(context.filters(), add_cmd, @r###"
     success: true
@@ -3833,7 +3828,6 @@ fn add_git_to_script() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"])
         .arg("--tag=0.0.1")
-        .arg("--preview")
         .arg("--script")
         .arg("script.py"), @r###"
     success: true
