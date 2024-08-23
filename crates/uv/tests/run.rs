@@ -1,4 +1,5 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
+#![allow(clippy::disallowed_types)]
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -1404,6 +1405,30 @@ fn run_no_project() -> Result<()> {
 
     ----- stderr -----
     warning: `--locked` has no effect when used alongside `--no-project`
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        print("Hello, world!")
+       "#
+    })?;
+
+    let mut command = context.run();
+    let command_with_args = command.stdin(std::fs::File::open(test_script)?).arg("-");
+    uv_snapshot!(context.filters(), command_with_args, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
     "###);
 
     Ok(())
