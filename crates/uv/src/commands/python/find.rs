@@ -70,7 +70,7 @@ pub(crate) async fn find(
 
     println!(
         "{}",
-        python.interpreter().sys_executable().simplified_display()
+        uv_fs::absolutize_path(python.interpreter().sys_executable())?.simplified_display()
     );
 
     Ok(ExitStatus::Success)

@@ -263,6 +263,10 @@ fn python_find_venv() {
     "###);
 
     // We should find it first
+    // TODO(zanieb): On Windows, this has in a different display path for virtual environments which
+    // is super annoying and requires some changes to how we represent working directories in the
+    // test context to resolve.
+    #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.python_find(), @r###"
     success: true
     exit_code: 0
@@ -273,6 +277,7 @@ fn python_find_venv() {
     "###);
 
     // Even if the `VIRTUAL_ENV` is not set (the test context includes this by default)
+    #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.python_find().env_remove("VIRTUAL_ENV"), @r###"
     success: true
     exit_code: 0
@@ -321,6 +326,7 @@ fn python_find_venv() {
     "###);
 
     // We should find virtual environments from a child directory
+    #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove("VIRTUAL_ENV"), @r###"
     success: true
     exit_code: 0
@@ -339,6 +345,7 @@ fn python_find_venv() {
     ----- stderr -----
     "###);
 
+    #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove("VIRTUAL_ENV"), @r###"
     success: true
     exit_code: 0
@@ -362,6 +369,7 @@ fn python_find_venv() {
     "###);
 
     // Unless, it is requested by path
+    #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.python_find().arg("child/.venv"), @r###"
     success: true
     exit_code: 0
@@ -372,6 +380,7 @@ fn python_find_venv() {
     "###);
 
     // Or activated via `VIRTUAL_ENV`
+    #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.python_find().env("VIRTUAL_ENV", child_dir.join(".venv").as_os_str()), @r###"
     success: true
     exit_code: 0
