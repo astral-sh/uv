@@ -1394,7 +1394,6 @@ mod tests {
           "project_name": "bird-feeder",
           "workspace": {
             "install_path": "[ROOT]/albatross-in-example/examples/bird-feeder",
-            "lock_path": "",
             "packages": {
               "bird-feeder": {
                 "root": "[ROOT]/albatross-in-example/examples/bird-feeder",
@@ -1438,7 +1437,6 @@ mod tests {
               "project_name": "bird-feeder",
               "workspace": {
                 "install_path": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
-                "lock_path": "",
                 "packages": {
                   "bird-feeder": {
                     "root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
@@ -1481,7 +1479,6 @@ mod tests {
               "project_name": "albatross",
               "workspace": {
                 "install_path": "[ROOT]/albatross-root-workspace",
-                "lock_path": "",
                 "packages": {
                   "albatross": {
                     "root": "[ROOT]/albatross-root-workspace",
@@ -1566,7 +1563,6 @@ mod tests {
               "project_name": "albatross",
               "workspace": {
                 "install_path": "[ROOT]/albatross-virtual-workspace",
-                "lock_path": "../..",
                 "packages": {
                   "albatross": {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
@@ -1638,7 +1634,6 @@ mod tests {
               "project_name": "albatross",
               "workspace": {
                 "install_path": "[ROOT]/albatross-just-project",
-                "lock_path": "",
                 "packages": {
                   "albatross": {
                     "root": "[ROOT]/albatross-just-project",

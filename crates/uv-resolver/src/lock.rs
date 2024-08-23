@@ -2912,8 +2912,7 @@ fn normalize_requirement(
             ext,
             url: _,
         } => {
-            let install_path = relative_to(workspace.install_path(), &install_path)
-                .map_err(LockErrorKind::RequirementRelativePath)?;
+            let install_path = uv_fs::normalize_path(&workspace.install_path().join(&install_path));
             let url = VerbatimUrl::from_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
@@ -2934,8 +2933,7 @@ fn normalize_requirement(
             editable,
             url: _,
         } => {
-            let install_path = relative_to(workspace.install_path(), &install_path)
-                .map_err(LockErrorKind::RequirementRelativePath)?;
+            let install_path = uv_fs::normalize_path(&workspace.install_path().join(&install_path));
             let url = VerbatimUrl::from_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
@@ -3163,7 +3161,7 @@ enum LockErrorKind {
     RequirementRelativePath(
         /// The inner error we forward.
         #[source]
-        std::io::Error,
+        io::Error,
     ),
     /// An error that occurs when parsing an existing requirement.
     #[error("could not convert between URL and path")]

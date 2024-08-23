@@ -4159,7 +4159,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "b", directory = "b" },
-            { name = "c", directory = "[TEMP_DIR]/c" },
+            { name = "c", directory = "c" },
         ]
 
         [[package]]

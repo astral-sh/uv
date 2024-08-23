@@ -276,14 +276,14 @@ fn root_package_splits_transitive_too() -> Result<()> {
 
     [package.metadata]
     requires-dist = [
-        { name = "b1", marker = "python_full_version < '3.12'", directory = "../b1" },
-        { name = "b2", marker = "python_full_version >= '3.12'", directory = "../b2" },
+        { name = "b1", marker = "python_full_version < '3.12'", directory = "b1" },
+        { name = "b2", marker = "python_full_version >= '3.12'", directory = "b2" },
     ]
 
     [[package]]
     name = "b1"
     version = "0.1.0"
-    source = { directory = "../b1" }
+    source = { directory = "b1" }
     dependencies = [
         { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "python_full_version < '3.12'" },
     ]
@@ -294,7 +294,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
     [[package]]
     name = "b2"
     version = "0.1.0"
-    source = { directory = "../b2" }
+    source = { directory = "b2" }
     dependencies = [
         { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "python_full_version >= '3.12'" },
     ]
@@ -804,12 +804,12 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     ]
 
     [package.metadata]
-    requires-dist = [{ name = "c", directory = "../c" }]
+    requires-dist = [{ name = "c", directory = "c" }]
 
     [[package]]
     name = "c"
     version = "0.1.0"
-    source = { directory = "../c" }
+    source = { directory = "c" }
     "###);
 
     Ok(())
