@@ -615,12 +615,13 @@ pub(crate) async fn add(
     )
     .await
     {
-        Err(_) => {
+        Err(err) => {
             // Revert the changes to the `pyproject.toml`, if necessary.
             if modified {
                 fs_err::write(project.root().join("pyproject.toml"), existing)?;
             }
-            return Ok(ExitStatus::Failure);
+            eprint!("{err:?}");
+            return Err(err.into());
         }
         _ => (),
     }
