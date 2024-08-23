@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.3.3
+
+### Enhancements
+
+- Add `uv sync --no-install-project` to skip installation of the project ([#6538](https://github.com/astral-sh/uv/pull/6538))
+- Add `uv sync --no-install-workspace` to skip installation of all workspace members ([#6539](https://github.com/astral-sh/uv/pull/6539))
+- Add `uv sync --no-install-package` to skip installation of specific packages ([#6540](https://github.com/astral-sh/uv/pull/6540))
+- Show previous version in self update message ([#6473](https://github.com/astral-sh/uv/pull/6473))
+
+### CLI
+
+- Add `--no-project` alias for `uv python pin --no-workspace` ([#6514](https://github.com/astral-sh/uv/pull/6514))
+- Ignore `.python-version` files in `uv venv` with `--no-config` ([#6513](https://github.com/astral-sh/uv/pull/6513))
+- Include virtual environment interpreters in `uv python find` ([#6521](https://github.com/astral-sh/uv/pull/6521))
+- Respect `-` as stdin channel for `uv run` ([#6481](https://github.com/astral-sh/uv/pull/6481))
+- Revert changes to pyproject.toml when sync fails duing `uv add` ([#6526](https://github.com/astral-sh/uv/pull/6526))
+
+### Configuration
+
+- Add `UV_COMPILE_BYTECODE` environment variable ([#6530](https://github.com/astral-sh/uv/pull/6530))
+
+### Bug fixes
+
+- Set `VIRTUAL_ENV` for `uv run` invocations ([#6543](https://github.com/astral-sh/uv/pull/6543))
+- Ignore errors in workspace discovery with `--no-project` ([#6554](https://github.com/astral-sh/uv/pull/6554))
+
+### Documentation
+
+- Add documentation for `uv python find` ([#6527](https://github.com/astral-sh/uv/pull/6527))
+- Add uv tool install example in Docker ([#6547](https://github.com/astral-sh/uv/pull/6547))
+- Document why we do lower bounds ([#6516](https://github.com/astral-sh/uv/pull/6516))
+- Fix to miss string termination in PowerShell commands for shell autocompletion documentation ([#6491](https://github.com/astral-sh/uv/pull/6491))
+- Fix incorrect workspace members keyword ([#6502](https://github.com/astral-sh/uv/pull/6502))
+- Use proper environment variables for Windows ([#6433](https://github.com/astral-sh/uv/pull/6433))
+- Improve caveat in `uvx` note ([#6546](https://github.com/astral-sh/uv/pull/6546))
+
 ## 0.3.2
 
 ### Configuration
@@ -2742,3 +2778,4 @@ path ([#1433](https://github.com/astral-sh/uv/pull/1433))
 - Grammar nit ([#1345](https://github.com/astral-sh/uv/pull/1345))
 
 <!-- prettier-ignore-end -->
+
