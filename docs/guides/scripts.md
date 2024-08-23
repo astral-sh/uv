@@ -195,6 +195,30 @@ print(Point)
 is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
 more details.
 
+## Improving reproducibility
+
+uv supports an `exclude-newer` field in the `tool.uv` section of inline script metadata to limit
+uv to only considering distributions released before a specific date. This is useful for improving
+the reproducibility of your script when run at a later point in time.
+
+The date may be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp
+(e.g., `2006-12-02T02:07:43Z`) or a local date in the same format (e.g., `2006-12-02`) in your
+system's configured time zone.
+
+```python title="example.py"
+# /// script
+# dependencies = [
+#   "requests",
+# ]
+# [tool.uv]
+# exclude-newer = "2020-01-23"
+# ///
+
+import requests
+
+print(requests.__version__)
+```
+
 ## Using different Python versions
 
 uv allows arbitrary Python versions to be requested on each script invocation, for example:

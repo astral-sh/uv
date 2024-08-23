@@ -3,7 +3,7 @@ use std::str::FromStr;
 use jiff::{tz::TimeZone, Timestamp, ToSpan};
 
 /// A timestamp that excludes files newer than it.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ExcludeNewer(Timestamp);
 
 impl ExcludeNewer {
@@ -56,6 +56,16 @@ impl FromStr for ExcludeNewer {
                 )
             })?;
         Ok(Self(timestamp))
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ExcludeNewer {
+    fn deserialize<D>(deserializer: D) -> Result<ExcludeNewer, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        FromStr::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
