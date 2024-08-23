@@ -134,7 +134,8 @@ impl TestContext {
         self
     }
 
-    /// Add extra standard filtering for Python executable names.
+    /// Add extra standard filtering for Python executable names, e.g., stripping version number
+    /// and `.exe` suffixes.
     #[must_use]
     pub fn with_filtered_python_names(mut self) -> Self {
         if cfg!(windows) {

@@ -250,18 +250,16 @@ fn python_find_venv() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
         // Enable additional filters for Windows compatibility
         .with_filtered_exe_suffix()
+        .with_filtered_python_names()
         .with_filtered_virtualenv_bin();
 
     // Create a virtual environment
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.12"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.12").arg("-q"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
-    Activate with: source .venv/[BIN]/activate
     "###);
 
     // We should find it first
@@ -269,7 +267,7 @@ fn python_find_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    .venv/[BIN]/python3
+    [VENV]/[BIN]/python
 
     ----- stderr -----
     "###);
@@ -279,7 +277,7 @@ fn python_find_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    .venv/[BIN]/python3
+    [VENV]/[BIN]/python
 
     ----- stderr -----
     "###);
@@ -327,7 +325,7 @@ fn python_find_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/[BIN]/python3
+    [VENV]/[BIN]/python
 
     ----- stderr -----
     "###);
@@ -345,7 +343,7 @@ fn python_find_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    .venv/[BIN]/python3
+    [TEMP_DIR]/child/.venv/[BIN]/python
 
     ----- stderr -----
     "###);
@@ -368,7 +366,7 @@ fn python_find_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    child/.venv/[BIN]/python3
+    [TEMP_DIR]/child/.venv/[BIN]/python
 
     ----- stderr -----
     "###);
@@ -378,7 +376,7 @@ fn python_find_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/child/.venv/[BIN]/python3
+    [TEMP_DIR]/child/.venv/[BIN]/python
 
     ----- stderr -----
     "###);

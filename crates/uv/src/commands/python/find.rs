@@ -68,7 +68,10 @@ pub(crate) async fn find(
         cache,
     )?;
 
-    println!("{}", python.interpreter().sys_executable().user_display());
+    println!(
+        "{}",
+        python.interpreter().sys_executable().simplified_display()
+    );
 
     Ok(ExitStatus::Success)
 }
