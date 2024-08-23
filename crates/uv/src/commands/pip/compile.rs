@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::env;
 use std::io::stdout;
 use std::path::Path;
@@ -643,6 +644,10 @@ impl<'a> OutputWriter<'a> {
     /// Commit the buffer to the output file.
     async fn commit(self) -> std::io::Result<()> {
         if let Some(output_file) = self.output_file {
+            // If the output file is an existing symlink, write to the destination instead.
+            let output_file = fs_err::read_link(output_file)
+                .map(Cow::Owned)
+                .unwrap_or(Cow::Borrowed(output_file));
             let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
             uv_fs::write_atomic(output_file, &stream).await?;
         }
