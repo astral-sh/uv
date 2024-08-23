@@ -826,3 +826,40 @@ fn read_metadata_statically_over_the_cache() -> Result<()> {
 
     Ok(())
 }
+
+/// Avoid syncing the project package when `--no-install-project` is provided.
+#[test]
+fn no_install_project() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Running with `--no-install-project` should install `anyio`, but not `project`.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}

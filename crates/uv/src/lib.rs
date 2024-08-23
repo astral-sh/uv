@@ -1102,6 +1102,7 @@ async fn run_project(
                 args.package,
                 args.extras,
                 args.dev,
+                args.no_install_project,
                 args.modifications,
                 args.python,
                 globals.python_preference,

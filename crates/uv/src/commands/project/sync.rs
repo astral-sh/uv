@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
+use distribution_types::Name;
 use itertools::Itertools;
 use pep508_rs::MarkerTree;
+use tracing::debug;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -30,6 +32,7 @@ pub(crate) async fn sync(
     package: Option<PackageName>,
     extras: ExtrasSpecification,
     dev: bool,
+    no_install_project: bool,
     modifications: Modifications,
     python: Option<String>,
     python_preference: PythonPreference,
@@ -102,6 +105,7 @@ pub(crate) async fn sync(
         &lock,
         &extras,
         dev,
+        no_install_project,
         modifications,
         settings.as_ref().into(),
         &state,
@@ -124,6 +128,7 @@ pub(super) async fn do_sync(
     lock: &Lock,
     extras: &ExtrasSpecification,
     dev: bool,
+    no_install_project: bool,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
@@ -186,6 +191,9 @@ pub(super) async fn do_sync(
 
     // Read the lockfile.
     let resolution = lock.to_resolution(project, markers, tags, extras, &dev)?;
+
+    // If `--no-install-project` is set, remove the project itself.
+    let resolution = apply_no_install_project(no_install_project, resolution, project);
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -273,4 +281,21 @@ pub(super) async fn do_sync(
     .await?;
 
     Ok(())
+}
+
+fn apply_no_install_project(
+    no_install_project: bool,
+    resolution: distribution_types::Resolution,
+    project: &VirtualProject,
+) -> distribution_types::Resolution {
+    if !no_install_project {
+        return resolution;
+    }
+
+    let Some(project_name) = project.project_name() else {
+        debug!("Ignoring `--no-install-project` for virtual workspace");
+        return resolution;
+    };
+
+    resolution.filter(|dist| dist.name() != project_name)
 }
