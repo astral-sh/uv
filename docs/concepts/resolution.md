@@ -260,20 +260,24 @@ unconditionally when using overrides — it does not matter if the marker evalua
 
 ## Lower bounds
 
-By default, `uv add` adds lower bounds to the added dependencies and `uv` in project mode warns when
-direct dependencies don't have lower bound. Lower bounds are not important in the "happy path", but
-they are important for cases with dependency conflicts. Say you have an application that requires
-two packages, and they have conflicting dependencies. The resolver tries all combination of versions
-of those two packages between their bounds and if all of them still conflict, we report an error you
-can fix. But if there are no lower bounds, we will backtrack down to the lowest version, often
-failing because either the old version only has a source distribution that fails to build, or we
-install a very old version that doesn't depend on the conflicting dependency, but also doesn't work
-with your code.
+By default, `uv add` adds lower bounds to dependencies and, when using uv to manage projects, uv
+will warn if direct dependencies don't have lower bound.
 
-For library authors, it's important to declare the lowest version for each dependency that your
-library works with, and to test them with `--resolution lowest` or `resolution lowest-direct` as
-explain [above](#resolution-strategy). Otherwise, a user may have other constraints that install too
-low versions and your library does not work.
+Lower bounds are not critical in the "happy path", but they are important for cases where there are
+dependency conflicts. For example, consider a project that requires two packages and those packages
+have conflicting dependencies. The resolver needs to check all combinations of all versions within
+the constraints for the two packages — if all of them conflict, an error is reported because the
+dependencies are not satisfiable. If there are no lower bounds, the resolver can (and often will)
+backtrack down to the oldest version of a package. This isn't only problematic because it's slow,
+the old version of the package often fails to build, or the resolver can end up picking a version
+that's old enough that it doesn't depend on the conflicting package, but also doesn't work with your
+code.
+
+Lower bounds are particularly critical when writing a library. It's important to declare the lowest
+version for each dependency that your library works with, and to validate that the bounds are
+correct — testing with [`--resolution lowest` or `resolution lowest-direct`](#resolution-strategy).
+Otherwise, a user may receive an old, incompatible version of one of your library's dependencies and
+the library will fail with an unexpected error.
 
 ## Reproducible resolutions
 
