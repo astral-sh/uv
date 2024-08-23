@@ -17,7 +17,7 @@ pub struct Credentials {
     password: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
 pub(crate) struct Username(Option<String>);
 
 impl Username {
