@@ -1422,3 +1422,44 @@ fn run_stdin() -> Result<()> {
 
     Ok(())
 }
+
+/// When the `pyproject.toml` file is invalid.
+#[test]
+fn run_project_toml_error() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+
+    // Create an empty project
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.touch()?;
+
+    let src = context.temp_dir.child("src").child("foo");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    // `run` should fail
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    "###);
+
+    // `run --no-project` should not
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
