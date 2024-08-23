@@ -144,8 +144,8 @@ is requested or an upgrade is explicitly requested with `--upgrade`.
 By default, uv tries to use the latest version of each package. For example,
 `uv pip install flask>=2.0.0` will install the latest version of Flask, e.g., 3.0.0. If
 `flask>=2.0.0` is a dependency of the project, only `flask` 3.0.0 will be used. This is important,
-for example, because running tests will not check that the the project is actually compatible with
-its stated lower bound of `flask` 2.0.0.
+for example, because running tests will not check that the project is actually compatible with its
+stated lower bound of `flask` 2.0.0.
 
 With `--resolution lowest`, uv will install the lowest possible version for all dependencies, both
 direct and indirect (transitive). Alternatively, `--resolution lowest-direct` will use the lowest
@@ -257,6 +257,23 @@ constraints files.
 If multiple overrides are provided for the same package, they must be differentiated with
 [markers](#platform-markers). If a package has a dependency with a marker, it is replaced
 unconditionally when using overrides — it does not matter if the marker evaluates to true or false.
+
+## Lower bounds
+
+By default, `uv add` adds lower bounds to the added dependencies and `uv` in project mode warns when
+direct dependencies don't have lower bound. Lower bounds are not important in the "happy path", but
+they are important for cases with dependency conflicts. Say you have an application that requires
+two packages, and they have conflicting dependencies. The resolver tries all combination of versions
+of those two packages between their bounds and if all of them still conflict, we report an error you
+can fix. But if there are no lower bounds, we will backtrack down to the lowest version, often
+failing because either the old version only has a source distribution that fails to build, or we
+install a very old version that doesn't depend on the conflicting dependency, but also doesn't work
+with your code.
+
+For library authors, it's important to declare the lowest version for each dependency that your
+library works with, and to test them with `--resolution lowest` or `resolution lowest-direct` as
+explain [above](#resolution-strategy). Otherwise, a user may have other constraints that install too
+low versions and your library does not work.
 
 ## Reproducible resolutions
 
