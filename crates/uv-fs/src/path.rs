@@ -274,6 +274,9 @@ pub fn relative_to(
     path: impl AsRef<Path>,
     base: impl AsRef<Path>,
 ) -> Result<PathBuf, std::io::Error> {
+    // println!("path: {}", path.as_ref().display());
+    // println!("base: {}", base.as_ref().display());
+
     // Find the longest common prefix, and also return the path stripped from that prefix
     let (stripped, common_prefix) = base
         .as_ref()

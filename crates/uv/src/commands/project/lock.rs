@@ -75,6 +75,9 @@ pub(crate) async fn lock(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
+    println!("cwd: {:?}", CWD);
+    println!("current_dir: {:?}", std::env::current_dir()?);
+
     // Find the project requirements.
     let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
 

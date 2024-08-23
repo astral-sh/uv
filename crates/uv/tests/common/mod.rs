@@ -210,6 +210,9 @@ impl TestContext {
         let canonical_temp_dir = temp_dir.canonicalize().unwrap();
         let venv = ChildPath::new(canonical_temp_dir.join(".venv"));
 
+        println!("temp_dir: {:?}", temp_dir.path());
+        println!("canonical_temp_dir: {:?}", canonical_temp_dir);
+
         let python_version = python_versions
             .first()
             .map(|version| PythonVersion::from_str(version).unwrap());
@@ -387,6 +390,8 @@ impl TestContext {
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
     pub fn add_shared_args(&self, command: &mut Command) {
         command
+            .arg("--directory")
+            .arg(self.temp_dir.path())
             .arg("--cache-dir")
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
@@ -396,6 +401,7 @@ impl TestContext {
             .env("UV_TEST_PYTHON_PATH", self.python_path())
             .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
             .current_dir(self.temp_dir.path());
+        println!("current_dir: {:?}", self.temp_dir.path());
 
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the

@@ -1928,8 +1928,12 @@ impl Source {
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Source, LockError> {
+        println!("path_dist.install_path: {:?}", path_dist.install_path);
+        println!("root: {:?}", root);
+
         let path = relative_to(&path_dist.install_path, root)
             .map_err(LockErrorKind::DistributionRelativePath)?;
+        println!("path: {:?}", path);
         Ok(Source::Path(path))
     }
 

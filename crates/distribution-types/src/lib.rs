@@ -33,6 +33,7 @@
 //!
 //! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
 use std::borrow::Cow;
+use std::path;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -360,7 +361,7 @@ impl Dist {
         ext: DistExtension,
     ) -> Result<Dist, Error> {
         // Convert to an absolute path.
-        let install_path = std::path::absolute(install_path)?;
+        let install_path = path::absolute(install_path)?;
 
         // Normalize the path.
         let install_path = normalize_absolute_path(&install_path)?;
@@ -405,7 +406,7 @@ impl Dist {
         editable: bool,
     ) -> Result<Dist, Error> {
         // Convert to an absolute path.
-        let install_path = std::path::absolute(install_path)?;
+        let install_path = path::absolute(install_path)?;
 
         // Normalize the path.
         let install_path = normalize_absolute_path(&install_path)?;
