@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.2
+
+### Configuration
+
+- Add support for configuring `python-downloads` with `UV_PYTHON_DOWNLOADS` ([#6436](https://github.com/astral-sh/uv/pull/6436))
+- Add support for configuring the `python-preference` with `UV_PYTHON_PREFERENCE` ([#6432](https://github.com/astral-sh/uv/pull/6432))
+- Deny invalid members in workspace schema ([#6450](https://github.com/astral-sh/uv/pull/6450))
+
+### Performance
+
+- Stop streaming wheels when `METADATA` is discovered (if range requests aren't supported) ([#6470](https://github.com/astral-sh/uv/pull/6470))
+
+### Bug fixes
+
+- Remove URI type from JSON Schema ([#6449](https://github.com/astral-sh/uv/pull/6449))
+- Fix retrieval of credentials for URLs from cache ([#6452](https://github.com/astral-sh/uv/pull/6452))
+- Restore `cache` suffix on Windows cache path ([#6482](https://github.com/astral-sh/uv/pull/6482))
+- Treat `.pyw` files as scripts in `uv run` on Windows ([#6453](https://github.com/astral-sh/uv/pull/6453))
+- Treat invalid extras as `false` in marker evaluation ([#6395](https://github.com/astral-sh/uv/pull/6395))
+- Avoid overwriting symlinks in `pip compile` output ([#6487](https://github.com/astral-sh/uv/pull/6487))
+
+### Documentation
+
+- Add `uv run` hint to the `uvx` guide ([#6454](https://github.com/astral-sh/uv/pull/6454))
+- Add a guide for using uv with FastAPI ([#6401](https://github.com/astral-sh/uv/pull/6401))
+- Add tip for using `managed = false` to disable project management ([#6465](https://github.com/astral-sh/uv/pull/6465))
+- Clarify the `uv tool run`, `uvx`, and `uv run` relationships ([#6455](https://github.com/astral-sh/uv/pull/6455))
+- Fix references to `--python-downloads` (it is `--no-python-downloads`) ([#6439](https://github.com/astral-sh/uv/pull/6439))
+- Further clarifications to the tools documentation ([#6474](https://github.com/astral-sh/uv/pull/6474))
+- Update docs dockerfile (bullseye -> bookworm) ([#6441](https://github.com/astral-sh/uv/pull/6441))
+- Update the installation documentation page ([#6468](https://github.com/astral-sh/uv/pull/6468))
+- Update pip compatibility pages to mention configuration files support ([#6410](https://github.com/astral-sh/uv/pull/6410))
+- Add `uv run` docs for gui scripts ([#6478](https://github.com/astral-sh/uv/pull/6478))
+
 ## 0.3.1
 
 ### Enhancements
@@ -2708,4 +2742,3 @@ path ([#1433](https://github.com/astral-sh/uv/pull/1433))
 - Grammar nit ([#1345](https://github.com/astral-sh/uv/pull/1345))
 
 <!-- prettier-ignore-end -->
-
