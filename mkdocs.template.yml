@@ -113,6 +113,7 @@ nav:
       - Docker: guides/integration/docker.md
       - GitHub Actions: guides/integration/github.md
       - Pre-commit: guides/integration/pre-commit.md
+      - FastAPI: guides/integration/fastapi.md
       - Alternative indexes: guides/integration/alternative-indexes.md
   - The pip interface:
       - pip/index.md
