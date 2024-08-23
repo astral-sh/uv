@@ -269,7 +269,7 @@ fn python_find_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    .venv/[BIN]/python3
+    [VENV]/[BIN]/python3
 
     ----- stderr -----
     "###);
@@ -279,7 +279,7 @@ fn python_find_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    .venv/[BIN]/python3
+    [VENV]/[BIN]/python3
 
     ----- stderr -----
     "###);
@@ -345,7 +345,7 @@ fn python_find_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    .venv/[BIN]/python3
+    [TEMP_DIR]/child/.venv/[BIN]/python3
 
     ----- stderr -----
     "###);
@@ -368,7 +368,7 @@ fn python_find_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    child/.venv/[BIN]/python3
+    [TEMP_DIR]/child/.venv/[BIN]/python3
 
     ----- stderr -----
     "###);
