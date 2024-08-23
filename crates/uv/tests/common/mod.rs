@@ -390,8 +390,6 @@ impl TestContext {
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
     pub fn add_shared_args(&self, command: &mut Command) {
         command
-            .arg("--directory")
-            .arg(self.temp_dir.path())
             .arg("--cache-dir")
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())

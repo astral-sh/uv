@@ -7,12 +7,19 @@ use path_slash::PathExt;
 
 /// The current working directory.
 pub static CWD: LazyLock<PathBuf> =
-    LazyLock::new(|| std::env::current_dir().expect("The current directory must exist"));
+    LazyLock::new(|| {
+        std::env::var("UV_CWD")
+            .ok()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::current_dir().expect("The current directory must exist"))
+    });
 
 /// The current working directory, canonicalized.
 pub static CANONICAL_CWD: LazyLock<PathBuf> = LazyLock::new(|| {
-    std::env::current_dir()
-        .expect("The current directory must exist")
+    std::env::var("UV_CWD")
+        .ok()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::current_dir().expect("The current directory must exist"))
         .canonicalize()
         .expect("The current directory must be canonicalized")
 });

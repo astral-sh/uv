@@ -7106,7 +7106,7 @@ fn lock_sources_archive() -> Result<()> {
     let mut workspace_archive_file = fs_err::File::create(&*workspace_archive)?;
     std::io::copy(&mut response.bytes()?.as_ref(), &mut workspace_archive_file)?;
 
-    println!("workspace_archive: {:?}", workspace_archive.path());
+
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {

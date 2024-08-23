@@ -169,7 +169,7 @@ impl Workspace {
                 pyproject_toml,
             });
 
-        println!("workspace_root: {:?}", workspace_root);
+
 
         Self::collect_members(
             workspace_root.clone(),
