@@ -1,8 +1,8 @@
 # Using uv with FastAPI
 
-[FastAPI](https://github.com/fastapi/fastapi) is modern, high-performance Python web framework. You
-can use uv to manage your FastAPI project, including installing dependencies, managing environments,
-running FastAPI applications, and more.
+[FastAPI](https://github.com/fastapi/fastapi) is a modern, high-performance Python web framework.
+You can use uv to manage your FastAPI project, including installing dependencies, managing
+environments, running FastAPI applications, and more.
 
 !!! note
 

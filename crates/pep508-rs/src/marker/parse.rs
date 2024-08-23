@@ -130,7 +130,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     cursor.eat_whitespace();
     let r_value = parse_marker_value(cursor)?;
 
-    // Convert a `<marker_value> <marker_op> <marker_value>` expression into it's
+    // Convert a `<marker_value> <marker_op> <marker_value>` expression into its
     // typed equivalent.
     let expr = match l_value {
         // Either:
