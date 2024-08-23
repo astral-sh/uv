@@ -240,13 +240,18 @@ pub(crate) async fn add(
     // optional on the downstream APIs.
     let python_version = None;
     let python_platform = None;
+    let python_implementation = None;
     let hasher = HashStrategy::default();
     let build_constraints = [];
     let sources = SourceStrategy::Enabled;
 
     // Determine the environment for the resolution.
-    let (tags, markers) =
-        resolution_environment(python_version, python_platform, target.interpreter())?;
+    let (tags, markers) = resolution_environment(
+        python_version,
+        python_platform,
+        python_implementation,
+        target.interpreter(),
+    )?;
 
     // Add all authenticated sources to the cache.
     for url in settings.index_locations.urls() {

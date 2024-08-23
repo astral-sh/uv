@@ -25,8 +25,8 @@ use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVersion, VersionRequest,
+    EnvironmentPreference, ImplementationName, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
 use uv_requirements::{
     upgrade::read_requirements_txt, RequirementsSource, RequirementsSpecification,
@@ -81,6 +81,7 @@ pub(crate) async fn pip_compile(
     build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
+    python_implementation: Option<ImplementationName>,
     universal: bool,
     exclude_newer: Option<ExcludeNewer>,
     sources: SourceStrategy,
@@ -246,8 +247,12 @@ pub(crate) async fn pip_compile(
     let (tags, markers) = if universal {
         (None, ResolverMarkers::universal(vec![]))
     } else {
-        let (tags, markers) =
-            resolution_environment(python_version, python_platform, &interpreter)?;
+        let (tags, markers) = resolution_environment(
+            python_version,
+            python_platform,
+            python_implementation,
+            &interpreter,
+        )?;
         (
             Some(tags),
             ResolverMarkers::specific_environment((*markers).clone()),

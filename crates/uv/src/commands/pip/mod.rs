@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use pep508_rs::MarkerEnvironment;
 use platform_tags::{Tags, TagsError};
 use uv_configuration::TargetTriple;
-use uv_python::{Interpreter, PythonVersion};
+use uv_python::{ImplementationName, Interpreter, PythonVersion};
 
 pub(crate) mod check;
 pub(crate) mod compile;
@@ -21,13 +21,18 @@ pub(crate) mod uninstall;
 pub(crate) fn resolution_environment(
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
+    python_implementation: Option<ImplementationName>,
     interpreter: &Interpreter,
 ) -> Result<(Cow<'_, Tags>, Cow<'_, MarkerEnvironment>), TagsError> {
+    let implementation_name = match python_implementation {
+        Some(python_implementation) => &*python_implementation.to_string(),
+        None => interpreter.implementation_name(),
+    };
     let tags = match (python_platform, python_version.as_ref()) {
         (Some(python_platform), Some(python_version)) => Cow::Owned(Tags::from_env(
             &python_platform.platform(),
             (python_version.major(), python_version.minor()),
-            interpreter.implementation_name(),
+            implementation_name,
             interpreter.implementation_tuple(),
             interpreter.manylinux_compatible(),
             interpreter.gil_disabled(),
@@ -35,7 +40,7 @@ pub(crate) fn resolution_environment(
         (Some(python_platform), None) => Cow::Owned(Tags::from_env(
             &python_platform.platform(),
             interpreter.python_tuple(),
-            interpreter.implementation_name(),
+            implementation_name,
             interpreter.implementation_tuple(),
             interpreter.manylinux_compatible(),
             interpreter.gil_disabled(),
@@ -43,12 +48,19 @@ pub(crate) fn resolution_environment(
         (None, Some(python_version)) => Cow::Owned(Tags::from_env(
             interpreter.platform(),
             (python_version.major(), python_version.minor()),
-            interpreter.implementation_name(),
+            implementation_name,
             interpreter.implementation_tuple(),
             interpreter.manylinux_compatible(),
             interpreter.gil_disabled(),
         )?),
-        (None, None) => Cow::Borrowed(interpreter.tags()?),
+        (None, None) => Cow::Owned(Tags::from_env(
+            interpreter.platform(),
+            interpreter.python_tuple(),
+            implementation_name,
+            interpreter.implementation_tuple(),
+            interpreter.manylinux_compatible(),
+            interpreter.gil_disabled(),
+        )?),
     };
 
     // Apply the platform tags to the markers.

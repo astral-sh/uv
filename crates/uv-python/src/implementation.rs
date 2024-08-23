@@ -10,11 +10,21 @@ pub enum Error {
     UnknownImplementation(String),
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Default, PartialOrd, Ord, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Default, PartialOrd, Ord, Hash, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum ImplementationName {
+    #[cfg_attr(feature = "clap", value(name = "gp"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "gp"))]
     GraalPy,
+
+    #[cfg_attr(feature = "clap", value(name = "pp"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "pp"))]
     PyPy,
     #[default]
+    #[cfg_attr(feature = "clap", value(name = "cp"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "cp"))]
     CPython,
 }
 

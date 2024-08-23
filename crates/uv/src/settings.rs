@@ -27,7 +27,9 @@ use uv_configuration::{
     TargetTriple, Upgrade,
 };
 use uv_normalize::PackageName;
-use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
+use uv_python::{
+    ImplementationName, Prefix, PythonDownloads, PythonPreference, PythonVersion, Target,
+};
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_settings::{
     Combine, FilesystemOptions, Options, PipOptions, ResolverInstallerOptions, ResolverOptions,
@@ -1187,6 +1189,7 @@ impl PipInstallSettings {
             only_binary,
             python_version,
             python_platform,
+            python_implementation,
             strict,
             no_strict,
             dry_run,
@@ -1257,6 +1260,7 @@ impl PipInstallSettings {
                     no_deps: flag(no_deps, deps),
                     python_version,
                     python_platform,
+                    python_implementation,
                     require_hashes: flag(require_hashes, no_require_hashes),
                     verify_hashes: flag(verify_hashes, no_verify_hashes),
                     ..PipOptions::from(installer)
@@ -1845,6 +1849,7 @@ pub(crate) struct PipSettings {
     pub(crate) config_setting: ConfigSettings,
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
+    pub(crate) python_implementation: Option<ImplementationName>,
     pub(crate) universal: bool,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) no_emit_package: Vec<PackageName>,
@@ -1903,6 +1908,7 @@ impl PipSettings {
             config_settings,
             python_version,
             python_platform,
+            python_implementation,
             universal,
             exclude_newer,
             no_emit_package,
@@ -2040,6 +2046,7 @@ impl PipSettings {
                 .unwrap_or_default(),
             python_version: args.python_version.combine(python_version),
             python_platform: args.python_platform.combine(python_platform),
+            python_implementation: args.python_implementation.combine(python_implementation),
             universal: args.universal.combine(universal).unwrap_or_default(),
             exclude_newer: args.exclude_newer.combine(exclude_newer),
             no_emit_package: args

@@ -11,7 +11,7 @@ use uv_configuration::{
 };
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_python::{ImplementationName, PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
@@ -984,6 +984,17 @@ pub struct PipOptions {
         "#
     )]
     pub python_platform: Option<TargetTriple>,
+    /// The python implementation for which requirements should be resolved.
+    ///
+    /// For example `cp` or `pp`
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            python-implementation = "pp"
+        "#
+    )]
+    pub python_implementation: Option<ImplementationName>,
     /// Perform a universal resolution, attempting to generate a single `requirements.txt` output
     /// file that is compatible with all operating systems, architectures, and Python
     /// implementations.

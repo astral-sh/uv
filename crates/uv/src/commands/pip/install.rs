@@ -21,7 +21,8 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
+    EnvironmentPreference, ImplementationName, Prefix, PythonEnvironment, PythonRequest,
+    PythonVersion, Target,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -64,6 +65,7 @@ pub(crate) async fn pip_install(
     build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
+    python_implementation: Option<ImplementationName>,
     strict: bool,
     exclude_newer: Option<ExcludeNewer>,
     sources: SourceStrategy,
@@ -237,7 +239,18 @@ pub(crate) async fn pip_install(
     };
 
     // Determine the environment for the resolution.
-    let (tags, markers) = resolution_environment(python_version, python_platform, interpreter)?;
+    let (tags, markers) = resolution_environment(
+        python_version,
+        python_platform,
+        python_implementation,
+        interpreter,
+    )?;
+    if let Some(implementation_name) = python_implementation {
+        debug!("Python implementation: {implementation_name}");
+    } else {
+        debug!("Python implementation: None");
+    }
+    debug!("Tags: {tags}");
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {

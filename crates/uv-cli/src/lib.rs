@@ -15,7 +15,7 @@ use uv_configuration::{
     ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
 use uv_normalize::{ExtraName, PackageName};
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_python::{ImplementationName, PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 pub mod compat;
@@ -1502,6 +1502,18 @@ pub struct PipInstallArgs {
     /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
+
+    /// The Python implementation for which requirements should be installed.
+    ///
+    /// For example `cp` or `pp`
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// implementation; as a result, the installed distributions may not be compatible with the _current_
+    /// implementation. Conversely, any distributions that are built from source may be incompatible with
+    /// the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-implementation` option is intended for advanced use cases.
+    #[arg(long)]
+    pub python_implementation: Option<ImplementationName>,
 
     /// Validate the Python environment after completing the installation, to detect and with
     /// missing dependencies or other issues.
