@@ -42,11 +42,7 @@ fn run_with_python_version() -> Result<()> {
     // Our tests change files in <1s, so we must disable CPython bytecode caching with `-B` or we'll
     // get stale files, see https://github.com/python/cpython/issues/75953.
     let mut command = context.run();
-    let command_with_args = command
-        .arg("--preview")
-        .arg("python")
-        .arg("-B")
-        .arg("main.py");
+    let command_with_args = command.arg("python").arg("-B").arg("main.py");
     uv_snapshot!(context.filters(), command_with_args, @r###"
     success: true
     exit_code: 0
@@ -69,7 +65,6 @@ fn run_with_python_version() -> Result<()> {
     // This is the same Python, no reinstallation.
     let mut command = context.run();
     let command_with_args = command
-        .arg("--preview")
         .arg("-p")
         .arg("3.12")
         .arg("python")
@@ -90,7 +85,6 @@ fn run_with_python_version() -> Result<()> {
     // This time, we target Python 3.11 instead.
     let mut command = context.run();
     let command_with_args = command
-        .arg("--preview")
         .arg("-p")
         .arg("3.11")
         .arg("python")
@@ -121,7 +115,6 @@ fn run_with_python_version() -> Result<()> {
     // This time, we target Python 3.8 instead.
     let mut command = context.run();
     let command_with_args = command
-        .arg("--preview")
         .arg("-p")
         .arg("3.8")
         .arg("python")
@@ -226,7 +219,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     // Running the script should install the requirements.
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -240,7 +233,7 @@ fn run_pep723_script() -> Result<()> {
     "###);
 
     // Running again should use the existing environment.
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -258,7 +251,7 @@ fn run_pep723_script() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -286,7 +279,7 @@ fn run_pep723_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -309,7 +302,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     // Running the script should install the requirements.
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -320,7 +313,7 @@ fn run_pep723_script() -> Result<()> {
     "###);
 
     // Running a script with `--locked` should warn.
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("--locked").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -343,7 +336,7 @@ fn run_pep723_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("--no-project").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -379,7 +372,7 @@ fn run_pythonw_script() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.pyw"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.pyw"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -420,7 +413,7 @@ fn run_pep723_script_metadata() -> Result<()> {
     })?;
 
     // Running the script should fail without network access.
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -451,7 +444,7 @@ fn run_pep723_script_metadata() -> Result<()> {
     })?;
 
     // The script should succeed with the specified source.
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1155,11 +1148,7 @@ fn run_from_directory() -> Result<()> {
     })?;
 
     let mut command = context.run();
-    let command_with_args = command
-        .arg("--preview")
-        .arg("--directory")
-        .arg("project")
-        .arg("main");
+    let command_with_args = command.arg("--directory").arg("project").arg("main");
 
     uv_snapshot!(context.filters(), command_with_args, @r###"
     success: true

@@ -18,7 +18,7 @@ mod common;
 /// `pip install --preview -e <current dir>`
 fn install_workspace(context: &TestContext, current_dir: &Path) -> Command {
     let mut command = context.pip_install();
-    command.arg("--preview").arg("-e").arg(current_dir);
+    command.arg("-e").arg(current_dir);
     command
 }
 
@@ -367,7 +367,6 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     // Run from the `bird-feeder` member.
     uv_snapshot!(filters, context
         .run()
-        .arg("--preview")
         .arg("--package")
         .arg("bird-feeder")
         .arg("packages/bird-feeder/check_installed_bird_feeder.py")
@@ -393,7 +392,6 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
 
     uv_snapshot!(context.filters(), universal_windows_filters=true, context
         .run()
-        .arg("--preview")
         .arg("--package")
         .arg("albatross")
         .arg("packages/albatross/check_installed_albatross.py")
@@ -429,7 +427,6 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
 
     uv_snapshot!(context.filters(), universal_windows_filters=true, context
         .run()
-        .arg("--preview")
         .arg("packages/albatross/check_installed_albatross.py")
         .current_dir(&work_dir), @r###"
     success: true
@@ -472,7 +469,6 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
     uv_snapshot!(filters, context
         .run()
-        .arg("--preview")
         .arg("--package")
         .arg("bird-feeder")
         .arg("packages/bird-feeder/check_installed_bird_feeder.py")
@@ -498,7 +494,6 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
     uv_snapshot!(context.filters(), universal_windows_filters=true, context
         .run()
-        .arg("--preview")
         .arg("--package")
         .arg("albatross")
         .arg("check_installed_albatross.py")
@@ -537,7 +532,6 @@ fn test_uv_run_isolate() -> Result<()> {
     // Install the root package.
     uv_snapshot!(context.filters(), universal_windows_filters=true, context
         .run()
-        .arg("--preview")
         .arg("--package")
         .arg("albatross")
         .arg("check_installed_albatross.py")
@@ -568,7 +562,6 @@ fn test_uv_run_isolate() -> Result<()> {
     // given command, so we don't remove `albatross` from the environment.
     uv_snapshot!(filters, context
         .run()
-        .arg("--preview")
         .arg("--package")
         .arg("bird-feeder")
         .arg("check_installed_albatross.py")
@@ -590,7 +583,6 @@ fn test_uv_run_isolate() -> Result<()> {
     // `--no-project` right now.
     uv_snapshot!(filters, context
         .run()
-        .arg("--preview")
         .arg("--isolated")
         .arg("--package")
         .arg("bird-feeder")
@@ -631,7 +623,6 @@ fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Resul
 
         context
             .lock()
-            .arg("--preview")
             .current_dir(work_dir.join(dir))
             .assert()
             .success();
@@ -759,7 +750,7 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
     "#};
     make_project(&other_workspace.join("packages").join("e"), "e", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&main_workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&main_workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -822,7 +813,7 @@ fn workspace_empty_member() -> Result<()> {
     // ... and an empty c.
     fs_err::create_dir_all(workspace.join("packages").join("c"))?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -864,7 +855,7 @@ fn workspace_hidden_files() -> Result<()> {
     // ... and a hidden c.
     fs_err::create_dir_all(workspace.join("packages").join(".c"))?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -927,7 +918,7 @@ fn workspace_hidden_member() -> Result<()> {
     "};
     make_project(&workspace.join("packages").join(".c"), "c", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1000,7 +991,7 @@ fn workspace_inherit_sources() -> Result<()> {
     library.child("src/__init__.py").touch()?;
 
     // As-is, resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1028,7 +1019,7 @@ fn workspace_inherit_sources() -> Result<()> {
     leaf.child("src/__init__.py").touch()?;
 
     // Resolving should succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1063,7 +1054,7 @@ fn workspace_inherit_sources() -> Result<()> {
     "#})?;
 
     // Resolving should succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1147,7 +1138,7 @@ fn workspace_inherit_sources() -> Result<()> {
 
     // Resolving should succeed; the member should still use the root's source, despite defining
     // some of its own
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1192,7 +1183,7 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     leaf.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1248,7 +1239,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1315,7 +1306,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
     bird.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1373,7 +1364,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1431,7 +1422,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1491,7 +1482,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
 
     // We should fail
     // TODO(zanieb): This error message is bad?
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

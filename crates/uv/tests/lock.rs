@@ -4125,7 +4125,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     "#})?;
     context.temp_dir.child("c/c/__init__.py").touch()?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -4407,7 +4407,7 @@ fn lock_new_extras() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -4530,7 +4530,7 @@ fn lock_new_extras() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
         ----- stdout -----

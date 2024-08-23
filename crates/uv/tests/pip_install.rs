@@ -5586,7 +5586,6 @@ fn tool_uv_sources() -> Result<()> {
 
     // Install the editable packages.
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_install()
-        .arg("--preview")
         .arg("-r")
         .arg(require_path)
         .arg("--extra")
@@ -5613,7 +5612,6 @@ fn tool_uv_sources() -> Result<()> {
 
     // Re-install the editable packages.
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_install()
-        .arg("--preview")
         .arg("-r")
         .arg(require_path)
         .arg("--extra")

@@ -95,8 +95,7 @@ fn create_venv_reads_request_from_python_version_file() {
     let context = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     // Without the file, we should use the first on the PATH
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -115,8 +114,7 @@ fn create_venv_reads_request_from_python_version_file() {
         .write_str("3.12")
         .unwrap();
 
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -136,8 +134,7 @@ fn create_venv_reads_request_from_python_versions_file() {
     let context = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     // Without the file, we should use the first on the PATH
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -156,8 +153,7 @@ fn create_venv_reads_request_from_python_versions_file() {
         .write_str("3.12\n3.11")
         .unwrap();
 
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -177,8 +173,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.9", "3.10", "3.12"]);
 
     // Without a Python requirement, we use the first on the PATH
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r#"
+    uv_snapshot!(context.filters(), context.venv(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -201,8 +196,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -225,8 +219,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r#"
+    uv_snapshot!(context.filters(), context.venv(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -249,8 +242,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r#"
+    uv_snapshot!(context.filters(), context.venv(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -284,8 +276,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r#"
+    uv_snapshot!(context.filters(), context.venv(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -308,8 +299,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r#"
+    uv_snapshot!(context.filters(), context.venv(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -332,8 +322,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r#"
+    uv_snapshot!(context.filters(), context.venv(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -357,8 +346,7 @@ fn create_venv_ignores_missing_pyproject_metadata() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r"[tool.no.project.here]" })?;
 
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -382,8 +370,7 @@ fn create_venv_warns_user_on_requires_python_discovery_error() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r"invalid toml" })?;
 
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -418,8 +405,7 @@ fn create_venv_explicit_request_takes_priority_over_python_version_file() {
         .write_str("3.12")
         .unwrap();
 
-    uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview").arg("--python").arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
