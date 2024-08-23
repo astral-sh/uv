@@ -74,10 +74,10 @@ pub(crate) async fn self_update(printer: Printer) -> Result<ExitStatus> {
     // available version of uv.
     match updater.run().await {
         Ok(Some(result)) => {
-            let version_information = if result.old_version.is_some() {
+            let version_information = if let Some(old_version) = result.old_version {
                 format!(
                     "from {} to {}",
-                    format!("v{}", result.old_version.unwrap()).bold().white(),
+                    format!("v{old_version}").bold().white(),
                     format!("v{}", result.new_version).bold().white(),
                 )
             } else {
