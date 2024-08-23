@@ -1847,7 +1847,7 @@ dependencies = [
  "pypi-types",
  "reflink-copy",
  "regex",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "schemars",
  "serde",
  "serde_json",
@@ -2511,7 +2511,7 @@ dependencies = [
  "pyo3",
  "pyo3-log",
  "regex",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "schemars",
  "serde",
  "serde_json",
@@ -2652,7 +2652,7 @@ name = "platform-tags"
 version = "0.0.1"
 dependencies = [
  "insta",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "serde",
  "thiserror",
 ]
@@ -2782,7 +2782,7 @@ dependencies = [
  "indexmap",
  "log",
  "priority-queue",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "thiserror",
 ]
 
@@ -2796,7 +2796,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset 0.9.1",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.3",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",
@@ -2894,7 +2894,7 @@ dependencies = [
  "pin-project-lite",
  "quinn-proto",
  "quinn-udp",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "rustls",
  "socket2",
  "thiserror",
@@ -2911,7 +2911,7 @@ dependencies = [
  "bytes",
  "rand",
  "ring",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "rustls",
  "slab",
  "thiserror",
@@ -3371,12 +3371,6 @@ checksum = "719b953e2095829ee67db738b3bfa9fa368c94900df327b3f07fe6e794d2fe1f"
 
 [[package]]
 name = "rustc-hash"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
-
-[[package]]
-name = "rustc-hash"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "583034fd73374156e66797ed8e5b0d5690409c9226b22d87cb7f19821c05d152"
@@ -3767,9 +3761,9 @@ checksum = "b7401a30af6cb5818bb64852270bb722533397edcfc7344954a38f420819ece2"
 
 [[package]]
 name = "svg"
-version = "0.15.1"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683eed9bd9a2b078f92f87d166db38292e8114ab16d4cf23787ad4eecd1bb6e5"
+checksum = "700efb40f3f559c23c18b446e8ed62b08b56b2bb3197b36d57e0470b4102779e"
 
 [[package]]
 name = "svgfilters"
@@ -4252,15 +4246,15 @@ dependencies = [
 
 [[package]]
 name = "tracing-durations-export"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35b910b25a6c8e0fefcfff912bad6c4f4849d37e5945c3861d15e550d819da53"
+checksum = "382e025ef8e0db646343dd2cf56af9d7fe6f5eabce5f388f8e5ec7234f555a0f"
 dependencies = [
  "anyhow",
  "fs-err",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "once_cell",
- "rustc-hash 1.1.0",
+ "rustc-hash",
  "serde",
  "serde_json",
  "svg",
@@ -4533,7 +4527,7 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "serde",
  "serde_json",
  "similar",
@@ -4588,7 +4582,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "rust-netrc",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "tempfile",
  "test-log",
  "tokio",
@@ -4612,7 +4606,7 @@ dependencies = [
  "pep508_rs",
  "pypi-types",
  "regex",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "serde",
  "serde_json",
  "tempfile",
@@ -4640,7 +4634,7 @@ dependencies = [
  "nanoid",
  "pypi-types",
  "rmp-serde",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "serde",
  "tempfile",
  "tracing",
@@ -4736,7 +4730,7 @@ dependencies = [
  "pep508_rs",
  "platform-tags",
  "pypi-types",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "schemars",
  "serde",
  "serde_json",
@@ -4766,7 +4760,7 @@ dependencies = [
  "pretty_assertions",
  "pypi-types",
  "resvg",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "schemars",
  "serde",
  "serde_json",
@@ -4805,7 +4799,7 @@ dependencies = [
  "install-wheel-rs",
  "itertools 0.13.0",
  "pypi-types",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "tracing",
  "uv-build",
  "uv-cache",
@@ -4840,7 +4834,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "rmp-serde",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "serde",
  "tempfile",
  "thiserror",
@@ -4874,7 +4868,7 @@ dependencies = [
  "pypi-types",
  "rayon",
  "reqwest",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "sha2",
  "thiserror",
  "tokio",
@@ -4943,7 +4937,7 @@ dependencies = [
  "platform-tags",
  "pypi-types",
  "rayon",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "same-file",
  "tempfile",
  "thiserror",
@@ -5064,7 +5058,7 @@ dependencies = [
  "pep508_rs",
  "pypi-types",
  "requirements-txt",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "serde",
  "thiserror",
  "toml",
@@ -5110,7 +5104,7 @@ dependencies = [
  "pypi-types",
  "requirements-txt",
  "rkyv",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "same-file",
  "schemars",
  "serde",
@@ -5236,7 +5230,7 @@ dependencies = [
  "pep440_rs",
  "pep508_rs",
  "pypi-types",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "thiserror",
  "url",
  "uv-cache",
@@ -5272,7 +5266,7 @@ version = "0.0.1"
 dependencies = [
  "anstream",
  "owo-colors",
- "rustc-hash 2.0.0",
+ "rustc-hash",
 ]
 
 [[package]]
@@ -5287,7 +5281,7 @@ dependencies = [
  "pep508_rs",
  "pypi-types",
  "regex",
- "rustc-hash 2.0.0",
+ "rustc-hash",
  "schemars",
  "serde",
  "thiserror",
