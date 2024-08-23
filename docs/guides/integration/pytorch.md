@@ -42,18 +42,6 @@ uv add --extra-index-url=https://download.pytorch.org/whl/cpu torch
 uv pip install --extra-index-url=https://download.pytorch.org/whl/cpu torch
 ```
 
-Alternatively, add the following to the `pyproject.toml` file:
-
-```toml
-[project]
-dependencies = [
-    "torch",
-]
-
-[tool.uv.sources]
-torch = { url = "https://download.pytorch.org/whl/cpu" }
-```
-
 ### CUDA 11.8 Support
 
 ```sh
@@ -62,18 +50,6 @@ uv add --extra-index-url=https://download.pytorch.org/whl/cu118 torch
 
 # make sure there is a virtual environment in the directory
 uv pip install --extra-index-url=https://download.pytorch.org/whl/cu118 torch
-```
-
-Alternatively, add the following to the `pyproject.toml` file:
-
-```toml
-[project]
-dependencies = [
-    "torch",
-]
-
-[tool.uv.sources]
-torch = { url = "https://download.pytorch.org/whl/cu118" }
 ```
 
 ### CUDA 12.1 Support
@@ -86,18 +62,6 @@ uv add --extra-index-url=https://download.pytorch.org/whl/cu121 torch
 uv pip install --extra-index-url=https://download.pytorch.org/whl/cu121 torch
 ```
 
-Alternatively, add the following to the `pyproject.toml` file:
-
-```toml
-[project]
-dependencies = [
-    "torch",
-]
-
-[tool.uv.sources]
-torch = { url = "https://download.pytorch.org/whl/cu121" }
-```
-
 ### CUDA 12.4 Support
 
 ```sh
@@ -106,18 +70,6 @@ uv add --extra-index-url=https://download.pytorch.org/whl/cu124 torch
 
 # make sure there is a virtual environment in the directory
 uv pip install --extra-index-url=https://download.pytorch.org/whl/cu124 torch
-```
-
-Alternatively, add the following to the `pyproject.toml` file:
-
-```toml
-[project]
-dependencies = [
-    "torch",
-]
-
-[tool.uv.sources]
-torch = { url = "https://download.pytorch.org/whl/cu124" }
 ```
 
 ## On Windows
@@ -142,18 +94,6 @@ uv add --extra-index-url=https://download.pytorch.org/whl/cu118 torch
 uv pip install --extra-index-url=https://download.pytorch.org/whl/cu118 torch
 ```
 
-Alternatively, add the following to the `pyproject.toml` file:
-
-```toml
-[project]
-dependencies = [
-    "torch",
-]
-
-[tool.uv.sources]
-torch = { url = "https://download.pytorch.org/whl/cu118" }
-```
-
 ### CUDA 12.1 Support
 
 ```sh
@@ -164,18 +104,6 @@ uv add --extra-index-url=https://download.pytorch.org/whl/cu121 torch
 uv pip install --extra-index-url=https://download.pytorch.org/whl/cu121 torch
 ```
 
-Alternatively, add the following to the `pyproject.toml` file:
-
-```toml
-[project]
-dependencies = [
-    "torch",
-]
-
-[tool.uv.sources]
-torch = { url = "https://download.pytorch.org/whl/cu121" }
-```
-
 ### CUDA 12.4 Support
 
 ```sh
@@ -184,16 +112,4 @@ uv add --extra-index-url=https://download.pytorch.org/whl/cu124 torch
 
 # make sure there is a virtual environment in the directory
 uv pip install --extra-index-url=https://download.pytorch.org/whl/cu124 torch
-```
-
-Alternatively, add the following to the `pyproject.toml` file:
-
-```toml
-[project]
-dependencies = [
-    "torch",
-]
-
-[tool.uv.sources]
-torch = { url = "https://download.pytorch.org/whl/cu124" }
 ```
