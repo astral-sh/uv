@@ -1103,6 +1103,7 @@ async fn run_project(
                 args.extras,
                 args.dev,
                 args.no_install_project,
+                args.no_install_workspace,
                 args.modifications,
                 args.python,
                 globals.python_preference,

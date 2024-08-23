@@ -33,6 +33,7 @@ pub(crate) async fn sync(
     extras: ExtrasSpecification,
     dev: bool,
     no_install_project: bool,
+    no_install_workspace: bool,
     modifications: Modifications,
     python: Option<String>,
     python_preference: PythonPreference,
@@ -106,6 +107,7 @@ pub(crate) async fn sync(
         &extras,
         dev,
         no_install_project,
+        no_install_workspace,
         modifications,
         settings.as_ref().into(),
         &state,
@@ -122,6 +124,7 @@ pub(crate) async fn sync(
 }
 
 /// Sync a lockfile with an environment.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_sync(
     project: &VirtualProject,
     venv: &PythonEnvironment,
@@ -129,6 +132,7 @@ pub(super) async fn do_sync(
     extras: &ExtrasSpecification,
     dev: bool,
     no_install_project: bool,
+    no_install_workspace: bool,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
@@ -194,6 +198,9 @@ pub(super) async fn do_sync(
 
     // If `--no-install-project` is set, remove the project itself.
     let resolution = apply_no_install_project(no_install_project, resolution, project);
+
+    // If `--no-install-workspace` is set, remove the project and any workspace members.
+    let resolution = apply_no_install_workspace(no_install_workspace, resolution, project);
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -298,4 +305,19 @@ fn apply_no_install_project(
     };
 
     resolution.filter(|dist| dist.name() != project_name)
+}
+
+fn apply_no_install_workspace(
+    no_install_workspace: bool,
+    resolution: distribution_types::Resolution,
+    project: &VirtualProject,
+) -> distribution_types::Resolution {
+    if !no_install_workspace {
+        return resolution;
+    }
+
+    let workspace_packages = project.workspace().packages();
+    resolution.filter(|dist| {
+        !workspace_packages.contains_key(dist.name()) && Some(dist.name()) != project.project_name()
+    })
 }

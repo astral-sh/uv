@@ -2282,6 +2282,16 @@ pub struct SyncArgs {
     #[arg(long)]
     pub no_install_project: bool,
 
+    /// Do not install any workspace members, including the root project.
+    ///
+    /// By default, all of the workspace members and their dependencies are installed into the
+    /// environment. The `--no-install-workspace` option allows exclusion of all the workspace
+    /// members while retaining their dependencies. This is particularly useful in situations like
+    /// building Docker images where installing the workspace separately from its dependencies
+    /// allows optimal layer caching.
+    #[arg(long)]
+    pub no_install_workspace: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or

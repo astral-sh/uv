@@ -191,7 +191,7 @@ If not mounting the cache, image size can be reduced with `--no-cache` flag.
 ### Intermediate layers
 
 If you're using uv to manage your project, you can improve build times by moving your transitive
-dependency installation into its own layer via `uv sync --no-install-project`.
+dependency installation into its own layer via the `--no-install` options.
 
 `uv sync --no-install-project` will install the dependencies of the project but not the project
 itself. Since the project changes frequently, but its dependencies are generally static, this can be
@@ -216,3 +216,8 @@ WORKDIR /app
 # Sync the project
 RUN uv sync --frozen
 ```
+
+!!! tip
+
+    If you're using a [workspace](../../concepts/workspaces.md), then consider the
+    `--no-install-workspace` flag which excludes the project _and_ any workspace members.
