@@ -211,7 +211,7 @@ system's configured time zone.
 #   "requests",
 # ]
 # [tool.uv]
-# exclude-newer = "2020-01-23"
+# exclude-newer = "2023-10-16"
 # ///
 
 import requests
