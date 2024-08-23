@@ -112,7 +112,7 @@ pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 proc-macro2 = { version = "1.0.86" }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "aaef464c1b0d8eea4ff9ffaee4f3458c236d10da" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "388685a8711092971930986644cfed152d1a1f6c" }
 pyo3 = { version = "0.21.0" }
 pyo3-log = { version = "0.10.0" }
 quote = { version = "1.0.36" }
