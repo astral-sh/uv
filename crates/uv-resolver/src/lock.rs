@@ -3161,7 +3161,7 @@ enum LockErrorKind {
     RequirementRelativePath(
         /// The inner error we forward.
         #[source]
-        io::Error,
+        std::io::Error,
     ),
     /// An error that occurs when parsing an existing requirement.
     #[error("could not convert between URL and path")]

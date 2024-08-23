@@ -144,8 +144,14 @@ impl LoweredRequirement {
                 // workspace lock root: `../current_workspace`
                 // relative to main workspace: `../current_workspace/packages/current_project`
                 let url = VerbatimUrl::parse_absolute_path(member.root())?;
+                let install_path = url.to_file_path().map_err(|()| {
+                    LoweringError::RelativeTo(io::Error::new(
+                        io::ErrorKind::Other,
+                        "Invalid path in file URL",
+                    ))
+                })?;
                 RequirementSource::Directory {
-                    install_path: member.root().clone(),
+                    install_path,
                     url,
                     editable: true,
                 }
@@ -356,19 +362,20 @@ fn path_source(
         Origin::Workspace => workspace_root,
     };
     let url = VerbatimUrl::parse_path(path, base)?.with_given(path.to_string_lossy());
-    let absolute_path = path
-        .to_path_buf()
-        .absolutize_from(base)
-        .map_err(|err| LoweringError::Absolutize(path.to_path_buf(), err))?
-        .to_path_buf();
-    let is_dir = if let Ok(metadata) = absolute_path.metadata() {
+    let install_path = url.to_file_path().map_err(|()| {
+        LoweringError::RelativeTo(io::Error::new(
+            io::ErrorKind::Other,
+            "Invalid path in file URL",
+        ))
+    })?;
+    let is_dir = if let Ok(metadata) = install_path.metadata() {
         metadata.is_dir()
     } else {
-        absolute_path.extension().is_none()
+        install_path.extension().is_none()
     };
     if is_dir {
         Ok(RequirementSource::Directory {
-            install_path: absolute_path,
+            install_path,
             url,
             editable,
         })
@@ -377,9 +384,9 @@ fn path_source(
             return Err(LoweringError::EditableFile(url.to_string()));
         }
         Ok(RequirementSource::Path {
-            install_path: absolute_path,
-            ext: DistExtension::from_path(path)
+            ext: DistExtension::from_path(&install_path)
                 .map_err(|err| ParsedUrlError::MissingExtensionPath(path.to_path_buf(), err))?,
+            install_path,
             url,
         })
     }
