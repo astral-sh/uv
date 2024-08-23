@@ -3339,7 +3339,9 @@ pub struct InstallerArgs {
         long,
         alias = "compile",
         overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options"
+        help_heading = "Installer options",
+        env = "UV_COMPILE_BYTECODE",
+        value_parser = clap::builder::BoolishValueParser::new(),
     )]
     pub compile_bytecode: bool,
 
@@ -3685,7 +3687,9 @@ pub struct ResolverInstallerArgs {
         long,
         alias = "compile",
         overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options"
+        help_heading = "Installer options",
+        env = "UV_COMPILE_BYTECODE",
+        value_parser = clap::builder::BoolishValueParser::new(),
     )]
     pub compile_bytecode: bool,
 

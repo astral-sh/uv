@@ -151,6 +151,24 @@ RUN --mount=from=uv,source=/uv,target=/bin/uv \
     uv pip install --system ruff
 ```
 
+### Compiling bytecode
+
+Compiling Python source files to bytecode is typically desirable for production images as it tends
+to improve startup time (at the cost of increased installation time).
+
+To enable bytecode compilation, use the `--compile-bytecode` flag:
+
+```dockerfile title="Dockerfile"
+RUN uv sync --compile-bytecode
+```
+
+Alternatively, you can set the `UV_COMPILE_BYTECODE` environment variable to ensure that all
+commands within the Dockerfile compile bytecode:
+
+```dockerfile title="Dockerfile"
+ENV UV_COMPILE_BYTECODE=1
+```
+
 ### Caching
 
 A [cache mount](https://docs.docker.com/build/guide/mounts/#add-a-cache-mount) can be used to
