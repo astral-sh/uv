@@ -3888,8 +3888,11 @@ fn fail_to_add_revert_project() -> Result<()> {
         dependencies = []
     "#})?;
 
-    // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add(&["pytorch==1.0.2"]), @r###"
+    // Adding `pytorch==1.0.2` should produce an error
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.add(&["pytorch==1.0.2"]), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
