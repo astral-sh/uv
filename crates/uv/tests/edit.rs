@@ -3873,3 +3873,87 @@ fn add_git_to_script() -> Result<()> {
     });
     Ok(())
 }
+
+// Revert changes to pyproject.toml if add fails
+#[test]
+fn fail_to_add_revert_project() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Adding `anyio` should include a lower-bound.
+    uv_snapshot!(context.filters(), context.add(&["pytorch==1.0.2"]), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Operation(Anyhow(Failed to prepare distributions
+
+    Caused by:
+        0: Failed to fetch wheel: pytorch==1.0.2
+        1: Build backend failed to build wheel through `build_wheel()` with exit status: 1
+           --- stdout:
+           
+           --- stderr:
+           Traceback (most recent call last):
+             File "<string>", line 11, in <module>
+             File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 410, in build_wheel
+               return self._build_with_temp_dir(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+             File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 395, in _build_with_temp_dir
+               self.run_setup()
+             File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+               super().run_setup(setup_script=setup_script)
+             File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+               exec(code, locals())
+             File "<string>", line 15, in <module>
+           Exception: You tried to install "pytorch". The package named for PyTorch is "torch"
+           ---))error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: pytorch==1.0.2
+      Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
+    --- stdout:
+
+    --- stderr:
+    Traceback (most recent call last):
+      File "<string>", line 11, in <module>
+      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 410, in build_wheel
+        return self._build_with_temp_dir(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 395, in _build_with_temp_dir
+        self.run_setup()
+      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+        super().run_setup(setup_script=setup_script)
+      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+        exec(code, locals())
+      File "<string>", line 15, in <module>
+    Exception: You tried to install "pytorch". The package named for PyTorch is "torch"
+    ---
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
+
+    Ok(())
+}
