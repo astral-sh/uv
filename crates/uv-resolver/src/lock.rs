@@ -1928,9 +1928,6 @@ impl Source {
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Source, LockError> {
-
-
-
         let path = relative_to(&path_dist.install_path, root)
             .map_err(LockErrorKind::DistributionRelativePath)?;
 

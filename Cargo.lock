@@ -4828,7 +4828,6 @@ dependencies = [
  "insta",
  "install-wheel-rs",
  "nanoid",
- "path-absolutize",
  "pep440_rs",
  "pep508_rs",
  "platform-tags",

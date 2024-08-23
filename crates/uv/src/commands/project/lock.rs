@@ -1,7 +1,6 @@
 #![allow(clippy::single_match_else)]
 
 use std::collections::BTreeSet;
-use std::env;
 use std::fmt::Write;
 
 use anstream::eprint;
@@ -77,7 +76,7 @@ pub(crate) async fn lock(
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     // Find the project requirements.
-    let workspace = Workspace::discover(&*CWD, &DiscoveryOptions::default()).await?;
+    let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(

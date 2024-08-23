@@ -7106,8 +7106,6 @@ fn lock_sources_archive() -> Result<()> {
     let mut workspace_archive_file = fs_err::File::create(&*workspace_archive)?;
     std::io::copy(&mut response.bytes()?.as_ref(), &mut workspace_archive_file)?;
 
-
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
         r#"
@@ -7134,8 +7132,8 @@ fn lock_sources_archive() -> Result<()> {
     // insta::with_settings!({
     //     filters => context.filters(),
     // }, {
-        assert_snapshot!(
-            lock, @r###"
+    assert_snapshot!(
+        lock, @r###"
         version = 1
         requires-python = ">=3.12"
 
@@ -7195,7 +7193,7 @@ fn lock_sources_archive() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "anyio" }]
         "###
-        );
+    );
     // });
 
     // Re-run with `--locked`.

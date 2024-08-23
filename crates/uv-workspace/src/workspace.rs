@@ -169,8 +169,6 @@ impl Workspace {
                 pyproject_toml,
             });
 
-
-
         Self::collect_members(
             workspace_root.clone(),
             workspace_definition,

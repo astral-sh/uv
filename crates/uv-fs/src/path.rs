@@ -7,19 +7,12 @@ use path_slash::PathExt;
 
 /// The current working directory.
 pub static CWD: LazyLock<PathBuf> =
-    LazyLock::new(|| {
-        std::env::var("UV_CWD")
-            .ok()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| std::env::current_dir().expect("The current directory must exist"))
-    });
+    LazyLock::new(|| std::env::current_dir().expect("The current directory must exist"));
 
 /// The current working directory, canonicalized.
 pub static CANONICAL_CWD: LazyLock<PathBuf> = LazyLock::new(|| {
-    std::env::var("UV_CWD")
-        .ok()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::current_dir().expect("The current directory must exist"))
+    std::env::current_dir()
+        .expect("The current directory must exist")
         .canonicalize()
         .expect("The current directory must be canonicalized")
 });
@@ -281,9 +274,6 @@ pub fn relative_to(
     path: impl AsRef<Path>,
     base: impl AsRef<Path>,
 ) -> Result<PathBuf, std::io::Error> {
-    // println!("path: {}", path.as_ref().display());
-    // println!("base: {}", base.as_ref().display());
-
     // Find the longest common prefix, and also return the path stripped from that prefix
     let (stripped, common_prefix) = base
         .as_ref()

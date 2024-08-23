@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use path_absolutize::Absolutize;
 use thiserror::Error;
 use url::Url;
 
