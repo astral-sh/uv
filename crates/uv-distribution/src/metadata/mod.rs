@@ -59,7 +59,6 @@ impl Metadata {
     pub async fn from_workspace(
         metadata: Metadata23,
         install_path: &Path,
-        lock_path: &Path,
         sources: SourceStrategy,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
@@ -75,7 +74,6 @@ impl Metadata {
                 provides_extras: metadata.provides_extras,
             },
             install_path,
-            lock_path,
             sources,
         )
         .await?;

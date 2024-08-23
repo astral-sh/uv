@@ -122,8 +122,7 @@ impl CachedDist {
                         .map_err(|()| anyhow!("Invalid path in file URL"))?;
                     Ok(Some(ParsedUrl::Directory(ParsedDirectoryUrl {
                         url: dist.url.raw().clone(),
-                        install_path: path.clone(),
-                        lock_path: path,
+                        install_path: path,
                         editable: dist.editable,
                     })))
                 } else {
