@@ -8,13 +8,17 @@ Install uv with our standalone installers or your package manager of choice.
 
 uv provides a standalone installer to download and install uv:
 
-```console title="macOS and Linux"
-$ curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+=== "macOS and Linux"
 
-```console title="Windows"
-$ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
+    ```console
+    $ curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+=== "Windows"
+
+    ```console
+    $ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+    ```
 
 By default, uv is installed to `~/.cargo/bin`.
 
@@ -22,25 +26,33 @@ By default, uv is installed to `~/.cargo/bin`.
 
     The installation script may be inspected before use:
 
-    ```console title="macOS and Linux"
-    $ curl -LsSf https://astral.sh/uv/install.sh | less
-    ```
+    === "macOS and Linux"
 
-    ```console title="Windows"
-    $ powershell -c "irm https://astral.sh/uv/install.ps1 | more"
-    ```
+        ```console
+        $ curl -LsSf https://astral.sh/uv/install.sh | less
+        ```
+
+    === "Windows"
+
+        ```console
+        $ powershell -c "irm https://astral.sh/uv/install.ps1 | more"
+        ```
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
 
 Request a specific version by including it in the URL:
 
-```console title="macOS and Linux"
-$ curl -LsSf https://astral.sh/uv/0.3.2/install.sh | sh
-```
+=== "macOS and Linux"
 
-```console title="Windows"
-$ powershell -c "irm https://astral.sh/uv/0.3.2/install.ps1 | iex"
-```
+    ```console
+    $ curl -LsSf https://astral.sh/uv/0.3.2/install.sh | sh
+    ```
+
+=== "Windows"
+
+    ```console
+    $ powershell -c "irm https://astral.sh/uv/0.3.2/install.ps1 | iex"
+    ```
 
 ### PyPI
 
