@@ -212,6 +212,54 @@ $ uv run --python 3.10 example.py
 See the [Python version request](../concepts/python-versions.md#requesting-a-version) documentation
 for more details on requesting Python versions.
 
+## Using GUI scripts
+
+On Windows `uv` will run your script ending with `.pyw` extension using `pythonw`:
+
+```python title="example.pyw"
+from tkinter import Tk, ttk
+
+root = Tk()
+root.title("uv")
+frm = ttk.Frame(root, padding=10)
+frm.grid()
+ttk.Label(frm, text="Hello World").grid(column=0, row=0)
+root.mainloop()
+```
+
+```console
+PS> uv run example.pyw
+```
+
+![Run Result](../assets/uv_gui_script_hello_world.png){: style="height:50px;width:150px"}
+
+Similarly, it works with dependencies as well:
+
+```python title="example_pyqt.pyw"
+import sys
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QGridLayout
+
+app = QApplication(sys.argv)
+widget = QWidget()
+grid = QGridLayout()
+
+text_label = QLabel()
+text_label.setText("Hello World!")
+grid.addWidget(text_label)
+
+widget.setLayout(grid)
+widget.setGeometry(100, 100, 200, 50)
+widget.setWindowTitle("uv")
+widget.show()
+sys.exit(app.exec_())
+```
+
+```console
+PS> uv run --with PyQt5 example_pyqt.pyw
+```
+
+![Run Result](../assets/uv_gui_script_hello_world_pyqt.png){: style="height:50px;width:150px"}
+
 ## Next steps
 
 To learn more about `uv run`, see the [command reference](../reference/cli.md#uv-run).
