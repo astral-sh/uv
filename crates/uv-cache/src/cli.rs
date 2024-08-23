@@ -1,10 +1,11 @@
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::Cache;
 use clap::Parser;
 use directories::ProjectDirs;
 use etcetera::BaseStrategy;
+use tracing::{debug, warn};
 
 #[derive(Parser, Debug, Clone)]
 #[command(next_help_heading = "Cache options")]
@@ -55,7 +56,26 @@ impl Cache {
             .ok()
             .map(|dirs| dirs.cache_dir().join("uv"))
         {
-            Ok(Self::from_path(cache_dir))
+            if cfg!(windows) {
+                // On Windows, we append `cache` to the LocalAppData directory, i.e., prefer
+                // `C:\Users\User\AppData\Local\uv\cache` over `C:\Users\User\AppData\Local\uv`.
+                //
+                // Unfortunately, v0.3.0 and v0.3.1 used the latter, so we need to migrate the cache
+                // for those users.
+                let destination = cache_dir.join("cache");
+                let source = cache_dir;
+                if let Err(err) = migrate_windows_cache(&source, &destination) {
+                    warn!(
+                        "Failed to migrate cache from `{}` to `{}`: {err}",
+                        source.display(),
+                        destination.display()
+                    );
+                }
+
+                Ok(Self::from_path(destination))
+            } else {
+                Ok(Self::from_path(cache_dir))
+            }
         } else {
             Ok(Self::from_path(".uv_cache"))
         }
@@ -68,4 +88,57 @@ impl TryFrom<CacheArgs> for Cache {
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
         Cache::from_settings(value.no_cache, value.cache_dir)
     }
+}
+
+/// Migrate the Windows cache from `C:\Users\User\AppData\Local\uv` to `C:\Users\User\AppData\Local\uv\cache`.
+fn migrate_windows_cache(source: &Path, destination: &Path) -> Result<(), io::Error> {
+    // The list of expected cache buckets in v0.3.0.
+    for directory in [
+        "built-wheels-v3",
+        "flat-index-v0",
+        "git-v0",
+        "interpreter-v2",
+        "simple-v12",
+        "wheels-v1",
+        "archive-v0",
+        "builds-v0",
+        "environments-v1",
+    ] {
+        let source = source.join(directory);
+        let destination = destination.join(directory);
+
+        // Migrate the cache bucket.
+        if source.exists() {
+            debug!(
+                "Migrating cache bucket from {} to {}",
+                source.display(),
+                destination.display()
+            );
+            if let Some(parent) = destination.parent() {
+                fs_err::create_dir_all(parent)?;
+            }
+            fs_err::rename(&source, &destination)?;
+        }
+    }
+
+    // The list of expected cache files in v0.3.0.
+    for file in [".gitignore", "CACHEDIR.TAG"] {
+        let source = source.join(file);
+        let destination = destination.join(file);
+
+        // Migrate the cache file.
+        if source.exists() {
+            debug!(
+                "Migrating cache file from {} to {}",
+                source.display(),
+                destination.display()
+            );
+            if let Some(parent) = destination.parent() {
+                fs_err::create_dir_all(parent)?;
+            }
+            fs_err::rename(&source, &destination)?;
+        }
+    }
+
+    Ok(())
 }
