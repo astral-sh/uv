@@ -63,6 +63,14 @@ print("hello world!")
 EOF
 ```
 
+or
+
+```bash
+echo '
+print("hello world!")
+' | uv run -
+```
+
 Note that if you use `uv run` in a _project_, i.e. a directory with a `pyproject.toml`, it will
 install the current project before running the script. If your script does not depend on the
 project, use the `--no-project` flag to skip this:
