@@ -1339,7 +1339,7 @@ impl VirtualProject {
         }
     }
 
-    /// Return the [`PackageName`] of the project, if it's not a virtual workspace.
+    /// Return the [`PackageName`] of the project, if it's not a virtual workspace root.
     pub fn project_name(&self) -> Option<&PackageName> {
         match self {
             VirtualProject::Project(project) => Some(project.project_name()),
@@ -1347,7 +1347,7 @@ impl VirtualProject {
         }
     }
 
-    /// Returns `true` if the project is a virtual workspace.
+    /// Returns `true` if the project is a virtual workspace root.
     pub fn is_virtual(&self) -> bool {
         matches!(self, VirtualProject::Virtual(_))
     }
@@ -1535,6 +1535,7 @@ mod tests {
                         "exclude": null
                       },
                       "managed": null,
+                      "virtual": null,
                       "dev-dependencies": null,
                       "environments": null,
                       "override-dependencies": null,
@@ -1607,6 +1608,7 @@ mod tests {
                         "exclude": null
                       },
                       "managed": null,
+                      "virtual": null,
                       "dev-dependencies": null,
                       "environments": null,
                       "override-dependencies": null,

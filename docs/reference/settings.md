@@ -1010,6 +1010,31 @@ those that are downloaded and installed by uv.
 
 ---
 
+#### [`r#virtual`](#r#virtual) {: #r#virtual }
+
+Whether the project should be considered "virtual".
+
+**Default value**: `true`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    virtual = false
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    virtual = false
+    ```
+
+---
+
 #### [`reinstall`](#reinstall) {: #reinstall }
 
 Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.

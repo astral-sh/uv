@@ -882,9 +882,9 @@ fn init_explicit_workspace() -> Result<()> {
     Ok(())
 }
 
-/// Run `uv init` from within a virtual workspace.
+/// Run `uv init --virtual` to create a virtual project.
 #[test]
-fn init_virtual_workspace() -> Result<()> {
+fn init_virtual_project() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let child = context.temp_dir.child("foo");
@@ -907,11 +907,66 @@ fn init_virtual_workspace() -> Result<()> {
     }, {
         assert_snapshot!(
             pyproject, @r###"
-        [tool.uv.workspace]
-        members = []
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
         "###
         );
     });
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Adding `bar` as member of workspace `[TEMP_DIR]/foo`
+    Initialized project `bar` at `[TEMP_DIR]/foo/bar`
+    "###);
+
+    let pyproject = fs_err::read_to_string(pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["bar"]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init` from within a virtual workspace.
+#[test]
+fn init_virtual_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    // Create a virtual workspace.
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r"
+        [tool.uv.workspace]
+        members = []
+        ",
+    })?;
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("bar"), @r###"
     success: true
@@ -957,7 +1012,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Nested workspaces are not supported, but outer workspace (`[TEMP_DIR]/`) includes `[TEMP_DIR]/foo`
+    Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized workspace `foo` at `[TEMP_DIR]/foo`
     "###);
 
@@ -967,8 +1022,13 @@ fn init_nested_virtual_workspace() -> Result<()> {
     }, {
         assert_snapshot!(
             pyproject, @r###"
-        [tool.uv.workspace]
-        members = []
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
         "###
         );
     });
@@ -980,7 +1040,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
         assert_snapshot!(
             workspace, @r###"
         [tool.uv.workspace]
-        members = []
+        members = ["foo"]
         "###
         );
     });

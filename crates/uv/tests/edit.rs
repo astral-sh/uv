@@ -20,9 +20,12 @@ fn add_registry() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]), @r###"
@@ -50,11 +53,14 @@ fn add_registry() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
             "anyio==3.7.0",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -143,6 +149,10 @@ fn add_git() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -211,6 +221,10 @@ fn add_git() -> Result<()> {
             "anyio==3.7.0",
             "uv-public-pypackage",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
@@ -313,6 +327,10 @@ fn add_git_private_source() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]), @r###"
@@ -342,6 +360,10 @@ fn add_git_private_source() -> Result<()> {
         dependencies = [
             "uv-private-pypackage",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         uv-private-pypackage = { git = "https://github.com/astral-test/uv-private-pypackage" }
@@ -409,6 +431,10 @@ fn add_git_private_raw() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]).arg("--raw-sources"), @r###"
@@ -443,6 +469,10 @@ fn add_git_private_raw() -> Result<()> {
         dependencies = [
             "uv-private-pypackage @ git+https://***@github.com/astral-test/uv-private-pypackage",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -504,6 +534,10 @@ fn add_git_error() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -562,6 +596,10 @@ fn add_git_raw() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -617,6 +655,10 @@ fn add_git_raw() -> Result<()> {
             "anyio==3.7.0",
             "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -714,6 +756,10 @@ fn add_git_implicit() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -770,6 +816,10 @@ fn add_raw_error() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     // Provide a tag without a Git source.
@@ -800,9 +850,12 @@ fn add_unnamed() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1"), @r###"
@@ -828,11 +881,14 @@ fn add_unnamed() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
             "uv-public-pypackage",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
@@ -897,6 +953,10 @@ fn add_remove_dev() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--dev"), @r###"
@@ -926,6 +986,10 @@ fn add_remove_dev() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         dev-dependencies = [
@@ -1049,6 +1113,10 @@ fn add_remove_dev() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv]
         dev-dependencies = []
         "###
@@ -1101,6 +1169,10 @@ fn add_remove_optional() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--optional=io"), @r###"
@@ -1135,6 +1207,10 @@ fn add_remove_optional() -> Result<()> {
         io = [
             "anyio==3.7.0",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -1254,6 +1330,10 @@ fn add_remove_optional() -> Result<()> {
 
         [project.optional-dependencies]
         io = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -1310,6 +1390,10 @@ fn add_remove_workspace() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     let pyproject_toml = context.temp_dir.child("child2/pyproject.toml");
@@ -1319,6 +1403,10 @@ fn add_remove_workspace() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding a workspace package with a mismatched source should error.
@@ -1373,6 +1461,10 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = [
             "child2",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         child2 = { workspace = true }
@@ -1457,6 +1549,10 @@ fn add_remove_workspace() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.sources]
         "###
         );
@@ -1525,6 +1621,10 @@ fn add_workspace_editable() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     let pyproject_toml = context.temp_dir.child("child2/pyproject.toml");
@@ -1534,6 +1634,10 @@ fn add_workspace_editable() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     let child1 = context.temp_dir.join("child1");
@@ -1567,6 +1671,10 @@ fn add_workspace_editable() -> Result<()> {
         dependencies = [
             "child2",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         child2 = { workspace = true }
@@ -1743,9 +1851,11 @@ fn update() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = [
-            "requests==2.31.0"
-        ]
+        dependencies = ["requests==2.31.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -1801,6 +1911,10 @@ fn update() -> Result<()> {
         dependencies = [
             "requests[security]==2.31.0",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -1836,6 +1950,10 @@ fn update() -> Result<()> {
             "requests[security]==2.31.0",
             "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -1872,6 +1990,10 @@ fn update() -> Result<()> {
             "requests[security]==2.31.0",
             "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         requests = { git = "https://github.com/psf/requests", tag = "v2.32.3" }
@@ -2021,9 +2143,11 @@ fn add_update_marker() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.8"
-        dependencies = [
-            "requests>=2.30; python_version >= '3.11'"
-        ]
+        dependencies = ["requests>=2.30; python_version >= '3.11'"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
@@ -2080,6 +2204,10 @@ fn add_update_marker() -> Result<()> {
             "requests>=2.30; python_version >= '3.11'",
             "requests>=2.0,<2.29 ; python_full_version < '3.11'",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2114,6 +2242,10 @@ fn add_update_marker() -> Result<()> {
             "requests>=2.30; python_version >= '3.11'",
             "requests>=2.0,<2.20 ; python_full_version < '3.11'",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2153,6 +2285,10 @@ fn add_update_marker() -> Result<()> {
             "requests>=2.0,<2.20 ; python_full_version < '3.11'",
             "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2190,6 +2326,10 @@ fn add_update_marker() -> Result<()> {
             "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
             "requests>=2.10 ; sys_platform == 'win32'",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2226,6 +2366,10 @@ fn add_update_marker() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2247,6 +2391,10 @@ fn update_source_replace_url() -> Result<()> {
         dependencies = [
             "requests[security] @ https://files.pythonhosted.org/packages/f9/9b/335f9764261e915ed497fcdeb11df5dfd6f7bf257d4a6a2a686d80da4d54/requests-2.32.3-py3-none-any.whl"
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     // Change the source. The existing URL should be removed.
@@ -2282,6 +2430,10 @@ fn update_source_replace_url() -> Result<()> {
             "requests[security]",
         ]
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.sources]
         requests = { git = "https://github.com/psf/requests", tag = "v2.32.3" }
         "###
@@ -2302,9 +2454,11 @@ fn add_inexact() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = [
-            "anyio == 3.7.0",
-        ]
+        dependencies = ["anyio == 3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -2337,6 +2491,10 @@ fn add_inexact() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["iniconfig==2.0.0"]), @r###"
@@ -2367,6 +2525,10 @@ fn add_inexact() -> Result<()> {
         dependencies = [
             "iniconfig==2.0.0",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2445,6 +2607,10 @@ fn remove_registry() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -2498,6 +2664,10 @@ fn remove_registry() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2545,11 +2715,12 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
-        dependencies = [
-          "anyio==3.7.0"
-        ]
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["requests==2.31.0"]), @r###"
@@ -2581,12 +2752,15 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
-          "anyio==3.7.0",
-          "requests==2.31.0",
+            "anyio==3.7.0",
+            "requests==2.31.0",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2602,9 +2776,12 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["requests==2.31.0"]), @r###"
@@ -2636,12 +2813,15 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
             "anyio==3.7.0",
             "requests==2.31.0",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2658,9 +2838,12 @@ fn add_frozen() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--frozen"), @r###"
@@ -2681,11 +2864,14 @@ fn add_frozen() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
             "anyio==3.7.0",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2705,9 +2891,12 @@ fn add_no_sync() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--no-sync"), @r###"
@@ -2729,11 +2918,14 @@ fn add_no_sync() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
             "anyio==3.7.0",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2821,9 +3013,12 @@ fn add_error() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["xyz"]), @r###"
@@ -2863,6 +3058,10 @@ fn add_lower_bound() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
@@ -2895,6 +3094,10 @@ fn add_lower_bound() -> Result<()> {
         dependencies = [
             "anyio>=4.3.0",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2914,6 +3117,10 @@ fn add_lower_bound_existing() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `anyio` should _not_ set a lower-bound, since it's already present (even if
@@ -2947,6 +3154,10 @@ fn add_lower_bound_existing() -> Result<()> {
         dependencies = [
             "anyio",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -2966,6 +3177,10 @@ fn add_lower_bound_raw() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `anyio` should _not_ set a lower-bound when using `--raw-sources`.
@@ -2998,6 +3213,10 @@ fn add_lower_bound_raw() -> Result<()> {
         dependencies = [
             "anyio",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -3017,6 +3236,10 @@ fn add_lower_bound_dev() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
@@ -3048,6 +3271,10 @@ fn add_lower_bound_dev() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv]
         dev-dependencies = [
             "anyio>=4.3.0",
@@ -3071,6 +3298,10 @@ fn add_lower_bound_optional() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
@@ -3106,6 +3337,10 @@ fn add_lower_bound_optional() -> Result<()> {
         io = [
             "anyio>=4.3.0",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -3185,6 +3420,10 @@ fn add_lower_bound_local() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `torch` should include a lower-bound, but no local segment.
@@ -3215,6 +3454,10 @@ fn add_lower_bound_local() -> Result<()> {
         dependencies = [
             "local-simple-a>=1.2.3",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -3359,9 +3602,12 @@ fn add_repeat() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
@@ -3389,11 +3635,14 @@ fn add_repeat() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
             "anyio>=4.3.0",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -3418,11 +3667,14 @@ fn add_repeat() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
             "anyio>=4.3.0",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });
@@ -3440,9 +3692,12 @@ fn add_requirements_file() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -3481,12 +3736,15 @@ fn add_requirements_file() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
             "flask==2.3.2",
             "anyio",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         anyio = { git = "https://github.com/agronholm/anyio.git", rev = "4.4.0" }
@@ -3985,6 +4243,10 @@ fn fail_to_add_revert_project() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `pytorch==1.0.2` should produce an error
@@ -4032,6 +4294,10 @@ fn fail_to_add_revert_project() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "###
         );
     });

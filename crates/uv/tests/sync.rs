@@ -21,6 +21,10 @@ fn sync() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -55,6 +59,10 @@ fn locked() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -81,6 +89,10 @@ fn locked() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -115,6 +127,10 @@ fn frozen() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -138,6 +154,10 @@ fn frozen() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -212,6 +232,10 @@ fn package() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["child", "anyio>3"]
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.sources]
         child = { workspace = true }
 
@@ -237,6 +261,10 @@ fn package() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig>1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -312,6 +340,10 @@ fn mixed_requires_python() -> Result<()> {
         name = "bird-feeder"
         version = "0.1.0"
         requires-python = ">=3.8"
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -381,6 +413,10 @@ fn virtual_workspace_dev_dependencies() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig>1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -441,6 +477,10 @@ fn sync_build_isolation() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -877,6 +917,10 @@ fn sync_environment() -> Result<()> {
         requires-python = ">=3.10"
         dependencies = ["iniconfig"]
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv]
         environments = ["python_version < '3.11'"]
         "#,
@@ -916,6 +960,10 @@ fn read_metadata_statically_over_the_cache() -> Result<()> {
         requires-python = ">=3.12"
         # Python string sorting is the other way round.
         dependencies = ["anyio>=4,<5"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -945,6 +993,10 @@ fn no_install_project() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -996,6 +1048,10 @@ fn no_install_workspace() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0", "child"]
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.workspace]
         members = ["child"]
 
@@ -1015,8 +1071,8 @@ fn no_install_workspace() -> Result<()> {
         dependencies = ["iniconfig>1"]
 
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
     child
@@ -1073,6 +1129,10 @@ fn no_install_package() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 

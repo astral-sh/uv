@@ -455,9 +455,11 @@ uv init [OPTIONS] [PATH]
 
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
-</dd><dt><code>--virtual</code></dt><dd><p>Create a virtual workspace instead of a project.</p>
+</dd><dt><code>--virtual</code></dt><dd><p>Create a virtual project, rather than a package.</p>
 
-<p>A virtual workspace does not define project dependencies and cannot be published. Instead, workspace members declare project dependencies. Development dependencies may still be declared.</p>
+<p>A virtual project is a project that is not intended to be built as a Python package, such as a project that only contains scripts or other application code.</p>
+
+<p>Virtual projects themselves are not installed into the Python environment.</p>
 
 </dd></dl>
 

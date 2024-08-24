@@ -1110,8 +1110,9 @@ pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
         {body}
 
         [build-system]
-        requires = ["flit_core>=3.8,<4"]
-        build-backend = "flit_core.buildapi"
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         "#
     };
     fs_err::create_dir_all(dir)?;

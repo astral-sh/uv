@@ -379,6 +379,13 @@
         "$ref": "#/definitions/Requirement"
       }
     },
+    "virtual": {
+      "description": "Whether the project should be considered \"virtual\".",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
     "workspace": {
       "description": "The workspace definition for the project, if any.",
       "anyOf": [

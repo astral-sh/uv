@@ -33,6 +33,10 @@ pub struct PyProjectToml {
     /// The raw unserialized document.
     #[serde(skip)]
     pub raw: String,
+
+    /// Used to determine whether a `build-system` is present.
+    #[serde(default, skip_serializing)]
+    build_system: Option<serde::de::IgnoredAny>,
 }
 
 impl PyProjectToml {
@@ -40,6 +44,27 @@ impl PyProjectToml {
     pub fn from_string(raw: String) -> Result<Self, toml::de::Error> {
         let pyproject = toml::from_str(&raw)?;
         Ok(PyProjectToml { raw, ..pyproject })
+    }
+
+    /// Returns `true` if the project should be considered "virtual".
+    pub fn is_virtual(&self) -> bool {
+        // A project is virtual if `virtual = true` is set...
+        if self
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.r#virtual)
+            == Some(true)
+        {
+            return true;
+        }
+
+        // Or if `build-system` is not present.
+        if self.build_system.is_none() {
+            return true;
+        }
+
+        false
     }
 }
 
@@ -100,6 +125,15 @@ pub struct ToolUv {
         "#
     )]
     pub managed: Option<bool>,
+    /// Whether the project should be considered "virtual".
+    #[option(
+        default = r#"true"#,
+        value_type = "bool",
+        example = r#"
+            virtual = false
+        "#
+    )]
+    pub r#virtual: Option<bool>,
     /// The project's development dependencies. Development dependencies will be installed by
     /// default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
     #[cfg_attr(
