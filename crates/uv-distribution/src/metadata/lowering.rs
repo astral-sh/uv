@@ -142,7 +142,7 @@ impl LoweredRequirement {
                 // relative to workspace: `packages/current_project`
                 // workspace lock root: `../current_workspace`
                 // relative to main workspace: `../current_workspace/packages/current_project`
-                let url = VerbatimUrl::parse_absolute_path(member.root())?;
+                let url = VerbatimUrl::from_absolute_path(member.root())?;
                 let install_path = url.to_file_path().map_err(|()| {
                     LoweringError::RelativeTo(io::Error::new(
                         io::ErrorKind::Other,
@@ -360,7 +360,7 @@ fn path_source(
         Origin::Project => project_dir,
         Origin::Workspace => workspace_root,
     };
-    let url = VerbatimUrl::parse_path(path, base)?.with_given(path.to_string_lossy());
+    let url = VerbatimUrl::from_path(path, base)?.with_given(path.to_string_lossy());
     let install_path = url.to_file_path().map_err(|()| {
         LoweringError::RelativeTo(io::Error::new(
             io::ErrorKind::Other,

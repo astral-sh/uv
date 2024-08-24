@@ -488,11 +488,13 @@ fn parse_entry(
             .ok()
             .filter(|path| path.exists())
         {
-            VerbatimUrl::from_path(path).map_err(|err| RequirementsTxtParserError::VerbatimUrl {
-                source: err,
-                url: given.to_string(),
-                start,
-                end: s.cursor(),
+            VerbatimUrl::from_absolute_path(path).map_err(|err| {
+                RequirementsTxtParserError::VerbatimUrl {
+                    source: err,
+                    url: given.to_string(),
+                    start,
+                    end: s.cursor(),
+                }
             })?
         } else {
             VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
@@ -512,11 +514,13 @@ fn parse_entry(
             .ok()
             .filter(|path| path.exists())
         {
-            VerbatimUrl::from_path(path).map_err(|err| RequirementsTxtParserError::VerbatimUrl {
-                source: err,
-                url: given.to_string(),
-                start,
-                end: s.cursor(),
+            VerbatimUrl::from_absolute_path(path).map_err(|err| {
+                RequirementsTxtParserError::VerbatimUrl {
+                    source: err,
+                    url: given.to_string(),
+                    start,
+                    end: s.cursor(),
+                }
             })?
         } else {
             VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
@@ -538,11 +542,13 @@ fn parse_entry(
             .ok()
             .filter(|path| path.exists())
         {
-            VerbatimUrl::from_path(path).map_err(|err| RequirementsTxtParserError::VerbatimUrl {
-                source: err,
-                url: given.to_string(),
-                start,
-                end: s.cursor(),
+            VerbatimUrl::from_absolute_path(path).map_err(|err| {
+                RequirementsTxtParserError::VerbatimUrl {
+                    source: err,
+                    url: given.to_string(),
+                    start,
+                    end: s.cursor(),
+                }
             })?
         } else {
             VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {

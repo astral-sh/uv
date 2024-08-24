@@ -40,11 +40,11 @@ impl UnnamedRequirementUrl for VerbatimUrl {
         path: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, VerbatimUrlError> {
-        Self::parse_path(path, working_dir)
+        Self::from_path(path, working_dir)
     }
 
     fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err> {
-        Self::parse_absolute_path(path)
+        Self::from_absolute_path(path)
     }
 
     fn parse_unnamed_url(given: impl AsRef<str>) -> Result<Self, Self::Err> {

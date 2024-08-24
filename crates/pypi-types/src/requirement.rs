@@ -744,7 +744,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             // sources in the lockfile, we replace the URL anyway.
             RequirementSourceWire::Path { path } => {
                 let path = PathBuf::from(path);
-                let url = VerbatimUrl::parse_path(&path, &*CWD)?;
+                let url = VerbatimUrl::from_path(&path, &*CWD)?;
                 Ok(Self::Path {
                     ext: DistExtension::from_path(path.as_path())
                         .map_err(|err| ParsedUrlError::MissingExtensionPath(path.clone(), err))?,
@@ -754,7 +754,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Directory { directory } => {
                 let directory = PathBuf::from(directory);
-                let url = VerbatimUrl::parse_path(&directory, &*CWD)?;
+                let url = VerbatimUrl::from_path(&directory, &*CWD)?;
                 Ok(Self::Directory {
                     install_path: directory,
                     editable: false,
@@ -763,7 +763,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Editable { editable } => {
                 let editable = PathBuf::from(editable);
-                let url = VerbatimUrl::parse_path(&editable, &*CWD)?;
+                let url = VerbatimUrl::from_path(&editable, &*CWD)?;
                 Ok(Self::Directory {
                     install_path: editable,
                     editable: true,
@@ -788,7 +788,7 @@ pub fn redact_git_credentials(url: &mut Url) {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use pep508_rs::{MarkerTree, VerbatimUrl};
 
@@ -823,7 +823,7 @@ mod tests {
             source: RequirementSource::Directory {
                 install_path: PathBuf::from(path),
                 editable: false,
-                url: VerbatimUrl::from_path(Path::new(path)).unwrap(),
+                url: VerbatimUrl::from_absolute_path(path).unwrap(),
             },
             origin: None,
         };

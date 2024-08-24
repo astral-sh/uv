@@ -1513,7 +1513,7 @@ impl Package {
                     yanked: None,
                 });
                 let index = IndexUrl::Path(
-                    VerbatimUrl::from_path(workspace_root.join(path))
+                    VerbatimUrl::from_absolute_path(workspace_root.join(path))
                         .map_err(LockErrorKind::RegistryVerbatimUrl)?,
                 );
 
@@ -1727,7 +1727,7 @@ impl Package {
 
 /// Attempts to construct a `VerbatimUrl` from the given `Path`.
 fn verbatim_url(path: PathBuf, id: &PackageId) -> Result<VerbatimUrl, LockError> {
-    let url = VerbatimUrl::from_path(path).map_err(|err| LockErrorKind::VerbatimUrl {
+    let url = VerbatimUrl::from_absolute_path(path).map_err(|err| LockErrorKind::VerbatimUrl {
         id: id.clone(),
         err,
     })?;
@@ -2892,7 +2892,7 @@ impl Wheel {
                     yanked: None,
                 });
                 let index = IndexUrl::Path(
-                    VerbatimUrl::from_path(root.join(index_path))
+                    VerbatimUrl::from_absolute_path(root.join(index_path))
                         .map_err(LockErrorKind::RegistryVerbatimUrl)?,
                 );
                 Ok(RegistryBuiltWheel {
@@ -3213,7 +3213,7 @@ fn normalize_requirement(
             url: _,
         } => {
             let install_path = uv_fs::normalize_path(&workspace.install_path().join(&install_path));
-            let url = VerbatimUrl::from_path(&install_path)
+            let url = VerbatimUrl::from_absolute_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
             Ok(Requirement {
@@ -3234,7 +3234,7 @@ fn normalize_requirement(
             url: _,
         } => {
             let install_path = uv_fs::normalize_path(&workspace.install_path().join(&install_path));
-            let url = VerbatimUrl::from_path(&install_path)
+            let url = VerbatimUrl::from_absolute_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
             Ok(Requirement {

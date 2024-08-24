@@ -113,7 +113,7 @@ impl FromStr for IndexUrl {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let url = if Path::new(s).exists() {
-            VerbatimUrl::from_path(std::path::absolute(s)?)?
+            VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
         } else {
             VerbatimUrl::parse_url(s)?
         };
@@ -248,7 +248,7 @@ impl FromStr for FlatIndexLocation {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let url = if Path::new(s).exists() {
-            VerbatimUrl::from_path(std::path::absolute(s)?)?
+            VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
         } else {
             VerbatimUrl::parse_url(s)?
         };
