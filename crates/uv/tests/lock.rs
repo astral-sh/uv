@@ -5521,8 +5521,9 @@ fn lock_redact_https() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    // Installing from the lockfile should fail without credentials.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    // Installing from the lockfile should fail without credentials. Omit the root, so that we fail
+    // when installing `iniconfig`, rather than when building `foo`.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://pypi-proxy.fly.dev/basic-auth/simple").arg("--no-install-project"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5534,7 +5535,7 @@ fn lock_redact_https() -> Result<()> {
     "###);
 
     // Installing from the lockfile should fail without an index.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-install-project"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5573,7 +5574,7 @@ fn lock_redact_https() -> Result<()> {
     "###);
 
     // Installing without credentials will fail without a cache.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").arg("--no-install-project"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
