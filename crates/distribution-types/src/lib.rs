@@ -42,6 +42,7 @@ use distribution_filename::{DistExtension, SourceDistExtension, WheelFilename};
 use pep440_rs::Version;
 use pep508_rs::{Pep508Url, VerbatimUrl};
 use pypi_types::{ParsedUrl, VerbatimParsedUrl};
+use uv_fs::normalize_absolute_path;
 use uv_git::GitUrl;
 use uv_normalize::PackageName;
 
@@ -234,7 +235,7 @@ pub struct DirectUrlBuiltDist {
 #[derive(Debug, Clone, Hash)]
 pub struct PathBuiltDist {
     pub filename: WheelFilename,
-    /// The absolute, canonicalized path to the wheel which we use for installing.
+    /// The absolute path to the wheel which we use for installing.
     pub install_path: PathBuf,
     /// The absolute path or path relative to the workspace root pointing to the wheel
     /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
@@ -295,7 +296,7 @@ pub struct GitSourceDist {
 #[derive(Debug, Clone, Hash)]
 pub struct PathSourceDist {
     pub name: PackageName,
-    /// The absolute, canonicalized path to the distribution which we use for installing.
+    /// The absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
     /// The absolute path or path relative to the workspace root pointing to the distribution
     /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
@@ -311,7 +312,7 @@ pub struct PathSourceDist {
 #[derive(Debug, Clone, Hash)]
 pub struct DirectorySourceDist {
     pub name: PackageName,
-    /// The absolute, canonicalized path to the distribution which we use for installing.
+    /// The absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
     /// The absolute path or path relative to the workspace root pointing to the distribution
     /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
@@ -371,14 +372,16 @@ impl Dist {
         lock_path: &Path,
         ext: DistExtension,
     ) -> Result<Dist, Error> {
-        // Store the canonicalized path, which also serves to validate that it exists.
-        let install_path = match install_path.canonicalize() {
-            Ok(path) => path,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Err(Error::NotFound(url.to_url()));
-            }
-            Err(err) => return Err(err.into()),
-        };
+        // Convert to an absolute path.
+        let install_path = std::path::absolute(install_path)?;
+
+        // Normalize the path.
+        let install_path = normalize_absolute_path(&install_path)?;
+
+        // Validate that the path exists.
+        if !install_path.exists() {
+            return Err(Error::NotFound(url.to_url()));
+        }
 
         // Determine whether the path represents a built or source distribution.
         match ext {
@@ -417,14 +420,16 @@ impl Dist {
         lock_path: &Path,
         editable: bool,
     ) -> Result<Dist, Error> {
-        // Store the canonicalized path, which also serves to validate that it exists.
-        let install_path = match install_path.canonicalize() {
-            Ok(path) => path,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Err(Error::NotFound(url.to_url()));
-            }
-            Err(err) => return Err(err.into()),
-        };
+        // Convert to an absolute path.
+        let install_path = std::path::absolute(install_path)?;
+
+        // Normalize the path.
+        let install_path = normalize_absolute_path(&install_path)?;
+
+        // Validate that the path exists.
+        if !install_path.exists() {
+            return Err(Error::NotFound(url.to_url()));
+        }
 
         // Determine whether the path represents an archive or a directory.
         Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {

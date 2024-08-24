@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 use thiserror::Error;
 use url::{ParseError, Url};
 
-use uv_fs::{normalize_absolute_path, normalize_url_path, Simplified};
+use uv_fs::{normalize_absolute_path, normalize_url_path};
 
 use crate::Pep508Url;
 
@@ -46,12 +46,9 @@ impl VerbatimUrl {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, VerbatimUrlError> {
         let path = path.as_ref();
 
-        // Normalize the path (and canonicalize it, if possible).
-        let path = match path.simple_canonicalize() {
-            Ok(path) => path,
-            Err(_) => normalize_absolute_path(path)
-                .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?,
-        };
+        // Normalize the path.
+        let path = normalize_absolute_path(path)
+            .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
@@ -90,12 +87,8 @@ impl VerbatimUrl {
             base_dir.as_ref().join(path)
         };
 
-        // Normalize the path (and canonicalize it, if possible).
-        let path = match path.simple_canonicalize() {
-            Ok(path) => path,
-            Err(_) => normalize_absolute_path(&path)
-                .map_err(|err| VerbatimUrlError::Normalization(path.clone(), err))?,
-        };
+        let path = normalize_absolute_path(&path)
+            .map_err(|err| VerbatimUrlError::Normalization(path.clone(), err))?;
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
@@ -123,12 +116,9 @@ impl VerbatimUrl {
             return Err(VerbatimUrlError::WorkingDirectory(path.to_path_buf()));
         };
 
-        // Normalize the path (and canonicalize it, if possible).
-        let path = match path.simple_canonicalize() {
-            Ok(path) => path,
-            Err(_) => normalize_absolute_path(&path)
-                .map_err(|_| VerbatimUrlError::WorkingDirectory(path))?,
-        };
+        // Normalize the path.
+        let path = normalize_absolute_path(&path)
+            .map_err(|err| VerbatimUrlError::Normalization(path.clone(), err))?;
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
