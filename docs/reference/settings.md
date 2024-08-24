@@ -1061,6 +1061,34 @@ By default, uv will use the latest compatible version of each package (`highest`
 
 ---
 
+#### [`trusted-host`](#trusted-host) {: #trusted-host }
+
+A list of trusted hostnames for SSL connections.
+
+WARNING: Hosts included in this list will not be verified against the system's certificate
+store.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    trusted-host = ["localhost:8080"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    trusted-host = ["localhost:8080"]
+    ```
+
+---
+
 #### [`upgrade`](#upgrade) {: #upgrade }
 
 Allow package upgrades, ignoring pinned versions in any existing output file.
@@ -2521,6 +2549,35 @@ environment. The packages will be installed at the top-level of the directory.
     ```toml
     [pip]
     target = "./target"
+    ```
+
+---
+
+#### [`trusted-host`](#pip_trusted-host) {: #pip_trusted-host }
+<span id="trusted-host"></span>
+
+A list of trusted hostnames for SSL connections.
+
+WARNING: Hosts included in this list will not be verified against the system's certificate
+store.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    trusted-host = ["localhost:8080"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    trusted-host = ["localhost:8080"]
     ```
 
 ---

@@ -1,14 +1,14 @@
 use std::fmt::Write;
 
 use anstream::eprint;
+use distribution_types::{IndexLocations, Resolution, UnresolvedRequirementSpecification};
+use install_wheel_rs::linker::LinkMode;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use pep508_rs::PackageName;
-use tracing::{debug, enabled, Level};
-
-use distribution_types::{IndexLocations, Resolution, UnresolvedRequirementSpecification};
-use install_wheel_rs::linker::LinkMode;
 use pypi_types::Requirement;
+use tracing::{debug, enabled, Level};
+use url::Url;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -53,6 +53,7 @@ pub(crate) async fn pip_install(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    trusted_host: Vec<Url>,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -83,7 +84,8 @@ pub(crate) async fn pip_install(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .keyring(keyring_provider)
+        .trusted_host(trusted_host);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {

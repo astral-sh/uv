@@ -352,6 +352,17 @@
         "$ref": "#/definitions/Source"
       }
     },
+    "trusted-host": {
+      "description": "A list of trusted hostnames for SSL connections.\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
     "upgrade": {
       "description": "Allow package upgrades, ignoring pinned versions in any existing output file.",
       "type": [
@@ -943,6 +954,17 @@
             "string",
             "null"
           ]
+        },
+        "trusted-host": {
+          "description": "A list of trusted hostnames for SSL connections.\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
         },
         "universal": {
           "description": "Perform a universal resolution, attempting to generate a single `requirements.txt` output file that is compatible with all operating systems, architectures, and Python implementations.\n\nIn universal mode, the current Python version (or user-provided `--python-version`) will be treated as a lower bound. For example, `--universal --python-version 3.7` would produce a universal resolution for Python 3.7 and later.",

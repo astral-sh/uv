@@ -2,12 +2,12 @@ use std::fmt::Write;
 
 use anstream::eprint;
 use anyhow::Result;
+use distribution_types::{IndexLocations, Resolution};
+use install_wheel_rs::linker::LinkMode;
 use owo_colors::OwoColorize;
 use pep508_rs::PackageName;
 use tracing::debug;
-
-use distribution_types::{IndexLocations, Resolution};
-use install_wheel_rs::linker::LinkMode;
+use url::Url;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -48,6 +48,7 @@ pub(crate) async fn pip_sync(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    trusted_host: Vec<Url>,
     allow_empty_requirements: bool,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -73,7 +74,8 @@ pub(crate) async fn pip_sync(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .keyring(keyring_provider)
+        .trusted_host(trusted_host);
 
     // Initialize a few defaults.
     let overrides = &[];

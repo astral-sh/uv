@@ -6,6 +6,7 @@ use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
+use url::Url;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
@@ -213,6 +214,7 @@ pub struct InstallerOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
+    pub trusted_host: Option<Vec<Url>>,
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
@@ -239,6 +241,7 @@ pub struct ResolverOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
+    pub trusted_host: Option<Vec<Url>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub config_settings: Option<ConfigSettings>,
@@ -350,6 +353,18 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+    /// A list of trusted hostnames for SSL connections.
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            trusted-host = ["localhost:8080"]
+        "#
+    )]
+    pub trusted_host: Option<Vec<Url>>,
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
@@ -721,6 +736,18 @@ pub struct PipOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+    /// A list of trusted hostnames for SSL connections.
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            trusted-host = ["localhost:8080"]
+        "#
+    )]
+    pub trusted_host: Option<Vec<Url>>,
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -1208,6 +1235,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            trusted_host: value.trusted_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             config_settings: value.config_settings,
@@ -1235,6 +1263,7 @@ impl From<ResolverInstallerOptions> for InstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            trusted_host: value.trusted_host,
             config_settings: value.config_settings,
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode,
@@ -1267,6 +1296,7 @@ pub struct ToolOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
+    pub trusted_host: Option<Vec<Url>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub config_settings: Option<ConfigSettings>,
@@ -1291,6 +1321,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            trusted_host: value.trusted_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             config_settings: value.config_settings,
@@ -1317,6 +1348,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            trusted_host: value.trusted_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             config_settings: value.config_settings,

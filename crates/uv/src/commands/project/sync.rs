@@ -143,6 +143,7 @@ pub(super) async fn do_sync(
         index_locations,
         index_strategy,
         keyring_provider,
+        trusted_host,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -209,6 +210,7 @@ pub(super) async fn do_sync(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
+        .trusted_host(trusted_host.to_vec())
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
         .build();

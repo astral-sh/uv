@@ -6,10 +6,10 @@ use std::str::FromStr;
 use anyhow::{anyhow, Result};
 use clap::builder::styling::Style;
 use clap::{Args, Parser, Subcommand};
-
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
+use url::Url;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
@@ -672,6 +672,18 @@ fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
         Ok(Maybe::None)
     } else {
         match IndexUrl::from_str(input) {
+            Ok(url) => Ok(Maybe::Some(url)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
+/// Parse a string into an [`Url`], mapping the empty string to `None`.
+fn parse_maybe_url(input: &str) -> Result<Maybe<Url>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match Url::parse(input) {
             Ok(url) => Ok(Maybe::Some(url)),
             Err(err) => Err(err.to_string()),
         }
@@ -1559,6 +1571,18 @@ pub struct PipUninstallArgs {
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub keyring_provider: Option<KeyringProviderType>,
 
+    /// A list of trusted hostnames for SSL connections.
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store.
+    #[arg(
+        long,
+        env = "UV_TRUSTED_HOST",
+        value_delimiter = ' ',
+        value_parser = parse_maybe_url,
+    )]
+    pub trusted_host: Option<Vec<Maybe<Url>>>,
+
     /// Use the system Python to uninstall packages.
     ///
     /// By default, uv uninstalls from the virtual environment in the current working directory or
@@ -1984,6 +2008,18 @@ pub struct VenvArgs {
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub keyring_provider: Option<KeyringProviderType>,
+
+    /// A list of trusted hostnames for SSL connections.
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store.
+    #[arg(
+        long,
+        env = "UV_TRUSTED_HOST",
+        value_delimiter = ' ',
+        value_parser = parse_maybe_url,
+    )]
+    pub trusted_host: Option<Vec<Maybe<Url>>>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -3321,6 +3357,19 @@ pub struct InstallerArgs {
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 
+    /// A list of trusted hostnames for SSL connections.
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store.
+    #[arg(
+        long,
+        env = "UV_TRUSTED_HOST",
+        value_delimiter = ' ',
+        value_parser = parse_maybe_url,
+        help_heading = "Index options"
+    )]
+    pub trusted_host: Option<Vec<Maybe<Url>>>,
+
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
         long,
@@ -3462,6 +3511,19 @@ pub struct ResolverArgs {
         help_heading = "Index options"
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+
+    /// A list of trusted hostnames for SSL connections.
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store.
+    #[arg(
+        long,
+        env = "UV_TRUSTED_HOST",
+        value_delimiter = ' ',
+        value_parser = parse_maybe_url,
+        help_heading = "Index options"
+    )]
+    pub trusted_host: Option<Vec<Maybe<Url>>>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -3634,6 +3696,19 @@ pub struct ResolverInstallerArgs {
         help_heading = "Index options"
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+
+    /// A list of trusted hostnames for SSL connections.
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store.
+    #[arg(
+        long,
+        env = "UV_TRUSTED_HOST",
+        value_delimiter = ' ',
+        value_parser = parse_maybe_url,
+        help_heading = "Index options"
+    )]
+    pub trusted_host: Option<Vec<Maybe<Url>>>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.

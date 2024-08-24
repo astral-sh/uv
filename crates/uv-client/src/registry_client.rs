@@ -26,7 +26,7 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_normalize::PackageName;
 
-use crate::base_client::{BaseClient, BaseClientBuilder};
+use crate::base_client::BaseClientBuilder;
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
@@ -69,6 +69,12 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
         self.base_client_builder = self.base_client_builder.keyring(keyring_type);
+        self
+    }
+
+    #[must_use]
+    pub fn trusted_host(mut self, trusted_host: Vec<Url>) -> Self {
+        self.base_client_builder = self.base_client_builder.trusted_host(trusted_host);
         self
     }
 
@@ -299,7 +305,7 @@ impl RegistryClient {
         cache_control: CacheControl,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
         let simple_request = self
-            .uncached_client(&url)
+            .uncached_client(url)
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
@@ -552,7 +558,7 @@ impl RegistryClient {
         };
 
         let req = self
-            .uncached_client(&url)
+            .uncached_client(url)
             .head(url.clone())
             .header(
                 "accept-encoding",
@@ -572,7 +578,7 @@ impl RegistryClient {
         let read_metadata_range_request = |response: Response| {
             async {
                 let mut reader = AsyncHttpRangeReader::from_head_response(
-                    self.uncached_client(&url).clone(),
+                    self.uncached_client(url).clone(),
                     response,
                     url.clone(),
                     headers,
@@ -620,7 +626,7 @@ impl RegistryClient {
 
         // Create a request to stream the file.
         let req = self
-            .uncached_client(&url)
+            .uncached_client(url)
             .get(url.clone())
             .header(
                 // `reqwest` defaults to accepting compressed responses.

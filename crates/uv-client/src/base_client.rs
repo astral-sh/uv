@@ -1,10 +1,11 @@
 use std::error::Error;
 use std::fmt::Debug;
-use std::ops::Deref;
 use std::path::Path;
 use std::{env, iter};
 
 use itertools::Itertools;
+use pep508_rs::MarkerEnvironment;
+use platform_tags::Platform;
 use reqwest::{Client, ClientBuilder, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
@@ -13,8 +14,6 @@ use reqwest_retry::{
 };
 use tracing::debug;
 use url::Url;
-use pep508_rs::MarkerEnvironment;
-use platform_tags::Platform;
 use uv_auth::AuthMiddleware;
 use uv_configuration::KeyringProviderType;
 use uv_fs::Simplified;
@@ -24,12 +23,13 @@ use uv_warnings::warn_user_once;
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
-use crate::{CachedClient, Connectivity};
+use crate::Connectivity;
 
 /// A builder for an [`BaseClient`].
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
+    trusted_host: Vec<Url>,
     native_tls: bool,
     retries: u32,
     pub connectivity: Connectivity,
@@ -48,6 +48,7 @@ impl BaseClientBuilder<'_> {
     pub fn new() -> Self {
         Self {
             keyring: KeyringProviderType::default(),
+            trusted_host: vec![],
             native_tls: false,
             connectivity: Connectivity::Online,
             retries: 3,
@@ -62,6 +63,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
         self.keyring = keyring_type;
+        self
+    }
+
+    #[must_use]
+    pub fn trusted_host(mut self, trusted_host: Vec<Url>) -> Self {
+        self.trusted_host = trusted_host;
         self
     }
 
@@ -109,7 +116,6 @@ impl<'a> BaseClientBuilder<'a> {
         // Create user agent.
         let mut user_agent_string = format!("uv/{}", version());
 
-
         // Add linehaul metadata.
         if let Some(markers) = self.markers {
             let linehaul = LineHaul::new(markers, self.platform);
@@ -123,9 +129,9 @@ impl<'a> BaseClientBuilder<'a> {
             let path_exists = Path::new(&path).exists();
             if !path_exists {
                 warn_user_once!(
-                        "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
-                        path.simplified_display().cyan()
-                    );
+                    "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
+                    path.simplified_display().cyan()
+                );
             }
             path_exists
         });
@@ -148,30 +154,31 @@ impl<'a> BaseClientBuilder<'a> {
         debug!("Using request timeout of {timeout}s");
 
         // Create a secure client that validates certificates.
-        let client =
-            self.create_client(&user_agent_string, timeout, false, ssl_cert_file_exists);
+        let client = self.create_client(
+            &user_agent_string,
+            timeout,
+            ssl_cert_file_exists,
+            Security::Secure,
+        );
 
         // Create an insecure client that accepts invalid certificates.
-        let dangerous_client =
-            self.create_client(&user_agent_string, timeout, true, ssl_cert_file_exists);
-
+        let dangerous_client = self.create_client(
+            &user_agent_string,
+            timeout,
+            ssl_cert_file_exists,
+            Security::Insecure,
+        );
 
         // Wrap in any relevant middleware and handle connectivity.
-        let client = match self.connectivity {
-            Connectivity::Online => self.apply_middleware(client),
-            Connectivity::Offline => self.apply_offline_middleware(client),
-        };
-        let dangerous_client = match self.connectivity {
-            Connectivity::Online => self.apply_middleware(dangerous_client),
-            Connectivity::Offline => self.apply_offline_middleware(dangerous_client),
-        };
+        let client = self.apply_middleware(client);
+        let dangerous_client = self.apply_middleware(dangerous_client);
 
         BaseClient {
             connectivity: self.connectivity,
             client,
             dangerous_client,
             timeout,
-            trusted_host: vec![]
+            trusted_host: vec![],
         }
     }
 
@@ -179,16 +186,21 @@ impl<'a> BaseClientBuilder<'a> {
         &self,
         user_agent: &str,
         timeout: u64,
-        accept_invalid_certs: bool,
         ssl_cert_file_exists: bool,
+        security: Security,
     ) -> Client {
         // Configure the builder.
         let client_builder = ClientBuilder::new()
             .user_agent(user_agent)
             .pool_max_idle_per_host(20)
             .read_timeout(std::time::Duration::from_secs(timeout))
-            .tls_built_in_root_certs(false)
-            .danger_accept_invalid_certs(accept_invalid_certs);
+            .tls_built_in_root_certs(false);
+
+        // If necessary, accept invalid certificates.
+        let client_builder = match security {
+            Security::Secure => client_builder,
+            Security::Insecure => client_builder.danger_accept_invalid_certs(true),
+        };
 
         let client_builder = if self.native_tls || ssl_cert_file_exists {
             client_builder.tls_built_in_native_certs(true)
@@ -215,29 +227,29 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     fn apply_middleware(&self, client: Client) -> ClientWithMiddleware {
-        let client = reqwest_middleware::ClientBuilder::new(client.clone());
+        match self.connectivity {
+            Connectivity::Online => {
+                let client = reqwest_middleware::ClientBuilder::new(client);
 
-        // Initialize the retry strategy.
-        let retry_policy =
-            ExponentialBackoff::builder().build_with_max_retries(self.retries);
-        let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
-            retry_policy,
-            UvRetryableStrategy,
-        );
-        let client = client.with(retry_strategy);
+                // Initialize the retry strategy.
+                let retry_policy =
+                    ExponentialBackoff::builder().build_with_max_retries(self.retries);
+                let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
+                    retry_policy,
+                    UvRetryableStrategy,
+                );
+                let client = client.with(retry_strategy);
 
-        // Initialize the authentication middleware to set headers.
-        let client =
-            client.with(AuthMiddleware::new().with_keyring(self.keyring.to_provider()));
+                // Initialize the authentication middleware to set headers.
+                let client =
+                    client.with(AuthMiddleware::new().with_keyring(self.keyring.to_provider()));
 
-
-        client.build()
-    }
-
-    fn apply_offline_middleware(&self, client: Client) -> ClientWithMiddleware {
-        reqwest_middleware::ClientBuilder::new(client)
-            .with(OfflineMiddleware)
-            .build()
+                client.build()
+            }
+            Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client)
+                .with(OfflineMiddleware)
+                .build(),
+        }
     }
 }
 
@@ -256,6 +268,14 @@ pub struct BaseClient {
     trusted_host: Vec<Url>,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum Security {
+    /// The client should use secure settings, i.e., valid certificates.
+    Secure,
+    /// The client should use insecure settings, i.e., skip certificate validation.
+    Insecure,
+}
+
 impl BaseClient {
     /// The underlying [`ClientWithMiddleware`] for secure requests.
     pub fn client(&self) -> ClientWithMiddleware {
@@ -265,7 +285,9 @@ impl BaseClient {
     /// Selects the appropriate client based on the host's trustworthiness.
     pub fn for_host(&self, url: &Url) -> &ClientWithMiddleware {
         if self
-            .trusted_host.iter().any(|trusted| url.host() == trusted.host())
+            .trusted_host
+            .iter()
+            .any(|trusted| url.host() == trusted.host())
         {
             &self.dangerous_client
         } else {

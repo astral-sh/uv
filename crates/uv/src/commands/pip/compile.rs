@@ -3,11 +3,12 @@ use std::env;
 use std::io::stdout;
 use std::path::Path;
 
-use anstream::{eprint, AutoStream};
+use anstream::{AutoStream, eprint};
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
+use url::Url;
 
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification, Verbatim};
 use install_wheel_rs::linker::LinkMode;
@@ -29,7 +30,7 @@ use uv_python::{
     PythonVersion, VersionRequest,
 };
 use uv_requirements::{
-    upgrade::read_requirements_txt, RequirementsSource, RequirementsSpecification,
+    RequirementsSource, RequirementsSpecification, upgrade::read_requirements_txt,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
@@ -39,9 +40,9 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::pip::loggers::DefaultResolveLogger;
-use crate::commands::pip::{operations, resolution_environment};
 use crate::commands::ExitStatus;
+use crate::commands::pip::{operations, resolution_environment};
+use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
@@ -75,6 +76,7 @@ pub(crate) async fn pip_compile(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    trusted_host: Vec<Url>,
     config_settings: ConfigSettings,
     connectivity: Connectivity,
     no_build_isolation: bool,
@@ -107,7 +109,8 @@ pub(crate) async fn pip_compile(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .keyring(keyring_provider)
+        .trusted_host(trusted_host);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {

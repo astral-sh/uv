@@ -234,6 +234,7 @@ async fn do_lock(
         index_locations,
         index_strategy,
         keyring_provider,
+        trusted_host,
         resolution,
         prerelease,
         config_setting,
@@ -342,6 +343,7 @@ async fn do_lock(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
+        .trusted_host(trusted_host.to_vec())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();

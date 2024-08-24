@@ -5,13 +5,13 @@ use std::vec;
 
 use anstream::eprint;
 use anyhow::Result;
-use miette::{Diagnostic, IntoDiagnostic};
-use owo_colors::OwoColorize;
-use thiserror::Error;
-
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
+use miette::{Diagnostic, IntoDiagnostic};
+use owo_colors::OwoColorize;
 use pypi_types::Requirement;
+use thiserror::Error;
+use url::Url;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -49,6 +49,7 @@ pub(crate) async fn venv(
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    trusted_host: Vec<Url>,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -69,6 +70,7 @@ pub(crate) async fn venv(
         index_locations,
         index_strategy,
         keyring_provider,
+        trusted_host,
         prompt,
         system_site_packages,
         connectivity,
@@ -122,6 +124,7 @@ async fn venv_impl(
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    trusted_host: Vec<Url>,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -251,6 +254,7 @@ async fn venv_impl(
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
             .keyring(keyring_provider)
+            .trusted_host(trusted_host)
             .markers(interpreter.markers())
             .platform(interpreter.platform())
             .build();

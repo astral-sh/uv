@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
-
+use url::Url;
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{ExtraName, RequirementOrigin};
@@ -1308,6 +1308,7 @@ impl PipUninstallSettings {
             requirement,
             python,
             keyring_provider,
+            trusted_host,
             system,
             no_system,
             break_system_packages,
@@ -1328,6 +1329,12 @@ impl PipUninstallSettings {
                     target,
                     prefix,
                     keyring_provider,
+                    trusted_host: trusted_host.map(|trusted_host| {
+                        trusted_host
+                            .into_iter()
+                            .filter_map(Maybe::into_option)
+                            .collect()
+                    }),
                     ..PipOptions::default()
                 },
                 filesystem,
@@ -1558,6 +1565,7 @@ impl VenvSettings {
             index_args,
             index_strategy,
             keyring_provider,
+            trusted_host,
             exclude_newer,
             link_mode,
             compat_args: _,
@@ -1576,6 +1584,12 @@ impl VenvSettings {
                     system: flag(system, no_system),
                     index_strategy,
                     keyring_provider,
+                    trusted_host: trusted_host.map(|trusted_host| {
+                        trusted_host
+                            .into_iter()
+                            .filter_map(Maybe::into_option)
+                            .collect()
+                    }),
                     exclude_newer,
                     link_mode,
                     ..PipOptions::from(index_args)
@@ -1595,6 +1609,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) trusted_host: &'a [Url],
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: &'a [PackageName],
@@ -1616,6 +1631,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) trusted_host: Vec<Url>,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: ConfigSettings,
@@ -1633,6 +1649,7 @@ pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) trusted_host: &'a [Url],
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: &'a ConfigSettings,
@@ -1663,6 +1680,7 @@ impl ResolverSettings {
             index_locations: &self.index_locations,
             index_strategy: self.index_strategy,
             keyring_provider: self.keyring_provider,
+            trusted_host: &self.trusted_host,
             resolution: self.resolution,
             prerelease: self.prerelease,
             config_setting: &self.config_setting,
@@ -1690,6 +1708,7 @@ impl From<ResolverOptions> for ResolverSettings {
             prerelease: value.prerelease.unwrap_or_default(),
             index_strategy: value.index_strategy.unwrap_or_default(),
             keyring_provider: value.keyring_provider.unwrap_or_default(),
+            trusted_host: value.trusted_host.unwrap_or_default(),
             config_setting: value.config_settings.unwrap_or_default(),
             no_build_isolation: value.no_build_isolation.unwrap_or_default(),
             no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
@@ -1718,6 +1737,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) trusted_host: &'a [Url],
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: &'a ConfigSettings,
@@ -1744,6 +1764,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) trusted_host: Vec<Url>,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: ConfigSettings,
@@ -1779,6 +1800,7 @@ impl ResolverInstallerSettings {
             index_locations: &self.index_locations,
             index_strategy: self.index_strategy,
             keyring_provider: self.keyring_provider,
+            trusted_host: &self.trusted_host,
             resolution: self.resolution,
             prerelease: self.prerelease,
             config_setting: &self.config_setting,
@@ -1808,6 +1830,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
             prerelease: value.prerelease.unwrap_or_default(),
             index_strategy: value.index_strategy.unwrap_or_default(),
             keyring_provider: value.keyring_provider.unwrap_or_default(),
+            trusted_host: value.trusted_host.unwrap_or_default(),
             config_setting: value.config_settings.unwrap_or_default(),
             no_build_isolation: value.no_build_isolation.unwrap_or_default(),
             no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
@@ -1852,6 +1875,7 @@ pub(crate) struct PipSettings {
     pub(crate) prefix: Option<Prefix>,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) trusted_host: Vec<Url>,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
     pub(crate) build_options: BuildOptions,
@@ -1906,6 +1930,7 @@ impl PipSettings {
             find_links,
             index_strategy,
             keyring_provider,
+            trusted_host,
             no_build,
             no_binary,
             only_binary,
@@ -1955,6 +1980,7 @@ impl PipSettings {
             find_links: top_level_find_links,
             index_strategy: top_level_index_strategy,
             keyring_provider: top_level_keyring_provider,
+            trusted_host: top_level_trusted_host,
             resolution: top_level_resolution,
             prerelease: top_level_prerelease,
             config_settings: top_level_config_settings,
@@ -1984,6 +2010,7 @@ impl PipSettings {
         let find_links = find_links.combine(top_level_find_links);
         let index_strategy = index_strategy.combine(top_level_index_strategy);
         let keyring_provider = keyring_provider.combine(top_level_keyring_provider);
+        let trusted_host = trusted_host.combine(top_level_trusted_host);
         let resolution = resolution.combine(top_level_resolution);
         let prerelease = prerelease.combine(top_level_prerelease);
         let config_settings = config_settings.combine(top_level_config_settings);
@@ -2043,6 +2070,7 @@ impl PipSettings {
                 .keyring_provider
                 .combine(keyring_provider)
                 .unwrap_or_default(),
+            trusted_host: args.trusted_host.combine(trusted_host).unwrap_or_default(),
             generate_hashes: args
                 .generate_hashes
                 .combine(generate_hashes)
@@ -2156,6 +2184,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
             index_locations: settings.index_locations,
             index_strategy: settings.index_strategy,
             keyring_provider: settings.keyring_provider,
+            trusted_host: settings.trusted_host,
             resolution: settings.resolution,
             prerelease: settings.prerelease,
             config_setting: settings.config_setting,
@@ -2176,6 +2205,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for InstallerSettingsRef<'a> {
             index_locations: settings.index_locations,
             index_strategy: settings.index_strategy,
             keyring_provider: settings.keyring_provider,
+            trusted_host: settings.trusted_host,
             config_setting: settings.config_setting,
             no_build_isolation: settings.no_build_isolation,
             no_build_isolation_package: settings.no_build_isolation_package,
