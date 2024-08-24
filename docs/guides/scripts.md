@@ -57,18 +57,16 @@ hello world!
 
 Additionally, your script can be read directly from stdin:
 
+```console
+$ echo 'print("hello world!")' | uv run -
+```
+
+Or, if your shell supports [here-documents](https://en.wikipedia.org/wiki/Here_document):
+
 ```bash
 uv run - <<EOF
 print("hello world!")
 EOF
-```
-
-or
-
-```bash
-echo '
-print("hello world!")
-' | uv run -
 ```
 
 Note that if you use `uv run` in a _project_, i.e. a directory with a `pyproject.toml`, it will
