@@ -48,6 +48,9 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
+rustls = "0.23.12"
+rustls-native-certs = "0.7.1"
+webpki-roots = "0.26.3"
 
 [dev-dependencies]
 anyhow = { workspace = true }

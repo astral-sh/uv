@@ -1,9 +1,10 @@
 use std::error::Error;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
 use std::path::Path;
 use std::{env, iter};
-
+use std::collections::HashSet;
+use std::sync::Arc;
 use itertools::Itertools;
 use reqwest::{Client, ClientBuilder, Response};
 use reqwest_middleware::ClientWithMiddleware;
@@ -11,6 +12,10 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
 };
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::{ClientConfig, DigitallySignedStruct, SignatureScheme};
+use rustls::client::WebPkiServerVerifier;
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use tracing::debug;
 
 use pep508_rs::MarkerEnvironment;
@@ -25,6 +30,53 @@ use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
 use crate::Connectivity;
+
+
+struct CustomCertVerifier {
+    hosts_to_skip_tls_verification: HashSet<String>,
+    default_verifier: Arc<dyn ServerCertVerifier>,
+}
+
+impl Debug for CustomCertVerifier {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
+impl ServerCertVerifier for CustomCertVerifier {
+    fn verify_server_cert(&self, end_entity: &CertificateDer<'_>, intermediates: &[CertificateDer<'_>], server_name: &ServerName<'_>, ocsp_response: &[u8], now: UnixTime) -> Result<ServerCertVerified, rustls::Error> {
+        // Check if the server_name matches any host in the list to skip verification
+        // Resolve the server name from DNS.
+        if let ServerName::DnsName(dns_name) = server_name {
+            if self.hosts_to_skip_tls_verification.contains(dns_name.as_ref()) {
+                return Ok(ServerCertVerified::assertion());
+            }
+        }
+
+        // Perform default certificate verification
+        self.default_verifier.verify_server_cert(
+            end_entity,
+            intermediates,
+            server_name,
+            ocsp_response,
+            now,
+        )
+    }
+
+
+    fn verify_tls12_signature(&self, message: &[u8], cert: &CertificateDer<'_>, dss: &DigitallySignedStruct) -> Result<HandshakeSignatureValid, rustls::Error> {
+        self.default_verifier.verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(&self, message: &[u8], cert: &CertificateDer<'_>, dss: &DigitallySignedStruct) -> Result<HandshakeSignatureValid, rustls::Error> {
+        self.default_verifier.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.default_verifier.supported_verify_schemes()
+    }
+}
+
 
 /// A builder for an [`BaseClient`].
 #[derive(Debug, Clone)]
@@ -148,19 +200,74 @@ impl<'a> BaseClientBuilder<'a> {
                 path_exists
             });
 
+            // Configure TLS.
+            let tls = {
+                // Set root certificates.
+                let mut root_cert_store = rustls::RootCertStore::empty();
+
+                if self.native_tls || ssl_cert_file_exists {
+                    let mut valid_count = 0;
+                    let mut invalid_count = 0;
+                    for cert in rustls_native_certs::load_native_certs().unwrap()
+                    {
+                        // Continue on parsing errors, as native stores often include ancient or syntactically
+                        // invalid certificates, like root certificates without any X509 extensions.
+                        // Inspiration: https://github.com/rustls/rustls/blob/633bf4ba9d9521a95f68766d04c22e2b01e68318/rustls/src/anchors.rs#L105-L112
+                        match root_cert_store.add(cert.into()) {
+                            Ok(_) => valid_count += 1,
+                            Err(err) => {
+                                invalid_count += 1;
+                                debug!("rustls failed to parse DER certificate: {err:?}");
+                            }
+                        }
+                    }
+                    if valid_count == 0 && invalid_count > 0 {
+                        // return Err(crate::error::builder(
+                        //     "zero valid certificates found in native root store",
+                        // ));
+                    }
+                } else{
+                    root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+                }
+
+                // Set TLS versions.
+                let versions = rustls::ALL_VERSIONS.to_vec();
+
+                // Allow user to have installed a runtime default.
+                // If not, we use ring.
+                let provider = rustls::crypto::CryptoProvider::get_default()
+                    .map(|arc| arc.clone())
+                    .unwrap();
+
+                let default_verifier = WebPkiServerVerifier::builder(Arc::new(root_cert_store)).build().unwrap();
+
+                // Build TLS config
+                let config_builder = ClientConfig::builder_with_provider(provider)
+                    .with_protocol_versions(&versions)
+                    .unwrap()
+                    .dangerous()
+                    .with_custom_certificate_verifier(Arc::new(CustomCertVerifier { hosts_to_skip_tls_verification: Default::default(), default_verifier }));
+
+                // Finalize TLS config
+                // STOPSHIP(charlie): Add `SSL_CERT` thing, it's private though? Ugh.
+                let mut tls = config_builder.with_no_client_auth();
+                tls.enable_sni = true;
+
+                // ALPN protocol
+                tls.alpn_protocols = vec![
+                    "http/1.1".into(),
+                ];
+
+                tls
+            };
+
             // Configure the builder.
             let client_core = ClientBuilder::new()
                 .user_agent(user_agent_string)
                 .pool_max_idle_per_host(20)
                 .read_timeout(std::time::Duration::from_secs(timeout))
-                .tls_built_in_root_certs(false);
+                .use_preconfigured_tls(tls);
 
-            // Configure TLS.
-            let client_core = if self.native_tls || ssl_cert_file_exists {
-                client_core.tls_built_in_native_certs(true)
-            } else {
-                client_core.tls_built_in_webpki_certs(true)
-            };
 
             // Configure mTLS.
             let client_core = if let Some(ssl_client_cert) = env::var_os("SSL_CLIENT_CERT") {
@@ -174,6 +281,7 @@ impl<'a> BaseClientBuilder<'a> {
             } else {
                 client_core
             };
+
 
             client_core.build().expect("Failed to build HTTP client")
         });
