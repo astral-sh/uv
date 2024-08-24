@@ -8,7 +8,7 @@ use pep508_rs::PackageName;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_fs::{absolutize_path, Simplified, CWD};
+use uv_fs::{Simplified, CWD};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     VersionRequest,
@@ -41,7 +41,7 @@ pub(crate) async fn init(
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
         None => CWD.to_path_buf(),
-        Some(ref path) => absolutize_path(Path::new(path))?.to_path_buf(),
+        Some(ref path) => std::path::absolute(path)?,
     };
 
     // Make sure a project does not already exist in the given directory.

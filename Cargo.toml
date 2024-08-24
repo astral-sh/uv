@@ -106,7 +106,6 @@ memchr = { version = "2.7.4" }
 miette = { version = "7.2.0" }
 nanoid = { version = "0.4.0" }
 owo-colors = { version = "4.0.0" }
-path-absolutize = { version = "3.1.1" }
 path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
