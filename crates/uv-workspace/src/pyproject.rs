@@ -332,13 +332,13 @@ impl Source {
 
         let source = match source {
             RequirementSource::Registry { .. } => return Ok(None),
-            RequirementSource::Path { lock_path, .. } => Source::Path {
+            RequirementSource::Path { install_path, .. } => Source::Path {
                 editable,
-                path: lock_path.to_string_lossy().into_owned(),
+                path: install_path.to_string_lossy().into_owned(),
             },
-            RequirementSource::Directory { lock_path, .. } => Source::Path {
+            RequirementSource::Directory { install_path, .. } => Source::Path {
                 editable,
-                path: lock_path.to_string_lossy().into_owned(),
+                path: install_path.to_string_lossy().into_owned(),
             },
             RequirementSource::Url {
                 subdirectory, url, ..

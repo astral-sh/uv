@@ -1497,3 +1497,61 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that path dependencies with path dependencies resolve paths correctly across workspaces.
+///
+/// Each package is its own workspace. We put the other projects into a separate directory `libs` so
+/// the paths don't line up by accident.
+#[test]
+fn test_path_hopping() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Build the main project ...
+    let deps = indoc! {r#"
+        dependencies = ["foo"]
+        [tool.uv.sources]
+        foo = { path = "../libs/foo", editable = true }
+    "#};
+    let main_project_dir = context.temp_dir.join("project");
+    make_project(&main_project_dir, "project", deps)?;
+
+    // ... that depends on foo ...
+    let deps = indoc! {r#"
+        dependencies = ["bar"]
+        [tool.uv.sources]
+        bar = { path = "../../libs/bar", editable = true }
+    "#};
+    make_project(&context.temp_dir.join("libs").join("foo"), "foo", deps)?;
+
+    // ... that depends on bar, a stub project.
+    make_project(&context.temp_dir.join("libs").join("bar"), "bar", "")?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&main_project_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    let lock: SourceLock =
+        toml::from_str(&fs_err::read_to_string(main_project_dir.join("uv.lock"))?)?;
+    assert_json_snapshot!(lock.sources(), @r###"
+    {
+      "bar": {
+        "editable": "../libs/bar"
+      },
+      "foo": {
+        "editable": "../libs/foo"
+      },
+      "project": {
+        "editable": "."
+      }
+    }
+    "###);
+
+    Ok(())
+}

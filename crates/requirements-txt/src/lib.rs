@@ -1845,7 +1845,6 @@ mod test {
                                                 fragment: None,
                                             },
                                             install_path: "/foo/bar",
-                                            lock_path: "/foo/bar",
                                             editable: true,
                                         },
                                     ),

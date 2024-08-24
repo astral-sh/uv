@@ -4159,7 +4159,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "b", directory = "b" },
-            { name = "c", directory = "[TEMP_DIR]/c" },
+            { name = "c", directory = "c" },
         ]
 
         [[package]]
@@ -4170,7 +4170,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         [[package]]
         name = "c"
         version = "0.1.0"
-        source = { directory = "[TEMP_DIR]/c" }
+        source = { directory = "c" }
         "###
         );
     });
@@ -5074,7 +5074,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.0.1"
-        source = { directory = "[TEMP_DIR]/v1" }
+        source = { directory = "v1" }
         resolution-markers = [
             "sys_platform == 'darwin'",
         ]
@@ -5088,7 +5088,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.0.1"
-        source = { directory = "[TEMP_DIR]/v2" }
+        source = { directory = "v2" }
         resolution-markers = [
             "sys_platform != 'darwin'",
         ]
@@ -5113,14 +5113,14 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v1" }, marker = "sys_platform == 'darwin'" },
-            { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v2" }, marker = "sys_platform != 'darwin'" },
+            { name = "dependency", version = "0.0.1", source = { directory = "v1" }, marker = "sys_platform == 'darwin'" },
+            { name = "dependency", version = "0.0.1", source = { directory = "v2" }, marker = "sys_platform != 'darwin'" },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "dependency", marker = "sys_platform != 'darwin'", directory = "[TEMP_DIR]/v2" },
-            { name = "dependency", marker = "sys_platform == 'darwin'", directory = "[TEMP_DIR]/v1" },
+            { name = "dependency", marker = "sys_platform != 'darwin'", directory = "v2" },
+            { name = "dependency", marker = "sys_platform == 'darwin'", directory = "v1" },
         ]
 
         [[package]]
@@ -7118,7 +7118,7 @@ fn lock_sources_archive() -> Result<()> {
         Url::from_file_path(&workspace_archive).unwrap(),
     })?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!( context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7129,11 +7129,11 @@ fn lock_sources_archive() -> Result<()> {
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r###"
+    // insta::with_settings!({
+    //     filters => context.filters(),
+    // }, {
+    assert_snapshot!(
+        lock, @r###"
         version = 1
         requires-python = ">=3.12"
 
@@ -7171,7 +7171,7 @@ fn lock_sources_archive() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "workspace", path = "[TEMP_DIR]/workspace.zip" }]
+        requires-dist = [{ name = "workspace", path = "workspace.zip" }]
 
         [[package]]
         name = "sniffio"
@@ -7185,7 +7185,7 @@ fn lock_sources_archive() -> Result<()> {
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { path = "[TEMP_DIR]/workspace.zip" }
+        source = { path = "workspace.zip" }
         dependencies = [
             { name = "anyio" },
         ]
@@ -7193,8 +7193,8 @@ fn lock_sources_archive() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "anyio" }]
         "###
-        );
-    });
+    );
+    // });
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
@@ -7293,7 +7293,7 @@ fn lock_sources_source_tree() -> Result<()> {
         [[package]]
         name = "anyio"
         version = "0.1.0"
-        source = { editable = "[TEMP_DIR]/workspace/anyio" }
+        source = { editable = "workspace/anyio" }
 
         [[package]]
         name = "project"
@@ -7304,18 +7304,18 @@ fn lock_sources_source_tree() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "workspace", directory = "[TEMP_DIR]/workspace" }]
+        requires-dist = [{ name = "workspace", directory = "workspace" }]
 
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { directory = "[TEMP_DIR]/workspace" }
+        source = { directory = "workspace" }
         dependencies = [
             { name = "anyio" },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "anyio", editable = "[TEMP_DIR]/workspace/anyio" }]
+        requires-dist = [{ name = "anyio", editable = "workspace/anyio" }]
         "###
         );
     });
