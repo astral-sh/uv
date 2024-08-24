@@ -432,7 +432,7 @@ impl ManagedPythonDownload {
         let filename = url.path_segments().unwrap().last().unwrap();
         let ext = SourceDistExtension::from_path(filename)
             .map_err(|err| Error::MissingExtension(url.to_string(), err))?;
-        let response = client.get(url.clone()).send().await?;
+        let response = client.client().get(url.clone()).send().await?;
 
         // Ensure the request was successful.
         response.error_for_status_ref()?;

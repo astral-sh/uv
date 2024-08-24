@@ -165,9 +165,9 @@ impl CachedClient {
         Self(client)
     }
 
-    /// The base client
-    pub fn uncached(&self) -> BaseClient {
-        self.0.clone()
+    /// The underlying [`BaseClient`] without caching.
+    pub fn uncached(&self) -> &BaseClient {
+        &self.0
     }
 
     /// Make a cached request with a custom response transformation
@@ -460,6 +460,7 @@ impl CachedClient {
         debug!("Sending revalidation request for: {url}");
         let response = self
             .0
+            .for_host(req.url())
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
@@ -499,6 +500,7 @@ impl CachedClient {
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let response = self
             .0
+            .for_host(req.url())
             .execute(req)
             .await
             .map_err(ErrorKind::from)?

@@ -1118,7 +1118,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.uncached_client().client(),
+                client.unmanaged.uncached_client(&resource.url).clone(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
             )
@@ -1188,7 +1188,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.uncached_client().client(),
+                client.unmanaged.uncached_client(&resource.url).clone(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
             )
@@ -1561,7 +1561,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Returns a GET [`reqwest::Request`] for the given URL.
     fn request(url: Url, client: &RegistryClient) -> Result<reqwest::Request, reqwest::Error> {
         client
-            .uncached_client()
+            .uncached_client(&url)
             .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.

@@ -7,6 +7,7 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
 use reqwest::{Client, Response, StatusCode};
+use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
@@ -171,8 +172,8 @@ impl RegistryClient {
     }
 
     /// Return the [`BaseClient`] used by this client.
-    pub fn uncached_client(&self) -> BaseClient {
-        self.client.uncached()
+    pub fn uncached_client(&self, url: &Url) -> &ClientWithMiddleware {
+        self.client.uncached().for_host(url)
     }
 
     /// Return the [`Connectivity`] mode used by this client.
@@ -298,7 +299,7 @@ impl RegistryClient {
         cache_control: CacheControl,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
         let simple_request = self
-            .uncached_client()
+            .uncached_client(&url)
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
@@ -512,7 +513,7 @@ impl RegistryClient {
                     })
             };
             let req = self
-                .uncached_client()
+                .uncached_client(&url)
                 .get(url.clone())
                 .build()
                 .map_err(ErrorKind::from)?;
@@ -551,7 +552,7 @@ impl RegistryClient {
         };
 
         let req = self
-            .uncached_client()
+            .uncached_client(&url)
             .head(url.clone())
             .header(
                 "accept-encoding",
@@ -571,7 +572,7 @@ impl RegistryClient {
         let read_metadata_range_request = |response: Response| {
             async {
                 let mut reader = AsyncHttpRangeReader::from_head_response(
-                    self.uncached_client().client(),
+                    self.uncached_client(&url).clone(),
                     response,
                     url.clone(),
                     headers,
@@ -619,7 +620,7 @@ impl RegistryClient {
 
         // Create a request to stream the file.
         let req = self
-            .uncached_client()
+            .uncached_client(&url)
             .get(url.clone())
             .header(
                 // `reqwest` defaults to accepting compressed responses.
