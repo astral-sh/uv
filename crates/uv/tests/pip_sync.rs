@@ -359,8 +359,8 @@ fn pip_sync_empty() -> Result<()> {
 
     ----- stderr -----
     warning: Requirements file requirements.txt does not contain any dependencies
-    Resolved 0 packages in [TIME]
-    Audited 0 packages in [TIME]
+    Resolved in [TIME]
+    Audited in [TIME]
     "###
     );
 
@@ -383,7 +383,7 @@ fn pip_sync_empty() -> Result<()> {
 
     ----- stderr -----
     warning: Requirements file requirements.txt does not contain any dependencies
-    Resolved 0 packages in [TIME]
+    Resolved in [TIME]
     Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
     "###
