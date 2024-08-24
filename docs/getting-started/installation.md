@@ -16,6 +16,9 @@ $ curl -LsSf https://astral.sh/uv/install.sh | sh
 $ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
+!!! tip
+    For PowerShell 7.X replace `powershell` with `pwsh`. [See Microsoft Docs for differences](https://learn.microsoft.com/en-us/powershell/scripting/whats-new/differences-from-windows-powershell)
+
 By default, uv is installed to `~/.cargo/bin`.
 
 !!! tip
