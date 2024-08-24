@@ -30,10 +30,10 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, HashStrategy};
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{operations, resolution_environment};
-use crate::commands::{elapsed, ExitStatus, SharedState};
+use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 
 /// Install packages into the current environment.
@@ -204,18 +204,7 @@ pub(crate) async fn pip_install(
                         debug!("Requirement satisfied: {requirement}");
                     }
                 }
-                let num_requirements = requirements.len();
-                let s = if num_requirements == 1 { "" } else { "s" };
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!(
-                        "Audited {} {}",
-                        format!("{num_requirements} package{s}").bold(),
-                        format!("in {}", elapsed(start.elapsed())).dimmed()
-                    )
-                    .dimmed()
-                )?;
+                DefaultInstallLogger.on_audit(requirements.len(), start, printer)?;
                 if dry_run {
                     writeln!(printer.stderr(), "Would make no changes")?;
                 }
