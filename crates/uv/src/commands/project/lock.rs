@@ -723,9 +723,15 @@ impl ValidatedLock {
                 debug!("Ignoring existing lockfile due to missing root package: `{name}`");
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MissingIndex(name, version, index) => {
+            SatisfiesResult::MissingRemoteIndex(name, version, index) => {
                 debug!(
-                    "Ignoring existing lockfile due to missing index: `{name}` `{version}` from `{index}`"
+                    "Ignoring existing lockfile due to missing remote index: `{name}` `{version}` from `{index}`"
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MissingLocalIndex(name, version, index) => {
+                debug!(
+                    "Ignoring existing lockfile due to missing local index: `{name}` `{version}` from `{}`", index.display()
                 );
                 Ok(Self::Preferable(lock))
             }
