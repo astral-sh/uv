@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
-use url::Url;
+
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{ExtraName, RequirementOrigin};
@@ -21,11 +21,7 @@ use uv_cli::{
     ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
 };
 use uv_client::Connectivity;
-use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SourceStrategy, TargetTriple, Upgrade,
-};
+use uv_configuration::{BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost, Upgrade};
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
@@ -1609,7 +1605,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) trusted_host: &'a [Url],
+    pub(crate) trusted_host: &'a [TrustedHost],
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: &'a [PackageName],
@@ -1631,7 +1627,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) trusted_host: Vec<Url>,
+    pub(crate) trusted_host: Vec<TrustedHost>,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: ConfigSettings,
@@ -1649,7 +1645,7 @@ pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) trusted_host: &'a [Url],
+    pub(crate) trusted_host: &'a [TrustedHost],
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: &'a ConfigSettings,
@@ -1737,7 +1733,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) trusted_host: &'a [Url],
+    pub(crate) trusted_host: &'a [TrustedHost],
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: &'a ConfigSettings,
@@ -1764,7 +1760,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) trusted_host: Vec<Url>,
+    pub(crate) trusted_host: Vec<TrustedHost>,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: ConfigSettings,
@@ -1875,7 +1871,7 @@ pub(crate) struct PipSettings {
     pub(crate) prefix: Option<Prefix>,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) trusted_host: Vec<Url>,
+    pub(crate) trusted_host: Vec<TrustedHost>,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
     pub(crate) build_options: BuildOptions,

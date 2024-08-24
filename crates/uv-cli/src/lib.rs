@@ -9,10 +9,10 @@ use clap::{Args, Parser, Subcommand};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
-use url::Url;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
+    TrustedHost,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -679,12 +679,12 @@ fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
 }
 
 /// Parse a string into an [`Url`], mapping the empty string to `None`.
-fn parse_maybe_url(input: &str) -> Result<Maybe<Url>, String> {
+fn parse_trusted_host(input: &str) -> Result<Maybe<TrustedHost>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
     } else {
-        match Url::parse(input) {
-            Ok(url) => Ok(Maybe::Some(url)),
+        match TrustedHost::from_str(input) {
+            Ok(host) => Ok(Maybe::Some(host)),
             Err(err) => Err(err.to_string()),
         }
     }
@@ -1571,7 +1571,10 @@ pub struct PipUninstallArgs {
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// A list of trusted hostnames for SSL connections.
+    /// A list of trusted hosts for SSL connections.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`) or a host-port pair
+    /// (e.g., `localhost:8080`).
     ///
     /// WARNING: Hosts included in this list will not be verified against the system's certificate
     /// store.
@@ -1579,9 +1582,9 @@ pub struct PipUninstallArgs {
         long,
         env = "UV_TRUSTED_HOST",
         value_delimiter = ' ',
-        value_parser = parse_maybe_url,
+        value_parser = parse_trusted_host,
     )]
-    pub trusted_host: Option<Vec<Maybe<Url>>>,
+    pub trusted_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// Use the system Python to uninstall packages.
     ///
@@ -2009,7 +2012,10 @@ pub struct VenvArgs {
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// A list of trusted hostnames for SSL connections.
+    /// A list of trusted hosts for SSL connections.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`) or a host-port pair
+    /// (e.g., `localhost:8080`).
     ///
     /// WARNING: Hosts included in this list will not be verified against the system's certificate
     /// store.
@@ -2017,9 +2023,9 @@ pub struct VenvArgs {
         long,
         env = "UV_TRUSTED_HOST",
         value_delimiter = ' ',
-        value_parser = parse_maybe_url,
+        value_parser = parse_trusted_host,
     )]
-    pub trusted_host: Option<Vec<Maybe<Url>>>,
+    pub trusted_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -3357,7 +3363,10 @@ pub struct InstallerArgs {
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// A list of trusted hostnames for SSL connections.
+    /// A list of trusted hosts for SSL connections.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`) or a host-port pair
+    /// (e.g., `localhost:8080`).
     ///
     /// WARNING: Hosts included in this list will not be verified against the system's certificate
     /// store.
@@ -3365,10 +3374,10 @@ pub struct InstallerArgs {
         long,
         env = "UV_TRUSTED_HOST",
         value_delimiter = ' ',
-        value_parser = parse_maybe_url,
+        value_parser = parse_trusted_host,
         help_heading = "Index options"
     )]
-    pub trusted_host: Option<Vec<Maybe<Url>>>,
+    pub trusted_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -3512,7 +3521,10 @@ pub struct ResolverArgs {
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// A list of trusted hostnames for SSL connections.
+    /// A list of trusted hosts for SSL connections.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`) or a host-port pair
+    /// (e.g., `localhost:8080`).
     ///
     /// WARNING: Hosts included in this list will not be verified against the system's certificate
     /// store.
@@ -3520,10 +3532,10 @@ pub struct ResolverArgs {
         long,
         env = "UV_TRUSTED_HOST",
         value_delimiter = ' ',
-        value_parser = parse_maybe_url,
+        value_parser = parse_trusted_host,
         help_heading = "Index options"
     )]
-    pub trusted_host: Option<Vec<Maybe<Url>>>,
+    pub trusted_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -3697,7 +3709,10 @@ pub struct ResolverInstallerArgs {
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// A list of trusted hostnames for SSL connections.
+    /// A list of trusted hosts for SSL connections.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`) or a host-port pair
+    /// (e.g., `localhost:8080`).
     ///
     /// WARNING: Hosts included in this list will not be verified against the system's certificate
     /// store.
@@ -3705,10 +3720,10 @@ pub struct ResolverInstallerArgs {
         long,
         env = "UV_TRUSTED_HOST",
         value_delimiter = ' ',
-        value_parser = parse_maybe_url,
+        value_parser = parse_trusted_host,
         help_heading = "Index options"
     )]
-    pub trusted_host: Option<Vec<Maybe<Url>>>,
+    pub trusted_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.

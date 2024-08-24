@@ -1,17 +1,17 @@
 use std::fmt::Write;
 
 use anyhow::Result;
-use distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
+use tracing::debug;
+
+use distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use pep508_rs::UnnamedRequirement;
 use pypi_types::Requirement;
 use pypi_types::VerbatimParsedUrl;
-use tracing::debug;
-use url::Url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::KeyringProviderType;
+use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_python::EnvironmentPreference;
 use uv_python::PythonRequest;
@@ -33,7 +33,7 @@ pub(crate) async fn pip_uninstall(
     connectivity: Connectivity,
     native_tls: bool,
     keyring_provider: KeyringProviderType,
-    trusted_host: Vec<Url>,
+    trusted_host: Vec<TrustedHost>,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();

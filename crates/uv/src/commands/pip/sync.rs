@@ -2,18 +2,18 @@ use std::fmt::Write;
 
 use anstream::eprint;
 use anyhow::Result;
+use owo_colors::OwoColorize;
+use tracing::debug;
+
 use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
-use owo_colors::OwoColorize;
 use pep508_rs::PackageName;
-use tracing::debug;
-use url::Url;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, Reinstall, SourceStrategy, Upgrade,
+    IndexStrategy, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -48,7 +48,7 @@ pub(crate) async fn pip_sync(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    trusted_host: Vec<Url>,
+    trusted_host: Vec<TrustedHost>,
     allow_empty_requirements: bool,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,

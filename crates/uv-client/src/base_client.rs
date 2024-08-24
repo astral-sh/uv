@@ -15,7 +15,7 @@ use reqwest_retry::{
 use tracing::debug;
 use url::Url;
 use uv_auth::AuthMiddleware;
-use uv_configuration::KeyringProviderType;
+use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_version::version;
 use uv_warnings::warn_user_once;
@@ -29,7 +29,7 @@ use crate::Connectivity;
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
-    trusted_host: Vec<Url>,
+    trusted_host: Vec<TrustedHost>,
     native_tls: bool,
     retries: u32,
     pub connectivity: Connectivity,
@@ -67,7 +67,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn trusted_host(mut self, trusted_host: Vec<Url>) -> Self {
+    pub fn trusted_host(mut self, trusted_host: Vec<TrustedHost>) -> Self {
         self.trusted_host = trusted_host;
         self
     }
@@ -175,10 +175,10 @@ impl<'a> BaseClientBuilder<'a> {
 
         BaseClient {
             connectivity: self.connectivity,
+            trusted_host: self.trusted_host.clone(),
             client,
             dangerous_client,
             timeout,
-            trusted_host: vec![],
         }
     }
 
@@ -265,7 +265,7 @@ pub struct BaseClient {
     /// Configured client timeout, in seconds.
     timeout: u64,
     /// The host that is trusted to use the insecure client.
-    trusted_host: Vec<Url>,
+    trusted_host: Vec<TrustedHost>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -287,7 +287,7 @@ impl BaseClient {
         if self
             .trusted_host
             .iter()
-            .any(|trusted| url.host() == trusted.host())
+            .any(|trusted_host| trusted_host.matches(url))
         {
             &self.dangerous_client
         } else {

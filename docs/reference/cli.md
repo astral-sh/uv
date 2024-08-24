@@ -308,7 +308,9 @@ uv run [OPTIONS] <COMMAND>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -729,7 +731,9 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 </dd><dt><code>--tag</code> <i>tag</i></dt><dd><p>Tag to use when adding a dependency from Git</p>
 
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -993,7 +997,9 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>If provided, uv will remove the dependency from the script&#8217;s inline metadata table, in adhere with PEP 723.</p>
 
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -1273,7 +1279,9 @@ uv sync [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -1505,7 +1513,9 @@ uv lock [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -1789,7 +1799,9 @@ uv tree [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -2067,7 +2079,9 @@ uv tool run [OPTIONS] [COMMAND]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -2311,7 +2325,9 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -2545,7 +2561,9 @@ uv tool upgrade [OPTIONS] <NAME>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -3938,7 +3956,9 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>By default, uv uses the virtual environment in the current working directory or any parent directory, falling back to searching for a Python executable in <code>PATH</code>. The <code>--system</code> option instructs uv to avoid using a virtual environment Python and restrict its search to the system path.</p>
 
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -4239,7 +4259,9 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 </dd><dt><code>--target</code> <i>target</i></dt><dd><p>Install packages into the specified directory, rather than into the virtual or system Python environment. The packages will be installed at the top-level of the directory</p>
 
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -4592,7 +4614,9 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 </dd><dt><code>--target</code> <i>target</i></dt><dd><p>Install packages into the specified directory, rather than into the virtual or system Python environment. The packages will be installed at the top-level of the directory</p>
 
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -4726,7 +4750,9 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 
 </dd><dt><code>--target</code> <i>target</i></dt><dd><p>Uninstall packages from the specified <code>--target</code> directory</p>
 
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
@@ -5436,7 +5462,9 @@ uv venv [OPTIONS] [NAME]
 
 <p>Unlike <code>pip</code>, when a virtual environment is created with <code>--system-site-packages</code>, uv will <em>not</em> take system site packages into account when running commands like <code>uv pip list</code> or <code>uv pip install</code>. The <code>--system-site-packages</code> flag will provide the virtual environment with access to the system site packages directory at runtime, but will not affect the behavior of uv commands.</p>
 
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hostnames for SSL connections.</p>
+</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
 
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 

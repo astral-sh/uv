@@ -9,6 +9,7 @@ use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use url::Url;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
+    TrustedHost,
 };
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
@@ -214,7 +215,7 @@ pub struct InstallerOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
-    pub trusted_host: Option<Vec<Url>>,
+    pub trusted_host: Option<Vec<TrustedHost>>,
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
@@ -241,7 +242,7 @@ pub struct ResolverOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
-    pub trusted_host: Option<Vec<Url>>,
+    pub trusted_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub config_settings: Option<ConfigSettings>,
@@ -353,7 +354,8 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
-    /// A list of trusted hostnames for SSL connections.
+    /// A list of trusted hosts for SSL connections. Expects to receive either a hostname (e.g.,
+    /// `localhost`) or a host-port pair (e.g., `localhost:8080`).
     ///
     /// WARNING: Hosts included in this list will not be verified against the system's certificate
     /// store.
@@ -364,7 +366,7 @@ pub struct ResolverInstallerOptions {
             trusted-host = ["localhost:8080"]
         "#
     )]
-    pub trusted_host: Option<Vec<Url>>,
+    pub trusted_host: Option<Vec<TrustedHost>>,
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
@@ -736,7 +738,8 @@ pub struct PipOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
-    /// A list of trusted hostnames for SSL connections.
+    /// A list of trusted hosts for SSL connections. Expects to receive either a hostname (e.g.,
+    /// `localhost`) or a host-port pair (e.g., `localhost:8080`).
     ///
     /// WARNING: Hosts included in this list will not be verified against the system's certificate
     /// store.
@@ -747,7 +750,7 @@ pub struct PipOptions {
             trusted-host = ["localhost:8080"]
         "#
     )]
-    pub trusted_host: Option<Vec<Url>>,
+    pub trusted_host: Option<Vec<TrustedHost>>,
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -1296,7 +1299,7 @@ pub struct ToolOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
-    pub trusted_host: Option<Vec<Url>>,
+    pub trusted_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub config_settings: Option<ConfigSettings>,

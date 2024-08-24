@@ -5,19 +5,19 @@ use std::vec;
 
 use anstream::eprint;
 use anyhow::Result;
-use distribution_types::IndexLocations;
-use install_wheel_rs::linker::LinkMode;
 use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
-use pypi_types::Requirement;
 use thiserror::Error;
-use url::Url;
+
+use distribution_types::IndexLocations;
+use install_wheel_rs::linker::LinkMode;
+use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary,
-    NoBuild, SourceStrategy,
+    NoBuild, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
@@ -49,7 +49,7 @@ pub(crate) async fn venv(
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    trusted_host: Vec<Url>,
+    trusted_host: Vec<TrustedHost>,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -124,7 +124,7 @@ async fn venv_impl(
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    trusted_host: Vec<Url>,
+    trusted_host: Vec<TrustedHost>,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,

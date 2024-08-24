@@ -22,8 +22,8 @@ use pep508_rs::MarkerEnvironment;
 use platform_tags::Platform;
 use pypi_types::{Metadata23, SimpleJson};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
-use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
+use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_normalize::PackageName;
 
 use crate::base_client::BaseClientBuilder;
@@ -73,7 +73,7 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn trusted_host(mut self, trusted_host: Vec<Url>) -> Self {
+    pub fn trusted_host(mut self, trusted_host: Vec<TrustedHost>) -> Self {
         self.base_client_builder = self.base_client_builder.trusted_host(trusted_host);
         self
     }

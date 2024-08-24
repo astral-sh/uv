@@ -1063,7 +1063,8 @@ By default, uv will use the latest compatible version of each package (`highest`
 
 #### [`trusted-host`](#trusted-host) {: #trusted-host }
 
-A list of trusted hostnames for SSL connections.
+A list of trusted hosts for SSL connections. Expects to receive either a hostname (e.g.,
+`localhost`) or a host-port pair (e.g., `localhost:8080`).
 
 WARNING: Hosts included in this list will not be verified against the system's certificate
 store.
@@ -2556,7 +2557,8 @@ environment. The packages will be installed at the top-level of the directory.
 #### [`trusted-host`](#pip_trusted-host) {: #pip_trusted-host }
 <span id="trusted-host"></span>
 
-A list of trusted hostnames for SSL connections.
+A list of trusted hosts for SSL connections. Expects to receive either a hostname (e.g.,
+`localhost`) or a host-port pair (e.g., `localhost:8080`).
 
 WARNING: Hosts included in this list will not be verified against the system's certificate
 store.

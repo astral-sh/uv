@@ -35,7 +35,6 @@ textwrap = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-url = "2.5.2"
 
 [package.metadata.cargo-shear]
 ignored = ["uv-options-metadata", "clap"]

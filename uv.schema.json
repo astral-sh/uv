@@ -353,14 +353,13 @@
       }
     },
     "trusted-host": {
-      "description": "A list of trusted hostnames for SSL connections.\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store.",
+      "description": "A list of trusted hosts for SSL connections. Expects to receive either a hostname (e.g., `localhost`) or a host-port pair (e.g., `localhost:8080`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store.",
       "type": [
         "array",
         "null"
       ],
       "items": {
-        "type": "string",
-        "format": "uri"
+        "$ref": "#/definitions/TrustedHost"
       }
     },
     "upgrade": {
@@ -956,14 +955,13 @@
           ]
         },
         "trusted-host": {
-          "description": "A list of trusted hostnames for SSL connections.\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store.",
+          "description": "A list of trusted hosts for SSL connections. Expects to receive either a hostname (e.g., `localhost`) or a host-port pair (e.g., `localhost:8080`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store.",
           "type": [
             "array",
             "null"
           ],
           "items": {
-            "type": "string",
-            "format": "uri"
+            "$ref": "#/definitions/TrustedHost"
           }
         },
         "universal": {
@@ -1448,6 +1446,10 @@
         }
       },
       "additionalProperties": false
+    },
+    "TrustedHost": {
+      "description": "A host or host-port pair.",
+      "type": "string"
     }
   }
 }
