@@ -6541,9 +6541,9 @@ fn lock_find_links_local_wheel() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "file://[WORKSPACE]/scripts/links" }
+        source = { local = "../../../../../../workspace/puffin/scripts/links" }
         wheels = [
-            { url = "file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl" },
+            { path = "tqdm-1000.0.0-py3-none-any.whl" },
         ]
         "###
         );
@@ -6630,8 +6630,8 @@ fn lock_find_links_local_sdist() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "999.0.0"
-        source = { registry = "file://[WORKSPACE]/scripts/links" }
-        sdist = { url = "file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz" }
+        source = { local = "../../../../../../workspace/puffin/scripts/links" }
+        sdist = { path = "tqdm-999.0.0.tar.gz" }
         "###
         );
     });
@@ -6855,6 +6855,14 @@ fn lock_local_index() -> Result<()> {
     let tqdm = root.child("tqdm");
     fs_err::create_dir_all(&tqdm)?;
 
+    let wheel = tqdm.child("tqdm-1000.0.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("scripts/links/tqdm-1000.0.0-py3-none-any.whl"),
+        &wheel,
+    )?;
+
     let index = tqdm.child("index.html");
     index.write_str(&formatdoc! {r#"
         <!DOCTYPE html>
@@ -6865,14 +6873,14 @@ fn lock_local_index() -> Result<()> {
           <body>
             <h1>Links for tqdm</h1>
             <a
-              href="{}/tqdm-1000.0.0-py3-none-any.whl"
+              href="{}"
               data-requires-python=">=3.8"
             >
               tqdm-1000.0.0-py3-none-any.whl
             </a>
           </body>
         </html>
-    "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
+    "#, Url::from_file_path(wheel).unwrap().as_str()})?;
 
     let context = TestContext::new("3.12");
 
@@ -6929,9 +6937,9 @@ fn lock_local_index() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "file://[TMP]" }
+        source = { local = "../../[TMP]/simple-html" }
         wheels = [
-            { url = "file://[WORKSPACE]/scripts/links//tqdm-1000.0.0-py3-none-any.whl" },
+            { path = "tqdm/tqdm-1000.0.0-py3-none-any.whl" },
         ]
         "###
         );

@@ -1128,7 +1128,7 @@ impl Package {
     ) -> Result<Self, LockError> {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
-        let wheels = Wheel::from_annotated_dist(annotated_dist)?;
+        let wheels = Wheel::from_annotated_dist(annotated_dist, root)?;
         let requires_dist = if id.source.is_immutable() {
             BTreeSet::default()
         } else {
@@ -1245,7 +1245,20 @@ impl Package {
                     let wheels = self
                         .wheels
                         .iter()
-                        .map(|wheel| wheel.to_registry_dist(url.to_url()))
+                        .map(|wheel| wheel.to_remote_registry_dist(url.to_url()))
+                        .collect::<Result<_, LockError>>()?;
+                    let reg_built_dist = RegistryBuiltDist {
+                        wheels,
+                        best_wheel_index,
+                        sdist: None,
+                    };
+                    Ok(Dist::Built(BuiltDist::Registry(reg_built_dist)))
+                }
+                Source::Local(path) => {
+                    let wheels = self
+                        .wheels
+                        .iter()
+                        .map(|wheel| wheel.to_local_registry_dist(path, workspace_root))
                         .collect::<Result<_, LockError>>()?;
                     let reg_built_dist = RegistryBuiltDist {
                         wheels,
@@ -1295,7 +1308,7 @@ impl Package {
                 }
                 .into()),
             };
-        }
+        };
 
         if let Some(sdist) = self.to_source_dist(workspace_root)? {
             return Ok(Dist::Source(sdist));
@@ -1417,6 +1430,51 @@ impl Package {
                     yanked: None,
                 });
                 let index = IndexUrl::Url(VerbatimUrl::from_url(url.to_url()));
+
+                let reg_dist = RegistrySourceDist {
+                    name: self.id.name.clone(),
+                    version: self.id.version.clone(),
+                    file,
+                    ext,
+                    index,
+                    wheels: vec![],
+                };
+                distribution_types::SourceDist::Registry(reg_dist)
+            }
+            Source::Local(path) => {
+                let Some(ref sdist) = self.sdist else {
+                    return Ok(None);
+                };
+
+                let file_path = sdist.path().ok_or_else(|| LockErrorKind::MissingPath {
+                    name: self.id.name.clone(),
+                    version: self.id.version.clone(),
+                })?;
+                let file_path = workspace_root.join(path).join(file_path);
+                let file_url = Url::from_file_path(&file_path).unwrap();
+                let filename = sdist
+                    .filename()
+                    .ok_or_else(|| LockErrorKind::MissingFilename {
+                        id: self.id.clone(),
+                    })?;
+                let ext = SourceDistExtension::from_path(filename.as_ref())?;
+                let file = Box::new(distribution_types::File {
+                    dist_info_metadata: false,
+                    filename: filename.to_string(),
+                    hashes: sdist
+                        .hash()
+                        .map(|hash| vec![hash.0.clone()])
+                        .unwrap_or_default(),
+                    requires_python: None,
+                    size: sdist.size(),
+                    upload_time_utc_ms: None,
+                    url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
+                    yanked: None,
+                });
+                let index = IndexUrl::Path(
+                    VerbatimUrl::from_path(workspace_root.join(path))
+                        .map_err(LockErrorKind::RegistryVerbatimUrl)?,
+                );
 
                 let reg_dist = RegistrySourceDist {
                     name: self.id.name.clone(),
@@ -1836,12 +1894,23 @@ impl From<PackageId> for PackageIdForDependency {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(try_from = "SourceWire")]
 enum Source {
+    /// A remote registry of `--find-links` index.
     Registry(UrlString),
+    /// A Git repository.
     Git(UrlString, GitSource),
+    /// A direct HTTP(S) URL.
     Direct(UrlString, DirectSource),
+    /// A path to a local source or built archive.
     Path(PathBuf),
+    /// A path to a local directory.
     Directory(PathBuf),
+    /// A path to a local directory that should be installed as editable.
     Editable(PathBuf),
+    /// A local registry of `--find-links` index.
+    ///
+    /// STOPSHIP(charlie): We should just use `Registry` for this, and have serialization that
+    /// allows either a URL or a path.
+    Local(PathBuf),
 }
 
 impl Source {
@@ -1862,7 +1931,7 @@ impl Source {
 
     fn from_built_dist(built_dist: &BuiltDist, root: &Path) -> Result<Source, LockError> {
         match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => Ok(Source::from_registry_built_dist(reg_dist)),
+            BuiltDist::Registry(ref reg_dist) => Source::from_registry_built_dist(reg_dist, root),
             BuiltDist::DirectUrl(ref direct_dist) => {
                 Ok(Source::from_direct_built_dist(direct_dist))
             }
@@ -1876,7 +1945,7 @@ impl Source {
     ) -> Result<Source, LockError> {
         match *source_dist {
             distribution_types::SourceDist::Registry(ref reg_dist) => {
-                Ok(Source::from_registry_source_dist(reg_dist))
+                Source::from_registry_source_dist(reg_dist, root)
             }
             distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
                 Ok(Source::from_direct_source_dist(direct_dist))
@@ -1893,12 +1962,18 @@ impl Source {
         }
     }
 
-    fn from_registry_built_dist(reg_dist: &RegistryBuiltDist) -> Source {
-        Source::from_index_url(&reg_dist.best_wheel().index)
+    fn from_registry_built_dist(
+        reg_dist: &RegistryBuiltDist,
+        root: &Path,
+    ) -> Result<Source, LockError> {
+        Source::from_index_url(&reg_dist.best_wheel().index, root)
     }
 
-    fn from_registry_source_dist(reg_dist: &RegistrySourceDist) -> Source {
-        Source::from_index_url(&reg_dist.index)
+    fn from_registry_source_dist(
+        reg_dist: &RegistrySourceDist,
+        root: &Path,
+    ) -> Result<Source, LockError> {
+        Source::from_index_url(&reg_dist.index, root)
     }
 
     fn from_direct_built_dist(direct_dist: &DirectUrlBuiltDist) -> Source {
@@ -1947,10 +2022,23 @@ impl Source {
         }
     }
 
-    fn from_index_url(index_url: &IndexUrl) -> Source {
-        // Remove any sensitive credentials from the index URL.
-        let redacted = index_url.redacted();
-        Source::Registry(UrlString::from(redacted.as_ref()))
+    fn from_index_url(index_url: &IndexUrl, root: &Path) -> Result<Source, LockError> {
+        match index_url {
+            IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                // Remove any sensitive credentials from the index URL.
+                let redacted = index_url.redacted();
+                Ok(Source::Registry(UrlString::from(redacted.as_ref())))
+            }
+            IndexUrl::Path(url) => {
+                let path = relative_to(
+                    url.to_file_path()
+                        .expect("Path registry should be a file path"),
+                    root,
+                )
+                .map_err(LockErrorKind::IndexRelativePath)?;
+                Ok(Source::Local(path))
+            }
+        }
     }
 
     fn from_git_dist(git_dist: &GitSourceDist) -> Source {
@@ -2010,6 +2098,9 @@ impl Source {
                     Value::from(PortablePath::from(path).to_string()),
                 );
             }
+            Source::Local(ref path) => {
+                source_table.insert("local", Value::from(PortablePath::from(path).to_string()));
+            }
         }
         table.insert("source", value(source_table));
     }
@@ -2021,7 +2112,10 @@ impl std::fmt::Display for Source {
             Source::Registry(url) | Source::Git(url, _) | Source::Direct(url, _) => {
                 write!(f, "{}+{}", self.name(), url)
             }
-            Source::Path(path) | Source::Directory(path) | Source::Editable(path) => {
+            Source::Path(path)
+            | Source::Directory(path)
+            | Source::Editable(path)
+            | Source::Local(path) => {
                 write!(f, "{}+{}", self.name(), PortablePath::from(path))
             }
         }
@@ -2037,6 +2131,7 @@ impl Source {
             Self::Path(..) => "path",
             Self::Directory(..) => "directory",
             Self::Editable(..) => "editable",
+            Self::Local(..) => "local",
         }
     }
 
@@ -2049,7 +2144,7 @@ impl Source {
     /// Returns `None` to indicate that the source kind _may_ include a hash.
     fn requires_hash(&self) -> Option<bool> {
         match *self {
-            Self::Registry(..) => None,
+            Self::Registry(..) | Self::Local(..) => None,
             Self::Direct(..) | Self::Path(..) => Some(true),
             Self::Git(..) | Self::Directory(..) | Self::Editable(..) => Some(false),
         }
@@ -2078,6 +2173,9 @@ enum SourceWire {
     },
     Editable {
         editable: PortablePathBuf,
+    },
+    Local {
+        local: PortablePathBuf,
     },
 }
 
@@ -2115,6 +2213,7 @@ impl TryFrom<SourceWire> for Source {
             Path { path } => Ok(Source::Path(path.into())),
             Directory { directory } => Ok(Source::Directory(directory.into())),
             Editable { editable } => Ok(Source::Editable(editable.into())),
+            Local { local } => Ok(Source::Local(local.into())),
         }
     }
 }
@@ -2223,6 +2322,13 @@ impl SourceDist {
         }
     }
 
+    fn path(&self) -> Option<&Path> {
+        match &self {
+            SourceDist::Url { .. } => None,
+            SourceDist::Path { path, .. } => Some(path),
+        }
+    }
+
     fn hash(&self) -> Option<&Hash> {
         match &self {
             SourceDist::Url { metadata, .. } => metadata.hash.as_ref(),
@@ -2304,15 +2410,31 @@ impl SourceDist {
             return Ok(None);
         }
 
-        let url = normalize_file_location(&reg_dist.file.url)
-            .map_err(LockErrorKind::InvalidFileUrl)
-            .map_err(LockError::from)?;
-        let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
-        let size = reg_dist.file.size;
-        Ok(Some(SourceDist::Url {
-            url,
-            metadata: SourceDistMetadata { hash, size },
-        }))
+        match &reg_dist.index {
+            IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                let url = normalize_file_location(&reg_dist.file.url)
+                    .map_err(LockErrorKind::InvalidFileUrl)
+                    .map_err(LockError::from)?;
+                let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
+                let size = reg_dist.file.size;
+                Ok(Some(SourceDist::Url {
+                    url,
+                    metadata: SourceDistMetadata { hash, size },
+                }))
+            }
+            IndexUrl::Path(path) => {
+                let index_path = path.to_file_path().unwrap();
+                let reg_dist_path = reg_dist.file.url.to_url().unwrap().to_file_path().unwrap();
+                let path = relative_to(reg_dist_path, index_path)
+                    .map_err(LockErrorKind::DistributionRelativePath)?;
+                let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
+                let size = reg_dist.file.size;
+                Ok(Some(SourceDist::Path {
+                    path,
+                    metadata: SourceDistMetadata { hash, size },
+                }))
+            }
+        }
     }
 
     fn from_direct_dist(
@@ -2495,12 +2617,15 @@ struct Wheel {
 }
 
 impl Wheel {
-    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Vec<Wheel>, LockError> {
+    fn from_annotated_dist(
+        annotated_dist: &AnnotatedDist,
+        root: &Path,
+    ) -> Result<Vec<Wheel>, LockError> {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed(_) => unreachable!(),
             ResolvedDist::Installable(ref dist) => {
-                Wheel::from_dist(dist, &annotated_dist.hashes, annotated_dist.index())
+                Wheel::from_dist(dist, &annotated_dist.hashes, annotated_dist.index(), root)
             }
         }
     }
@@ -2509,9 +2634,10 @@ impl Wheel {
         dist: &Dist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
+        root: &Path,
     ) -> Result<Vec<Wheel>, LockError> {
         match *dist {
-            Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist, hashes, index),
+            Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist, hashes, index, root),
             Dist::Source(distribution_types::SourceDist::Registry(ref source_dist)) => source_dist
                 .wheels
                 .iter()
@@ -2530,13 +2656,16 @@ impl Wheel {
         built_dist: &BuiltDist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
+        root: &Path,
     ) -> Result<Vec<Wheel>, LockError> {
         match *built_dist {
             BuiltDist::Registry(ref reg_dist) => Wheel::from_registry_dist(reg_dist, index),
             BuiltDist::DirectUrl(ref direct_dist) => {
                 Ok(vec![Wheel::from_direct_dist(direct_dist, hashes)])
             }
-            BuiltDist::Path(ref path_dist) => Ok(vec![Wheel::from_path_dist(path_dist, hashes)]),
+            BuiltDist::Path(ref path_dist) => {
+                Ok(vec![Wheel::from_path_dist(path_dist, hashes, root)?])
+            }
         }
     }
 
@@ -2558,17 +2687,33 @@ impl Wheel {
 
     fn from_registry_wheel(wheel: &RegistryBuiltWheel) -> Result<Wheel, LockError> {
         let filename = wheel.filename.clone();
-        let url = normalize_file_location(&wheel.file.url)
-            .map_err(LockErrorKind::InvalidFileUrl)
-            .map_err(LockError::from)?;
-        let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
-        let size = wheel.file.size;
-        Ok(Wheel {
-            url: WheelWireSource::Url { url },
-            hash,
-            size,
-            filename,
-        })
+        match &wheel.index {
+            IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                let url = normalize_file_location(&wheel.file.url)
+                    .map_err(LockErrorKind::InvalidFileUrl)
+                    .map_err(LockError::from)?;
+                let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
+                let size = wheel.file.size;
+                Ok(Wheel {
+                    url: WheelWireSource::Url { url },
+                    hash,
+                    size,
+                    filename,
+                })
+            }
+            IndexUrl::Path(path) => {
+                let index_path = path.to_file_path().unwrap();
+                let wheel_path = wheel.file.url.to_url().unwrap().to_file_path().unwrap();
+                let path = relative_to(wheel_path, index_path)
+                    .map_err(LockErrorKind::DistributionRelativePath)?;
+                Ok(Wheel {
+                    url: WheelWireSource::Path { path },
+                    hash: None,
+                    size: None,
+                    filename,
+                })
+            }
+        }
     }
 
     fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {
@@ -2582,28 +2727,26 @@ impl Wheel {
         }
     }
 
-    fn from_path_dist(path_dist: &PathBuiltDist, hashes: &[HashDigest]) -> Wheel {
-        Wheel {
-            url: WheelWireSource::Filename {
-                filename: path_dist.filename.clone(),
-            },
+    fn from_path_dist(
+        path_dist: &PathBuiltDist,
+        hashes: &[HashDigest],
+        root: &Path,
+    ) -> Result<Wheel, LockError> {
+        let path = relative_to(&path_dist.install_path, root)
+            .map_err(LockErrorKind::DistributionRelativePath)?;
+        Ok(Wheel {
+            url: WheelWireSource::Path { path },
             hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
             filename: path_dist.filename.clone(),
-        }
+        })
     }
 
-    fn to_registry_dist(&self, url: Url) -> Result<RegistryBuiltWheel, LockError> {
+    fn to_remote_registry_dist(&self, index_url: Url) -> Result<RegistryBuiltWheel, LockError> {
         let filename: WheelFilename = self.filename.clone();
-        let url_string = match &self.url {
-            WheelWireSource::Url { url } => url.clone(),
-            WheelWireSource::Filename { .. } => {
-                return Err(LockErrorKind::MissingUrl {
-                    name: self.filename.name.clone(),
-                    version: self.filename.version.clone(),
-                }
-                .into())
-            }
+        let file_url = match &self.url {
+            WheelWireSource::Url { url } => url,
+            WheelWireSource::Path { .. } => unreachable!(),
         };
         let file = Box::new(distribution_types::File {
             dist_info_metadata: false,
@@ -2612,10 +2755,43 @@ impl Wheel {
             requires_python: None,
             size: self.size,
             upload_time_utc_ms: None,
-            url: FileLocation::AbsoluteUrl(url_string),
+            url: FileLocation::AbsoluteUrl(file_url.clone()),
             yanked: None,
         });
-        let index = IndexUrl::Url(VerbatimUrl::from_url(url));
+        let index = IndexUrl::Url(VerbatimUrl::from_url(index_url));
+        Ok(RegistryBuiltWheel {
+            filename,
+            file,
+            index,
+        })
+    }
+
+    fn to_local_registry_dist(
+        &self,
+        index_path: &Path,
+        root: &Path,
+    ) -> Result<RegistryBuiltWheel, LockError> {
+        let filename: WheelFilename = self.filename.clone();
+        let file_path = match &self.url {
+            WheelWireSource::Path { path } => path,
+            WheelWireSource::Url { .. } => unreachable!(),
+        };
+        let file_path = root.join(index_path).join(file_path);
+        let file_url = Url::from_file_path(&file_path).unwrap();
+        let file = Box::new(distribution_types::File {
+            dist_info_metadata: false,
+            filename: filename.to_string(),
+            hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
+            requires_python: None,
+            size: self.size,
+            upload_time_utc_ms: None,
+            url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
+            yanked: None,
+        });
+        let index = IndexUrl::Path(
+            VerbatimUrl::from_path(root.join(index_path))
+                .map_err(LockErrorKind::RegistryVerbatimUrl)?,
+        );
         Ok(RegistryBuiltWheel {
             filename,
             file,
@@ -2652,12 +2828,14 @@ enum WheelWireSource {
         url: UrlString,
     },
     /// Used for path wheels.
-    ///
-    /// We only store the filename for path wheel, since we can't store a relative path in the url
-    Filename {
-        /// We duplicate the filename since a lot of code relies on having the filename on the
-        /// wheel entry.
-        filename: WheelFilename,
+    Path {
+        /// The filename of the wheel.
+        ///
+        /// This isn't part of the wire format since it's redundant with the
+        /// URL. But we do use it for various things, and thus compute it at
+        /// deserialization time. Not being able to extract a wheel filename from a
+        /// wheel URL is thus a deserialization error.
+        path: PathBuf,
     },
 }
 
@@ -2669,8 +2847,8 @@ impl Wheel {
             WheelWireSource::Url { url } => {
                 table.insert("url", Value::from(url.as_ref()));
             }
-            WheelWireSource::Filename { filename } => {
-                table.insert("filename", Value::from(filename.to_string()));
+            WheelWireSource::Path { path } => {
+                table.insert("path", Value::from(PortablePath::from(path).to_string()));
             }
         }
         if let Some(ref hash) = self.hash {
@@ -2687,7 +2865,6 @@ impl TryFrom<WheelWire> for Wheel {
     type Error = String;
 
     fn try_from(wire: WheelWire) -> Result<Wheel, String> {
-        // If necessary, extract the filename from the URL.
         let filename = match &wire.url {
             WheelWireSource::Url { url } => {
                 let filename = url.filename().map_err(|err| err.to_string())?;
@@ -2695,7 +2872,17 @@ impl TryFrom<WheelWire> for Wheel {
                     format!("failed to parse `{filename}` as wheel filename: {err}")
                 })?
             }
-            WheelWireSource::Filename { filename } => filename.clone(),
+            WheelWireSource::Path { path } => {
+                let filename = path
+                    .file_name()
+                    .and_then(|file_name| file_name.to_str())
+                    .ok_or_else(|| {
+                        format!("path `{}` has no filename component", path.display())
+                    })?;
+                filename.parse::<WheelFilename>().map_err(|err| {
+                    format!("failed to parse `{filename}` as wheel filename: {err}")
+                })?
+            }
         };
 
         Ok(Wheel {
@@ -3098,10 +3285,19 @@ enum LockErrorKind {
         /// The kind of the invalid source.
         source_type: &'static str,
     },
-    /// An error that occurs when a distribution indicates that it is sourced from a registry, but
-    /// is missing a URL.
+    /// An error that occurs when a distribution indicates that it is sourced from a remote
+    /// registry, but is missing a URL.
     #[error("found registry distribution {name}=={version} without a valid URL")]
     MissingUrl {
+        /// The name of the distribution that is missing a URL.
+        name: PackageName,
+        /// The version of the distribution that is missing a URL.
+        version: Version,
+    },
+    /// An error that occurs when a distribution indicates that it is sourced from a local registry,
+    /// but is missing a path.
+    #[error("found local registry distribution {name}=={version} without a valid path")]
+    MissingPath {
         /// The name of the distribution that is missing a URL.
         name: PackageName,
         /// The version of the distribution that is missing a URL.
@@ -3137,6 +3333,13 @@ enum LockErrorKind {
         #[source]
         std::io::Error,
     ),
+    /// An error that occurs when converting an index URL to a relative path
+    #[error("could not compute relative path between workspace and index")]
+    IndexRelativePath(
+        /// The inner error we forward.
+        #[source]
+        std::io::Error,
+    ),
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `version` field.
     #[error(
@@ -3167,6 +3370,13 @@ enum LockErrorKind {
     /// An error that occurs when parsing an existing requirement.
     #[error("could not convert between URL and path")]
     RequirementVerbatimUrl(
+        /// The inner error we forward.
+        #[source]
+        VerbatimUrlError,
+    ),
+    /// An error that occurs when parsing an registry's index URL.
+    #[error("could not convert between URL and path")]
+    RegistryVerbatimUrl(
         /// The inner error we forward.
         #[source]
         VerbatimUrlError,
