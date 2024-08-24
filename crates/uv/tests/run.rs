@@ -460,6 +460,39 @@ fn run_pep723_script_metadata() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_pep723_script_metadata_exclude_newer_local_date() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # dependencies = ["sniffio"]
+        # [tool.uv]
+        # exclude-newer = "2020-01-01"
+        # ///
+        import sniffio
+        print(sniffio.__version__)
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().env_remove("UV_EXCLUDE_NEWER").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1.1.0
+
+    ----- stderr -----
+    Reading inline script metadata from: main.py
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.1.0
+    "###);
+
+    Ok(())
+}
+
 /// With `managed = false`, we should avoid installing the project itself.
 #[test]
 fn run_managed_false() -> Result<()> {
