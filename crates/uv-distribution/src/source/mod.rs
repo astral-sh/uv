@@ -100,24 +100,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
-                    FileLocation::Path(path) => {
-                        let url = Url::from_file_path(path)
-                            .map_err(|()| Error::RelativePath(path.clone()))?;
-                        return self
-                            .archive(
-                                source,
-                                &PathSourceUrl {
-                                    url: &url,
-                                    path: Cow::Borrowed(path),
-                                    ext: dist.ext,
-                                },
-                                &cache_shard,
-                                tags,
-                                hashes,
-                            )
-                            .boxed_local()
-                            .await;
-                    }
                 };
 
                 // If the URL is a file URL, use the local path directly.
@@ -277,23 +259,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
-                    FileLocation::Path(path) => {
-                        let url = Url::from_file_path(path)
-                            .map_err(|()| Error::RelativePath(path.clone()))?;
-                        return self
-                            .archive_metadata(
-                                source,
-                                &PathSourceUrl {
-                                    url: &url,
-                                    path: Cow::Borrowed(path),
-                                    ext: dist.ext,
-                                },
-                                &cache_shard,
-                                hashes,
-                            )
-                            .boxed_local()
-                            .await;
-                    }
                 };
 
                 // If the URL is a file URL, use the local path directly.

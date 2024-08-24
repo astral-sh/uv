@@ -6,7 +6,7 @@ use tracing::{debug, info_span, warn, Instrument};
 use url::Url;
 
 use distribution_filename::DistFilename;
-use distribution_types::{File, FileLocation, FlatIndexLocation, IndexUrl};
+use distribution_types::{File, FileLocation, FlatIndexLocation, IndexUrl, UrlString};
 use uv_cache::{Cache, CacheBucket};
 
 use crate::cached_client::{CacheControl, CachedClientError};
@@ -254,6 +254,9 @@ impl<'a> FlatIndexClient<'a> {
                 continue;
             };
 
+            // SAFETY: The index path is itself constructed from a URL.
+            let url = Url::from_file_path(entry.path()).unwrap();
+
             let file = File {
                 dist_info_metadata: false,
                 filename: filename.to_string(),
@@ -261,7 +264,7 @@ impl<'a> FlatIndexClient<'a> {
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,
-                url: FileLocation::Path(entry.path().clone()),
+                url: FileLocation::AbsoluteUrl(UrlString::from(url)),
                 yanked: None,
             };
 

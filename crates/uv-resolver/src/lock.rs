@@ -2856,7 +2856,7 @@ impl<'de> serde::Deserialize<'de> for Hash {
 fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
     match location {
         FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.as_base_url()),
-        _ => Ok(normalize_url(location.to_url()?)),
+        FileLocation::RelativeUrl(_, _) => Ok(normalize_url(location.to_url()?)),
     }
 }
 
