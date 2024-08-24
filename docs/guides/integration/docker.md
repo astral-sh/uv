@@ -228,8 +228,9 @@ a big time saver.
 FROM python:3.12-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-# Copy the lockfile into the image
+# Copy the lockfile and `pyproject.toml` into the image
 ADD uv.lock /app/uv.lock
+ADD pyproject.toml /app/pyproject.toml
 
 # Install dependencies
 WORKDIR /app
@@ -242,6 +243,9 @@ WORKDIR /app
 # Sync the project
 RUN uv sync --frozen
 ```
+
+Note that the `pyproject.toml` is required to identify the project root and name, but the project
+_contents_ are not copied into the image until the final `uv sync` command.
 
 !!! tip
 

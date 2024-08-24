@@ -861,6 +861,18 @@ fn no_install_project() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
+    // However, we do require the `pyproject.toml`.
+    fs_err::remove_file(pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `pyproject.toml` found in current directory or any parent directory
+    "###);
+
     Ok(())
 }
 
@@ -926,6 +938,18 @@ fn no_install_workspace() -> Result<()> {
      + idna==3.6
      + iniconfig==2.0.0
      + sniffio==1.3.1
+    "###);
+
+    // However, we do require the `pyproject.toml`.
+    fs_err::remove_file(child.join("pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Workspace member `[TEMP_DIR]/child` is missing a `pyproject.toml` (matches: `child`)
     "###);
 
     Ok(())
