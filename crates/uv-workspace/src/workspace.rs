@@ -270,7 +270,7 @@ impl Workspace {
                 })
                 .unwrap_or_default();
 
-            let url = VerbatimUrl::from_path(&member.root)
+            let url = VerbatimUrl::from_absolute_path(&member.root)
                 .expect("path is valid URL")
                 .with_given(member.root.to_string_lossy());
             Some(Requirement {

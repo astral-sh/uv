@@ -484,12 +484,17 @@ fn parse_entry(
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let expanded = expand_env_vars(given);
-        let url = if let Ok(path) = Path::new(expanded.as_ref()).canonicalize() {
-            VerbatimUrl::from_path(path).map_err(|err| RequirementsTxtParserError::VerbatimUrl {
-                source: err,
-                url: given.to_string(),
-                start,
-                end: s.cursor(),
+        let url = if let Some(path) = std::path::absolute(expanded.as_ref())
+            .ok()
+            .filter(|path| path.exists())
+        {
+            VerbatimUrl::from_absolute_path(path).map_err(|err| {
+                RequirementsTxtParserError::VerbatimUrl {
+                    source: err,
+                    url: given.to_string(),
+                    start,
+                    end: s.cursor(),
+                }
             })?
         } else {
             VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
@@ -505,12 +510,17 @@ fn parse_entry(
     } else if s.eat_if("--extra-index-url") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let expanded = expand_env_vars(given);
-        let url = if let Ok(path) = Path::new(expanded.as_ref()).canonicalize() {
-            VerbatimUrl::from_path(path).map_err(|err| RequirementsTxtParserError::VerbatimUrl {
-                source: err,
-                url: given.to_string(),
-                start,
-                end: s.cursor(),
+        let url = if let Some(path) = std::path::absolute(expanded.as_ref())
+            .ok()
+            .filter(|path| path.exists())
+        {
+            VerbatimUrl::from_absolute_path(path).map_err(|err| {
+                RequirementsTxtParserError::VerbatimUrl {
+                    source: err,
+                    url: given.to_string(),
+                    start,
+                    end: s.cursor(),
+                }
             })?
         } else {
             VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
@@ -528,12 +538,17 @@ fn parse_entry(
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let expanded = expand_env_vars(given);
-        let url = if let Ok(path) = Path::new(expanded.as_ref()).canonicalize() {
-            VerbatimUrl::from_path(path).map_err(|err| RequirementsTxtParserError::VerbatimUrl {
-                source: err,
-                url: given.to_string(),
-                start,
-                end: s.cursor(),
+        let url = if let Some(path) = std::path::absolute(expanded.as_ref())
+            .ok()
+            .filter(|path| path.exists())
+        {
+            VerbatimUrl::from_absolute_path(path).map_err(|err| {
+                RequirementsTxtParserError::VerbatimUrl {
+                    source: err,
+                    url: given.to_string(),
+                    start,
+                    end: s.cursor(),
+                }
             })?
         } else {
             VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
