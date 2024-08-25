@@ -3,10 +3,10 @@ use std::str::FromStr;
 use std::{fmt, mem};
 
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
+use pep508_rs::{ExtraName, MarkerTree, PackageName, Requirement, VerbatimUrl, VersionOrUrl};
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
-use uv_fs::PortablePath;
+use uv_fs::{PortablePath, CWD};
 
 use crate::pyproject::{DependencyType, Source};
 
@@ -503,9 +503,20 @@ pub fn add_dependency(
     deps: &mut Array,
     has_source: bool,
 ) -> Result<ArrayEdit, Error> {
-    // Find matching dependencies.
     let mut to_replace = find_dependencies(&req.name, Some(&req.marker), deps);
-    match to_replace.as_slice() {
+
+    // determine the dependency list is sorted prior to
+    // adding the new dependency; the new dependency list
+    // will be sorted only when the original list is sorted
+    // so that users' custom dependency ordering is preserved.
+    let sorted = deps
+        .clone()
+        .into_iter()
+        .collect::<Vec<_>>()
+        .windows(2)
+        .all(|w| w[0].to_string() <= w[1].to_string());
+
+    let edit = match to_replace.as_slice() {
         [] => {
             deps.push(req.to_string());
             reformat_array_multiline(deps);
@@ -520,7 +531,18 @@ pub fn add_dependency(
         }
         // Cannot perform ambiguous updates.
         _ => Err(Error::Ambiguous),
+    };
+
+    if sorted {
+        deps.sort_by_key(|d| {
+            pep508_rs::Requirement::<VerbatimUrl>::parse(d.clone().as_str().unwrap(), &*CWD)
+                .unwrap()
+                .name
+                .clone()
+        })
     }
+
+    edit
 }
 
 /// Update an existing requirement.

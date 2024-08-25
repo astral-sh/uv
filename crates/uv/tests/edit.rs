@@ -3484,8 +3484,8 @@ fn add_requirements_file() -> Result<()> {
         # ...
         requires-python = ">=3.12"
         dependencies = [
-            "flask==2.3.2",
             "anyio",
+            "flask==2.3.2",
         ]
 
         [tool.uv.sources]
@@ -3564,9 +3564,9 @@ fn add_script() -> Result<()> {
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
+        #   "anyio",
         #   "requests<3",
         #   "rich",
-        #   "anyio",
         # ]
         # ///
 
@@ -3616,8 +3616,8 @@ fn add_script_without_metadata_table() -> Result<()> {
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
-        #     "rich",
         #     "requests<3",
+        #     "rich",
         # ]
         # ///
         import requests
@@ -3668,8 +3668,8 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
-        #     "rich",
         #     "requests<3",
+        #     "rich",
         # ]
         # ///
         import requests
@@ -3724,8 +3724,8 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
-        #     "rich",
         #     "requests<3",
+        #     "rich",
         # ]
         # ///
         import requests
@@ -3775,8 +3775,8 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
-        #     "rich",
         #     "requests<3",
+        #     "rich",
         # ]
         # ///
         """This is a script."""
@@ -4036,5 +4036,161 @@ fn fail_to_add_revert_project() -> Result<()> {
         );
     });
 
+    Ok(())
+}
+
+/// Ensure that the added dependencies are sorted
+/// if the dependency list was already sorted prior to adding the new one.
+#[test]
+fn sorted_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    description = "Add your description here"
+    requires-python = ">=3.12"
+    dependencies = [
+        "CacheControl[filecache]>=0.14,<0.15",
+        "mwparserfromhell",
+        "pywikibot",
+        "sentry-sdk",
+        "yarl",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&["pydantic"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    Prepared 19 packages in [TIME]
+    Installed 19 packages in [TIME]
+     + annotated-types==0.6.0
+     + cachecontrol==0.14.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + filelock==3.13.1
+     + idna==3.6
+     + msgpack==1.0.8
+     + multidict==6.0.5
+     + mwparserfromhell==0.6.6
+     + packaging==24.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + pydantic==2.6.4
+     + pydantic-core==2.16.3
+     + pywikibot==9.0.0
+     + requests==2.31.0
+     + sentry-sdk==1.43.0
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+     + yarl==1.9.4
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+        dependencies = [
+            "CacheControl[filecache]>=0.14,<0.15",
+            "mwparserfromhell",
+            "pydantic",
+            "pywikibot",
+            "sentry-sdk",
+            "yarl>=2.6.4",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+/// Ensure that the custom ordering of the dependencies is preserved
+/// after adding a package.
+#[test]
+fn custom_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    description = "Add your description here"
+    requires-python = ">=3.12"
+    dependencies = [
+        "yarl",
+        "CacheControl[filecache]>=0.14,<0.15",
+        "mwparserfromhell",
+        "pywikibot",
+        "sentry-sdk",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&["pydantic"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    Prepared 19 packages in [TIME]
+    Installed 19 packages in [TIME]
+     + annotated-types==0.6.0
+     + cachecontrol==0.14.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + filelock==3.13.1
+     + idna==3.6
+     + msgpack==1.0.8
+     + multidict==6.0.5
+     + mwparserfromhell==0.6.6
+     + packaging==24.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + pydantic==2.6.4
+     + pydantic-core==2.16.3
+     + pywikibot==9.0.0
+     + requests==2.31.0
+     + sentry-sdk==1.43.0
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+     + yarl==1.9.4
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+        dependencies = [
+            "yarl",
+            "CacheControl[filecache]>=0.14,<0.15",
+            "mwparserfromhell",
+            "pywikibot",
+            "sentry-sdk",
+            "pydantic>=2.6.4",
+        ]
+        "###
+        );
+    });
     Ok(())
 }
