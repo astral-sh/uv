@@ -504,23 +504,44 @@ pub fn add_dependency(
     has_source: bool,
 ) -> Result<ArrayEdit, Error> {
     let mut to_replace = find_dependencies(&req.name, Some(&req.marker), deps);
-
-    // determine the dependency list is sorted prior to
-    // adding the new dependency; the new dependency list
-    // will be sorted only when the original list is sorted
-    // so that users' custom dependency ordering is preserved.
-    let sorted = deps
-        .clone()
-        .into_iter()
-        .collect::<Vec<_>>()
-        .windows(2)
-        .all(|w| w[0].to_string() <= w[1].to_string());
-
     let edit = match to_replace.as_slice() {
         [] => {
+            // determine the dependency list is sorted prior to
+            // adding the new dependency; the new dependency list
+            // will be sorted only when the original list is sorted
+            // so that users' custom dependency ordering is preserved.
+            let sorted = deps
+                .clone()
+                .into_iter()
+                .collect::<Vec<_>>()
+                .windows(2)
+                .all(|w| w[0].to_string() <= w[1].to_string());
+
             deps.push(req.to_string());
+            let mut index = deps.len() - 1;
+            if sorted {
+                deps.sort_by_key(|d| {
+                    pep508_rs::Requirement::<VerbatimUrl>::parse(d.clone().as_str().unwrap(), &*CWD)
+                        .unwrap()
+                        .name
+                        .clone()
+                });
+                index = deps
+                    .iter()
+                    .position(|d| {
+                        pep508_rs::Requirement::<VerbatimUrl>::parse(
+                            d.clone().as_str().unwrap(),
+                            &*CWD,
+                        )
+                        .unwrap()
+                        .name
+                            == req.name
+                    })
+                    .unwrap();
+            }
+
             reformat_array_multiline(deps);
-            Ok(ArrayEdit::Add(deps.len() - 1))
+            Ok(ArrayEdit::Add(index))
         }
         [_] => {
             let (i, mut old_req) = to_replace.remove(0);
@@ -532,15 +553,6 @@ pub fn add_dependency(
         // Cannot perform ambiguous updates.
         _ => Err(Error::Ambiguous),
     };
-
-    if sorted {
-        deps.sort_by_key(|d| {
-            pep508_rs::Requirement::<VerbatimUrl>::parse(d.clone().as_str().unwrap(), &*CWD)
-                .unwrap()
-                .name
-                .clone()
-        });
-    }
 
     edit
 }
