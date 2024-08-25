@@ -270,6 +270,9 @@ pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBu
 /// `lib/python/site-packages/foo/__init__.py` and `lib/python/site-packages` -> `foo/__init__.py`
 /// `lib/marker.txt` and `lib/python/site-packages` -> `../../marker.txt`
 /// `bin/foo_launcher` and `lib/python/site-packages` -> `../../../bin/foo_launcher`
+///
+/// Returns `Err` if there is no relative path between `path` and `base` (for example, if the paths
+/// are on different drives on Windows).
 pub fn relative_to(
     path: impl AsRef<Path>,
     base: impl AsRef<Path>,

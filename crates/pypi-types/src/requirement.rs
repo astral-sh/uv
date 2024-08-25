@@ -507,7 +507,8 @@ impl RequirementSource {
                 ext,
                 url,
             } => Ok(Self::Path {
-                install_path: relative_to(&install_path, path)?,
+                install_path: relative_to(&install_path, path)
+                    .or_else(|_| std::path::absolute(install_path))?,
                 ext,
                 url,
             }),
@@ -516,7 +517,8 @@ impl RequirementSource {
                 editable,
                 url,
             } => Ok(Self::Directory {
-                install_path: relative_to(&install_path, path)?,
+                install_path: relative_to(&install_path, path)
+                    .or_else(|_| std::path::absolute(install_path))?,
                 editable,
                 url,
             }),

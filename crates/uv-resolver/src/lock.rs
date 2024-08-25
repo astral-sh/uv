@@ -791,7 +791,9 @@ impl Lock {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
                     IndexUrl::Path(index_url) => {
                         let path = index_url.to_file_path().ok()?;
-                        let path = relative_to(&path, workspace.install_path()).ok()?;
+                        let path = relative_to(&path, workspace.install_path())
+                            .or_else(|_| std::path::absolute(path))
+                            .ok()?;
                         Some(path)
                     }
                 })
@@ -802,7 +804,9 @@ impl Lock {
                             FlatIndexLocation::Url(_) => None,
                             FlatIndexLocation::Path(index_url) => {
                                 let path = index_url.to_file_path().ok()?;
-                                let path = relative_to(&path, workspace.install_path()).ok()?;
+                                let path = relative_to(&path, workspace.install_path())
+                                    .or_else(|_| std::path::absolute(path))
+                                    .ok()?;
                                 Some(path)
                             }
                         }),
@@ -2026,14 +2030,15 @@ impl Source {
 
     fn from_path_built_dist(path_dist: &PathBuiltDist, root: &Path) -> Result<Source, LockError> {
         let path = relative_to(&path_dist.install_path, root)
+            .or_else(|_| std::path::absolute(&path_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Source::Path(path))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Source, LockError> {
         let path = relative_to(&path_dist.install_path, root)
+            .or_else(|_| std::path::absolute(&path_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
-
         Ok(Source::Path(path))
     }
 
@@ -2042,6 +2047,7 @@ impl Source {
         root: &Path,
     ) -> Result<Source, LockError> {
         let path = relative_to(&directory_dist.install_path, root)
+            .or_else(|_| std::path::absolute(&directory_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable {
             Ok(Source::Editable(path))
@@ -2059,11 +2065,10 @@ impl Source {
                 Ok(Source::Registry(source))
             }
             IndexUrl::Path(url) => {
-                let path = relative_to(
-                    url.to_file_path().map_err(|()| LockErrorKind::UrlToPath)?,
-                    root,
-                )
-                .map_err(LockErrorKind::IndexRelativePath)?;
+                let path = url.to_file_path().map_err(|()| LockErrorKind::UrlToPath)?;
+                let path = relative_to(&path, root)
+                    .or_else(|_| std::path::absolute(&path))
+                    .map_err(LockErrorKind::IndexRelativePath)?;
                 let source = RegistrySource::Path(path);
                 Ok(Source::Registry(source))
             }
@@ -2520,7 +2525,8 @@ impl SourceDist {
                     .map_err(LockErrorKind::InvalidFileUrl)?
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath)?;
-                let path = relative_to(reg_dist_path, index_path)
+                let path = relative_to(&reg_dist_path, index_path)
+                    .or_else(|_| std::path::absolute(&reg_dist_path))
                     .map_err(LockErrorKind::DistributionRelativePath)?;
                 let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = reg_dist.file.size;
@@ -2798,7 +2804,8 @@ impl Wheel {
                     .map_err(LockErrorKind::InvalidFileUrl)?
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath)?;
-                let path = relative_to(wheel_path, index_path)
+                let path = relative_to(&wheel_path, index_path)
+                    .or_else(|_| std::path::absolute(&wheel_path))
                     .map_err(LockErrorKind::DistributionRelativePath)?;
                 Ok(Wheel {
                     url: WheelWireSource::Path { path },
