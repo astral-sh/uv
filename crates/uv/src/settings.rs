@@ -21,7 +21,11 @@ use uv_cli::{
     ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
 };
 use uv_client::Connectivity;
-use uv_configuration::{BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost, Upgrade};
+use uv_configuration::{
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
+    IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
+    SourceStrategy, TargetTriple, TrustedHost, Upgrade,
+};
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};

@@ -74,6 +74,23 @@ If client certificate authentication (mTLS) is desired, set the `SSL_CLIENT_CERT
 variable to the path of the PEM formatted file containing the certificate followed by the private
 key.
 
+Finally, if you're using a setup in which you want to trust a self-signed certificate or otherwise
+disable certificate verification, you can instruct uv to allow insecure connections to dedicated
+hosts via the `allow-insecure-host` configuration option. For example, adding the following to
+`pyproject.toml` will allow insecure connections to `example.com`:
+
+```toml
+[tool.uv]
+allow-insecure-host = ["example.com"]
+```
+
+`allow-insecure-host` expects to receive a hostname (e.g., `localhost`) or hostname-port pair (e.g.,
+`localhost:8080`), and is only applicable to HTTPS connections, as HTTP connections are inherently
+insecure.
+
+Use `allow-insecure-host` with caution and only in trusted environments, as it can expose you to
+security risks due to the lack of certificate verification.
+
 ## Authentication with alternative package indexes
 
 See the [alternative indexes integration guide](../guides/integration/alternative-indexes.md) for

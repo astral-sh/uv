@@ -6,7 +6,6 @@ use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
-use url::Url;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
     TrustedHost,

@@ -3,12 +3,11 @@ use std::env;
 use std::io::stdout;
 use std::path::Path;
 
-use anstream::{AutoStream, eprint};
+use anstream::{eprint, AutoStream};
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
-use url::Url;
 
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification, Verbatim};
 use install_wheel_rs::linker::LinkMode;
@@ -30,7 +29,7 @@ use uv_python::{
     PythonVersion, VersionRequest,
 };
 use uv_requirements::{
-    RequirementsSource, RequirementsSpecification, upgrade::read_requirements_txt,
+    upgrade::read_requirements_txt, RequirementsSource, RequirementsSpecification,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
@@ -40,9 +39,9 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::ExitStatus;
-use crate::commands::pip::{operations, resolution_environment};
 use crate::commands::pip::loggers::DefaultResolveLogger;
+use crate::commands::pip::{operations, resolution_environment};
+use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
