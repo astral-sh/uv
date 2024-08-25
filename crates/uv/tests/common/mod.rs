@@ -492,6 +492,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv export` command with options shared across scenarios.
+    pub fn export(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("export");
+        self.add_shared_args(&mut command);
+        command
+    }
+
     /// Create a `uv python find` command with options shared across scenarios.
     pub fn python_find(&self) -> Command {
         let mut command = Command::new(get_bin());

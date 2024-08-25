@@ -38,6 +38,7 @@ use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverS
 
 pub(crate) mod add;
 pub(crate) mod environment;
+pub(crate) mod export;
 pub(crate) mod init;
 pub(crate) mod lock;
 pub(crate) mod remove;

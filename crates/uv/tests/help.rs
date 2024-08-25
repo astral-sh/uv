@@ -22,6 +22,7 @@ fn help() {
       remove                     Remove dependencies from the project
       sync                       Update the project's environment
       lock                       Update the project's lockfile
+      export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
@@ -85,6 +86,7 @@ fn help_flag() {
       remove   Remove dependencies from the project
       sync     Update the project's environment
       lock     Update the project's lockfile
+      export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
@@ -146,6 +148,7 @@ fn help_short_flag() {
       remove   Remove dependencies from the project
       sync     Update the project's environment
       lock     Update the project's lockfile
+      export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
@@ -624,6 +627,7 @@ fn help_unknown_subcommand() {
         remove
         sync
         lock
+        export
         tree
         tool
         python
@@ -647,6 +651,7 @@ fn help_unknown_subcommand() {
         remove
         sync
         lock
+        export
         tree
         tool
         python
@@ -697,6 +702,7 @@ fn help_with_global_option() {
       remove                     Remove dependencies from the project
       sync                       Update the project's environment
       lock                       Update the project's lockfile
+      export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
@@ -796,6 +802,7 @@ fn help_with_no_pager() {
       remove                     Remove dependencies from the project
       sync                       Update the project's environment
       lock                       Update the project's lockfile
+      export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations

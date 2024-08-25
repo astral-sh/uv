@@ -11,7 +11,7 @@ use pypi_types::{Requirement, SupportedEnvironments};
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::{
     options::{flag, resolver_installer_options, resolver_options},
-    ToolUpgradeArgs,
+    ExportArgs, ToolUpgradeArgs,
 };
 use uv_cli::{
     AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
@@ -22,7 +22,7 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
+    BuildOptions, Concurrency, ConfigSettings, ExportFormat, ExtrasSpecification, HashCheckingMode,
     IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
     SourceStrategy, TargetTriple, TrustedHost, Upgrade,
 };
@@ -935,6 +935,59 @@ impl TreeSettings {
         }
     }
 }
+
+/// The resolved settings to use for an `export` invocation.
+#[allow(clippy::struct_excessive_bools, dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct ExportSettings {
+    pub(crate) format: ExportFormat,
+    pub(crate) package: Option<PackageName>,
+    pub(crate) extras: ExtrasSpecification,
+    pub(crate) dev: bool,
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
+    pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverSettings,
+}
+
+impl ExportSettings {
+    /// Resolve the [`ExportSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: ExportArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let ExportArgs {
+            format,
+            package,
+            extra,
+            all_extras,
+            no_all_extras,
+            dev,
+            no_dev,
+            locked,
+            frozen,
+            resolver,
+            build,
+            refresh,
+            python,
+        } = args;
+
+        Self {
+            package,
+            format,
+            extras: ExtrasSpecification::from_args(
+                flag(all_extras, no_all_extras).unwrap_or_default(),
+                extra.unwrap_or_default(),
+            ),
+            dev: flag(dev, no_dev).unwrap_or(true),
+            locked,
+            frozen,
+            python,
+            refresh: Refresh::from(refresh),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+        }
+    }
+}
+
 /// The resolved settings to use for a `pip compile` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]

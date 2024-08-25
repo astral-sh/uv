@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
-use distribution_types::{Dist, ResolvedDist, SourceDist};
 use itertools::Itertools;
+
+use distribution_types::{Dist, ResolvedDist, SourceDist};
 use pep508_rs::MarkerTree;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;

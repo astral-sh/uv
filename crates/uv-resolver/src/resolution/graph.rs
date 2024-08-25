@@ -33,7 +33,7 @@ pub(crate) type MarkersForDistribution = FxHashMap<(Version, Option<VerbatimUrl>
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ResolutionGraph {
     /// The underlying graph.
     pub(crate) petgraph: Graph<ResolutionGraphNode, MarkerTree, Directed>,

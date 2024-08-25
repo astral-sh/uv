@@ -3,7 +3,9 @@ pub use error::{NoSolutionError, NoSolutionHeader, ResolveError};
 pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
 pub use flat_index::FlatIndex;
-pub use lock::{Lock, LockError, ResolverManifest, SatisfiesResult, TreeDisplay};
+pub use lock::{
+    Lock, LockError, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
+};
 pub use manifest::Manifest;
 pub use options::{Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
@@ -31,6 +33,7 @@ mod exclude_newer;
 mod exclusions;
 mod flat_index;
 mod fork_urls;
+mod graph_ops;
 mod lock;
 mod manifest;
 mod marker;

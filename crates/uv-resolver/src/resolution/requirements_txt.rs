@@ -19,7 +19,7 @@ pub(crate) struct RequirementsTxtDist {
     pub(crate) version: Version,
     pub(crate) extras: Vec<ExtraName>,
     pub(crate) hashes: Vec<HashDigest>,
-    pub(crate) markers: Option<MarkerTree>,
+    pub(crate) markers: MarkerTree,
 }
 
 impl RequirementsTxtDist {
@@ -89,11 +89,8 @@ impl RequirementsTxtDist {
                     }
                 };
                 if let Some(given) = given {
-                    return if let Some(markers) = self
-                        .markers
-                        .as_ref()
-                        .filter(|_| include_markers)
-                        .and_then(MarkerTree::contents)
+                    return if let Some(markers) =
+                        self.markers.contents().filter(|_| include_markers)
                     {
                         Cow::Owned(format!("{given} ; {markers}"))
                     } else {
@@ -104,12 +101,7 @@ impl RequirementsTxtDist {
         }
 
         if self.extras.is_empty() || !include_extras {
-            if let Some(markers) = self
-                .markers
-                .as_ref()
-                .filter(|_| include_markers)
-                .and_then(MarkerTree::contents)
-            {
+            if let Some(markers) = self.markers.contents().filter(|_| include_markers) {
                 Cow::Owned(format!("{} ; {}", self.dist.verbatim(), markers))
             } else {
                 self.dist.verbatim()
@@ -118,12 +110,7 @@ impl RequirementsTxtDist {
             let mut extras = self.extras.clone();
             extras.sort_unstable();
             extras.dedup();
-            if let Some(markers) = self
-                .markers
-                .as_ref()
-                .filter(|_| include_markers)
-                .and_then(MarkerTree::contents)
-            {
+            if let Some(markers) = self.markers.contents().filter(|_| include_markers) {
                 Cow::Owned(format!(
                     "{}[{}]{} ; {}",
                     self.name(),
@@ -176,7 +163,7 @@ impl From<&AnnotatedDist> for RequirementsTxtDist {
                 vec![]
             },
             hashes: annotated.hashes.clone(),
-            markers: None,
+            markers: MarkerTree::default(),
         }
     }
 }

@@ -301,6 +301,15 @@ The lockfile is created and updated during uv invocations that use the project e
 There is no Python standard for lockfiles at this time, so the format of this file is specific to uv
 and not usable by other tools.
 
+!!! tip
+
+    If you need to integrate uv with other tools or workflows, you can export `uv.lock` to `requirements.txt` format
+    with `uv export --format requirements-txt`. The generated `requirements.txt` file can then be installed via
+    `uv pip install`, or with other tools like `pip`.
+
+    In general, we recommend against using both a `uv.lock` and a `requirements.txt` file. If you find yourself
+    exporting a `uv.lock` file, consider opening an issue to discuss your use case.
+
 ### Checking if the lockfile is up-to-date
 
 To avoid updating the lockfile during `uv sync` and `uv run` invocations, use the `--frozen` flag.
