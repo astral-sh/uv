@@ -10,7 +10,7 @@ use tracing::{debug, trace, warn};
 
 use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
 use pypi_types::{Requirement, RequirementSource};
-use uv_fs::{absolutize_path, Simplified};
+use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::warn_user;
 
@@ -88,9 +88,9 @@ impl Workspace {
         path: &Path,
         options: &DiscoveryOptions<'_>,
     ) -> Result<Workspace, WorkspaceError> {
-        let path = absolutize_path(path)
+        let path = std::path::absolute(path)
             .map_err(WorkspaceError::Normalize)?
-            .to_path_buf();
+            .clone();
 
         let project_path = path
             .ancestors()
@@ -527,9 +527,9 @@ impl Workspace {
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
-                let member_root = absolutize_path(&member_root)
+                let member_root = std::path::absolute(&member_root)
                     .map_err(WorkspaceError::Normalize)?
-                    .to_path_buf();
+                    .clone();
 
                 // If the directory is explicitly ignored, skip it.
                 if options.ignore.contains(member_root.as_path()) {
@@ -869,9 +869,9 @@ impl ProjectWorkspace {
         project_pyproject_toml: &PyProjectToml,
         options: &DiscoveryOptions<'_>,
     ) -> Result<Self, WorkspaceError> {
-        let project_path = absolutize_path(install_path)
+        let project_path = std::path::absolute(install_path)
             .map_err(WorkspaceError::Normalize)?
-            .to_path_buf();
+            .clone();
 
         // Check if workspaces are explicitly disabled for the project.
         if project_pyproject_toml
@@ -1229,9 +1229,9 @@ impl VirtualProject {
             .and_then(|uv| uv.workspace.as_ref())
         {
             // Otherwise, if it contains a `tool.uv.workspace` table, it's a virtual workspace.
-            let project_path = absolutize_path(project_root)
+            let project_path = std::path::absolute(project_root)
                 .map_err(WorkspaceError::Normalize)?
-                .to_path_buf();
+                .clone();
 
             check_nested_workspaces(&project_path, options);
 

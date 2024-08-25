@@ -240,16 +240,6 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     normalized
 }
 
-/// Convert a path to an absolute path, relative to the current working directory.
-///
-/// Unlike [`std::fs::canonicalize`], this function does not resolve symlinks and does not require
-/// the path to exist.
-pub fn absolutize_path(path: &Path) -> Result<Cow<Path>, std::io::Error> {
-    use path_absolutize::Absolutize;
-
-    path.absolutize_from(CWD.simplified())
-}
-
 /// Like `fs_err::canonicalize`, but avoids attempting to resolve symlinks on Windows.
 pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
     let path = path.as_ref();
