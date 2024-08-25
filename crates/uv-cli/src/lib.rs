@@ -2772,6 +2772,14 @@ pub struct ToolRunArgs {
     #[arg(long)]
     pub with: Vec<String>,
 
+    /// Run with the given packages installed as editables
+    ///
+    /// When used in a project, these dependencies will be layered on top of
+    /// the uv tool's environment in a separate, ephemeral environment. These
+    /// dependencies are allowed to conflict with those specified.
+    #[arg(long)]
+    pub with_editable: Vec<String>,
+
     /// Run with all packages listed in the given `requirements.txt` files.
     #[arg(long, value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,

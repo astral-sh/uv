@@ -125,6 +125,11 @@ pub(crate) async fn run(
             eprint!("{report:?}");
             return Ok(ExitStatus::Failure);
         }
+        Err(ProjectError::Operation(operations::Error::Named(err))) => {
+            let err = miette::Report::msg(format!("{err}")).context("Invalid `--with` requirement");
+            eprint!("{err:?}");
+            return Ok(ExitStatus::Failure);
+        }
         Err(err) => return Err(err.into()),
     };
 

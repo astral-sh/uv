@@ -265,6 +265,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) command: Option<ExternalCommand>,
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
+    pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
@@ -285,6 +286,7 @@ impl ToolRunSettings {
             command,
             from,
             with,
+            with_editable,
             with_requirements,
             isolated,
             show_resolution,
@@ -308,6 +310,7 @@ impl ToolRunSettings {
             command,
             from,
             with,
+            with_editable,
             with_requirements: with_requirements
                 .into_iter()
                 .filter_map(Maybe::into_option)
