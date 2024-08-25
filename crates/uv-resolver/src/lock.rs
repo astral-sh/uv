@@ -457,11 +457,20 @@ impl Lock {
         // dependencies in virtual workspaces).
         for group in dev {
             for dependency in project.group(group) {
-                let root = self
-                    .find_by_name(dependency)
-                    .expect("found too many packages matching root")
-                    .expect("could not find root");
-                queue.push_back((root, None));
+                if dependency.marker.evaluate(marker_env, &[]) {
+                    let root = self
+                        .find_by_markers(&dependency.name, marker_env)
+                        .expect("found too many packages matching root")
+                        .expect("could not find root");
+
+                    // Add the base package.
+                    queue.push_back((root, None));
+
+                    // Add any extras.
+                    for extra in &dependency.extras {
+                        queue.push_back((root, Some(extra)));
+                    }
+                }
             }
         }
 
@@ -669,6 +678,39 @@ impl Lock {
                     return Err(format!("found multiple packages matching `{name}`"));
                 }
                 found_dist = Some(dist);
+            }
+        }
+        Ok(found_dist)
+    }
+
+    /// Returns the package with the given name.
+    ///
+    /// If there are multiple matching packages, returns the package that
+    /// corresponds to the given marker tree.
+    ///
+    /// If there are multiple packages that are relevant to the current
+    /// markers, then an error is returned.
+    ///
+    /// If there are no matching packages, then `Ok(None)` is returned.
+    fn find_by_markers(
+        &self,
+        name: &PackageName,
+        marker_env: &MarkerEnvironment,
+    ) -> Result<Option<&Package>, String> {
+        let mut found_dist = None;
+        for dist in &self.packages {
+            if &dist.id.name == name {
+                if dist.fork_markers.is_empty()
+                    || dist
+                        .fork_markers
+                        .iter()
+                        .any(|marker| marker.evaluate(marker_env, &[]))
+                {
+                    if found_dist.is_some() {
+                        return Err(format!("found multiple packages matching `{name}`"));
+                    }
+                    found_dist = Some(dist);
+                }
             }
         }
         Ok(found_dist)

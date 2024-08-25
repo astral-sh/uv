@@ -357,7 +357,7 @@ fn virtual_workspace_dev_dependencies() -> Result<()> {
     pyproject_toml.write_str(
         r#"
         [tool.uv]
-        dev-dependencies = ["anyio>3"]
+        dev-dependencies = ["anyio>3", "requests[socks]", "typing-extensions ; sys_platform == ''"]
 
         [tool.uv.workspace]
         members = ["child"]
@@ -390,33 +390,39 @@ fn virtual_workspace_dev_dependencies() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    // Syncing with `--no-dev` should omit `anyio`.
+    // Syncing with `--no-dev` should omit all dependencies except `iniconfig`.
     uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 11 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + child==0.1.0 (from file://[TEMP_DIR]/child)
      + iniconfig==2.0.0
     "###);
 
-    // Syncing without `--no-dev` should include `anyio`.
+    // Syncing without `--no-dev` should include `anyio`, `requests`, `pysocks`, and their
+    // dependencies, but not `typing-extensions`.
     uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Resolved 11 packages in [TIME]
+    Prepared 8 packages in [TIME]
+    Installed 8 packages in [TIME]
      + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
      + idna==3.6
+     + pysocks==1.7.1
+     + requests==2.31.0
      + sniffio==1.3.1
+     + urllib3==2.2.1
     "###);
 
     Ok(())
