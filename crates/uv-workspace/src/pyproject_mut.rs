@@ -539,7 +539,7 @@ pub fn add_dependency(
                 .unwrap()
                 .name
                 .clone()
-        })
+        });
     }
 
     edit
