@@ -53,7 +53,7 @@ pub(crate) async fn pip_install(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    trusted_host: Vec<TrustedHost>,
+    allow_insecure_host: Vec<TrustedHost>,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -85,7 +85,7 @@ pub(crate) async fn pip_install(
         .connectivity(connectivity)
         .native_tls(native_tls)
         .keyring(keyring_provider)
-        .trusted_host(trusted_host);
+        .allow_insecure_host(allow_insecure_host);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {

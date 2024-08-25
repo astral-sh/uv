@@ -410,7 +410,7 @@ pub(crate) async fn resolve_names(
         index_locations,
         index_strategy,
         keyring_provider,
-        trusted_host,
+        allow_insecure_host,
         resolution: _,
         prerelease: _,
         config_setting,
@@ -437,7 +437,7 @@ pub(crate) async fn resolve_names(
         .index_urls(index_locations.index_urls())
         .index_strategy(*index_strategy)
         .keyring(*keyring_provider)
-        .trusted_host(trusted_host.clone())
+        .allow_insecure_host(allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -512,7 +512,7 @@ pub(crate) async fn resolve_environment<'a>(
         index_locations,
         index_strategy,
         keyring_provider,
-        trusted_host,
+        allow_insecure_host,
         resolution,
         prerelease,
         config_setting,
@@ -552,7 +552,7 @@ pub(crate) async fn resolve_environment<'a>(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .trusted_host(trusted_host.to_vec())
+        .allow_insecure_host(allow_insecure_host.to_vec())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -664,7 +664,7 @@ pub(crate) async fn sync_environment(
         index_locations,
         index_strategy,
         keyring_provider,
-        trusted_host,
+        allow_insecure_host,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -695,7 +695,7 @@ pub(crate) async fn sync_environment(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .trusted_host(trusted_host.to_vec())
+        .allow_insecure_host(allow_insecure_host.to_vec())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -810,7 +810,7 @@ pub(crate) async fn update_environment(
         index_locations,
         index_strategy,
         keyring_provider,
-        trusted_host,
+        allow_insecure_host,
         resolution,
         prerelease,
         config_setting,
@@ -878,7 +878,7 @@ pub(crate) async fn update_environment(
         .index_urls(index_locations.index_urls())
         .index_strategy(*index_strategy)
         .keyring(*keyring_provider)
-        .trusted_host(trusted_host.clone())
+        .allow_insecure_host(allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();

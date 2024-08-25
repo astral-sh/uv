@@ -70,6 +70,14 @@ uv run [OPTIONS] <COMMAND>
 
 <p>This option is only available when running in a project.</p>
 
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
@@ -308,12 +316,6 @@ uv run [OPTIONS] <COMMAND>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
-
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -489,7 +491,15 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--branch</code> <i>branch</i></dt><dd><p>Branch to use when adding a dependency from Git</p>
+<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
+</dd><dt><code>--branch</code> <i>branch</i></dt><dd><p>Branch to use when adding a dependency from Git</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -731,12 +741,6 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 </dd><dt><code>--tag</code> <i>tag</i></dt><dd><p>Tag to use when adding a dependency from Git</p>
 
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
-
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -779,7 +783,15 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
+</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 
@@ -997,12 +1009,6 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>If provided, uv will remove the dependency from the script&#8217;s inline metadata table, in adhere with PEP 723.</p>
 
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
-
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -1040,6 +1046,14 @@ uv sync [OPTIONS]
 <h3 class="cli-reference">Options</h3>
 
 <dl class="cli-reference"><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies</p>
+
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -1279,12 +1293,6 @@ uv sync [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
-
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -1313,7 +1321,15 @@ uv lock [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
+</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 
@@ -1513,12 +1529,6 @@ uv lock [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
-
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -1543,7 +1553,15 @@ uv tree [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
+</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 
@@ -1799,12 +1817,6 @@ uv tree [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
-
 </dd><dt><code>--universal</code></dt><dd><p>Show a platform-independent dependency tree.</p>
 
 <p>Shows resolved package versions for all Python versions and platforms, rather than filtering to those that are relevant for the current environment.</p>
@@ -1875,7 +1887,15 @@ uv tool run [OPTIONS] [COMMAND]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
+</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 
@@ -2079,12 +2099,6 @@ uv tool run [OPTIONS] [COMMAND]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
-
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -2123,7 +2137,15 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
+</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 
@@ -2325,12 +2347,6 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
-
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -2370,6 +2386,14 @@ uv tool upgrade [OPTIONS] <NAME>
 <h3 class="cli-reference">Options</h3>
 
 <dl class="cli-reference"><dt><code>--all</code></dt><dd><p>Upgrade all tools</p>
+
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -2561,12 +2585,6 @@ uv tool upgrade [OPTIONS] <NAME>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
-
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -3640,6 +3658,14 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
 </dd><dt><code>--annotation-style</code> <i>annotation-style</i></dt><dd><p>The style of the annotation comments included in the output file, used to indicate the source of each package.</p>
 
 <p>Defaults to <code>split</code>.</p>
@@ -3956,12 +3982,6 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>By default, uv uses the virtual environment in the current working directory or any parent directory, falling back to searching for a Python executable in <code>PATH</code>. The <code>--system</code> option instructs uv to avoid using a virtual environment Python and restrict its search to the system path.</p>
 
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
-
 </dd><dt><code>--universal</code></dt><dd><p>Perform a universal resolution, attempting to generate a single <code>requirements.txt</code> output file that is compatible with all operating systems, architectures, and Python implementations.</p>
 
 <p>In universal mode, the current Python version (or user-provided <code>--python-version</code>) will be treated as a lower bound. For example, <code>--universal --python-version 3.7</code> would produce a universal resolution for Python 3.7 and later.</p>
@@ -4003,6 +4023,14 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <h3 class="cli-reference">Options</h3>
 
 <dl class="cli-reference"><dt><code>--allow-empty-requirements</code></dt><dd><p>Allow sync of empty requirements, which will clear the environment of all packages</p>
+
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 </dd><dt><code>--break-system-packages</code></dt><dd><p>Allow uv to modify an <code>EXTERNALLY-MANAGED</code> Python installation.</p>
 
@@ -4259,12 +4287,6 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 </dd><dt><code>--target</code> <i>target</i></dt><dd><p>Install packages into the specified directory, rather than into the virtual or system Python environment. The packages will be installed at the top-level of the directory</p>
 
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
-
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
@@ -4300,6 +4322,14 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <dl class="cli-reference"><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies.</p>
 
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
+
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 </dd><dt><code>--break-system-packages</code></dt><dd><p>Allow uv to modify an <code>EXTERNALLY-MANAGED</code> Python installation.</p>
 
@@ -4614,12 +4644,6 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 </dd><dt><code>--target</code> <i>target</i></dt><dd><p>Install packages into the specified directory, rather than into the virtual or system Python environment. The packages will be installed at the top-level of the directory</p>
 
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
-
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -4654,7 +4678,15 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--break-system-packages</code></dt><dd><p>Allow uv to modify an <code>EXTERNALLY-MANAGED</code> Python installation.</p>
+<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
+</dd><dt><code>--break-system-packages</code></dt><dd><p>Allow uv to modify an <code>EXTERNALLY-MANAGED</code> Python installation.</p>
 
 <p>WARNING: <code>--break-system-packages</code> is intended for use in continuous integration (CI) environments, when installing into Python installations that are managed by an external package manager, like <code>apt</code>. It should be used with caution, as such Python installations explicitly recommend against modifications by other package managers (like uv or <code>pip</code>).</p>
 
@@ -4749,12 +4781,6 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 <p>WARNING: <code>--system</code> is intended for use in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
 
 </dd><dt><code>--target</code> <i>target</i></dt><dd><p>Uninstall packages from the specified <code>--target</code> directory</p>
-
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -5306,6 +5332,14 @@ uv venv [OPTIONS] [NAME]
 
 <p>WARNING: This option can lead to unexpected behavior if the existing virtual environment and the newly-created virtual environment are linked to different Python interpreters.</p>
 
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
@@ -5461,12 +5495,6 @@ uv venv [OPTIONS] [NAME]
 </dd><dt><code>--system-site-packages</code></dt><dd><p>Give the virtual environment access to the system site packages directory.</p>
 
 <p>Unlike <code>pip</code>, when a virtual environment is created with <code>--system-site-packages</code>, uv will <em>not</em> take system site packages into account when running commands like <code>uv pip list</code> or <code>uv pip install</code>. The <code>--system-site-packages</code> flag will provide the virtual environment with access to the system site packages directory at runtime, but will not affect the behavior of uv commands.</p>
-
-</dd><dt><code>--trusted-host</code> <i>trusted-host</i></dt><dd><p>A list of trusted hosts for SSL connections.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>) or a host-port pair (e.g., <code>localhost:8080</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store.</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 

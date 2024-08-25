@@ -4,6 +4,16 @@
   "description": "Metadata and configuration for uv.",
   "type": "object",
   "properties": {
+    "allow-insecure-host": {
+      "description": "Allow insecure connections to host.\n\nExpects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g., `localhost:8080`), or a URL (e.g., `https://localhost`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store. Only use `--allow-insecure-host` in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/TrustedHost"
+      }
+    },
     "cache-dir": {
       "description": "Path to the cache directory.\n\nDefaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux, and `%LOCALAPPDATA%\\uv\\cache` on Windows.",
       "type": [
@@ -352,16 +362,6 @@
         "$ref": "#/definitions/Source"
       }
     },
-    "trusted-host": {
-      "description": "A list of trusted hosts for SSL connections. Expects to receive either a hostname (e.g., `localhost`) or a host-port pair (e.g., `localhost:8080`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store.",
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "$ref": "#/definitions/TrustedHost"
-      }
-    },
     "upgrade": {
       "description": "Allow package upgrades, ignoring pinned versions in any existing output file.",
       "type": [
@@ -570,6 +570,16 @@
             "boolean",
             "null"
           ]
+        },
+        "allow-insecure-host": {
+          "description": "Allow insecure connections to host.\n\nExpects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g., `localhost:8080`), or a URL (e.g., `https://localhost`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store. Only use `--allow-insecure-host` in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/TrustedHost"
+          }
         },
         "annotation-style": {
           "description": "The style of the annotation comments included in the output file, used to indicate the source of each package.",
@@ -953,16 +963,6 @@
             "string",
             "null"
           ]
-        },
-        "trusted-host": {
-          "description": "A list of trusted hosts for SSL connections. Expects to receive either a hostname (e.g., `localhost`) or a host-port pair (e.g., `localhost:8080`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/definitions/TrustedHost"
-          }
         },
         "universal": {
           "description": "Perform a universal resolution, attempting to generate a single `requirements.txt` output file that is compatible with all operating systems, architectures, and Python implementations.\n\nIn universal mode, the current Python version (or user-provided `--python-version`) will be treated as a lower bound. For example, `--universal --python-version 3.7` would produce a universal resolution for Python 3.7 and later.",

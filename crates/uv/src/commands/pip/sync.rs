@@ -48,7 +48,7 @@ pub(crate) async fn pip_sync(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    trusted_host: Vec<TrustedHost>,
+    allow_insecure_host: Vec<TrustedHost>,
     allow_empty_requirements: bool,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -75,7 +75,7 @@ pub(crate) async fn pip_sync(
         .connectivity(connectivity)
         .native_tls(native_tls)
         .keyring(keyring_provider)
-        .trusted_host(trusted_host);
+        .allow_insecure_host(allow_insecure_host);
 
     // Initialize a few defaults.
     let overrides = &[];

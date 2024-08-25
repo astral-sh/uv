@@ -40,6 +40,7 @@ impl std::str::FromStr for TrustedHost {
         let mut parts = s.splitn(2, ':');
         let host = parts
             .next()
+            .and_then(|host| host.split('/').next())
             .ok_or_else(|| TrustedHostError::MissingHost(s.to_string()))?;
         let port = parts
             .next()
@@ -89,6 +90,13 @@ mod tests {
 
         assert_eq!(
             "https://example.com".parse::<super::TrustedHost>().unwrap(),
+            super::TrustedHost::Host("example.com".to_string())
+        );
+
+        assert_eq!(
+            "https://example.com/hello/world"
+                .parse::<super::TrustedHost>()
+                .unwrap(),
             super::TrustedHost::Host("example.com".to_string())
         );
     }

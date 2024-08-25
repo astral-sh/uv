@@ -679,7 +679,7 @@ fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
 }
 
 /// Parse a string into an [`Url`], mapping the empty string to `None`.
-fn parse_trusted_host(input: &str) -> Result<Maybe<TrustedHost>, String> {
+fn parse_insecure_host(input: &str) -> Result<Maybe<TrustedHost>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
     } else {
@@ -1571,20 +1571,24 @@ pub struct PipUninstallArgs {
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// A list of trusted hosts for SSL connections.
+    /// Allow insecure connections to a host.
     ///
-    /// Expects to receive either a hostname (e.g., `localhost`) or a host-port pair
-    /// (e.g., `localhost:8080`).
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
     ///
     /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store.
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
     #[arg(
         long,
-        env = "UV_TRUSTED_HOST",
+        alias = "trusted-host",
+        env = "UV_INSECURE_HOST",
         value_delimiter = ' ',
-        value_parser = parse_trusted_host,
+        value_parser = parse_insecure_host,
     )]
-    pub trusted_host: Option<Vec<Maybe<TrustedHost>>>,
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// Use the system Python to uninstall packages.
     ///
@@ -2012,20 +2016,24 @@ pub struct VenvArgs {
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// A list of trusted hosts for SSL connections.
+    /// Allow insecure connections to a host.
     ///
-    /// Expects to receive either a hostname (e.g., `localhost`) or a host-port pair
-    /// (e.g., `localhost:8080`).
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
     ///
     /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store.
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
     #[arg(
         long,
-        env = "UV_TRUSTED_HOST",
+        alias = "trusted-host",
+        env = "UV_INSECURE_HOST",
         value_delimiter = ' ',
-        value_parser = parse_trusted_host,
+        value_parser = parse_insecure_host,
     )]
-    pub trusted_host: Option<Vec<Maybe<TrustedHost>>>,
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -3363,21 +3371,25 @@ pub struct InstallerArgs {
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// A list of trusted hosts for SSL connections.
+    /// Allow insecure connections to a host.
     ///
-    /// Expects to receive either a hostname (e.g., `localhost`) or a host-port pair
-    /// (e.g., `localhost:8080`).
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
     ///
     /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store.
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
     #[arg(
         long,
-        env = "UV_TRUSTED_HOST",
+        alias = "trusted-host",
+        env = "UV_INSECURE_HOST",
         value_delimiter = ' ',
-        value_parser = parse_trusted_host,
+        value_parser = parse_insecure_host,
         help_heading = "Index options"
     )]
-    pub trusted_host: Option<Vec<Maybe<TrustedHost>>>,
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -3521,21 +3533,25 @@ pub struct ResolverArgs {
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// A list of trusted hosts for SSL connections.
+    /// Allow insecure connections to a host.
     ///
-    /// Expects to receive either a hostname (e.g., `localhost`) or a host-port pair
-    /// (e.g., `localhost:8080`).
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
     ///
     /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store.
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
     #[arg(
         long,
-        env = "UV_TRUSTED_HOST",
+        alias = "trusted-host",
+        env = "UV_INSECURE_HOST",
         value_delimiter = ' ',
-        value_parser = parse_trusted_host,
+        value_parser = parse_insecure_host,
         help_heading = "Index options"
     )]
-    pub trusted_host: Option<Vec<Maybe<TrustedHost>>>,
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -3709,21 +3725,25 @@ pub struct ResolverInstallerArgs {
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// A list of trusted hosts for SSL connections.
+    /// Allow insecure connections to a host.
     ///
-    /// Expects to receive either a hostname (e.g., `localhost`) or a host-port pair
-    /// (e.g., `localhost:8080`).
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
     ///
     /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store.
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
     #[arg(
         long,
-        env = "UV_TRUSTED_HOST",
+        alias = "trusted-host",
+        env = "UV_INSECURE_HOST",
         value_delimiter = ' ',
-        value_parser = parse_trusted_host,
+        value_parser = parse_insecure_host,
         help_heading = "Index options"
     )]
-    pub trusted_host: Option<Vec<Maybe<TrustedHost>>>,
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.

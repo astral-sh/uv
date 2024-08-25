@@ -29,7 +29,7 @@ use crate::Connectivity;
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
-    trusted_host: Vec<TrustedHost>,
+    allow_insecure_host: Vec<TrustedHost>,
     native_tls: bool,
     retries: u32,
     pub connectivity: Connectivity,
@@ -48,7 +48,7 @@ impl BaseClientBuilder<'_> {
     pub fn new() -> Self {
         Self {
             keyring: KeyringProviderType::default(),
-            trusted_host: vec![],
+            allow_insecure_host: vec![],
             native_tls: false,
             connectivity: Connectivity::Online,
             retries: 3,
@@ -67,8 +67,8 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn trusted_host(mut self, trusted_host: Vec<TrustedHost>) -> Self {
-        self.trusted_host = trusted_host;
+    pub fn allow_insecure_host(mut self, allow_insecure_host: Vec<TrustedHost>) -> Self {
+        self.allow_insecure_host = allow_insecure_host;
         self
     }
 
@@ -175,7 +175,7 @@ impl<'a> BaseClientBuilder<'a> {
 
         BaseClient {
             connectivity: self.connectivity,
-            trusted_host: self.trusted_host.clone(),
+            allow_insecure_host: self.allow_insecure_host.clone(),
             client,
             dangerous_client,
             timeout,
@@ -264,8 +264,8 @@ pub struct BaseClient {
     connectivity: Connectivity,
     /// Configured client timeout, in seconds.
     timeout: u64,
-    /// The host that is trusted to use the insecure client.
-    trusted_host: Vec<TrustedHost>,
+    /// Hosts that are trusted to use the insecure client.
+    allow_insecure_host: Vec<TrustedHost>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -285,9 +285,9 @@ impl BaseClient {
     /// Selects the appropriate client based on the host's trustworthiness.
     pub fn for_host(&self, url: &Url) -> &ClientWithMiddleware {
         if self
-            .trusted_host
+            .allow_insecure_host
             .iter()
-            .any(|trusted_host| trusted_host.matches(url))
+            .any(|allow_insecure_host| allow_insecure_host.matches(url))
         {
             &self.dangerous_client
         } else {

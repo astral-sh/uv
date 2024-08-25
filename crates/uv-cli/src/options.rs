@@ -38,7 +38,7 @@ impl From<ResolverArgs> for PipOptions {
             upgrade_package,
             index_strategy,
             keyring_provider,
-            trusted_host,
+            allow_insecure_host,
             resolution,
             prerelease,
             pre,
@@ -56,8 +56,8 @@ impl From<ResolverArgs> for PipOptions {
             upgrade_package: Some(upgrade_package),
             index_strategy,
             keyring_provider,
-            trusted_host: trusted_host.map(|trusted_host| {
-                trusted_host
+            allow_insecure_host: allow_insecure_host.map(|allow_insecure_host| {
+                allow_insecure_host
                     .into_iter()
                     .filter_map(Maybe::into_option)
                     .collect()
@@ -89,7 +89,7 @@ impl From<InstallerArgs> for PipOptions {
             reinstall_package,
             index_strategy,
             keyring_provider,
-            trusted_host,
+            allow_insecure_host,
             config_setting,
             no_build_isolation,
             build_isolation,
@@ -105,8 +105,8 @@ impl From<InstallerArgs> for PipOptions {
             reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
-            trusted_host: trusted_host.map(|trusted_host| {
-                trusted_host
+            allow_insecure_host: allow_insecure_host.map(|allow_insecure_host| {
+                allow_insecure_host
                     .into_iter()
                     .filter_map(Maybe::into_option)
                     .collect()
@@ -135,7 +135,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             reinstall_package,
             index_strategy,
             keyring_provider,
-            trusted_host,
+            allow_insecure_host,
             resolution,
             prerelease,
             pre,
@@ -157,8 +157,8 @@ impl From<ResolverInstallerArgs> for PipOptions {
             reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
-            trusted_host: trusted_host.map(|trusted_host| {
-                trusted_host
+            allow_insecure_host: allow_insecure_host.map(|allow_insecure_host| {
+                allow_insecure_host
                     .into_iter()
                     .filter_map(Maybe::into_option)
                     .collect()
@@ -215,7 +215,7 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         upgrade_package,
         index_strategy,
         keyring_provider,
-        trusted_host,
+        allow_insecure_host,
         resolution,
         prerelease,
         pre,
@@ -255,8 +255,8 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         upgrade_package: Some(upgrade_package),
         index_strategy,
         keyring_provider,
-        trusted_host: trusted_host.map(|trusted_host| {
-            trusted_host
+        allow_insecure_host: allow_insecure_host.map(|allow_insecure_host| {
+            allow_insecure_host
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect()
@@ -296,7 +296,7 @@ pub fn resolver_installer_options(
         reinstall_package,
         index_strategy,
         keyring_provider,
-        trusted_host,
+        allow_insecure_host,
         resolution,
         prerelease,
         pre,
@@ -348,8 +348,8 @@ pub fn resolver_installer_options(
         },
         index_strategy,
         keyring_provider,
-        trusted_host: trusted_host.map(|trusted_host| {
-            trusted_host
+        allow_insecure_host: allow_insecure_host.map(|allow_insecure_host| {
+            allow_insecure_host
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect()

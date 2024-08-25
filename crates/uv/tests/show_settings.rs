@@ -128,7 +128,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -267,7 +267,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -407,7 +407,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -579,7 +579,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -697,7 +697,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -847,7 +847,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1034,7 +1034,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1220,7 +1220,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1384,7 +1384,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1524,7 +1524,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1702,7 +1702,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1863,7 +1863,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2003,7 +2003,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2126,7 +2126,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2249,7 +2249,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2374,7 +2374,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2504,7 +2504,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             find_links: None,
             index_strategy: None,
             keyring_provider: None,
-            trusted_host: None,
+            allow_insecure_host: None,
             resolution: Some(
                 LowestDirect,
             ),
@@ -2540,7 +2540,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             },
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
             config_setting: ConfigSettings(
@@ -2671,7 +2671,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2845,7 +2845,7 @@ fn resolve_both() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -3011,7 +3011,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -3229,7 +3229,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -3355,7 +3355,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            trusted_host: [],
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {

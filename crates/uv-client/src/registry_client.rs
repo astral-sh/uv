@@ -73,8 +73,10 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn trusted_host(mut self, trusted_host: Vec<TrustedHost>) -> Self {
-        self.base_client_builder = self.base_client_builder.trusted_host(trusted_host);
+    pub fn allow_insecure_host(mut self, allow_insecure_host: Vec<TrustedHost>) -> Self {
+        self.base_client_builder = self
+            .base_client_builder
+            .allow_insecure_host(allow_insecure_host);
         self
     }
 
