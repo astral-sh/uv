@@ -59,6 +59,16 @@ project dependencies, use `uv add` to add a package to the environment. For one-
 use [`uvx`](../guides/tools.md) or
 [`uv run --with`](#running-commands-with-additional-dependencies).
 
+!!! tip
+
+    If you don't want uv to manage the project environment, set [`managed = false`](../reference/settings.md#managed)
+    to disable automatic locking and syncing of the project. For example:
+
+    ```toml title="pyproject.toml"
+    [tool.uv]
+    managed = false
+    ```
+
 ## Lockfile
 
 uv creates a `uv.lock` file next to the `pyproject.toml`.

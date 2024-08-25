@@ -169,7 +169,7 @@ fn add_git() -> Result<()> {
     "###);
 
     // Adding with an ambiguous Git reference should treat it as a revision.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]).arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -183,7 +183,7 @@ fn add_git() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -315,7 +315,7 @@ fn add_git_private_source() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]).arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -411,7 +411,7 @@ fn add_git_private_raw() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]).arg("--raw-sources").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]).arg("--raw-sources"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -527,7 +527,7 @@ fn add_git_error() -> Result<()> {
     "###);
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("flask").arg("--tag").arg("0.0.1").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&[]).arg("flask").arg("--tag").arg("0.0.1"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -537,7 +537,7 @@ fn add_git_error() -> Result<()> {
     "###);
 
     // Provide a tag with a non-Git source.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&[]).arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -588,7 +588,7 @@ fn add_git_raw() -> Result<()> {
     "###);
 
     // Use an ambiguous tag reference, which would otherwise not resolve.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]).arg("--raw-sources").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]).arg("--raw-sources"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -740,7 +740,7 @@ fn add_git_implicit() -> Result<()> {
     "###);
 
     // Omit the `git+` prefix.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"]).arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -773,7 +773,7 @@ fn add_raw_error() -> Result<()> {
     "#})?;
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&[]).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -805,7 +805,7 @@ fn add_unnamed() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1").arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1325,7 +1325,6 @@ fn add_remove_workspace() -> Result<()> {
     let mut add_cmd =
         context.add(&["child2 @ git+https://github.com/astral-test/uv-public-pypackage"]);
     add_cmd
-        .arg("--preview")
         .arg("--package")
         .arg("child1")
         .current_dir(&context.temp_dir);
@@ -1343,7 +1342,6 @@ fn add_remove_workspace() -> Result<()> {
     let child1 = context.temp_dir.join("child1");
     let mut add_cmd = context.add(&["child2"]);
     add_cmd
-        .arg("--preview")
         .arg("--package")
         .arg("child1")
         .current_dir(&context.temp_dir);
@@ -1540,10 +1538,7 @@ fn add_workspace_editable() -> Result<()> {
 
     let child1 = context.temp_dir.join("child1");
     let mut add_cmd = context.add(&["child2"]);
-    add_cmd
-        .arg("--editable")
-        .arg("--preview")
-        .current_dir(&child1);
+    add_cmd.arg("--editable").current_dir(&child1);
 
     uv_snapshot!(context.filters(), add_cmd, @r###"
     success: true
@@ -3584,6 +3579,62 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
     Ok(())
 }
 
+/// Add to a script with a metadata table and a shebang.
+#[test]
+fn add_script_with_metadata_table_and_shebang() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        #!/usr/bin/env python3
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated `script.py`
+    "###);
+
+    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r###"
+        #!/usr/bin/env python3
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "rich",
+        #     "requests<3",
+        # ]
+        # ///
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+        "###
+        );
+    });
+    Ok(())
+}
+
 /// Add to a script without a metadata table, but with a docstring.
 #[test]
 fn add_script_without_metadata_table_with_docstring() -> Result<()> {
@@ -3777,7 +3828,6 @@ fn add_git_to_script() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"])
         .arg("--tag=0.0.1")
-        .arg("--preview")
         .arg("--script")
         .arg("script.py"), @r###"
     success: true
@@ -3815,5 +3865,71 @@ fn add_git_to_script() -> Result<()> {
         "###
         );
     });
+    Ok(())
+}
+
+// Revert changes to pyproject.toml if add fails
+#[test]
+fn fail_to_add_revert_project() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Adding `pytorch==1.0.2` should produce an error
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.add(&["pytorch==1.0.2"]), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: pytorch==1.0.2
+      Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
+    --- stdout:
+
+    --- stderr:
+    Traceback (most recent call last):
+      File "<string>", line 11, in <module>
+      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 410, in build_wheel
+        return self._build_with_temp_dir(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 395, in _build_with_temp_dir
+        self.run_setup()
+      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+        super().run_setup(setup_script=setup_script)
+      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+        exec(code, locals())
+      File "<string>", line 15, in <module>
+    Exception: You tried to install "pytorch". The package named for PyTorch is "torch"
+    ---
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
+
     Ok(())
 }

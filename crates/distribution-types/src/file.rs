@@ -79,8 +79,6 @@ pub enum FileLocation {
     RelativeUrl(String, String),
     /// Absolute URL.
     AbsoluteUrl(UrlString),
-    /// Absolute path to a file.
-    Path(#[with(rkyv::with::AsString)] PathBuf),
 }
 
 impl FileLocation {
@@ -110,15 +108,6 @@ impl FileLocation {
                 Ok(joined)
             }
             FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.to_url()),
-            FileLocation::Path(ref path) => {
-                let path = path
-                    .to_str()
-                    .ok_or_else(|| ToUrlError::PathNotUtf8 { path: path.clone() })?;
-                let url = Url::from_file_path(path).map_err(|()| ToUrlError::InvalidPath {
-                    path: path.to_string(),
-                })?;
-                Ok(url)
-            }
         }
     }
 
@@ -129,7 +118,7 @@ impl FileLocation {
     pub fn to_url_string(&self) -> Result<UrlString, ToUrlError> {
         match *self {
             FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.clone()),
-            _ => Ok(self.to_url()?.into()),
+            FileLocation::RelativeUrl(_, _) => Ok(self.to_url()?.into()),
         }
     }
 }
@@ -139,7 +128,6 @@ impl Display for FileLocation {
         match self {
             Self::RelativeUrl(_base, url) => Display::fmt(&url, f),
             Self::AbsoluteUrl(url) => Display::fmt(&url.0, f),
-            Self::Path(path) => Display::fmt(&path.display(), f),
         }
     }
 }
@@ -155,8 +143,6 @@ impl Display for FileLocation {
     PartialOrd,
     Ord,
     Hash,
-    Serialize,
-    Deserialize,
     rkyv::Archive,
     rkyv::Deserialize,
     rkyv::Serialize,
@@ -164,6 +150,24 @@ impl Display for FileLocation {
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 pub struct UrlString(String);
+
+impl serde::Serialize for UrlString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        String::serialize(&self.0, serializer)
+    }
+}
+
+impl<'de> serde::de::Deserialize<'de> for UrlString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        String::deserialize(deserializer).map(UrlString)
+    }
+}
 
 impl UrlString {
     /// Converts a [`UrlString`] to a [`Url`].

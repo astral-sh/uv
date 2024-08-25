@@ -216,7 +216,7 @@ dependencies = [
 mollymawk = { workspace = true }
 
 [tool.uv.workspace]
-include = [
+members = [
   "packages/mollymawk"
 ]
 ```

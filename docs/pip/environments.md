@@ -28,8 +28,8 @@ $ uv venv --python 3.11
 ```
 
 Note this requires the requested Python version to be available on the system. However, if
-available, uv will download Python for you. See the [Python version](../concepts/python-versions.md)
-documentation for more details.
+unavailable, uv will download Python for you. See the
+[Python version](../concepts/python-versions.md) documentation for more details.
 
 ## Using a virtual environment
 

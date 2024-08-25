@@ -34,7 +34,6 @@ impl schemars::JsonSchema for IndexUrl {
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
-            format: Some("uri".to_owned()),
             metadata: Some(Box::new(schemars::schema::Metadata {
                 description: Some("The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`).".to_string()),
               ..schemars::schema::Metadata::default()
@@ -113,8 +112,8 @@ impl FromStr for IndexUrl {
     type Err = IndexUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let url = if let Ok(path) = Path::new(s).canonicalize() {
-            VerbatimUrl::from_path(path)?
+        let url = if Path::new(s).exists() {
+            VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
         } else {
             VerbatimUrl::parse_url(s)?
         };
@@ -193,7 +192,6 @@ impl schemars::JsonSchema for FlatIndexLocation {
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
-            format: Some("uri".to_owned()),
             metadata: Some(Box::new(schemars::schema::Metadata {
                 description: Some("The path to a directory of distributions, or a URL to an HTML file with a flat listing of distributions.".to_string()),
               ..schemars::schema::Metadata::default()
@@ -249,8 +247,8 @@ impl FromStr for FlatIndexLocation {
     type Err = IndexUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let url = if let Ok(path) = Path::new(s).canonicalize() {
-            VerbatimUrl::from_path(path)?
+        let url = if Path::new(s).exists() {
+            VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
         } else {
             VerbatimUrl::parse_url(s)?
         };

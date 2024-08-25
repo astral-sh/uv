@@ -70,6 +70,29 @@ impl Resolution {
     pub fn diagnostics(&self) -> &[ResolutionDiagnostic] {
         &self.diagnostics
     }
+
+    /// Filter the resolution to only include packages that match the given predicate.
+    #[must_use]
+    pub fn filter(self, predicate: impl Fn(&ResolvedDist) -> bool) -> Self {
+        let packages = self
+            .packages
+            .iter()
+            .filter(|(_, dist)| predicate(dist))
+            .map(|(name, dist)| (name.clone(), dist.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let hashes = self
+            .hashes
+            .iter()
+            .filter(|(name, _)| packages.contains_key(name))
+            .map(|(name, hashes)| (name.clone(), hashes.clone()))
+            .collect();
+        let diagnostics = self.diagnostics.clone();
+        Self {
+            packages,
+            hashes,
+            diagnostics,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Hash)]
@@ -162,7 +185,6 @@ impl From<&ResolvedDist> for Requirement {
                 }
                 Dist::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {
                     install_path: wheel.install_path.clone(),
-                    lock_path: wheel.lock_path.clone(),
                     url: wheel.url.clone(),
                     ext: DistExtension::Wheel,
                 },
@@ -191,13 +213,11 @@ impl From<&ResolvedDist> for Requirement {
                 },
                 Dist::Source(SourceDist::Path(sdist)) => RequirementSource::Path {
                     install_path: sdist.install_path.clone(),
-                    lock_path: sdist.lock_path.clone(),
                     url: sdist.url.clone(),
                     ext: DistExtension::Source(sdist.ext),
                 },
                 Dist::Source(SourceDist::Directory(sdist)) => RequirementSource::Directory {
                     install_path: sdist.install_path.clone(),
-                    lock_path: sdist.lock_path.clone(),
                     url: sdist.url.clone(),
                     editable: sdist.editable,
                 },

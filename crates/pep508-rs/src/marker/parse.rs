@@ -4,6 +4,7 @@ use pep440_rs::{Version, VersionPattern, VersionSpecifier};
 use uv_normalize::ExtraName;
 
 use crate::cursor::Cursor;
+use crate::marker::MarkerValueExtra;
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueVersion,
     MarkerWarningKind, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
@@ -42,7 +43,7 @@ fn parse_marker_operator<T: Pep508Url>(
             Some((pos, other)) => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(format!(
-                        "Expected whitespace after 'not', found '{other}'"
+                        "Expected whitespace after `not`, found `{other}`"
                     )),
                     start: pos,
                     len: other.len_utf8(),
@@ -57,7 +58,7 @@ fn parse_marker_operator<T: Pep508Url>(
     }
     MarkerOperator::from_str(operator).map_err(|_| Pep508Error {
         message: Pep508ErrorSource::String(format!(
-            "Expected a valid marker operator (such as '>=' or 'not in'), found '{operator}'"
+            "Expected a valid marker operator (such as `>=` or `not in`), found `{operator}`"
         )),
         start,
         len,
@@ -102,7 +103,7 @@ pub(crate) fn parse_marker_value<T: Pep508Url>(
             let key = cursor.slice(start, len);
             MarkerValue::from_str(key).map_err(|_| Pep508Error {
                 message: Pep508ErrorSource::String(format!(
-                    "Expected a valid marker name, found '{key}'"
+                    "Expected a quoted string or a valid marker name, found `{key}`"
                 )),
                 start,
                 len,
@@ -129,7 +130,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     cursor.eat_whitespace();
     let r_value = parse_marker_value(cursor)?;
 
-    // Convert a `<marker_value> <marker_op> <marker_value>` expression into it's
+    // Convert a `<marker_value> <marker_op> <marker_value>` expression into its
     // typed equivalent.
     let expr = match l_value {
         // Either:
@@ -342,8 +343,8 @@ fn parse_version_expr(
         reporter.report(
             MarkerWarningKind::Pep440Error,
             format!(
-                "Expected PEP 440 version operator to compare {key} with '{version}',
-                    found '{marker_operator}', will be ignored",
+                "Expected PEP 440 version operator to compare {key} with `{version}`,
+                    found `{marker_operator}`, will be ignored",
                 version = pattern.version()
             ),
         );
@@ -397,8 +398,8 @@ fn parse_inverted_version_expr(
         reporter.report(
             MarkerWarningKind::Pep440Error,
             format!(
-                "Expected PEP 440 version operator to compare {key} with '{version}',
-                    found '{marker_operator}', will be ignored"
+                "Expected PEP 440 version operator to compare {key} with `{version}`,
+                    found `{marker_operator}`, will be ignored"
             ),
         );
 
@@ -427,14 +428,13 @@ fn parse_extra_expr(
     reporter: &mut impl Reporter,
 ) -> Option<MarkerExpression> {
     let name = match ExtraName::from_str(value) {
-        Ok(name) => name,
+        Ok(name) => MarkerValueExtra::Extra(name),
         Err(err) => {
             reporter.report(
                 MarkerWarningKind::ExtraInvalidComparison,
-                format!("Expected extra name, found '{value}', will be ignored: {err}"),
+                format!("Expected extra name (found `{value}`): {err}"),
             );
-
-            return None;
+            MarkerValueExtra::Arbitrary(value.to_string())
         }
     };
 

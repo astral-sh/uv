@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
-use std::path::PathBuf;
 
 use anyhow::Result;
 use fs_err as fs;
@@ -8,16 +7,12 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::debug;
 
 use uv_client::Connectivity;
 use uv_fs::CWD;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
-use uv_python::{
-    requests_from_version_file, PythonDownloads, PythonRequest, PYTHON_VERSIONS_FILENAME,
-    PYTHON_VERSION_FILENAME,
-};
+use uv_python::{PythonDownloads, PythonRequest, PythonVersionFile};
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -43,18 +38,10 @@ pub(crate) async fn install(
 
     let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {
-        // Read from the version file, unless `--no-config` was requested
-        let version_file_requests = if no_config {
-            if PathBuf::from(PYTHON_VERSION_FILENAME).exists() {
-                debug!("Ignoring `.python-version` file due to `--no-config`");
-            } else if PathBuf::from(PYTHON_VERSIONS_FILENAME).exists() {
-                debug!("Ignoring `.python-versions` file due to `--no-config`");
-            }
-            None
-        } else {
-            requests_from_version_file(&CWD).await?
-        };
-        version_file_requests.unwrap_or_else(|| vec![PythonRequest::Any])
+        PythonVersionFile::discover(&*CWD, no_config, true)
+            .await?
+            .map(uv_python::PythonVersionFile::into_versions)
+            .unwrap_or_else(|| vec![PythonRequest::Any])
     } else {
         targets
             .iter()
@@ -239,10 +226,13 @@ pub(crate) async fn install(
         for (key, err) in errors {
             writeln!(
                 printer.stderr(),
-                "{}: Failed to install {}: {err}",
+                "{}: Failed to install {}",
                 "error".red().bold(),
-                key.green(),
+                key.green()
             )?;
+            for err in anyhow::Error::new(err).chain() {
+                writeln!(printer.stderr(), "  {}: {}", "Caused by".red().bold(), err)?;
+            }
         }
         return Ok(ExitStatus::Failure);
     }

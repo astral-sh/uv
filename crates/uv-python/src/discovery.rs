@@ -89,6 +89,19 @@ pub enum PythonDownloads {
     Never,
 }
 
+impl FromStr for PythonDownloads {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "auto" | "automatic" | "true" | "1" => Ok(PythonDownloads::Automatic),
+            "manual" => Ok(PythonDownloads::Manual),
+            "never" | "false" | "0" => Ok(PythonDownloads::Never),
+            _ => Err(format!("Invalid value for `python-download`: '{s}'")),
+        }
+    }
+}
+
 impl From<bool> for PythonDownloads {
     fn from(value: bool) -> Self {
         if value {

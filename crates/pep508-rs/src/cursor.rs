@@ -125,7 +125,7 @@ impl<'a> Cursor<'a> {
             Some((_, value)) if value == expected => Ok(()),
             Some((pos, other)) => Err(Pep508Error {
                 message: Pep508ErrorSource::String(format!(
-                    "Expected '{expected}', found '{other}'"
+                    "Expected `{expected}`, found `{other}`"
                 )),
                 start: pos,
                 len: other.len_utf8(),

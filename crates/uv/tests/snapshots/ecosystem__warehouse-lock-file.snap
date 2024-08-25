@@ -491,7 +491,6 @@ wheels = [
 [package.optional-dependencies]
 sqs = [
     { name = "boto3" },
-    { name = "kombu" },
     { name = "kombu", extra = ["sqs"] },
     { name = "pycurl", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32'" },
     { name = "urllib3" },

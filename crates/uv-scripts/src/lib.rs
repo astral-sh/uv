@@ -80,11 +80,15 @@ impl Pep723Script {
         let metadata = Pep723Metadata::from_str(&default_metadata)?;
 
         //  Extract the shebang and script content.
-        let (prelude, postlude) = extract_shebang(&contents)?;
+        let (shebang, postlude) = extract_shebang(&contents)?;
 
         Ok(Self {
             path: file.as_ref().to_path_buf(),
-            prelude,
+            prelude: if shebang.is_empty() {
+                String::new()
+            } else {
+                format!("{shebang}\n")
+            },
             metadata,
             postlude,
         })
@@ -94,11 +98,7 @@ impl Pep723Script {
     pub async fn write(&self, metadata: &str) -> Result<(), Pep723Error> {
         let content = format!(
             "{}{}{}",
-            if self.prelude.is_empty() {
-                String::new()
-            } else {
-                format!("{}\n", self.prelude)
-            },
+            self.prelude,
             serialize_metadata(metadata),
             self.postlude
         );

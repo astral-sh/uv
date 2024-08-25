@@ -433,50 +433,34 @@ fn sync_build_isolation() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz"]
+        dependencies = ["source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz"]
         "#,
     )?;
 
-    // Running `uv sync` should fail.
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.sync().arg("--no-build-isolation"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
+    // Running `uv sync` should fail (but it could fail when building the root project, or when
+    // building `source-distribution`).
+    context
+        .sync()
+        .arg("--no-build-isolation")
+        .assert()
+        .failure();
 
-    ----- stderr -----
-    error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
-    --- stdout:
-
-    --- stderr:
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-    ModuleNotFoundError: No module named 'hatchling'
-    ---
-    "###);
-
-    // Install `setuptools` (for the root project) plus `hatchling`, `hatch-vcs`, and `wheel` (for `iniconfig`).
-    uv_snapshot!(context.filters(), context.pip_install().arg("wheel").arg("setuptools").arg("hatchling").arg("hatch-vcs"), @r###"
+    // Install `setuptools` (for the root project) plus `hatchling` (for `source-distribution`).
+    uv_snapshot!(context.filters(), context.pip_install().arg("wheel").arg("setuptools").arg("hatchling"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 10 packages in [TIME]
-    Prepared 10 packages in [TIME]
-    Installed 10 packages in [TIME]
-     + hatch-vcs==0.4.0
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
      + hatchling==1.22.4
      + packaging==24.0
      + pathspec==0.12.1
      + pluggy==1.4.0
      + setuptools==69.2.0
-     + setuptools-scm==8.0.4
      + trove-classifiers==2024.3.3
-     + typing-extensions==4.10.0
      + wheel==0.43.0
     "###);
 
@@ -490,8 +474,94 @@ fn sync_build_isolation() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz)
      + project==0.1.0 (from file://[TEMP_DIR]/)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn sync_build_isolation_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
+        ]
+
+        [build-system]
+        requires = ["setuptools >= 40.9.0"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Running `uv sync` should fail for iniconfig.
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
+      Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
+    --- stdout:
+
+    --- stderr:
+    Traceback (most recent call last):
+      File "<string>", line 8, in <module>
+    ModuleNotFoundError: No module named 'hatchling'
+    ---
+    "###);
+
+    // Install `hatchling` for `source-distribution`.
+    uv_snapshot!(context.filters(), context.pip_install().arg("hatchling"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + hatchling==1.22.4
+     + packaging==24.0
+     + pathspec==0.12.1
+     + pluggy==1.4.0
+     + trove-classifiers==2024.3.3
+    "###);
+
+    // Running `uv sync` should succeed.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 5 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - hatchling==1.22.4
+     - packaging==24.0
+     - pathspec==0.12.1
+     - pluggy==1.4.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     - trove-classifiers==2024.3.3
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -558,99 +628,6 @@ fn sync_reset_state() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + pydantic-core==2.17.0
      + typing-extensions==4.10.0
-    "###);
-
-    assert!(context.temp_dir.child("uv.lock").exists());
-
-    Ok(())
-}
-
-#[test]
-fn sync_build_isolation_package() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = [
-            "iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz",
-        ]
-        [build-system]
-        requires = [
-          "setuptools >= 40.9.0",
-        ]
-        build-backend = "setuptools.build_meta"
-        "#,
-    )?;
-
-    // Running `uv sync` should fail for iniconfig.
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.sync().arg("--no-build-isolation-package").arg("iniconfig"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
-    --- stdout:
-
-    --- stderr:
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-    ModuleNotFoundError: No module named 'hatchling'
-    ---
-    "###);
-
-    // Install `hatchinling`, `hatch-vs` for iniconfig
-    uv_snapshot!(context.filters(), context.pip_install().arg("hatchling").arg("hatch-vcs"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 9 packages in [TIME]
-    Prepared 9 packages in [TIME]
-    Installed 9 packages in [TIME]
-     + hatch-vcs==0.4.0
-     + hatchling==1.22.4
-     + packaging==24.0
-     + pathspec==0.12.1
-     + pluggy==1.4.0
-     + setuptools==69.2.0
-     + setuptools-scm==8.0.4
-     + trove-classifiers==2024.3.3
-     + typing-extensions==4.10.0
-    "###);
-
-    // Running `uv sync` should succeed.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("iniconfig"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Uninstalled 9 packages in [TIME]
-    Installed 2 packages in [TIME]
-     - hatch-vcs==0.4.0
-     - hatchling==1.22.4
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz)
-     - packaging==24.0
-     - pathspec==0.12.1
-     - pluggy==1.4.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-     - setuptools==69.2.0
-     - setuptools-scm==8.0.4
-     - trove-classifiers==2024.3.3
-     - typing-extensions==4.10.0
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -823,6 +800,187 @@ fn read_metadata_statically_over_the_cache() -> Result<()> {
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     // Assert stability.
     assert_eq!(lock1, lock2);
+
+    Ok(())
+}
+
+/// Avoid syncing the project package when `--no-install-project` is provided.
+#[test]
+fn no_install_project() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Running with `--no-install-project` should install `anyio`, but not `project`.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    // However, we do require the `pyproject.toml`.
+    fs_err::remove_file(pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `pyproject.toml` found in current directory or any parent directory
+    "###);
+
+    Ok(())
+}
+
+/// Avoid syncing workspace members and the project when `--no-install-workspace` is provided, but
+/// include the all of the dependencies.
+#[test]
+fn no_install_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+
+    // Add a workspace member.
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Running with `--no-install-workspace` should install `anyio` and `iniconfig`, but not
+    // `project` or `child`.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    "###);
+
+    // However, we do require the `pyproject.toml`.
+    fs_err::remove_file(child.join("pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Workspace member `[TEMP_DIR]/child` is missing a `pyproject.toml` (matches: `child`)
+    "###);
+
+    Ok(())
+}
+
+/// Avoid syncing the target package when `--no-install-package` is provided.
+#[test]
+fn no_install_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Running with `--no-install-package anyio` should skip anyio but include everything else
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-package").arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    // Running with `--no-install-package project` should skip the project itself (not as a special
+    // case, that's just the name of the project)
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-package").arg("project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==3.7.0
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
 
     Ok(())
 }

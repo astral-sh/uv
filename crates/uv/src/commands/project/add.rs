@@ -3,12 +3,13 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
-use cache_key::RepositoryUrl;
 use owo_colors::OwoColorize;
-use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
-use pypi_types::redact_git_credentials;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
+
+use cache_key::RepositoryUrl;
+use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
+use pypi_types::redact_git_credentials;
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -19,8 +20,8 @@ use uv_fs::{Simplified, CWD};
 use uv_git::GIT_STORE;
 use uv_normalize::PackageName;
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, Interpreter, PythonDownloads,
-    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
+    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, RequiresPython};
@@ -123,7 +124,10 @@ pub(crate) async fn add(
             let python_request = if let Some(request) = python.as_deref() {
                 // (1) Explicit request from user
                 PythonRequest::parse(request)
-            } else if let Some(request) = request_from_version_file(&CWD).await? {
+            } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
+                .await?
+                .and_then(PythonVersionFile::into_version)
+            {
                 // (2) Request from `.python-version`
                 request
             } else {
@@ -151,7 +155,10 @@ pub(crate) async fn add(
         let python_request = if let Some(request) = python.as_deref() {
             // (1) Explicit request from user
             Some(PythonRequest::parse(request))
-        } else if let Some(request) = request_from_version_file(&CWD).await? {
+        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
+            .await?
+            .and_then(PythonVersionFile::into_version)
+        {
             // (2) Request from `.python-version`
             Some(request)
         } else {
@@ -234,7 +241,8 @@ pub(crate) async fn add(
     let python_version = None;
     let python_platform = None;
     let hasher = HashStrategy::default();
-    let build_isolation = BuildIsolation::default();
+    let build_constraints = [];
+    let sources = SourceStrategy::Enabled;
 
     // Determine the environment for the resolution.
     let (tags, markers) =
@@ -253,6 +261,18 @@ pub(crate) async fn add(
         .platform(target.interpreter().platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let environment;
+    let build_isolation = if settings.no_build_isolation {
+        environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+        BuildIsolation::Shared(&environment)
+    } else if settings.no_build_isolation_package.is_empty() {
+        BuildIsolation::Isolated
+    } else {
+        environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+        BuildIsolation::SharedPackage(&environment, &settings.no_build_isolation_package)
+    };
+
     // Initialize any shared state.
     let state = SharedState::default();
 
@@ -262,9 +282,6 @@ pub(crate) async fn add(
         let entries = client.fetch(settings.index_locations.flat_index()).await?;
         FlatIndex::from_entries(entries, Some(&tags), &hasher, &settings.build_options)
     };
-
-    let build_constraints = [];
-    let sources = SourceStrategy::Enabled;
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -621,13 +638,19 @@ pub(crate) async fn process_project_and_sync(
 
     // Initialize any shared state.
     let state = SharedState::default();
+    let no_install_root = false;
+    let no_install_workspace = false;
+    let no_install_package = vec![];
 
-    project::sync::do_sync(
+    if let Err(err) = project::sync::do_sync(
         &project,
         venv,
         &lock,
         &extras,
         dev,
+        no_install_root,
+        no_install_workspace,
+        no_install_package,
         Modifications::Sufficient,
         settings.as_ref().into(),
         &state,
@@ -638,7 +661,14 @@ pub(crate) async fn process_project_and_sync(
         cache,
         printer,
     )
-    .await?;
+    .await
+    {
+        // Revert the changes to the `pyproject.toml`, if necessary.
+        if modified {
+            fs_err::write(project.root().join("pyproject.toml"), existing)?;
+        }
+        return Err(err.into());
+    }
 
     Ok(ExitStatus::Success)
 }

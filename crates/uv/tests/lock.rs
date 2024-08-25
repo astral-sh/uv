@@ -2735,6 +2735,8 @@ fn lock_requires_python() -> Result<()> {
            cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
+          hint: Pre-releases are available for pygls in the requested range (e.g., 2.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+
           hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
     "###);
 
@@ -4125,7 +4127,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     "#})?;
     context.temp_dir.child("c/c/__init__.py").touch()?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -4159,7 +4161,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "b", directory = "b" },
-            { name = "c", directory = "[TEMP_DIR]/c" },
+            { name = "c", directory = "c" },
         ]
 
         [[package]]
@@ -4170,7 +4172,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         [[package]]
         name = "c"
         version = "0.1.0"
-        source = { directory = "[TEMP_DIR]/c" }
+        source = { directory = "c" }
         "###
         );
     });
@@ -4407,7 +4409,7 @@ fn lock_new_extras() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -4530,7 +4532,7 @@ fn lock_new_extras() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -5074,7 +5076,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.0.1"
-        source = { directory = "[TEMP_DIR]/v1" }
+        source = { directory = "v1" }
         resolution-markers = [
             "sys_platform == 'darwin'",
         ]
@@ -5088,7 +5090,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.0.1"
-        source = { directory = "[TEMP_DIR]/v2" }
+        source = { directory = "v2" }
         resolution-markers = [
             "sys_platform != 'darwin'",
         ]
@@ -5113,14 +5115,14 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v1" }, marker = "sys_platform == 'darwin'" },
-            { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v2" }, marker = "sys_platform != 'darwin'" },
+            { name = "dependency", version = "0.0.1", source = { directory = "v1" }, marker = "sys_platform == 'darwin'" },
+            { name = "dependency", version = "0.0.1", source = { directory = "v2" }, marker = "sys_platform != 'darwin'" },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "dependency", marker = "sys_platform != 'darwin'", directory = "[TEMP_DIR]/v2" },
-            { name = "dependency", marker = "sys_platform == 'darwin'", directory = "[TEMP_DIR]/v1" },
+            { name = "dependency", marker = "sys_platform != 'darwin'", directory = "v2" },
+            { name = "dependency", marker = "sys_platform == 'darwin'", directory = "v1" },
         ]
 
         [[package]]
@@ -5521,8 +5523,9 @@ fn lock_redact_https() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    // Installing from the lockfile should fail without credentials.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    // Installing from the lockfile should fail without credentials. Omit the root, so that we fail
+    // when installing `iniconfig`, rather than when building `foo`.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://pypi-proxy.fly.dev/basic-auth/simple").arg("--no-install-project"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5534,7 +5537,7 @@ fn lock_redact_https() -> Result<()> {
     "###);
 
     // Installing from the lockfile should fail without an index.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-install-project"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5558,6 +5561,46 @@ fn lock_redact_https() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
+    // A subsequent sync will succeed because the credentials are in uv's request cache.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ foo==0.1.0 (from file://[TEMP_DIR]/)
+     ~ iniconfig==2.0.0
+    "###);
+
+    // Installing without credentials will fail without a cache.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").arg("--no-install-project"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: iniconfig==2.0.0
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+    "###);
+
+    // Installing with credentials from with `UV_INDEX_URL` should succeed.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").env("UV_INDEX_URL", "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ foo==0.1.0 (from file://[TEMP_DIR]/)
+     ~ iniconfig==2.0.0
+    "###);
+
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -5572,17 +5615,19 @@ fn lock_redact_https() -> Result<()> {
         "#,
     )?;
 
-    // Installing from the lockfile should succeed when credentials are included via `pyproject.toml`.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    // Installing from the lockfile should succeed when credentials are included via
+    // `pyproject.toml`.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      ~ foo==0.1.0 (from file://[TEMP_DIR]/)
+     ~ iniconfig==2.0.0
     "###);
 
     Ok(())
@@ -6448,7 +6493,28 @@ fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
 fn lock_find_links_local_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    // Populate the `--find-links` entries.
+    fs_err::create_dir_all(context.temp_dir.join("links"))?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("tqdm-"))
+        {
+            let dest = context
+                .temp_dir
+                .join("links")
+                .join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    let workspace = context.temp_dir.child("workspace");
+
+    let pyproject_toml = workspace.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! { r#"
         [project]
         name = "project"
@@ -6459,19 +6525,20 @@ fn lock_find_links_local_wheel() -> Result<()> {
         [tool.uv]
         find-links = ["{}"]
         "#,
-        context.workspace_root.join("scripts/links/").portable_display(),
+        context.temp_dir.join("links/").portable_display(),
     })?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6498,34 +6565,37 @@ fn lock_find_links_local_wheel() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "file://[WORKSPACE]/scripts/links" }
+        source = { registry = "../links" }
         wheels = [
-            { url = "file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl" },
+            { path = "tqdm-1000.0.0-py3-none-any.whl" },
         ]
         "###
         );
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/workspace)
      + tqdm==1000.0.0
     "###);
 
@@ -6537,7 +6607,28 @@ fn lock_find_links_local_wheel() -> Result<()> {
 fn lock_find_links_local_sdist() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    // Populate the `--find-links` entries.
+    fs_err::create_dir_all(context.temp_dir.join("links"))?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("tqdm-"))
+        {
+            let dest = context
+                .temp_dir
+                .join("links")
+                .join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    let workspace = context.temp_dir.child("workspace");
+
+    let pyproject_toml = workspace.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! { r#"
         [project]
         name = "project"
@@ -6548,19 +6639,20 @@ fn lock_find_links_local_sdist() -> Result<()> {
         [tool.uv]
         find-links = ["{}"]
         "#,
-        context.workspace_root.join("scripts/links/").portable_display(),
+        context.temp_dir.join("links/").portable_display(),
     })?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6587,32 +6679,35 @@ fn lock_find_links_local_sdist() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "999.0.0"
-        source = { registry = "file://[WORKSPACE]/scripts/links" }
-        sdist = { url = "file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz" }
+        source = { registry = "../links" }
+        sdist = { path = "tqdm-999.0.0.tar.gz" }
         "###
         );
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/workspace)
      + tqdm==999.0.0
     "###);
 
@@ -6812,6 +6907,14 @@ fn lock_local_index() -> Result<()> {
     let tqdm = root.child("tqdm");
     fs_err::create_dir_all(&tqdm)?;
 
+    let wheel = tqdm.child("tqdm-1000.0.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("scripts/links/tqdm-1000.0.0-py3-none-any.whl"),
+        &wheel,
+    )?;
+
     let index = tqdm.child("index.html");
     index.write_str(&formatdoc! {r#"
         <!DOCTYPE html>
@@ -6822,14 +6925,14 @@ fn lock_local_index() -> Result<()> {
           <body>
             <h1>Links for tqdm</h1>
             <a
-              href="{}/tqdm-1000.0.0-py3-none-any.whl"
+              href="{}"
               data-requires-python=">=3.8"
             >
               tqdm-1000.0.0-py3-none-any.whl
             </a>
           </body>
         </html>
-    "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
+    "#, Url::from_file_path(wheel).unwrap().as_str()})?;
 
     let context = TestContext::new("3.12");
 
@@ -6886,9 +6989,9 @@ fn lock_local_index() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "file://[TMP]" }
+        source = { registry = "../../[TMP]/simple-html" }
         wheels = [
-            { url = "file://[WORKSPACE]/scripts/links//tqdm-1000.0.0-py3-none-any.whl" },
+            { path = "tqdm/tqdm-1000.0.0-py3-none-any.whl" },
         ]
         "###
         );
@@ -7076,7 +7179,7 @@ fn lock_sources_archive() -> Result<()> {
         Url::from_file_path(&workspace_archive).unwrap(),
     })?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!( context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7087,11 +7190,11 @@ fn lock_sources_archive() -> Result<()> {
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r###"
+    // insta::with_settings!({
+    //     filters => context.filters(),
+    // }, {
+    assert_snapshot!(
+        lock, @r###"
         version = 1
         requires-python = ">=3.12"
 
@@ -7129,7 +7232,7 @@ fn lock_sources_archive() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "workspace", path = "[TEMP_DIR]/workspace.zip" }]
+        requires-dist = [{ name = "workspace", path = "workspace.zip" }]
 
         [[package]]
         name = "sniffio"
@@ -7143,7 +7246,7 @@ fn lock_sources_archive() -> Result<()> {
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { path = "[TEMP_DIR]/workspace.zip" }
+        source = { path = "workspace.zip" }
         dependencies = [
             { name = "anyio" },
         ]
@@ -7151,8 +7254,8 @@ fn lock_sources_archive() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "anyio" }]
         "###
-        );
-    });
+    );
+    // });
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
@@ -7251,7 +7354,7 @@ fn lock_sources_source_tree() -> Result<()> {
         [[package]]
         name = "anyio"
         version = "0.1.0"
-        source = { editable = "[TEMP_DIR]/workspace/anyio" }
+        source = { editable = "workspace/anyio" }
 
         [[package]]
         name = "project"
@@ -7262,18 +7365,18 @@ fn lock_sources_source_tree() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "workspace", directory = "[TEMP_DIR]/workspace" }]
+        requires-dist = [{ name = "workspace", directory = "workspace" }]
 
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { directory = "[TEMP_DIR]/workspace" }
+        source = { directory = "workspace" }
         dependencies = [
             { name = "anyio" },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "anyio", editable = "[TEMP_DIR]/workspace/anyio" }]
+        requires-dist = [{ name = "anyio", editable = "workspace/anyio" }]
         "###
         );
     });
@@ -7848,7 +7951,6 @@ fn lock_transitive_extra() -> Result<()> {
 
         [package.optional-dependencies]
         async = [
-            { name = "leaf" },
             { name = "leaf", extra = ["async"] },
             { name = "typing-extensions" },
         ]
@@ -10259,6 +10361,246 @@ fn lock_virtual() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + iniconfig==2.0.0
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// `coverage` defines a `toml` extra, but it doesn't enable any dependencies after Python 3.11.
+#[test]
+fn lock_dropped_dev_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        dev-dependencies = [
+            "coverage[toml]"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "coverage"
+        version = "7.4.4"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/d5/f809d8b630cf4c11fe490e20037a343d12a74ec2783c6cdb5aee725e7137/coverage-7.4.4.tar.gz", hash = "sha256:c901df83d097649e257e803be22592aedfd5182f07b3cc87d640bbb9afd50f49", size = 783727 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/a0/de/a54b245e781bfd6f3fd7ce5566a695686b5c25ee7c743f514e7634428972/coverage-7.4.4-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:201bef2eea65e0e9c56343115ba3814e896afe6d36ffd37bab783261db430f76", size = 206409 },
+            { url = "https://files.pythonhosted.org/packages/88/92/07f9c593cd27e3c595b8cb83b95adad8c9ba3d611debceed097a5fd6be4b/coverage-7.4.4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:41c9c5f3de16b903b610d09650e5e27adbfa7f500302718c9ffd1c12cf9d6818", size = 206568 },
+            { url = "https://files.pythonhosted.org/packages/41/6d/e142c823e5d4b24481f990da4cf9d2d577a6f4e1fb6faf39d9a4e42b1d43/coverage-7.4.4-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d898fe162d26929b5960e4e138651f7427048e72c853607f2b200909794ed978", size = 238920 },
+            { url = "https://files.pythonhosted.org/packages/30/1a/105f0139df6a2adbcaa0c110711a46dbd9f59e93a09ca15a97d59c2564f2/coverage-7.4.4-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:3ea79bb50e805cd6ac058dfa3b5c8f6c040cb87fe83de10845857f5535d1db70", size = 236288 },
+            { url = "https://files.pythonhosted.org/packages/98/79/185cb42910b6a2b2851980407c8445ac0da0750dff65e420e86f973c8396/coverage-7.4.4-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ce4b94265ca988c3f8e479e741693d143026632672e3ff924f25fab50518dd51", size = 238223 },
+            { url = "https://files.pythonhosted.org/packages/92/12/2303d1c543a11ea060dbc7144ed3174fc09107b5dd333649415c95ede58b/coverage-7.4.4-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:00838a35b882694afda09f85e469c96367daa3f3f2b097d846a7216993d37f4c", size = 245161 },
+            { url = "https://files.pythonhosted.org/packages/96/5a/7d0e945c4759fe9d19aad1679dd3096aeb4cb9fcf0062fe24554dc4787b8/coverage-7.4.4-cp312-cp312-musllinux_1_1_i686.whl", hash = "sha256:fdfafb32984684eb03c2d83e1e51f64f0906b11e64482df3c5db936ce3839d48", size = 243066 },
+            { url = "https://files.pythonhosted.org/packages/f4/1b/79cdb7b11bbbd6540a536ac79412904b5c1f8903d5c1330084212afa8ceb/coverage-7.4.4-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:69eb372f7e2ece89f14751fbcbe470295d73ed41ecd37ca36ed2eb47512a6ab9", size = 244805 },
+            { url = "https://files.pythonhosted.org/packages/af/7f/54dc676e7e63549838a3a7b95a8e11df80441bf7d64c6ce8f1cdbc0d1ff0/coverage-7.4.4-cp312-cp312-win32.whl", hash = "sha256:137eb07173141545e07403cca94ab625cc1cc6bc4c1e97b6e3846270e7e1fea0", size = 208590 },
+            { url = "https://files.pythonhosted.org/packages/46/c4/1dfe76d96034a347d717a2392b004d42d45934cb94efa362ad41ca871f6e/coverage-7.4.4-cp312-cp312-win_amd64.whl", hash = "sha256:d71eec7d83298f1af3326ce0ff1d0ea83c7cb98f72b577097f9083b20bdaf05e", size = 209415 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "coverage" },
+        ]
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        dev = [{ name = "coverage", extras = ["toml"] }]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Re-run with `--offline`. We shouldn't need a network connection to validate an
+    // already-correct lockfile with immutable metadata.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + coverage==7.4.4
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
+/// Use a trailing slash on the declared index.
+#[test]
+fn lock_trailing_slash() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        index-url = "https://pypi.org/simple/"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "anyio"
+        version = "3.7.0"
+        source = { registry = "https://pypi.org/simple/" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873 },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple/" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple/" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    // Re-run with `--offline`. We shouldn't need a network connection to validate an
+    // already-correct lockfile with immutable metadata.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 

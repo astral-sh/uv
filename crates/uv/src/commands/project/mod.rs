@@ -18,8 +18,8 @@ use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, Interpreter, PythonDownloads,
-    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
+    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
@@ -177,7 +177,11 @@ impl WorkspacePython {
         let python_request = if let Some(request) = python_request {
             Some(request)
             // (2) Request from `.python-version`
-        } else if let Some(request) = request_from_version_file(workspace.install_path()).await? {
+        } else if let Some(request) =
+            PythonVersionFile::discover(workspace.install_path(), false, false)
+                .await?
+                .and_then(PythonVersionFile::into_version)
+        {
             Some(request)
             // (3) `Requires-Python` in `pyproject.toml`
         } else {
@@ -658,6 +662,7 @@ pub(crate) async fn sync_environment(
         keyring_provider,
         config_setting,
         no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -692,8 +697,10 @@ pub(crate) async fn sync_environment(
     // Determine whether to enable build isolation.
     let build_isolation = if no_build_isolation {
         BuildIsolation::Shared(&venv)
-    } else {
+    } else if no_build_isolation_package.is_empty() {
         BuildIsolation::Isolated
+    } else {
+        BuildIsolation::SharedPackage(&venv, no_build_isolation_package)
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them

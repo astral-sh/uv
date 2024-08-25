@@ -40,6 +40,9 @@ jobs:
               - "!**/*.md"
               - "!bin/**"
               - "!assets/**"
+              # Generated markdown files are checked during test runs
+              - "docs/reference/cli.md"
+              - "docs/reference/settings.md"
   cargo-fmt:
     name: "cargo fmt"
     runs-on: ubuntu-latest

@@ -40,9 +40,9 @@ use uv_resolver::{
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
-use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
+use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::commands::{compile_bytecode, elapsed, ChangeEventKind, DryRunEvent};
+use crate::commands::{compile_bytecode, ChangeEventKind, DryRunEvent};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -524,17 +524,7 @@ fn report_dry_run(
 
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
-        let s = if resolution.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Audited {} {}",
-                format!("{} package{}", resolution.len(), s).bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
-            .dimmed()
-        )?;
+        DefaultInstallLogger.on_audit(resolution.len(), start, printer)?;
         writeln!(printer.stderr(), "Would make no changes")?;
         return Ok(());
     }

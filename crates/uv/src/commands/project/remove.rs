@@ -35,7 +35,6 @@ pub(crate) async fn remove(
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -191,6 +190,9 @@ pub(crate) async fn remove(
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
     let extras = ExtrasSpecification::All;
     let dev = true;
+    let no_install_project = false;
+    let no_install_workspace = false;
+    let no_install_package = vec![];
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -201,6 +203,9 @@ pub(crate) async fn remove(
         &lock,
         &extras,
         dev,
+        no_install_project,
+        no_install_workspace,
+        no_install_package,
         Modifications::Exact,
         settings.as_ref().into(),
         &state,

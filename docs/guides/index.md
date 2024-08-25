@@ -13,6 +13,7 @@ Learn how to integrate uv with other software:
 - [Using with pre-commit](./integration/pre-commit.md)
 - [Using in GitHub Actions](./integration/github.md)
 - [Using with alternative package indexes](./integration/alternative-indexes.md)
+- [Building a FastAPI application](./integration/fastapi.md)
 
 Or, explore the [concept documentation](../concepts/index.md) for comprehensive breakdown of each
 feature.

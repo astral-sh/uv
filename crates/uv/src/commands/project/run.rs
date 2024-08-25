@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anstream::eprint;
@@ -9,7 +10,7 @@ use anyhow::{anyhow, bail, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
@@ -20,11 +21,11 @@ use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, Interpreter, PythonDownloads,
-    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
+    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_scripts::{Pep723Error, Pep723Script};
+use uv_scripts::Pep723Script;
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
@@ -44,7 +45,7 @@ use crate::settings::ResolverInstallerSettings;
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     script: Option<Pep723Script>,
-    command: ExternalCommand,
+    command: RunCommand,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
     locked: bool,
@@ -52,11 +53,11 @@ pub(crate) async fn run(
     isolated: bool,
     package: Option<PackageName>,
     no_project: bool,
+    no_config: bool,
     extras: ExtrasSpecification,
     dev: bool,
     python: Option<String>,
     settings: ResolverInstallerSettings,
-
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -87,9 +88,6 @@ pub(crate) async fn run(
         }
     }
 
-    // Parse the input command.
-    let command = RunCommand::from(&command);
-
     // Initialize any shared state.
     let state = SharedState::default();
 
@@ -109,7 +107,10 @@ pub(crate) async fn run(
         let python_request = if let Some(request) = python.as_deref() {
             Some(PythonRequest::parse(request))
             // (2) Request from `.python-version`
-        } else if let Some(request) = request_from_version_file(&CWD).await? {
+        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
+            .await?
+            .and_then(PythonVersionFile::into_version)
+        {
             Some(request)
             // (3) `Requires-Python` in `pyproject.toml`
         } else {
@@ -263,19 +264,34 @@ pub(crate) async fn run(
             ))
         } else {
             match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
-                Ok(project) => Some(project),
-                Err(WorkspaceError::MissingPyprojectToml) => None,
-                Err(WorkspaceError::NonWorkspace(_)) => None,
-                Err(err) => return Err(err.into()),
+                Ok(project) => {
+                    if no_project {
+                        debug!("Ignoring discovered project due to `--no-project`");
+                        None
+                    } else {
+                        Some(project)
+                    }
+                }
+                Err(WorkspaceError::MissingPyprojectToml | WorkspaceError::NonWorkspace(_)) => {
+                    // If the user runs with `--no-project` and we can't find a project, warn.
+                    if no_project {
+                        warn!("`--no-project` was provided, but no project was found");
+                    }
+                    None
+                }
+                Err(err) => {
+                    // If the user runs with `--no-project`, ignore the error.
+                    if no_project {
+                        warn!("Ignoring project discovery error due to `--no-project`: {err}");
+                        None
+                    } else {
+                        return Err(err.into());
+                    }
+                }
             }
         };
 
-        let project = if no_project {
-            // If the user runs with `--no-project` and we can't find a project, warn.
-            if project.is_none() {
-                debug!("`--no-project` was provided, but no project was found; ignoring...");
-            }
-
+        if no_project {
             // If the user ran with `--no-project` and provided a project-only setting, warn.
             if !extras.is_empty() {
                 warn_user_once!("Extras have no effect when used alongside `--no-project`");
@@ -289,27 +305,21 @@ pub(crate) async fn run(
             if frozen {
                 warn_user_once!("`--frozen` has no effect when used alongside `--no-project`");
             }
-
-            None
-        } else {
+        } else if project.is_none() {
             // If we can't find a project and the user provided a project-only setting, warn.
-            if project.is_none() {
-                if !extras.is_empty() {
-                    warn_user_once!("Extras have no effect when used outside of a project");
-                }
-                if !dev {
-                    warn_user_once!("`--no-dev` has no effect when used outside of a project");
-                }
-                if locked {
-                    warn_user_once!("`--locked` has no effect when used outside of a project");
-                }
-                if frozen {
-                    warn_user_once!("`--frozen` has no effect when used outside of a project");
-                }
+            if !extras.is_empty() {
+                warn_user_once!("Extras have no effect when used outside of a project");
             }
-
-            project
-        };
+            if !dev {
+                warn_user_once!("`--no-dev` has no effect when used outside of a project");
+            }
+            if locked {
+                warn_user_once!("`--locked` has no effect when used outside of a project");
+            }
+            if frozen {
+                warn_user_once!("`--frozen` has no effect when used outside of a project");
+            }
+        }
 
         let interpreter = if let Some(project) = project {
             if let Some(project_name) = project.project_name() {
@@ -410,12 +420,19 @@ pub(crate) async fn run(
                 Err(err) => return Err(err.into()),
             };
 
+            let no_install_root = false;
+            let no_install_workspace = false;
+            let no_install_package = vec![];
+
             project::sync::do_sync(
                 &project,
                 &venv,
                 result.lock(),
                 &extras,
                 dev,
+                no_install_root,
+                no_install_workspace,
+                no_install_package,
                 Modifications::Sufficient,
                 settings.as_ref().into(),
                 &state,
@@ -441,8 +458,18 @@ pub(crate) async fn run(
                     .connectivity(connectivity)
                     .native_tls(native_tls);
 
+                // (1) Explicit request from user
+                let python_request = if let Some(request) = python.as_deref() {
+                    Some(PythonRequest::parse(request))
+                // (2) Request from `.python-version`
+                } else {
+                    PythonVersionFile::discover(&*CWD, no_config, false)
+                        .await?
+                        .and_then(PythonVersionFile::into_version)
+                };
+
                 let python = PythonInstallation::find_or_download(
-                    python.as_deref().map(PythonRequest::parse),
+                    python_request,
                     // No opt-in is required for system environments, since we are not mutating it.
                     EnvironmentPreference::Any,
                     python_preference,
@@ -593,8 +620,13 @@ pub(crate) async fn run(
         )?;
     }
 
+    // Determine the Python interpreter to use for the command, if necessary.
+    let interpreter = ephemeral_env
+        .as_ref()
+        .map_or_else(|| &base_interpreter, |env| env.interpreter());
+
     debug!("Running `{command}`");
-    let mut process = Command::from(&command);
+    let mut process = command.as_command(interpreter);
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
@@ -613,15 +645,17 @@ pub(crate) async fn run(
     )?;
     process.env("PATH", new_path);
 
+    // Ensure `VIRTUAL_ENV` is set.
+    if interpreter.is_virtualenv() {
+        process.env("VIRTUAL_ENV", interpreter.sys_prefix().as_os_str());
+    };
+
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
-    let mut handle = process.spawn().with_context(|| {
-        format!(
-            "Failed to spawn: `{}`",
-            command.executable().to_string_lossy()
-        )
-    })?;
+    let mut handle = process
+        .spawn()
+        .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
 
     // Ignore signals in the parent process, deferring them to the child. This is safe as long as
     // the command is the last thing that runs in this process; otherwise, we'd need to restore the
@@ -637,21 +671,6 @@ pub(crate) async fn run(
     } else {
         Ok(ExitStatus::Failure)
     }
-}
-
-/// Read a [`Pep723Script`] from the given command.
-pub(crate) async fn parse_script(
-    command: &ExternalCommand,
-) -> Result<Option<Pep723Script>, Pep723Error> {
-    // Parse the input command.
-    let command = RunCommand::from(command);
-
-    let RunCommand::Python(target, _) = &command else {
-        return Ok(None);
-    };
-
-    // Read the PEP 723 `script` metadata from the target script.
-    Pep723Script::read(&target).await
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.
@@ -702,9 +721,15 @@ fn can_skip_ephemeral(
 }
 
 #[derive(Debug)]
-enum RunCommand {
+pub(crate) enum RunCommand {
+    /// Execute `python`.
+    Python(Vec<OsString>),
     /// Execute a `python` script.
-    Python(PathBuf, Vec<OsString>),
+    PythonScript(PathBuf, Vec<OsString>),
+    /// Execute a `pythonw` script (Windows only).
+    PythonGuiScript(PathBuf, Vec<OsString>),
+    /// Execute a `python` script provided via `stdin`.
+    PythonStdin(Vec<u8>),
     /// Execute an external command.
     External(OsString, Vec<OsString>),
     /// Execute an empty command (in practice, `python` with no arguments).
@@ -712,11 +737,74 @@ enum RunCommand {
 }
 
 impl RunCommand {
-    /// Return the name of the target executable.
-    fn executable(&self) -> Cow<'_, OsString> {
+    /// Return the name of the target executable, for display purposes.
+    fn display_executable(&self) -> Cow<'_, str> {
         match self {
-            Self::Python(_, _) | Self::Empty => Cow::Owned(OsString::from("python")),
-            Self::External(executable, _) => Cow::Borrowed(executable),
+            Self::Python(_) => Cow::Borrowed("python"),
+            Self::PythonScript(_, _) | Self::Empty => Cow::Borrowed("python"),
+            Self::PythonGuiScript(_, _) => Cow::Borrowed("pythonw"),
+            Self::PythonStdin(_) => Cow::Borrowed("python -c"),
+            Self::External(executable, _) => executable.to_string_lossy(),
+        }
+    }
+
+    /// Convert a [`RunCommand`] into a [`Command`].
+    fn as_command(&self, interpreter: &Interpreter) -> Command {
+        match self {
+            Self::Python(args) => {
+                let mut process = Command::new(interpreter.sys_executable());
+                process.args(args);
+                process
+            }
+            Self::PythonScript(target, args) => {
+                let mut process = Command::new(interpreter.sys_executable());
+                process.arg(target);
+                process.args(args);
+                process
+            }
+            Self::PythonGuiScript(target, args) => {
+                let python_executable = interpreter.sys_executable();
+
+                // Use `pythonw.exe` if it exists, otherwise fall back to `python.exe`.
+                // See `install-wheel-rs::get_script_executable`.gd
+                let pythonw_executable = python_executable
+                    .file_name()
+                    .map(|name| {
+                        let new_name = name.to_string_lossy().replace("python", "pythonw");
+                        python_executable.with_file_name(new_name)
+                    })
+                    .filter(|path| path.is_file())
+                    .unwrap_or_else(|| python_executable.to_path_buf());
+
+                let mut process = Command::new(&pythonw_executable);
+                process.arg(target);
+                process.args(args);
+                process
+            }
+            Self::PythonStdin(script) => {
+                let mut process = Command::new(interpreter.sys_executable());
+                process.arg("-c");
+
+                #[cfg(unix)]
+                {
+                    use std::os::unix::ffi::OsStringExt;
+                    process.arg(OsString::from_vec(script.clone()));
+                }
+
+                #[cfg(not(unix))]
+                {
+                    let script = String::from_utf8(script.clone()).expect("script is valid UTF-8");
+                    process.arg(script);
+                }
+
+                process
+            }
+            Self::External(executable, args) => {
+                let mut process = Command::new(executable);
+                process.args(args);
+                process
+            }
+            Self::Empty => Command::new(interpreter.sys_executable()),
         }
     }
 }
@@ -724,11 +812,29 @@ impl RunCommand {
 impl std::fmt::Display for RunCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Python(target, args) => {
+            Self::Python(args) => {
+                write!(f, "python")?;
+                for arg in args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                Ok(())
+            }
+            Self::PythonScript(target, args) => {
                 write!(f, "python {}", target.display())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
                 }
+                Ok(())
+            }
+            Self::PythonGuiScript(target, args) => {
+                write!(f, "pythonw {}", target.display())?;
+                for arg in args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                Ok(())
+            }
+            Self::PythonStdin(_) => {
+                write!(f, "python -c")?;
                 Ok(())
             }
             Self::External(executable, args) => {
@@ -746,45 +852,41 @@ impl std::fmt::Display for RunCommand {
     }
 }
 
-impl From<&ExternalCommand> for RunCommand {
-    fn from(command: &ExternalCommand) -> Self {
+impl TryFrom<&ExternalCommand> for RunCommand {
+    type Error = std::io::Error;
+
+    fn try_from(command: &ExternalCommand) -> Result<Self, Self::Error> {
         let (target, args) = command.split();
 
         let Some(target) = target else {
-            return Self::Empty;
+            return Ok(Self::Empty);
         };
 
         let target_path = PathBuf::from(&target);
-        if target_path
+        if target.eq_ignore_ascii_case("-") {
+            let mut buf = Vec::with_capacity(1024);
+            std::io::stdin().read_to_end(&mut buf)?;
+            Ok(Self::PythonStdin(buf))
+        } else if target.eq_ignore_ascii_case("python") {
+            Ok(Self::Python(args.to_vec()))
+        } else if target_path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
             && target_path.exists()
         {
-            Self::Python(target_path, args.to_vec())
+            Ok(Self::PythonScript(target_path, args.to_vec()))
+        } else if cfg!(windows)
+            && target_path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
+            && target_path.exists()
+        {
+            Ok(Self::PythonGuiScript(target_path, args.to_vec()))
         } else {
-            Self::External(
+            Ok(Self::External(
                 target.clone(),
                 args.iter().map(std::clone::Clone::clone).collect(),
-            )
-        }
-    }
-}
-
-impl From<&RunCommand> for Command {
-    fn from(command: &RunCommand) -> Self {
-        match command {
-            RunCommand::Python(target, args) => {
-                let mut process = Command::new("python");
-                process.arg(target);
-                process.args(args);
-                process
-            }
-            RunCommand::External(executable, args) => {
-                let mut process = Command::new(executable);
-                process.args(args);
-                process
-            }
-            RunCommand::Empty => Command::new("python"),
+            ))
         }
     }
 }

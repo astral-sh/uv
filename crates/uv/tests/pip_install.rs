@@ -4058,14 +4058,14 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
         .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
         .env("PATH", venv_bin_path(&context.venv)), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
     Request for public@pypi-proxy.fly.dev
-    error: Failed to download `anyio==4.3.0`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
     "###
     );
 }
@@ -4099,14 +4099,14 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
         .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
         .env("PATH", venv_bin_path(&context.venv)), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
     Request for public@pypi-proxy.fly.dev
-    error: Failed to download `anyio==4.3.0`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
     "###
     );
 }
@@ -5586,7 +5586,6 @@ fn tool_uv_sources() -> Result<()> {
 
     // Install the editable packages.
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_install()
-        .arg("--preview")
         .arg("-r")
         .arg(require_path)
         .arg("--extra")
@@ -5613,7 +5612,6 @@ fn tool_uv_sources() -> Result<()> {
 
     // Re-install the editable packages.
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_install()
-        .arg("--preview")
         .arg("-r")
         .arg(require_path)
         .arg("--extra")

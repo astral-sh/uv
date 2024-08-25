@@ -41,6 +41,18 @@ $ uvx pycowsay hello from uv
 
 Tools are installed into temporary, isolated environments when using `uvx`.
 
+!!! note
+
+    If you are running a tool in a [_project_](../concepts/projects.md) and the tool requires that
+    your project is installed, e.g., when using `pytest` or `mypy`, you'll want to use
+    [`uv run`](./projects.md#running-commands) instead of `uvx`. Otherwise, the tool will be run in
+    a virtual environment that is isolated from your project.
+
+    If your project has a flat structure, e.g., instead of using a `src` directory for modules,
+    the project itself does not need to be installed and `uvx` is fine. In this case, using
+    `uv run` is only beneficial if you want to pin the version of the tool in the project's
+    dependencies.
+
 ## Commands with different package names
 
 When `uvx ruff` is invoked, uv installs the `ruff` package which provides the `ruff` command.
@@ -103,6 +115,11 @@ $ uvx --with mkdocs-material mkdocs --help
 
 If a tool is used often, it is useful to install it to a persistent environment and add it to the
 `PATH` instead of invoking `uvx` repeatedly.
+
+!!! tip
+
+    `uvx` is a convenient alias for `uv tool run`. All of the other commands for interacting with
+    tools require the full `uv tool` prefix.
 
 To install `ruff`:
 

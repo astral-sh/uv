@@ -60,7 +60,7 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
         path: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, Self::Err> {
-        let verbatim = VerbatimUrl::parse_path(&path, &working_dir)?;
+        let verbatim = VerbatimUrl::from_path(&path, &working_dir)?;
         let verbatim_path = verbatim.as_path()?;
         let is_dir = if let Ok(metadata) = verbatim_path.metadata() {
             metadata.is_dir()
@@ -71,14 +71,12 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
             ParsedUrl::Directory(ParsedDirectoryUrl {
                 url: verbatim.to_url(),
                 install_path: verbatim.as_path()?,
-                lock_path: path.as_ref().to_path_buf(),
                 editable: false,
             })
         } else {
             ParsedUrl::Path(ParsedPathUrl {
                 url: verbatim.to_url(),
                 install_path: verbatim.as_path()?,
-                lock_path: path.as_ref().to_path_buf(),
                 ext: DistExtension::from_path(&path).map_err(|err| {
                     ParsedUrlError::MissingExtensionPath(path.as_ref().to_path_buf(), err)
                 })?,
@@ -91,7 +89,7 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
     }
 
     fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err> {
-        let verbatim = VerbatimUrl::parse_absolute_path(&path)?;
+        let verbatim = VerbatimUrl::from_absolute_path(&path)?;
         let verbatim_path = verbatim.as_path()?;
         let is_dir = if let Ok(metadata) = verbatim_path.metadata() {
             metadata.is_dir()
@@ -102,14 +100,12 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
             ParsedUrl::Directory(ParsedDirectoryUrl {
                 url: verbatim.to_url(),
                 install_path: verbatim.as_path()?,
-                lock_path: path.as_ref().to_path_buf(),
                 editable: false,
             })
         } else {
             ParsedUrl::Path(ParsedPathUrl {
                 url: verbatim.to_url(),
                 install_path: verbatim.as_path()?,
-                lock_path: path.as_ref().to_path_buf(),
                 ext: DistExtension::from_path(&path).map_err(|err| {
                     ParsedUrlError::MissingExtensionPath(path.as_ref().to_path_buf(), err)
                 })?,
@@ -185,28 +181,18 @@ impl ParsedUrl {
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub struct ParsedPathUrl {
     pub url: Url,
-    /// The absolute, canonicalized path to the distribution which we use for installing.
+    /// The absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
-    /// The absolute path or path relative to the workspace root pointing to the distribution
-    /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
-    /// are resolved, and unlike the install path, we did not yet join it on the base directory.
-    pub lock_path: PathBuf,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
     pub ext: DistExtension,
 }
 
 impl ParsedPathUrl {
     /// Construct a [`ParsedPathUrl`] from a path requirement source.
-    pub fn from_source(
-        install_path: PathBuf,
-        lock_path: PathBuf,
-        ext: DistExtension,
-        url: Url,
-    ) -> Self {
+    pub fn from_source(install_path: PathBuf, ext: DistExtension, url: Url) -> Self {
         Self {
             url,
             install_path,
-            lock_path,
             ext,
         }
     }
@@ -219,27 +205,17 @@ impl ParsedPathUrl {
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub struct ParsedDirectoryUrl {
     pub url: Url,
-    /// The absolute, canonicalized path to the distribution which we use for installing.
+    /// The absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
-    /// The absolute path or path relative to the workspace root pointing to the distribution
-    /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
-    /// are resolved, and unlike the install path, we did not yet join it on the base directory.
-    pub lock_path: PathBuf,
     pub editable: bool,
 }
 
 impl ParsedDirectoryUrl {
     /// Construct a [`ParsedDirectoryUrl`] from a path requirement source.
-    pub fn from_source(
-        install_path: PathBuf,
-        lock_path: PathBuf,
-        editable: bool,
-        url: Url,
-    ) -> Self {
+    pub fn from_source(install_path: PathBuf, editable: bool, url: Url) -> Self {
         Self {
             url,
             install_path,
-            lock_path,
             editable,
         }
     }
@@ -393,7 +369,6 @@ impl TryFrom<Url> for ParsedUrl {
                 Ok(Self::Directory(ParsedDirectoryUrl {
                     url,
                     install_path: path.clone(),
-                    lock_path: path,
                     editable: false,
                 }))
             } else {
@@ -402,7 +377,6 @@ impl TryFrom<Url> for ParsedUrl {
                     ext: DistExtension::from_path(&path)
                         .map_err(|err| ParsedUrlError::MissingExtensionPath(path.clone(), err))?,
                     install_path: path.clone(),
-                    lock_path: path,
                 }))
             }
         } else {

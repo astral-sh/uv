@@ -22,8 +22,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, PythonDownloads, PythonInstallation,
-    PythonPreference, PythonRequest, VersionRequest,
+    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
+    PythonVersionFile, VersionRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_shell::Shell;
@@ -57,6 +57,7 @@ pub(crate) async fn venv(
     exclude_newer: Option<ExcludeNewer>,
     concurrency: Concurrency,
     native_tls: bool,
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
@@ -78,6 +79,7 @@ pub(crate) async fn venv(
         exclude_newer,
         concurrency,
         native_tls,
+        no_config,
         cache,
         printer,
         relocatable,
@@ -130,6 +132,7 @@ async fn venv_impl(
     exclude_newer: Option<ExcludeNewer>,
     concurrency: Concurrency,
     native_tls: bool,
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
@@ -145,10 +148,10 @@ async fn venv_impl(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request =
-            request_from_version_file(&std::env::current_dir().into_diagnostic()?)
-                .await
-                .into_diagnostic()?;
+        interpreter_request = PythonVersionFile::discover(&*CWD, no_config, false)
+            .await
+            .into_diagnostic()?
+            .and_then(PythonVersionFile::into_version);
     }
 
     // (3) `Requires-Python` in `pyproject.toml`

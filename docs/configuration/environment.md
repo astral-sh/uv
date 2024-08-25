@@ -56,6 +56,13 @@ uv accepts the following command-line arguments as environment variables:
   directories.
 - `UV_EXCLUDE_NEWER`: Equivalent to the `--exclude-newer` command-line argument. If set, uv will
   exclude distributions published after the specified date.
+- `UV_PYTHON_PREFERENCE`: Equivalent to the `--python-preference` command-line argument. Whether uv
+  should prefer system or managed Python versions.
+- `UV_PYTHON_DOWNLOADS`: Equivalent to the
+  [`python-downloads`](../reference/settings.md#python-downloads) setting and, when disabled, the
+  `--no-python-downloads` option. Whether uv should allow Python downloads.
+- `UV_COMPILE_BYTECODE`: Equivalent to the `--compile-bytecode` command-line argument. If set, uv
+  will compile Python source files to bytecode after installation.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 

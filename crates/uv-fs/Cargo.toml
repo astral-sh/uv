@@ -22,7 +22,6 @@ either = { workspace = true }
 encoding_rs_io = { workspace = true }
 fs-err = { workspace = true }
 fs2 = { workspace = true }
-path-absolutize = { workspace = true }
 path-slash = { workspace = true }
 serde = { workspace = true, optional = true }
 tempfile = { workspace = true }

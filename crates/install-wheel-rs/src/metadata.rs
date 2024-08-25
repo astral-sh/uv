@@ -72,6 +72,43 @@ pub fn find_archive_dist_info<'a, T: Copy>(
     Ok((payload, dist_info_prefix))
 }
 
+/// Returns `true` if the file is a `METADATA` file in a `.dist-info` directory that matches the
+/// wheel filename.
+pub fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, Error> {
+    let Some((dist_info_dir, file)) = path.split_once('/') else {
+        return Ok(false);
+    };
+    if file != "METADATA" {
+        return Ok(false);
+    }
+    let Some(dist_info_prefix) = dist_info_dir.strip_suffix(".dist-info") else {
+        return Ok(false);
+    };
+
+    // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
+    // package name, but only warn if the version is not the normalized version.
+    let Some((name, version)) = dist_info_prefix.rsplit_once('-') else {
+        return Err(Error::MissingDistInfoSegments(dist_info_prefix.to_string()));
+    };
+    if PackageName::from_str(name)? != filename.name {
+        return Err(Error::MissingDistInfoPackageName(
+            dist_info_prefix.to_string(),
+            filename.name.to_string(),
+        ));
+    }
+    if !Version::from_str(version).is_ok_and(|version| version == filename.version) {
+        warn!(
+            "{}",
+            Error::MissingDistInfoVersion(
+                dist_info_prefix.to_string(),
+                filename.version.to_string(),
+            )
+        );
+    }
+
+    Ok(true)
+}
+
 /// Given an archive, read the `METADATA` from the `.dist-info` directory.
 pub fn read_archive_metadata(
     filename: &WheelFilename,

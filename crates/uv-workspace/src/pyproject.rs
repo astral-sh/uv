@@ -150,6 +150,7 @@ pub struct ToolUv {
 
 #[derive(Serialize, Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ToolUvWorkspace {
     /// Packages to include as workspace members.
     ///
@@ -206,7 +207,7 @@ impl Deref for SerdePattern {
 /// A `tool.uv.sources` value.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(untagged, deny_unknown_fields)]
+#[serde(rename_all = "kebab-case", untagged, deny_unknown_fields)]
 pub enum Source {
     /// A remote Git repository, available over HTTPS or SSH.
     ///
@@ -331,13 +332,13 @@ impl Source {
 
         let source = match source {
             RequirementSource::Registry { .. } => return Ok(None),
-            RequirementSource::Path { lock_path, .. } => Source::Path {
+            RequirementSource::Path { install_path, .. } => Source::Path {
                 editable,
-                path: lock_path.to_string_lossy().into_owned(),
+                path: install_path.to_string_lossy().into_owned(),
             },
-            RequirementSource::Directory { lock_path, .. } => Source::Path {
+            RequirementSource::Directory { install_path, .. } => Source::Path {
                 editable,
-                path: lock_path.to_string_lossy().into_owned(),
+                path: install_path.to_string_lossy().into_owned(),
             },
             RequirementSource::Url {
                 subdirectory, url, ..

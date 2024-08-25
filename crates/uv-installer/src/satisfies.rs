@@ -150,7 +150,6 @@ impl RequirementSatisfaction {
             }
             RequirementSource::Path {
                 install_path: requested_path,
-                lock_path: _,
                 ext: _,
                 url: _,
             } => {
@@ -197,7 +196,6 @@ impl RequirementSatisfaction {
             }
             RequirementSource::Directory {
                 install_path: requested_path,
-                lock_path: _,
                 editable: requested_editable,
                 url: _,
             } => {

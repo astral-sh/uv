@@ -18,7 +18,7 @@ use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
-use uv_fs::Simplified;
+use uv_fs::{normalize_absolute_path, Simplified};
 use uv_git::GitUrl;
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
@@ -266,22 +266,22 @@ impl<'a> Planner<'a> {
                     url,
                     editable,
                     install_path,
-                    lock_path,
                 } => {
-                    // Store the canonicalized path, which also serves to validate that it exists.
-                    let install_path = match install_path.canonicalize() {
-                        Ok(path) => path,
-                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                            return Err(Error::NotFound(url.to_url()).into());
-                        }
-                        Err(err) => return Err(err.into()),
-                    };
+                    // Convert to an absolute path.
+                    let install_path = std::path::absolute(install_path)?;
+
+                    // Normalize the path.
+                    let install_path = normalize_absolute_path(&install_path)?;
+
+                    // Validate that the path exists.
+                    if !install_path.exists() {
+                        return Err(Error::NotFound(url.to_url()).into());
+                    }
 
                     let sdist = DirectorySourceDist {
                         name: requirement.name.clone(),
                         url: url.clone(),
                         install_path,
-                        lock_path: lock_path.clone(),
                         editable: *editable,
                     };
 
@@ -303,16 +303,17 @@ impl<'a> Planner<'a> {
                     ext,
                     url,
                     install_path,
-                    lock_path,
                 } => {
-                    // Store the canonicalized path, which also serves to validate that it exists.
-                    let install_path = match install_path.canonicalize() {
-                        Ok(path) => path,
-                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                            return Err(Error::NotFound(url.to_url()).into());
-                        }
-                        Err(err) => return Err(err.into()),
-                    };
+                    // Convert to an absolute path.
+                    let install_path = std::path::absolute(install_path)?;
+
+                    // Normalize the path.
+                    let install_path = normalize_absolute_path(&install_path)?;
+
+                    // Validate that the path exists.
+                    if !install_path.exists() {
+                        return Err(Error::NotFound(url.to_url()).into());
+                    }
 
                     match ext {
                         DistExtension::Wheel => {
@@ -331,21 +332,20 @@ impl<'a> Planner<'a> {
                                 filename,
                                 url: url.clone(),
                                 install_path,
-                                lock_path: lock_path.clone(),
                             };
 
                             if !wheel.filename.is_compatible(tags) {
                                 bail!(
-                                "A path dependency is incompatible with the current platform: {}",
-                                wheel.lock_path.user_display()
-                            );
+                                    "A path dependency is incompatible with the current platform: {}",
+                                    wheel.install_path.user_display()
+                                );
                             }
 
                             if no_binary {
                                 bail!(
-                                "A path dependency points to a wheel which conflicts with `--no-binary`: {}",
-                                wheel.url
-                            );
+                                    "A path dependency points to a wheel which conflicts with `--no-binary`: {}",
+                                    wheel.url
+                                );
                             }
 
                             // Find the exact wheel from the cache, since we know the filename in
@@ -383,7 +383,6 @@ impl<'a> Planner<'a> {
                                 name: requirement.name.clone(),
                                 url: url.clone(),
                                 install_path,
-                                lock_path: lock_path.clone(),
                                 ext: *ext,
                             };
 

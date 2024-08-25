@@ -154,7 +154,10 @@ pub struct RequirementsTxt {
 
 impl RequirementsTxt {
     /// See module level documentation
-    #[instrument(skip_all, fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str()))]
+    #[instrument(
+        skip_all,
+        fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str())
+    )]
     pub async fn parse(
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
@@ -481,12 +484,17 @@ fn parse_entry(
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let expanded = expand_env_vars(given);
-        let url = if let Ok(path) = Path::new(expanded.as_ref()).canonicalize() {
-            VerbatimUrl::from_path(path).map_err(|err| RequirementsTxtParserError::VerbatimUrl {
-                source: err,
-                url: given.to_string(),
-                start,
-                end: s.cursor(),
+        let url = if let Some(path) = std::path::absolute(expanded.as_ref())
+            .ok()
+            .filter(|path| path.exists())
+        {
+            VerbatimUrl::from_absolute_path(path).map_err(|err| {
+                RequirementsTxtParserError::VerbatimUrl {
+                    source: err,
+                    url: given.to_string(),
+                    start,
+                    end: s.cursor(),
+                }
             })?
         } else {
             VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
@@ -502,12 +510,17 @@ fn parse_entry(
     } else if s.eat_if("--extra-index-url") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let expanded = expand_env_vars(given);
-        let url = if let Ok(path) = Path::new(expanded.as_ref()).canonicalize() {
-            VerbatimUrl::from_path(path).map_err(|err| RequirementsTxtParserError::VerbatimUrl {
-                source: err,
-                url: given.to_string(),
-                start,
-                end: s.cursor(),
+        let url = if let Some(path) = std::path::absolute(expanded.as_ref())
+            .ok()
+            .filter(|path| path.exists())
+        {
+            VerbatimUrl::from_absolute_path(path).map_err(|err| {
+                RequirementsTxtParserError::VerbatimUrl {
+                    source: err,
+                    url: given.to_string(),
+                    start,
+                    end: s.cursor(),
+                }
             })?
         } else {
             VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
@@ -525,12 +538,17 @@ fn parse_entry(
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let expanded = expand_env_vars(given);
-        let url = if let Ok(path) = Path::new(expanded.as_ref()).canonicalize() {
-            VerbatimUrl::from_path(path).map_err(|err| RequirementsTxtParserError::VerbatimUrl {
-                source: err,
-                url: given.to_string(),
-                start,
-                end: s.cursor(),
+        let url = if let Some(path) = std::path::absolute(expanded.as_ref())
+            .ok()
+            .filter(|path| path.exists())
+        {
+            VerbatimUrl::from_absolute_path(path).map_err(|err| {
+                RequirementsTxtParserError::VerbatimUrl {
+                    source: err,
+                    url: given.to_string(),
+                    start,
+                    end: s.cursor(),
+                }
             })?
         } else {
             VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
@@ -622,7 +640,7 @@ fn eat_trailing_line(content: &str, s: &mut Scanner) -> Result<(), RequirementsT
         Some(other) => {
             let (line, column) = calculate_row_column(content, s.cursor());
             return Err(RequirementsTxtParserError::Parser {
-                message: format!("Expected comment or end-of-line, found '{other}'"),
+                message: format!("Expected comment or end-of-line, found `{other}`"),
                 line,
                 column,
             });
@@ -723,7 +741,7 @@ fn parse_hashes(content: &str, s: &mut Scanner) -> Result<Vec<String>, Requireme
         let (line, column) = calculate_row_column(content, s.cursor());
         return Err(RequirementsTxtParserError::Parser {
             message: format!(
-                "Expected '--hash', found '{:?}'",
+                "Expected `--hash`, found `{:?}`",
                 s.eat_while(|c: char| !c.is_whitespace())
             ),
             line,
@@ -1412,7 +1430,7 @@ mod test {
         }, {
             insta::assert_snapshot!(errors, @r###"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
-            Expected an alphanumeric character starting the extra name, found 'ö'
+            Expected an alphanumeric character starting the extra name, found `ö`
             numpy[ö]==1.29
                   ^
             "###);
@@ -1542,7 +1560,7 @@ mod test {
         }, {
             insta::assert_snapshot!(errors, @r###"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 3
-            Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','
+            Expected either alphanumerical character (starting the extra name) or `]` (ending the extras section), found `,`
             black[,abcdef]
                   ^
             "###);
@@ -1842,7 +1860,6 @@ mod test {
                                                 fragment: None,
                                             },
                                             install_path: "/foo/bar",
-                                            lock_path: "/foo/bar",
                                             editable: true,
                                         },
                                     ),

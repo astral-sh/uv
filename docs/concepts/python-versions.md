@@ -134,6 +134,34 @@ To exclude downloads and only show installed Python versions:
 $ uv python list --only-installed
 ```
 
+## Finding a Python executable
+
+To find a Python executable, use the `uv python find` command:
+
+```console
+$ uv python find
+```
+
+By default, this will display the path to the first available Python executable. See the
+[discovery rules](#discovery-of-python-versions) for details about how executables are discovered.
+
+This interface also supports many [request formats](#requesting-a-version), e.g., to find a Python
+executable that has a version of 3.11 or newer:
+
+```console
+$ uv python find >=3.11
+```
+
+By default, `uv python find` will include Python versions from virtual environments. If a `.venv`
+directory is found in the working directory or any of the parent directories or the `VIRTUAL_ENV`
+environment variable is set, it will take precedence over any Python executables on the `PATH`.
+
+To ignore virtual environments, use the `--system` flag:
+
+```console
+$ uv python find --system
+```
+
 ## Discovery of Python versions
 
 When searching for a Python version, the following locations are checked:
@@ -171,8 +199,9 @@ during `uv python install`.
 
 !!! tip
 
-The `--python-downloads` option can be passed to any uv command, or it can be set in a
-[persistent configuration file](../configuration/files.md) to change the default behavior.
+    The `python-downloads` setting can be set in a
+    [persistent configuration file](../configuration/files.md) to change the default behavior, or
+    the `--no-python-downloads` flag can be passed to any uv command.
 
 ## Adjusting Python version preferences
 

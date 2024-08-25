@@ -435,6 +435,33 @@ impl Deref for StringVersion {
     }
 }
 
+/// The [`ExtraName`] value used in `extra` markers.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum MarkerValueExtra {
+    /// A valid [`ExtraName`].
+    Extra(ExtraName),
+    /// An invalid name, preserved as an arbitrary string.
+    Arbitrary(String),
+}
+
+impl MarkerValueExtra {
+    fn as_extra(&self) -> Option<&ExtraName> {
+        match self {
+            Self::Extra(extra) => Some(extra),
+            Self::Arbitrary(_) => None,
+        }
+    }
+}
+
+impl Display for MarkerValueExtra {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Extra(extra) => extra.fmt(f),
+            Self::Arbitrary(string) => string.fmt(f),
+        }
+    }
+}
+
 /// Represents one clause such as `python_version > "3.8"`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[allow(missing_docs)]
@@ -471,7 +498,7 @@ pub enum MarkerExpression {
     /// `extra <extra op> '...'` or `'...' <extra op> extra`.
     Extra {
         operator: ExtraOperator,
-        name: ExtraName,
+        name: MarkerValueExtra,
     },
 }
 
@@ -885,7 +912,12 @@ impl MarkerTree {
             }
             MarkerTreeKind::Extra(marker) => {
                 return marker
-                    .edge(extras.contains(marker.name()))
+                    .edge(
+                        marker
+                            .name()
+                            .as_extra()
+                            .is_some_and(|extra| extras.contains(extra)),
+                    )
                     .evaluate_reporter_impl(env, extras, reporter);
             }
         }
@@ -931,7 +963,12 @@ impl MarkerTree {
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras_and_python_version(extras, python_versions)),
             MarkerTreeKind::Extra(marker) => marker
-                .edge(extras.contains(marker.name()))
+                .edge(
+                    marker
+                        .name()
+                        .as_extra()
+                        .is_some_and(|extra| extras.contains(extra)),
+                )
                 .evaluate_extras_and_python_version(extras, python_versions),
         }
     }
@@ -956,7 +993,12 @@ impl MarkerTree {
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
             MarkerTreeKind::Extra(marker) => marker
-                .edge(extras.contains(marker.name()))
+                .edge(
+                    marker
+                        .name()
+                        .as_extra()
+                        .is_some_and(|extra| extras.contains(extra)),
+                )
                 .evaluate_extras(extras),
         }
     }
@@ -1144,9 +1186,13 @@ impl MarkerTree {
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> MarkerTree {
-        MarkerTree(INTERNER.lock().restrict(self.0, &|var| match var {
-            Variable::Extra(name) => is_extra(name).then_some(true),
-            _ => None,
+        MarkerTree(INTERNER.lock().restrict(self.0, &|var| {
+            match var {
+                Variable::Extra(name) => name
+                    .as_extra()
+                    .and_then(|name| is_extra(name).then_some(true)),
+                _ => None,
+            }
         }))
     }
 }
@@ -1375,14 +1421,14 @@ impl Ord for ContainsMarkerTree<'_> {
 /// A node representing the existence or absence of a given extra, such as `extra == 'bar'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ExtraMarkerTree<'a> {
-    name: &'a ExtraName,
+    name: &'a MarkerValueExtra,
     high: NodeId,
     low: NodeId,
 }
 
 impl ExtraMarkerTree<'_> {
     /// Returns the name of the extra in this expression.
-    pub fn name(&self) -> &ExtraName {
+    pub fn name(&self) -> &MarkerValueExtra {
         self.name
     }
 
@@ -1742,8 +1788,8 @@ mod test {
         testing_logger::validate(|captured_logs| {
             assert_eq!(
                 captured_logs[0].body,
-                "Expected PEP 440 version to compare with python_version, found '3.9.', \
-                 will evaluate to false: after parsing '3.9', found '.', which is \
+                "Expected PEP 440 version to compare with python_version, found `3.9.`, \
+                 will evaluate to false: after parsing `3.9`, found `.`, which is \
                  not part of a valid version"
             );
             assert_eq!(captured_logs[0].level, log::Level::Warn);

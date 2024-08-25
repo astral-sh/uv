@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "cache-dir": {
-      "description": "Path to the cache directory.\n\nDefaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux, and `{FOLDERID_LocalAppData}\\uv\\cache` on Windows.",
+      "description": "Path to the cache directory.\n\nDefaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux, and `%LOCALAPPDATA%\\uv\\cache` on Windows.",
       "type": [
         "string",
         "null"
@@ -451,8 +451,7 @@
     },
     "FlatIndexLocation": {
       "description": "The path to a directory of distributions, or a URL to an HTML file with a flat listing of distributions.",
-      "type": "string",
-      "format": "uri"
+      "type": "string"
     },
     "IndexStrategy": {
       "oneOf": [
@@ -481,8 +480,7 @@
     },
     "IndexUrl": {
       "description": "The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`).",
-      "type": "string",
-      "format": "uri"
+      "type": "string"
     },
     "KeyringProviderType": {
       "description": "Keyring provider type to use for credential lookup.",
@@ -1425,7 +1423,8 @@
             "$ref": "#/definitions/String"
           }
         }
-      }
+      },
+      "additionalProperties": false
     }
   }
 }

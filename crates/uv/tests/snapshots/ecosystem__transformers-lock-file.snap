@@ -5443,7 +5443,6 @@ all = [
     { name = "pillow" },
     { name = "protobuf" },
     { name = "pyctcdecode" },
-    { name = "ray" },
     { name = "ray", extra = ["tune"] },
     { name = "sentencepiece" },
     { name = "sigopt" },
@@ -5542,7 +5541,6 @@ dev-dependencies = [
     { name = "pytest" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
-    { name = "ray" },
     { name = "ray", extra = ["tune"] },
     { name = "rhoknp" },
     { name = "rjieba" },
@@ -5592,7 +5590,6 @@ docs = [
     { name = "pillow" },
     { name = "protobuf" },
     { name = "pyctcdecode" },
-    { name = "ray" },
     { name = "ray", extra = ["tune"] },
     { name = "sentencepiece" },
     { name = "sigopt" },
@@ -5628,7 +5625,6 @@ ftfy = [
 ]
 integrations = [
     { name = "optuna" },
-    { name = "ray" },
     { name = "ray", extra = ["tune"] },
     { name = "sigopt" },
 ]
@@ -5668,7 +5664,6 @@ quality = [
     { name = "urllib3" },
 ]
 ray = [
-    { name = "ray" },
     { name = "ray", extra = ["tune"] },
 ]
 retrieval = [
@@ -6050,10 +6045,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/33/3e/a2f59384587eff6aeb7d37b6780de7fedd2214935e27520430ca9f5b7975/triton-3.0.0-1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:5ce8520437c602fb633f1324cc3871c47bee3b67acf9756c1a66309b60e3216c", size = 209438883 },
     { url = "https://files.pythonhosted.org/packages/fe/7b/7757205dee3628f75e7991021d15cd1bd0c9b044ca9affe99b50879fc0e1/triton-3.0.0-1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:34e509deb77f1c067d8640725ef00c5cbfcb2052a1a3cb6a6d343841f92624eb", size = 209464695 },
     { url = "https://files.pythonhosted.org/packages/6c/bf/55cccf57c14787ad81ee827526ddd48fd0aff0291fcc7b8c2e2bdf28da0a/triton-3.0.0-1-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:6e5727202f7078c56f91ff13ad0c1abab14a0e7f2c87e91b12b6f64f3e8ae609", size = 209377082 },
-    { url = "https://files.pythonhosted.org/packages/15/67/84e5a4b7b45bdeb11da26a67dfa2b988c512abbcbcad8cbc30aa579051b2/triton-3.0.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:39b052da883351fdf6be3d93cedae6db3b8e3988d3b09ed221bccecfa9612230", size = 209380247 },
-    { url = "https://files.pythonhosted.org/packages/ea/6b/1d72cc8a7379822dadf050474add7d8b73b02c35057446b6f17d27cb9ea2/triton-3.0.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:cd34f19a8582af96e6291d4afce25dac08cb2a5d218c599163761e8e0827208e", size = 209442823 },
-    { url = "https://files.pythonhosted.org/packages/ae/b2/048c9ecfdba0e6b0ae3c02eed2d9dd3e9e990a6d46da98555cf0c2232168/triton-3.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0d5e10de8c011adeb7c878c6ce0dd6073b14367749e34467f1cff2bde1b78253", size = 209468633 },
-    { url = "https://files.pythonhosted.org/packages/11/f6/51a08e6eca368d75768afe2d73e9e5e4255e7c8e705c744baa108bf844fc/triton-3.0.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:41004fb1ae9a53fcb3e970745feb87f0e3c94c6ce1ba86e95fa3b8537894bef7", size = 209381017 },
 ]
 
 [[package]]

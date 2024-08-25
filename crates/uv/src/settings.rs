@@ -117,6 +117,7 @@ impl GlobalSettings {
                 .unwrap_or_else(PythonPreference::default_from_env),
             python_downloads: flag(args.allow_python_downloads, args.no_python_downloads)
                 .map(PythonDownloads::from)
+                .combine(env(env::UV_PYTHON_DOWNLOADS))
                 .combine(workspace.and_then(|workspace| workspace.globals.python_downloads))
                 .unwrap_or_default(),
             no_progress: args.no_progress,
@@ -207,7 +208,6 @@ pub(crate) struct RunSettings {
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
-    pub(crate) command: ExternalCommand,
     pub(crate) with: Vec<String>,
     pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
@@ -230,7 +230,7 @@ impl RunSettings {
             no_all_extras,
             dev,
             no_dev,
-            command,
+            command: _,
             with,
             with_editable,
             with_requirements,
@@ -254,7 +254,6 @@ impl RunSettings {
                 extra.unwrap_or_default(),
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
-            command,
             with,
             with_editable,
             with_requirements: with_requirements
@@ -313,12 +312,20 @@ impl ToolRunSettings {
 
         // If `--upgrade` was passed explicitly, warn.
         if installer.upgrade || !installer.upgrade_package.is_empty() {
-            warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool");
+            if with.is_empty() && with_requirements.is_empty() {
+                warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool.");
+            } else {
+                warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to upgrade any `--with` dependencies.");
+            }
         }
 
         // If `--reinstall` was passed explicitly, warn.
         if installer.reinstall || !installer.reinstall_package.is_empty() {
-            warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool");
+            if with.is_empty() && with_requirements.is_empty() {
+                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool.");
+            } else {
+                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to reinstall any `--with` dependencies.");
+            }
         }
 
         Self {
@@ -580,15 +587,26 @@ impl PythonUninstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PythonFindSettings {
     pub(crate) request: Option<String>,
+    pub(crate) no_project: bool,
+    pub(crate) system: bool,
 }
 
 impl PythonFindSettings {
     /// Resolve the [`PythonFindSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonFindArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let PythonFindArgs { request } = args;
+        let PythonFindArgs {
+            request,
+            no_project,
+            system,
+            no_system,
+        } = args;
 
-        Self { request }
+        Self {
+            request,
+            no_project,
+            system: flag(system, no_system).unwrap_or_default(),
+        }
     }
 }
 
@@ -598,7 +616,7 @@ impl PythonFindSettings {
 pub(crate) struct PythonPinSettings {
     pub(crate) request: Option<String>,
     pub(crate) resolved: bool,
-    pub(crate) no_workspace: bool,
+    pub(crate) no_project: bool,
 }
 
 impl PythonPinSettings {
@@ -609,13 +627,13 @@ impl PythonPinSettings {
             request,
             no_resolved,
             resolved,
-            no_workspace,
+            no_project,
         } = args;
 
         Self {
             request,
             resolved: flag(resolved, no_resolved).unwrap_or(false),
-            no_workspace,
+            no_project,
         }
     }
 }
@@ -627,6 +645,9 @@ pub(crate) struct SyncSettings {
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
+    pub(crate) no_install_project: bool,
+    pub(crate) no_install_workspace: bool,
+    pub(crate) no_install_package: Vec<PackageName>,
     pub(crate) modifications: Modifications,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
@@ -639,8 +660,6 @@ impl SyncSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: SyncArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let SyncArgs {
-            locked,
-            frozen,
             extra,
             all_extras,
             no_all_extras,
@@ -648,6 +667,11 @@ impl SyncSettings {
             no_dev,
             inexact,
             exact,
+            no_install_project,
+            no_install_workspace,
+            no_install_package,
+            locked,
+            frozen,
             installer,
             build,
             refresh,
@@ -678,6 +702,9 @@ impl SyncSettings {
                 extra.unwrap_or_default(),
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
+            no_install_project,
+            no_install_workspace,
+            no_install_package,
             modifications,
             package,
             python,
@@ -1583,6 +1610,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
+    pub(crate) no_build_isolation_package: &'a [PackageName],
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
@@ -2163,6 +2191,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for InstallerSettingsRef<'a> {
             keyring_provider: settings.keyring_provider,
             config_setting: settings.config_setting,
             no_build_isolation: settings.no_build_isolation,
+            no_build_isolation_package: settings.no_build_isolation_package,
             exclude_newer: settings.exclude_newer,
             link_mode: settings.link_mode,
             compile_bytecode: settings.compile_bytecode,
@@ -2183,6 +2212,11 @@ mod env {
 
     pub(super) const CONCURRENT_INSTALLS: (&str, &str) =
         ("UV_CONCURRENT_INSTALLS", "a non-zero integer");
+
+    pub(super) const UV_PYTHON_DOWNLOADS: (&str, &str) = (
+        "UV_PYTHON_DOWNLOADS",
+        "one of 'auto', 'true', 'manual', 'never', or 'false'",
+    );
 }
 
 /// Attempt to load and parse an environment variable with the given name.

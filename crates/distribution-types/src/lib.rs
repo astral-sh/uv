@@ -33,6 +33,7 @@
 //!
 //! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
 use std::borrow::Cow;
+use std::path;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -42,6 +43,7 @@ use distribution_filename::{DistExtension, SourceDistExtension, WheelFilename};
 use pep440_rs::Version;
 use pep508_rs::{Pep508Url, VerbatimUrl};
 use pypi_types::{ParsedUrl, VerbatimParsedUrl};
+use uv_fs::normalize_absolute_path;
 use uv_git::GitUrl;
 use uv_normalize::PackageName;
 
@@ -234,12 +236,8 @@ pub struct DirectUrlBuiltDist {
 #[derive(Debug, Clone, Hash)]
 pub struct PathBuiltDist {
     pub filename: WheelFilename,
-    /// The absolute, canonicalized path to the wheel which we use for installing.
+    /// The absolute path to the wheel which we use for installing.
     pub install_path: PathBuf,
-    /// The absolute path or path relative to the workspace root pointing to the wheel
-    /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
-    /// are resolved, and unlike the install path, we did not yet join it on the base directory.
-    pub lock_path: PathBuf,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -295,12 +293,8 @@ pub struct GitSourceDist {
 #[derive(Debug, Clone, Hash)]
 pub struct PathSourceDist {
     pub name: PackageName,
-    /// The absolute, canonicalized path to the distribution which we use for installing.
+    /// The absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
-    /// The absolute path or path relative to the workspace root pointing to the distribution
-    /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
-    /// are resolved, and unlike the install path, we did not yet join it on the base directory.
-    pub lock_path: PathBuf,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
     pub ext: SourceDistExtension,
     /// The URL as it was provided by the user.
@@ -311,12 +305,8 @@ pub struct PathSourceDist {
 #[derive(Debug, Clone, Hash)]
 pub struct DirectorySourceDist {
     pub name: PackageName,
-    /// The absolute, canonicalized path to the distribution which we use for installing.
+    /// The absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
-    /// The absolute path or path relative to the workspace root pointing to the distribution
-    /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
-    /// are resolved, and unlike the install path, we did not yet join it on the base directory.
-    pub lock_path: PathBuf,
     /// Whether the package should be installed in editable mode.
     pub editable: bool,
     /// The URL as it was provided by the user.
@@ -368,17 +358,18 @@ impl Dist {
         name: PackageName,
         url: VerbatimUrl,
         install_path: &Path,
-        lock_path: &Path,
         ext: DistExtension,
     ) -> Result<Dist, Error> {
-        // Store the canonicalized path, which also serves to validate that it exists.
-        let install_path = match install_path.canonicalize() {
-            Ok(path) => path,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Err(Error::NotFound(url.to_url()));
-            }
-            Err(err) => return Err(err.into()),
-        };
+        // Convert to an absolute path.
+        let install_path = path::absolute(install_path)?;
+
+        // Normalize the path.
+        let install_path = normalize_absolute_path(&install_path)?;
+
+        // Validate that the path exists.
+        if !install_path.exists() {
+            return Err(Error::NotFound(url.to_url()));
+        }
 
         // Determine whether the path represents a built or source distribution.
         match ext {
@@ -395,14 +386,12 @@ impl Dist {
                 Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
                     filename,
                     install_path,
-                    lock_path: lock_path.to_path_buf(),
                     url,
                 })))
             }
             DistExtension::Source(ext) => Ok(Self::Source(SourceDist::Path(PathSourceDist {
                 name,
                 install_path,
-                lock_path: lock_path.to_path_buf(),
                 ext,
                 url,
             }))),
@@ -414,23 +403,23 @@ impl Dist {
         name: PackageName,
         url: VerbatimUrl,
         install_path: &Path,
-        lock_path: &Path,
         editable: bool,
     ) -> Result<Dist, Error> {
-        // Store the canonicalized path, which also serves to validate that it exists.
-        let install_path = match install_path.canonicalize() {
-            Ok(path) => path,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Err(Error::NotFound(url.to_url()));
-            }
-            Err(err) => return Err(err.into()),
-        };
+        // Convert to an absolute path.
+        let install_path = path::absolute(install_path)?;
+
+        // Normalize the path.
+        let install_path = normalize_absolute_path(&install_path)?;
+
+        // Validate that the path exists.
+        if !install_path.exists() {
+            return Err(Error::NotFound(url.to_url()));
+        }
 
         // Determine whether the path represents an archive or a directory.
         Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
             name,
             install_path,
-            lock_path: lock_path.to_path_buf(),
             editable,
             url,
         })))
@@ -461,18 +450,13 @@ impl Dist {
                 archive.subdirectory,
                 archive.ext,
             ),
-            ParsedUrl::Path(file) => Self::from_file_url(
-                name,
-                url.verbatim,
-                &file.install_path,
-                &file.lock_path,
-                file.ext,
-            ),
+            ParsedUrl::Path(file) => {
+                Self::from_file_url(name, url.verbatim, &file.install_path, file.ext)
+            }
             ParsedUrl::Directory(directory) => Self::from_directory_url(
                 name,
                 url.verbatim,
                 &directory.install_path,
-                &directory.lock_path,
                 directory.editable,
             ),
             ParsedUrl::Git(git) => {
@@ -1035,7 +1019,6 @@ impl Identifier for FileLocation {
                 DistributionId::RelativeUrl(base.to_string(), url.to_string())
             }
             Self::AbsoluteUrl(url) => DistributionId::AbsoluteUrl(url.to_string()),
-            Self::Path(path) => path.distribution_id(),
         }
     }
 
@@ -1045,7 +1028,6 @@ impl Identifier for FileLocation {
                 ResourceId::RelativeUrl(base.to_string(), url.to_string())
             }
             Self::AbsoluteUrl(url) => ResourceId::AbsoluteUrl(url.to_string()),
-            Self::Path(path) => path.resource_id(),
         }
     }
 }

@@ -115,15 +115,18 @@ pub struct GlobalArgs {
         global = true,
         long,
         help_heading = "Python options",
-        display_order = 700
+        display_order = 700,
+        env = "UV_PYTHON_PREFERENCE"
     )]
     pub python_preference: Option<PythonPreference>,
 
-    /// Allow automatically downloading Python when required.
+    #[allow(clippy::doc_markdown)]
+    /// Allow automatically downloading Python when required. [env: "UV_PYTHON_DOWNLOADS=auto"]
     #[arg(global = true, long, help_heading = "Python options", hide = true)]
     pub allow_python_downloads: bool,
 
-    /// Disable automatic downloads of Python.
+    #[allow(clippy::doc_markdown)]
+    /// Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
     #[arg(global = true, long, help_heading = "Python options")]
     pub no_python_downloads: bool,
 
@@ -256,17 +259,16 @@ pub enum Commands {
 
     /// Manage Python versions and installations
     ///
-    /// Generally, uv first searches for Python in a virtual environment, either
-    /// active or in a `.venv` directory  in the current working directory or
-    /// any parent directory. If a virtual environment is not required, uv will
-    /// then search for a Python interpreter. Python interpreters are found by
-    /// searching for Python executables in the `PATH` environment variable.
+    /// Generally, uv first searches for Python in a virtual environment, either active or in a
+    /// `.venv` directory  in the current working directory or any parent directory. If a virtual
+    /// environment is not required, uv will then search for a Python interpreter. Python
+    /// interpreters are found by searching for Python executables in the `PATH` environment
+    /// variable.
     ///
-    /// On Windows, the `py` launcher is also invoked to find Python
-    /// executables.
+    /// On Windows, the `py` launcher is also invoked to find Python executables.
     ///
-    /// By default, uv will download Python if a version cannot be found. This
-    /// behavior can be disabled with the `--python-downloads` option.
+    /// By default, uv will download Python if a version cannot be found. This behavior can be
+    /// disabled with the `--no-python-downloads` flag or the `python-downloads` setting.
     ///
     /// The `--python` option allows requesting a different interpreter.
     ///
@@ -278,26 +280,22 @@ pub enum Commands {
     /// - `<implementation>@<version>` e.g. `cpython@3.12`
     /// - `<implementation><version>` e.g. `cpython3.12` or `cp312`
     /// - `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
-    /// - `<implementation>-<version>-<os>-<arch>-<libc>` e.g.
-    ///   `cpython-3.12.3-macos-aarch64-none`
+    /// - `<implementation>-<version>-<os>-<arch>-<libc>` e.g. `cpython-3.12.3-macos-aarch64-none`
     ///
-    /// Additionally, a specific system Python interpreter can often be
-    /// requested with:
+    /// Additionally, a specific system Python interpreter can often be requested with:
     ///
     /// - `<executable-path>` e.g. `/opt/homebrew/bin/python3`
     /// - `<executable-name>` e.g. `mypython3`
     /// - `<install-dir>` e.g. `/some/environment/`
     ///
-    /// When the `--python` option is used, normal discovery rules apply but
-    /// discovered interpreters are checked for compatibility with the request,
-    /// e.g., if `pypy` is requested, uv will first check if the virtual
-    /// environment contains a PyPy interpreter then check if each executable in
-    /// the path is a PyPy interpreter.
+    /// When the `--python` option is used, normal discovery rules apply but discovered interpreters
+    /// are checked for compatibility with the request, e.g., if `pypy` is requested, uv will first
+    /// check if the virtual environment contains a PyPy interpreter then check if each executable
+    /// in the path is a PyPy interpreter.
     ///
-    /// uv supports discovering CPython, PyPy, and GraalPy interpreters.
-    /// Unsupported interpreters will be skipped during discovery. If an
-    /// unsupported interpreter implementation is requested, uv will exit with
-    /// an error.
+    /// uv supports discovering CPython, PyPy, and GraalPy interpreters. Unsupported interpreters
+    /// will be skipped during discovery. If an unsupported interpreter implementation is requested,
+    /// uv will exit with an error.
     #[clap(verbatim_doc_comment)]
     #[command(
         after_help = "Use `uv help python` for more details.",
@@ -407,7 +405,7 @@ pub enum CacheCommand {
     ///
     ///
     /// By default, the cache is stored in  `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
-    /// `{FOLDERID_LocalAppData}\uv\cache` on Windows.
+    /// `%LOCALAPPDATA%\uv\cache` on Windows.
     ///
     /// When `--no-cache` is used, the cache is stored in a temporary directory and discarded when
     /// the process exits.
@@ -522,7 +520,8 @@ pub enum ProjectCommand {
     /// script and run with a Python interpreter, i.e., `uv run file.py` is
     /// equivalent to `uv run python file.py`. If the script contains inline
     /// dependency metadata, it will be installed into an isolated, ephemeral
-    /// environment.
+    /// environment. When used with `-`, the input will be read from stdin,
+    /// and treated as a Python script.
     ///
     /// When used in a project, the project environment will be created and
     /// updated before invoking the command.
@@ -562,7 +561,7 @@ pub enum ProjectCommand {
     ///
     /// If a given dependency exists already, it will be updated to the new version specifier unless
     /// it includes markers that differ from the existing specifier in which case another entry for
-    /// the depenedency will be added.
+    /// the dependency will be added.
     ///
     /// If no constraint or URL is provided for a dependency, a lower bound is added equal to the
     /// latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in
@@ -2296,6 +2295,34 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("inexact"), hide = true)]
     pub exact: bool,
 
+    /// Do not install the current project.
+    ///
+    /// By default, the current project is installed into the environment with all of its
+    /// dependencies. The `--no-install-project` option allows the project to be excluded, but all of
+    /// its dependencies are still installed. This is particularly useful in situations like
+    /// building Docker images where installing the project separately from its dependencies
+    /// allows optimal layer caching.
+    #[arg(long)]
+    pub no_install_project: bool,
+
+    /// Do not install any workspace members, including the root project.
+    ///
+    /// By default, all of the workspace members and their dependencies are installed into the
+    /// environment. The `--no-install-workspace` option allows exclusion of all the workspace
+    /// members while retaining their dependencies. This is particularly useful in situations like
+    /// building Docker images where installing the workspace separately from its dependencies
+    /// allows optimal layer caching.
+    #[arg(long)]
+    pub no_install_workspace: bool,
+
+    /// Do not install the given package(s).
+    ///
+    /// By default, all of the project's dependencies are installed into the environment. The
+    /// `--no-install-package` option allows exclusion of specific packages. Note this can result
+    /// in a broken environment, and should be used with caution.
+    #[arg(long)]
+    pub no_install_package: Vec<PackageName>,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or
@@ -2422,11 +2449,11 @@ pub struct AddArgs {
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
-    #[arg(long, overrides_with = "no_editable", hide = true)]
+    /// Add the requirements as editable.
+    #[arg(long, overrides_with = "no_editable")]
     pub editable: bool,
 
-    /// Don't add the requirements as editables.
-    #[arg(long, overrides_with = "editable")]
+    #[arg(long, overrides_with = "editable", hide = true)]
     pub no_editable: bool,
 
     /// Add source requirements to `project.dependencies`, rather than `tool.uv.sources`.
@@ -2740,7 +2767,7 @@ pub enum ToolCommand {
     /// The tools directory is used to store environments and metadata for installed tools.
     ///
     /// By default, tools are stored in the uv data directory at `$XDG_DATA_HOME/uv/tools` or
-    /// `$HOME/.local/share/uv/tools` on Unix and `{FOLDERID_RoamingAppData}\uv\data\tools` on
+    /// `$HOME/.local/share/uv/tools` on Unix and `%APPDATA%\uv\data\tools` on
     /// Windows.
     ///
     /// The tool installation directory may be overridden with `$UV_TOOL_DIR`.
@@ -2979,7 +3006,7 @@ pub enum PythonCommand {
     ///
     /// By default, Python installations are stored in the uv data directory at
     /// `$XDG_DATA_HOME/uv/python` or `$HOME/.local/share/uv/python` on Unix and
-    /// `{FOLDERID_RoamingAppData}\uv\data\python` on Windows.
+    /// `%APPDATA%\uv\data\python` on Windows.
     ///
     /// The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
     Dir,
@@ -3052,6 +3079,32 @@ pub struct PythonFindArgs {
     ///
     /// See `uv help python` to view supported request formats.
     pub request: Option<String>,
+
+    /// Avoid discovering a project or workspace.
+    ///
+    /// Otherwise, when no request is provided, the Python requirement of a project in the current
+    /// directory or parent directories will be used.
+    #[arg(long, alias = "no_workspace")]
+    pub no_project: bool,
+
+    /// Only find system Python interpreters.
+    ///
+    /// By default, uv will report the first Python interpreter it would use, including those in an
+    /// active virtual environment or a virtual environment in the current working directory or any
+    /// parent directory.
+    ///
+    /// The `--system` option instructs uv to skip virtual environment Python interpreters and
+    /// restrict its search to the system path.
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_system")
+    )]
+    pub system: bool,
+
+    #[arg(long, overrides_with("system"), hide = true)]
+    pub no_system: bool,
 }
 
 #[derive(Args)]
@@ -3078,13 +3131,13 @@ pub struct PythonPinArgs {
     #[arg(long, overrides_with("no_resolved"), hide = true)]
     pub no_resolved: bool,
 
-    /// Avoid validating the Python pin is compatible with the workspace.
+    /// Avoid validating the Python pin is compatible with the project or workspace.
     ///
-    /// By default, a workspace is discovered in the current directory or any parent
-    /// directory. If a workspace is found, the Python pin is validated against
-    /// the workspace's `requires-python` constraint.
-    #[arg(long)]
-    pub no_workspace: bool,
+    /// By default, a project or workspace is discovered in the current directory or any parent
+    /// directory. If a workspace is found, the Python pin is validated against the workspace's
+    /// `requires-python` constraint.
+    #[arg(long, alias = "no-workspace")]
+    pub no_project: bool,
 }
 
 #[derive(Args)]
@@ -3356,7 +3409,9 @@ pub struct InstallerArgs {
         long,
         alias = "compile",
         overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options"
+        help_heading = "Installer options",
+        env = "UV_COMPILE_BYTECODE",
+        value_parser = clap::builder::BoolishValueParser::new(),
     )]
     pub compile_bytecode: bool,
 
@@ -3702,7 +3757,9 @@ pub struct ResolverInstallerArgs {
         long,
         alias = "compile",
         overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options"
+        help_heading = "Installer options",
+        env = "UV_COMPILE_BYTECODE",
+        value_parser = clap::builder::BoolishValueParser::new(),
     )]
     pub compile_bytecode: bool,
 

@@ -264,17 +264,38 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     error: The requested Python version `cpython@3.10` is incompatible with the project `requires-python` value of `>=3.11`.
     "###);
 
+    // Request an incompatible version with project discovery turned off
+    uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.10").arg("--no-project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `cpython@3.10`
+
+    ----- stderr -----
+    "###);
+
+    // And, as an alias, workspace discovery
+    uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.10").arg("--no-workspace"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `cpython@3.10`
+
+    ----- stderr -----
+    "###);
+
     // Request a complex version range that resolves to an incompatible version
     uv_snapshot!(context.filters(), context.python_pin().arg(">3.8,<3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned `.python-version` to `>3.8, <3.11`
+    Updated `.python-version` from `cpython@3.10` -> `>3.8, <3.11`
 
     ----- stderr -----
     warning: The requested Python version `>3.8, <3.11` resolves to `3.10.[X]` which  is incompatible with the project `requires-python` value of `>=3.11`.
     "###);
 
+    // Request a version that is compatible
     uv_snapshot!(context.filters(), context.python_pin().arg("3.11"), @r###"
     success: true
     exit_code: 0
@@ -649,6 +670,7 @@ fn python_pin_with_comments() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     3.12
+    3.10
 
     ----- stderr -----
     "###);

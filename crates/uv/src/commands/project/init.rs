@@ -2,20 +2,21 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use cache_key::RepositoryUrl;
 use owo_colors::OwoColorize;
+use tracing::{debug, warn};
 
+use cache_key::RepositoryUrl;
 use pep440_rs::Version;
+use pep508_rs::marker::MarkerValueExtra;
 use pep508_rs::{ExtraName, MarkerExpression, PackageName, Requirement};
 use pypi_types::redact_git_credentials;
-use tracing::debug;
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, SourceStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_fs::{absolutize_path, Simplified, CWD};
+use uv_fs::{Simplified, CWD};
 use uv_git::GIT_STORE;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
@@ -24,7 +25,6 @@ use uv_python::{
 use uv_requirements::SourceTreeResolver;
 use uv_resolver::{FlatIndex, RequiresPython};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{
@@ -64,7 +64,7 @@ pub(crate) async fn init(
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
         None => CWD.to_path_buf(),
-        Some(ref path) => absolutize_path(Path::new(path))?.to_path_buf(),
+        Some(ref path) => std::path::absolute(path)?,
     };
 
     // Make sure a project does not already exist in the given directory.
@@ -259,7 +259,11 @@ pub(crate) async fn init(
                 .iter()
                 .flatten()
                 .filter_map(|marker| {
-                    if let MarkerExpression::Extra { name, .. } = marker {
+                    if let MarkerExpression::Extra {
+                        name: MarkerValueExtra::Extra(name),
+                        ..
+                    } = marker
+                    {
                         Some(name.clone())
                     } else {
                         None
@@ -430,16 +434,14 @@ async fn init_project(
             Err(WorkspaceError::MissingPyprojectToml | WorkspaceError::NonWorkspace(_)) => {
                 // If the user runs with `--no-workspace` and we can't find a workspace, warn.
                 if no_workspace {
-                    warn_user_once!("`--no-workspace` was provided, but no workspace was found");
+                    warn!("`--no-workspace` was provided, but no workspace was found");
                 }
                 None
             }
             Err(err) => {
                 // If the user runs with `--no-workspace`, ignore the error.
                 if no_workspace {
-                    warn_user_once!(
-                        "Ignoring workspace discovery error due to `--no-workspace`: {err}"
-                    );
+                    warn!("Ignoring workspace discovery error due to `--no-workspace`: {err}");
                     None
                 } else {
                     return Err(err.into());

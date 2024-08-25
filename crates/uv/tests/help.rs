@@ -39,10 +39,10 @@ fn help() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python
+              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -101,10 +101,10 @@ fn help_flag() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python
+              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -162,10 +162,10 @@ fn help_short_flag() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python
+              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -199,17 +199,16 @@ fn help_subcommand() {
     ----- stdout -----
     Manage Python versions and installations
 
-    Generally, uv first searches for Python in a virtual environment, either
-    active or in a `.venv` directory  in the current working directory or
-    any parent directory. If a virtual environment is not required, uv will
-    then search for a Python interpreter. Python interpreters are found by
-    searching for Python executables in the `PATH` environment variable.
+    Generally, uv first searches for Python in a virtual environment, either active or in a
+    `.venv` directory  in the current working directory or any parent directory. If a virtual
+    environment is not required, uv will then search for a Python interpreter. Python
+    interpreters are found by searching for Python executables in the `PATH` environment
+    variable.
 
-    On Windows, the `py` launcher is also invoked to find Python
-    executables.
+    On Windows, the `py` launcher is also invoked to find Python executables.
 
-    By default, uv will download Python if a version cannot be found. This
-    behavior can be disabled with the `--python-downloads` option.
+    By default, uv will download Python if a version cannot be found. This behavior can be
+    disabled with the `--no-python-downloads` flag or the `python-downloads` setting.
 
     The `--python` option allows requesting a different interpreter.
 
@@ -221,26 +220,22 @@ fn help_subcommand() {
     - `<implementation>@<version>` e.g. `cpython@3.12`
     - `<implementation><version>` e.g. `cpython3.12` or `cp312`
     - `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
-    - `<implementation>-<version>-<os>-<arch>-<libc>` e.g.
-      `cpython-3.12.3-macos-aarch64-none`
+    - `<implementation>-<version>-<os>-<arch>-<libc>` e.g. `cpython-3.12.3-macos-aarch64-none`
 
-    Additionally, a specific system Python interpreter can often be
-    requested with:
+    Additionally, a specific system Python interpreter can often be requested with:
 
     - `<executable-path>` e.g. `/opt/homebrew/bin/python3`
     - `<executable-name>` e.g. `mypython3`
     - `<install-dir>` e.g. `/some/environment/`
 
-    When the `--python` option is used, normal discovery rules apply but
-    discovered interpreters are checked for compatibility with the request,
-    e.g., if `pypy` is requested, uv will first check if the virtual
-    environment contains a PyPy interpreter then check if each executable in
-    the path is a PyPy interpreter.
+    When the `--python` option is used, normal discovery rules apply but discovered interpreters
+    are checked for compatibility with the request, e.g., if `pypy` is requested, uv will first
+    check if the virtual environment contains a PyPy interpreter then check if each executable
+    in the path is a PyPy interpreter.
 
-    uv supports discovering CPython, PyPy, and GraalPy interpreters.
-    Unsupported interpreters will be skipped during discovery. If an
-    unsupported interpreter implementation is requested, uv will exit with
-    an error.
+    uv supports discovering CPython, PyPy, and GraalPy interpreters. Unsupported interpreters
+    will be skipped during discovery. If an unsupported interpreter implementation is requested,
+    uv will exit with an error.
 
     Usage: uv python [OPTIONS] <COMMAND>
 
@@ -263,7 +258,7 @@ fn help_subcommand() {
               Path to the cache directory.
               
               Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv`
-              on Linux, and `{FOLDERID_LocalAppData}/uv/cache` on Windows.
+              on Linux, and `%LOCALAPPDATA%/uv/cache` on Windows.
               
               [env: UV_CACHE_DIR=]
 
@@ -274,6 +269,8 @@ fn help_subcommand() {
               By default, uv prefers using Python versions it manages. However, it will use system
               Python installations if a uv-managed Python is not installed. This option allows
               prioritizing or ignoring system Python installations.
+              
+              [env: UV_PYTHON_PREFERENCE=]
 
               Possible values:
               - only-managed: Only use managed Python installations; never use system Python
@@ -284,7 +281,7 @@ fn help_subcommand() {
                 installations
 
           --no-python-downloads
-              Disable automatic downloads of Python
+              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet
@@ -410,7 +407,7 @@ fn help_subsubcommand() {
               Path to the cache directory.
               
               Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv`
-              on Linux, and `{FOLDERID_LocalAppData}/uv/cache` on Windows.
+              on Linux, and `%LOCALAPPDATA%/uv/cache` on Windows.
               
               [env: UV_CACHE_DIR=]
 
@@ -421,6 +418,8 @@ fn help_subsubcommand() {
               By default, uv prefers using Python versions it manages. However, it will use system
               Python installations if a uv-managed Python is not installed. This option allows
               prioritizing or ignoring system Python installations.
+              
+              [env: UV_PYTHON_PREFERENCE=]
 
               Possible values:
               - only-managed: Only use managed Python installations; never use system Python
@@ -431,7 +430,7 @@ fn help_subsubcommand() {
                 installations
 
           --no-python-downloads
-              Disable automatic downloads of Python
+              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet
@@ -531,10 +530,10 @@ fn help_flag_subcommand() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python
+              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -583,10 +582,10 @@ fn help_flag_subsubcommand() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python
+              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -715,10 +714,10 @@ fn help_with_global_option() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python
+              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -814,10 +813,10 @@ fn help_with_no_pager() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [possible values:
-              only-managed, managed, system, only-system]
+              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
+              [possible values: only-managed, managed, system, only-system]
           --no-python-downloads
-              Disable automatic downloads of Python
+              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet                      Do not print any output
