@@ -621,6 +621,7 @@ impl PythonPinSettings {
         }
     }
 }
+
 /// The resolved settings to use for a `sync` invocation.
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
@@ -668,16 +669,6 @@ impl SyncSettings {
             filesystem,
         );
 
-        let exact = flag(exact, inexact).unwrap_or(true);
-
-        // By default, sync with exact semantics, unless the user set `--no-build-isolation`;
-        // otherwise, we'll end up removing build dependencies.
-        let modifications = if !exact || settings.no_build_isolation {
-            Modifications::Sufficient
-        } else {
-            Modifications::Exact
-        };
-
         Self {
             locked,
             frozen,
@@ -689,7 +680,11 @@ impl SyncSettings {
             no_install_project,
             no_install_workspace,
             no_install_package,
-            modifications,
+            modifications: if flag(exact, inexact).unwrap_or(true) {
+                Modifications::Exact
+            } else {
+                Modifications::Sufficient
+            },
             package,
             python,
             refresh: Refresh::from(refresh),
