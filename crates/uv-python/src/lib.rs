@@ -1563,6 +1563,32 @@ mod tests {
     }
 
     #[test]
+    fn find_python_venv_symlink() -> Result<()> {
+        let context = TestContext::new()?;
+
+        let venv = context.tempdir.child("target").child("env");
+        TestContext::mock_venv(&venv, "3.10.6")?;
+        let symlink = context.tempdir.child("proj").child(".venv");
+        context.tempdir.child("proj").create_dir_all()?;
+        symlink.symlink_to_dir(venv)?;
+
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("../proj/.venv"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.10.6",
+            "We should find the symlinked venv"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn find_python_treats_missing_file_path_as_file() -> Result<()> {
         let context = TestContext::new()?;
         context.workdir.child("foo").create_dir_all()?;
