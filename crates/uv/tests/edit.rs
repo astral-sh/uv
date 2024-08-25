@@ -3051,7 +3051,7 @@ fn add_lower_bound_optional() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "anyio", marker = "extra == 'io'" }]
+        requires-dist = [{ name = "anyio", marker = "extra == 'io'", specifier = ">=4.3.0" }]
 
         [[package]]
         name = "sniffio"
@@ -3142,7 +3142,7 @@ fn add_lower_bound_local() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "local-simple-a" }]
+        requires-dist = [{ name = "local-simple-a", specifier = ">=1.2.3" }]
         "###
         );
     });
@@ -3227,7 +3227,7 @@ fn add_virtual() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        requirements = [{ name = "iniconfig" }]
+        requirements = [{ name = "iniconfig", specifier = ">=2.0.0" }]
 
         [[package]]
         name = "iniconfig"
