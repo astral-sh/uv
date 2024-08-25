@@ -168,6 +168,36 @@ specified as `KEY=VALUE` pairs.
 
 ---
 
+#### [`constraint-dependencies`](#constraint-dependencies) {: #constraint-dependencies }
+
+The project's constraint dependencies.
+
+Constraint on dependencies must be described in PEP 508-style.
+
+!!! note
+    If a workspace is used, only the root configuration values are valid, member configuration values are ignored.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    constraint-dependencies = ["grpcio<1.65"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    constraint-dependencies = ["grpcio<1.65"]
+    ```
+
+---
+
 #### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
 
 The project's development dependencies. Development dependencies will be installed by
@@ -768,6 +798,36 @@ Disable network access, relying only on locally cached data and locally availabl
     ```toml
     
     offline = true
+    ```
+
+---
+
+#### [`override-dependencies`](#override-dependencies) {: #override-dependencies }
+
+The project's override dependencies.
+
+Overrides on dependencies must be described in PEP 508-style.
+
+!!! note
+    If a workspace is used, only the root configuration values are valid, member configuration values are ignored.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    override-dependencies = ["werkzeug==2.3.0"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    override-dependencies = ["werkzeug==2.3.0"]
     ```
 
 ---

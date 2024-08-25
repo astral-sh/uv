@@ -137,6 +137,12 @@ pub struct ToolUv {
         "#
     )]
     pub environments: Option<SupportedEnvironments>,
+    /// The project's override dependencies.
+    ///
+    /// Overrides on dependencies must be described in PEP 508-style.
+    ///
+    /// !!! note
+    ///     If a workspace is used, only the root configuration values are valid, member configuration values are ignored.
     #[cfg_attr(
         feature = "schemars",
         schemars(
@@ -144,7 +150,34 @@ pub struct ToolUv {
             description = "PEP 508-style requirements, e.g. `ruff==0.5.0`, or `ruff @ https://...`."
         )
     )]
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[str]",
+        example = r#"
+            override-dependencies = ["werkzeug==2.3.0"]
+        "#
+    )]
     pub override_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "PEP 508-style requirements, e.g. `ruff==0.5.0`, or `ruff @ https://...`."
+        )
+    )]
+    /// The project's constraint dependencies.
+    ///
+    /// Constraint on dependencies must be described in PEP 508-style.
+    ///
+    /// !!! note
+    ///     If a workspace is used, only the root configuration values are valid, member configuration values are ignored.
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[str]",
+        example = r#"
+            constraint-dependencies = ["grpcio<1.65"]
+        "#
+    )]
     pub constraint_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
 }
 
