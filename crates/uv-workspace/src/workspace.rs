@@ -9,7 +9,7 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, trace, warn};
 
 use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
-use pypi_types::{Requirement, RequirementSource};
+use pypi_types::{Requirement, RequirementSource, VerbatimParsedUrl};
 use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::warn_user;
@@ -1309,7 +1309,10 @@ impl VirtualProject {
     /// Returns dependencies that apply to the workspace root, but not any of its members. As such,
     /// only returns a non-empty iterator for virtual workspaces, which can include dev dependencies
     /// on the virtual root.
-    pub fn group(&self, name: &GroupName) -> impl Iterator<Item = &PackageName> {
+    pub fn group(
+        &self,
+        name: &GroupName,
+    ) -> impl Iterator<Item = &pep508_rs::Requirement<VerbatimParsedUrl>> {
         match self {
             VirtualProject::Project(_) => {
                 // For non-virtual projects, dev dependencies are attached to the members.
@@ -1326,7 +1329,7 @@ impl VirtualProject {
                             .as_ref()
                             .and_then(|tool| tool.uv.as_ref())
                             .and_then(|uv| uv.dev_dependencies.as_ref())
-                            .map(|dev| dev.iter().map(|req| &req.name))
+                            .map(|dev| dev.iter())
                             .into_iter()
                             .flatten(),
                     )
