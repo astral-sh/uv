@@ -55,6 +55,7 @@ pub(crate) enum LibcVersion {
 /// inspecting core binaries.
 pub(crate) fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
     let ld_path = find_ld_path()?;
+    trace!("ld path: {}", ld_path.user_display());
 
     match detect_musl_version(&ld_path) {
         Ok(os) => return Ok(os),
@@ -68,7 +69,7 @@ pub(crate) fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
             trace!("Tried to find libc version from possible symlink at {ld_path:?}, but failed: {err}");
         }
     }
-    match detect_glibc_version_from_ldd() {
+    match detect_glibc_version_from_ldd(&ld_path) {
         Ok(os_version) => return Ok(os_version),
         Err(err) => {
             trace!("Tried to find glibc version from `ldd --version`, but failed: {err}");
@@ -78,13 +79,13 @@ pub(crate) fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
 }
 
 // glibc version is taken from `std/sys/unix/os.rs`.
-fn detect_glibc_version_from_ldd() -> Result<LibcVersion, LibcDetectionError> {
-    let output = Command::new("ldd")
+fn detect_glibc_version_from_ldd(ldd: &Path) -> Result<LibcVersion, LibcDetectionError> {
+    let output = Command::new(ldd)
         .args(["--version"])
         .output()
         .map_err(|err| LibcDetectionError::FailedToRun {
             libc: "glibc",
-            program: "ldd --version".to_string(),
+            program: format!("{} --version", ldd.user_display()),
             err,
         })?;
     if let Some(os) = glibc_ldd_output_to_version("stdout", &output.stdout) {
@@ -98,10 +99,10 @@ fn detect_glibc_version_from_ldd() -> Result<LibcVersion, LibcDetectionError> {
 
 /// Parse `ldd --version` output.
 ///
-/// Example: `ldd (Ubuntu GLIBC 2.39-0ubuntu8.3) 2.39`.
+/// Example: `ld.so (Ubuntu GLIBC 2.39-0ubuntu8.3) stable release version 2.39.`.
 fn glibc_ldd_output_to_version(kind: &str, output: &[u8]) -> Option<LibcVersion> {
     static RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"ldd \(.+\) ([0-9]+\.[0-9]+)").unwrap());
+        LazyLock::new(|| Regex::new(r"ld.so \(.+\) .* ([0-9]+\.[0-9]+)").unwrap());
 
     let output = String::from_utf8_lossy(output);
     trace!("{kind} output from `ldd --version`: {output:?}");
@@ -236,40 +237,25 @@ fn find_ld_path_at(path: impl AsRef<Path>) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use indoc::indoc;
 
     #[test]
     fn parse_ldd_output() {
         let ver_str = glibc_ldd_output_to_version(
             "stdout",
-            br"ldd (GNU libc) 2.12
-Copyright (C) 2010 Free Software Foundation, Inc.
-This is free software; see the source for copying conditions.  There is NO
-warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-Written by Roland McGrath and Ulrich Drepper.",
+            indoc! {br"ld.so (Ubuntu GLIBC 2.39-0ubuntu8.3) stable release version 2.39.
+                Copyright (C) 2024 Free Software Foundation, Inc.
+                This is free software; see the source for copying conditions.
+                There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A
+                PARTICULAR PURPOSE.
+            "},
         )
         .unwrap();
         assert_eq!(
             ver_str,
             LibcVersion::Manylinux {
                 major: 2,
-                minor: 12
-            }
-        );
-
-        let ver_str = glibc_ldd_output_to_version(
-            "stderr",
-            br"ldd (Ubuntu GLIBC 2.31-0ubuntu9.2) 2.31
-  Copyright (C) 2020 Free Software Foundation, Inc.
-  This is free software; see the source for copying conditions.  There is NO
-  warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  Written by Roland McGrath and Ulrich Drepper.",
-        )
-        .unwrap();
-        assert_eq!(
-            ver_str,
-            LibcVersion::Manylinux {
-                major: 2,
-                minor: 31
+                minor: 39
             }
         );
     }
