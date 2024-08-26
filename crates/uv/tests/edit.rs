@@ -4061,34 +4061,13 @@ fn sorted_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["pydantic"]), @r###"
+    uv_snapshot!(context.filters(), context.add(&["pydantic"]).arg("--no-sync"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    Prepared 19 packages in [TIME]
-    Installed 19 packages in [TIME]
-     + annotated-types==0.6.0
-     + cachecontrol==0.14.0
-     + certifi==2024.2.2
-     + charset-normalizer==3.3.2
-     + filelock==3.13.1
-     + idna==3.6
-     + msgpack==1.0.8
-     + multidict==6.0.5
-     + mwparserfromhell==0.6.6
-     + packaging==24.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-     + pydantic==2.6.4
-     + pydantic-core==2.16.3
-     + pywikibot==9.0.0
-     + requests==2.31.0
-     + sentry-sdk==1.43.0
-     + typing-extensions==4.10.0
-     + urllib3==2.2.1
-     + yarl==1.9.4
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -4139,34 +4118,13 @@ fn custom_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["pydantic"]), @r###"
+    uv_snapshot!(context.filters(), context.add(&["pydantic"]).arg("--no-sync"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    Prepared 19 packages in [TIME]
-    Installed 19 packages in [TIME]
-     + annotated-types==0.6.0
-     + cachecontrol==0.14.0
-     + certifi==2024.2.2
-     + charset-normalizer==3.3.2
-     + filelock==3.13.1
-     + idna==3.6
-     + msgpack==1.0.8
-     + multidict==6.0.5
-     + mwparserfromhell==0.6.6
-     + packaging==24.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-     + pydantic==2.6.4
-     + pydantic-core==2.16.3
-     + pywikibot==9.0.0
-     + requests==2.31.0
-     + sentry-sdk==1.43.0
-     + typing-extensions==4.10.0
-     + urllib3==2.2.1
-     + yarl==1.9.4
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
