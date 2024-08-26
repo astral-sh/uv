@@ -504,6 +504,7 @@ pub fn add_dependency(
     has_source: bool,
 ) -> Result<ArrayEdit, Error> {
     let mut to_replace = find_dependencies(&req.name, Some(&req.marker), deps);
+
     let edit = match to_replace.as_slice() {
         [] => {
             // determine the dependency list is sorted prior to
@@ -518,7 +519,8 @@ pub fn add_dependency(
                 .all(|w| w[0].to_string() <= w[1].to_string());
 
             deps.push(req.to_string());
-            let mut index = deps.len() - 1;
+            reformat_array_multiline(deps);
+
             if sorted {
                 deps.sort_by_key(|d| {
                     pep508_rs::Requirement::<VerbatimUrl>::parse(d.clone().as_str().unwrap(), &*CWD)
@@ -526,22 +528,9 @@ pub fn add_dependency(
                         .name
                         .clone()
                 });
-                index = deps
-                    .iter()
-                    .position(|d| {
-                        pep508_rs::Requirement::<VerbatimUrl>::parse(
-                            d.clone().as_str().unwrap(),
-                            &*CWD,
-                        )
-                        .unwrap()
-                        .name
-                            == req.name
-                    })
-                    .unwrap();
             }
 
-            reformat_array_multiline(deps);
-            Ok(ArrayEdit::Add(index))
+            Ok(ArrayEdit::Add(deps.len() - 1))
         }
         [_] => {
             let (i, mut old_req) = to_replace.remove(0);

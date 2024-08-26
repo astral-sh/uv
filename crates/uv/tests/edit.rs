@@ -4106,10 +4106,10 @@ fn sorted_dependencies() -> Result<()> {
         dependencies = [
             "CacheControl[filecache]>=0.14,<0.15",
             "mwparserfromhell",
-            "pydantic",
+            "pydantic>=2.6.4",
             "pywikibot",
             "sentry-sdk",
-            "yarl>=2.6.4",
+            "yarl",
         ]
         "###
         );
