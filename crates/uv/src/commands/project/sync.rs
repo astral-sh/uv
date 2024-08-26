@@ -228,11 +228,11 @@ pub(super) async fn do_sync(
 
     // Determine whether to enable build isolation.
     let build_isolation = if no_build_isolation {
-        BuildIsolation::Shared(venv)
-    } else if !no_build_isolation_package.is_empty() {
-        BuildIsolation::SharedPackage(venv, no_build_isolation_package)
-    } else {
+        BuildIsolation::Shared(&venv)
+    } else if no_build_isolation_package.is_empty() {
         BuildIsolation::Isolated
+    } else {
+        BuildIsolation::SharedPackage(&venv, no_build_isolation_package)
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
