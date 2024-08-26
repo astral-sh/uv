@@ -63,6 +63,11 @@ WORKDIR /app
 RUN uv sync --frozen
 ```
 
+!!! tip
+
+    It is best practice to use [intermediate layers](#intermediate-layers) separating installation
+    of dependencies and the project itself to improve Docker image build times.
+
 Once the project is installed, you can either _activate_ the virtual environment:
 
 ```dockerfile title="Dockerfile"
@@ -155,9 +160,9 @@ RUN uv pip install -r requirements.txt
 
 ### Installing a project
 
-When installing a project alongside requirements, it is prudent to separate copying the requirements
-from the rest of the source code. This allows the dependencies of the project (which do not change
-often) to be cached separately from the project itself (which changes very frequently).
+When installing a project alongside requirements, it is best practice to separate copying the
+requirements from the rest of the source code. This allows the dependencies of the project (which do
+not change often) to be cached separately from the project itself (which changes very frequently).
 
 ```dockerfile title="Dockerfile"
 COPY pyproject.toml .
