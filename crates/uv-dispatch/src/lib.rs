@@ -298,11 +298,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         dist: Option<&'data SourceDist>,
         build_kind: BuildKind,
     ) -> Result<SourceBuild> {
+        let dist_name = dist.map(distribution_types::Name::name);
         // Note we can only prevent builds by name for packages with names
         // unless all builds are disabled.
         if self
             .build_options
-            .no_build_requirement(dist.map(distribution_types::Name::name))
+            .no_build_requirement(dist_name)
             // We always allow editable builds
             && !matches!(build_kind, BuildKind::Editable)
         {
@@ -318,6 +319,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let builder = SourceBuild::setup(
             source,
             subdirectory,
+            dist_name,
             self.interpreter,
             self,
             self.source_build_context.clone(),
