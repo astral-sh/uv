@@ -530,7 +530,8 @@ pub fn add_dependency(
             }
             let index = deps
                 .iter()
-                .position(|d| d.as_str().and_then(try_parse_requirement).unwrap().name == req.name)
+                .map(|d| d.as_str().and_then(try_parse_requirement).unwrap())
+                .position(|r| r.name == req.name && r.extras == req.extras)
                 .unwrap();
             Ok(ArrayEdit::Add(index))
         }
