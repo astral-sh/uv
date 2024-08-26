@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.3.4
+
+### CLI
+
+- Show `--editable` on the `uv add` CLI ([#6608](https://github.com/astral-sh/uv/pull/6608))
+- Add `--refresh` to `tool run` warning for `--with` dependencies ([#6609](https://github.com/astral-sh/uv/pull/6609))
+
+### Bug fixes
+
+- Allow per dependency build isolation for `setup.py`-based projects ([#6517](https://github.com/astral-sh/uv/pull/6517))
+- Avoid un-strict syncing by-default for build isolation ([#6606](https://github.com/astral-sh/uv/pull/6606))
+- Respect `--no-build-isolation-package` in `uv sync` ([#6605](https://github.com/astral-sh/uv/pull/6605))
+- Respect extras and markers on virtual dev dependencies ([#6620](https://github.com/astral-sh/uv/pull/6620))
+- Support PEP 723 scripts in GUI files ([#6611](https://github.com/astral-sh/uv/pull/6611))
+- Update lockfile after setting minimum bounds in `uv add` ([#6618](https://github.com/astral-sh/uv/pull/6618))
+- Use relative paths for `--find-links` and local registries ([#6566](https://github.com/astral-sh/uv/pull/6566))
+- Use separate types to represent raw vs. resolver markers ([#6646](https://github.com/astral-sh/uv/pull/6646))
+- Parse wheels `WHEEL` and `METADATA` files as email messages ([#6616](https://github.com/astral-sh/uv/pull/6616))
+- Support unquoted hrefs in `--find-links` and other HTML sources ([#6622](https://github.com/astral-sh/uv/pull/6622))
+- Don't canonicalize paths to user requirements ([#6560](https://github.com/astral-sh/uv/pull/6560))
+
+### Documentation
+
+- Add FastAPI guide to overview ([#6603](https://github.com/astral-sh/uv/pull/6603))
+- Add docs for disabling build isolation with `uv sync` ([#6607](https://github.com/astral-sh/uv/pull/6607))
+- Add example of reading script from stdin using echo ([#6567](https://github.com/astral-sh/uv/pull/6567))
+- Add tip to use intermediate layers in Docker builds ([#6650](https://github.com/astral-sh/uv/pull/6650))
+- Clarify need to include `pyproject.toml` with `--no-install-project` ([#6581](https://github.com/astral-sh/uv/pull/6581))
+- Move `WORKDIR` directive in Docker examples ([#6652](https://github.com/astral-sh/uv/pull/6652))
+- Remove duplicate `WORKDIR` directive in Docker example ([#6651](https://github.com/astral-sh/uv/pull/6651))
+
 ## 0.3.3
 
 ### Enhancements
@@ -2778,4 +2809,5 @@ path ([#1433](https://github.com/astral-sh/uv/pull/1433))
 - Grammar nit ([#1345](https://github.com/astral-sh/uv/pull/1345))
 
 <!-- prettier-ignore-end -->
+
 
