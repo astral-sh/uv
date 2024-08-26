@@ -10,7 +10,7 @@ use tracing::debug;
 
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
-use pypi_types::Requirement;
+use pypi_types::{Requirement, SupportedEnvironments};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -28,7 +28,7 @@ use uv_resolver::{
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, SupportedEnvironments, Workspace};
+use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};

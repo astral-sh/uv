@@ -303,6 +303,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.environments,
                 args.settings.extras,
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,

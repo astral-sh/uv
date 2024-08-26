@@ -14,9 +14,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use crate::environments::SupportedEnvironments;
 use pep440_rs::VersionSpecifiers;
-use pypi_types::{RequirementSource, VerbatimParsedUrl};
+use pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 use uv_git::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, PackageName};
@@ -121,11 +120,14 @@ pub struct ToolUv {
     /// By default, uv will resolve for all possible environments during a `uv lock` operation.
     /// However, you can restrict the set of supported environments to improve performance and avoid
     /// unsatisfiable branches in the solution space.
+    ///
+    /// These environments will also respected when `uv pip compile` is invoked with the
+    /// `--universal` flag.
     #[cfg_attr(
         feature = "schemars",
         schemars(
             with = "Option<Vec<String>>",
-            description = "A list of environment markers, e.g. `python_version >= '3.6'`."
+            description = "A list of environment markers, e.g., `python_version >= '3.6'`."
         )
     )]
     #[option(

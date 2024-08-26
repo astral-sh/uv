@@ -9,12 +9,11 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, trace, warn};
 
 use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
-use pypi_types::{Requirement, RequirementSource, VerbatimParsedUrl};
+use pypi_types::{Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::warn_user;
 
-use crate::environments::SupportedEnvironments;
 use crate::pyproject::{Project, PyProjectToml, Source, ToolUvWorkspace};
 
 #[derive(thiserror::Error, Debug)]

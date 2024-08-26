@@ -7,7 +7,7 @@ use std::str::FromStr;
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{ExtraName, RequirementOrigin};
-use pypi_types::Requirement;
+use pypi_types::{Requirement, SupportedEnvironments};
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::{
     options::{flag, resolver_installer_options, resolver_options},
@@ -927,9 +927,10 @@ pub(crate) struct PipCompileSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
+    pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
-    pub(crate) build_constraint: Vec<PathBuf>,
+    pub(crate) environments: SupportedEnvironments,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -1015,6 +1016,12 @@ impl PipCompileSettings {
             Vec::new()
         };
 
+        let environments = if let Some(configuration) = &filesystem {
+            configuration.environments.clone().unwrap_or_default()
+        } else {
+            SupportedEnvironments::default()
+        };
+
         Self {
             src_file,
             constraint: constraint
@@ -1031,6 +1038,7 @@ impl PipCompileSettings {
                 .collect(),
             constraints_from_workspace,
             overrides_from_workspace,
+            environments,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
