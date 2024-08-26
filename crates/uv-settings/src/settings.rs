@@ -40,13 +40,9 @@ pub struct Options {
     pub top_level: ResolverInstallerOptions,
     #[option_group]
     pub pip: Option<PipOptions>,
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "PEP 508 style requirements, e.g. `ruff==0.5.0`, or `ruff @ https://...`."
-        )
-    )]
+
+    // NOTE(charlie): These fields are shared with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 

@@ -170,14 +170,19 @@ specified as `KEY=VALUE` pairs.
 
 #### [`constraint-dependencies`](#constraint-dependencies) {: #constraint-dependencies }
 
-The project's constraint dependencies.
+Constraints to apply when resolving the project's dependencies.
 
-Constraint on dependencies must be described in PEP 508-style.
+Constraints are used to restrict the versions of dependencies that are selected during
+resolution.
+
+Including a package as a constraint will _not_ trigger installation of the package on its
+own; instead, the package must be requested elsewhere in the project's first-party or
+transitive dependencies.
 
 !!! note
-    When using project interfaces like `uv lock`, only the settings in the pyproject.toml are valid.   
-    Specifically, when using a workspace, only the settings in the pyproject.toml located at the workspace root are applied.   
-    The settings in the pyproject.toml of workspace members and in uv.toml are ignored.   
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `constraint-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
 
 **Default value**: `[]`
 
@@ -189,12 +194,16 @@ Constraint on dependencies must be described in PEP 508-style.
 
     ```toml
     [tool.uv]
+    # Ensure that the grpcio version is always less than 1.65, if it's requested by a
+    # transitive dependency.
     constraint-dependencies = ["grpcio<1.65"]
     ```
 === "uv.toml"
 
     ```toml
     
+    # Ensure that the grpcio version is always less than 1.65, if it's requested by a
+    # transitive dependency.
     constraint-dependencies = ["grpcio<1.65"]
     ```
 
@@ -806,14 +815,20 @@ Disable network access, relying only on locally cached data and locally availabl
 
 #### [`override-dependencies`](#override-dependencies) {: #override-dependencies }
 
-The project's override dependencies.
+Overrides to apply when resolving the project's dependencies.
 
-Overrides on dependencies must be described in PEP 508-style.
+Overrides are used to force selection of a specific version of a package, regardless of the
+version requested by any other package, and regardless of whether choosing that version
+would typically constitute an invalid resolution.
+
+While constraints are _additive_, in that they're combined with the requirements of the
+constituent packages, overrides are _absolute_, in that they completely replace the
+requirements of any constituent packages.
 
 !!! note
-    When using project interfaces like `uv lock`, only the settings in the pyproject.toml are valid.   
-    Specifically, when using a workspace, only the settings in the pyproject.toml located at the workspace root are applied.   
-    The settings in the pyproject.toml of workspace members and in uv.toml are ignored.   
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
 
 **Default value**: `[]`
 
@@ -825,12 +840,16 @@ Overrides on dependencies must be described in PEP 508-style.
 
     ```toml
     [tool.uv]
+    # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
+    # a different version.
     override-dependencies = ["werkzeug==2.3.0"]
     ```
 === "uv.toml"
 
     ```toml
     
+    # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
+    # a different version.
     override-dependencies = ["werkzeug==2.3.0"]
     ```
 
