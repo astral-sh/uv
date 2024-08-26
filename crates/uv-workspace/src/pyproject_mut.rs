@@ -504,19 +504,20 @@ pub fn add_dependency(
     has_source: bool,
 ) -> Result<ArrayEdit, Error> {
     let mut to_replace = find_dependencies(&req.name, Some(&req.marker), deps);
-    // determine the dependency list is sorted prior to
-    // adding the new dependency; the new dependency list
-    // will be sorted only when the original list is sorted
-    // so that users' custom dependency ordering is preserved.
-    let sorted = deps
-        .clone()
-        .into_iter()
-        .collect::<Vec<_>>()
-        .windows(2)
-        .all(|w| w[0].to_string() <= w[1].to_string());
 
     let edit = match to_replace.as_slice() {
         [] => {
+            // determine the dependency list is sorted prior to
+            // adding the new dependency; the new dependency list
+            // will be sorted only when the original list is sorted
+            // so that users' custom dependency ordering is preserved.
+            let sorted = deps
+                .clone()
+                .into_iter()
+                .collect::<Vec<_>>()
+                .windows(2)
+                .all(|w| w[0].to_string() <= w[1].to_string());
+
             deps.push(req.to_string());
             reformat_array_multiline(deps);
 
