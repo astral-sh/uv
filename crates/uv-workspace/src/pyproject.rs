@@ -142,7 +142,9 @@ pub struct ToolUv {
     /// Overrides on dependencies must be described in PEP 508-style.
     ///
     /// !!! note
-    ///     If a workspace is used, only the root configuration values are valid, member configuration values are ignored.
+    ///     When using project interfaces like `uv lock`, only the settings in the pyproject.toml are valid.   
+    ///     Specifically, when using a workspace, only the settings in the pyproject.toml located at the workspace root are applied.   
+    ///     The settings in the pyproject.toml of workspace members and in uv.toml are ignored.   
     #[cfg_attr(
         feature = "schemars",
         schemars(
@@ -170,7 +172,9 @@ pub struct ToolUv {
     /// Constraint on dependencies must be described in PEP 508-style.
     ///
     /// !!! note
-    ///     If a workspace is used, only the root configuration values are valid, member configuration values are ignored.
+    ///     When using project interfaces like `uv lock`, only the settings in the pyproject.toml are valid.   
+    ///     Specifically, when using a workspace, only the settings in the pyproject.toml located at the workspace root are applied.   
+    ///     The settings in the pyproject.toml of workspace members and in uv.toml are ignored.   
     #[option(
         default = r#"[]"#,
         value_type = "list[str]",
