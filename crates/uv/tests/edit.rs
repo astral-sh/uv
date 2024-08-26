@@ -2111,8 +2111,8 @@ fn add_update_marker() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = [
-            "requests>=2.30; python_version >= '3.11'",
             "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+            "requests>=2.30; python_version >= '3.11'",
         ]
         "###
         );
@@ -2149,8 +2149,8 @@ fn add_update_marker() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = [
-            "requests>=2.30; python_version >= '3.11'",
             "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+            "requests>=2.30; python_version >= '3.11'",
             "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
         ]
         "###
@@ -2185,10 +2185,10 @@ fn add_update_marker() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = [
-            "requests>=2.30; python_version >= '3.11'",
             "requests>=2.0,<2.20 ; python_full_version < '3.11'",
-            "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
             "requests>=2.10 ; sys_platform == 'win32'",
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
         ]
         "###
         );
