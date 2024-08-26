@@ -505,7 +505,7 @@ pub fn add_dependency(
 ) -> Result<ArrayEdit, Error> {
     let mut to_replace = find_dependencies(&req.name, Some(&req.marker), deps);
 
-    let edit = match to_replace.as_slice() {
+    match to_replace.as_slice() {
         [] => {
             // determine the dependency list is sorted prior to
             // adding the new dependency; the new dependency list
@@ -545,9 +545,7 @@ pub fn add_dependency(
         }
         // Cannot perform ambiguous updates.
         _ => Err(Error::Ambiguous),
-    };
-
-    edit
+    }
 }
 
 /// Update an existing requirement.
