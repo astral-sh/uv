@@ -178,7 +178,7 @@ RUN uv pip install -e .
 If uv isn't needed in the final image, the binary can be mounted in each invocation:
 
 ```dockerfile title="Dockerfile"
-RUN --mount=from=uv,source=/uv,target=/bin/uv \
+RUN --mount=from=ghcr.io/astral-sh/uv,source=/uv,target=/bin/uv \
     uv pip install --system ruff
 ```
 
