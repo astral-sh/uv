@@ -3,7 +3,7 @@ use std::str::FromStr;
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::RemoteSource;
 use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifierBuildError};
-use pep508_rs::{MarkerEnvironment, PackageName};
+use pep508_rs::PackageName;
 use pypi_types::RequirementSource;
 
 use crate::resolver::ForkMap;
@@ -17,7 +17,7 @@ impl Locals {
     /// Determine the set of permitted local versions in the [`Manifest`].
     pub(crate) fn from_manifest(
         manifest: &Manifest,
-        markers: Option<&MarkerEnvironment>,
+        markers: &ResolverMarkers,
         dependencies: DependencyMode,
     ) -> Self {
         let mut locals = ForkMap::default();

@@ -157,11 +157,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             python_requirement
                 .target()
                 .and_then(|target| target.as_requires_python()),
-            AllowedYanks::from_manifest(
-                &manifest,
-                markers.marker_environment(),
-                options.dependency_mode,
-            ),
+            AllowedYanks::from_manifest(&manifest, &markers, options.dependency_mode),
             hasher,
             options.exclude_newer,
             build_context.build_options(),
@@ -199,24 +195,11 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
-            selector: CandidateSelector::for_resolution(
-                options,
-                &manifest,
-                markers.marker_environment(),
-            ),
+            selector: CandidateSelector::for_resolution(options, &manifest, &markers),
             dependency_mode: options.dependency_mode,
-            urls: Urls::from_manifest(
-                &manifest,
-                markers.marker_environment(),
-                git,
-                options.dependency_mode,
-            )?,
-            locals: Locals::from_manifest(
-                &manifest,
-                markers.marker_environment(),
-                options.dependency_mode,
-            ),
-            groups: Groups::from_manifest(&manifest, markers.marker_environment()),
+            urls: Urls::from_manifest(&manifest, &markers, git, options.dependency_mode)?,
+            locals: Locals::from_manifest(&manifest, &markers, options.dependency_mode),
+            groups: Groups::from_manifest(&manifest, &markers),
             project: manifest.project,
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
