@@ -59,7 +59,7 @@ pub(crate) fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
     match detect_musl_version(&ld_path) {
         Ok(os) => return Ok(os),
         Err(err) => {
-            trace!("Tried to find musl version by running `{ld_path:?}`, but failed: {err}")
+            trace!("Tried to find musl version by running `{ld_path:?}`, but failed: {err}");
         }
     }
     match detect_linux_libc_from_ld_symlink(&ld_path) {
@@ -167,7 +167,7 @@ fn detect_musl_version(ld_path: impl AsRef<Path>) -> Result<LibcVersion, LibcDet
 }
 
 /// Parse the musl version from ld output.
-/// 
+///
 /// Example: `Version 1.2.5`.
 fn musl_ld_output_to_version(kind: &str, output: &[u8]) -> Option<LibcVersion> {
     static RE: LazyLock<Regex> =
