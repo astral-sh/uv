@@ -243,6 +243,9 @@ By default, uv will resolve for all possible environments during a `uv lock` ope
 However, you can restrict the set of supported environments to improve performance and avoid
 unsatisfiable branches in the solution space.
 
+These environments will also respected when `uv pip compile` is invoked with the
+`--universal` flag.
+
 **Default value**: `[]`
 
 **Type**: `str | list[str]`

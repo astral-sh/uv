@@ -77,7 +77,7 @@
       }
     },
     "environments": {
-      "description": "A list of environment markers, e.g. `python_version >= '3.6'`.",
+      "description": "A list of environment markers, e.g., `python_version >= '3.6'`.",
       "type": [
         "array",
         "null"
