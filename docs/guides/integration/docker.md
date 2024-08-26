@@ -238,7 +238,6 @@ RUN uv sync --frozen --no-install-project
 
 # Copy the project into the image
 ADD . /app
-WORKDIR /app
 
 # Sync the project
 RUN uv sync --frozen
