@@ -138,7 +138,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
-        let markers = self.interpreter.markers();
+        let markers = self.interpreter.resolver_markers();
         let tags = self.interpreter.tags()?;
 
         let resolver = Resolver::new(
@@ -148,7 +148,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .index_strategy(self.index_strategy)
                 .build(),
             &python_requirement,
-            ResolverMarkers::specific_environment(markers.clone()),
+            ResolverMarkers::specific_environment(markers),
             Some(tags),
             self.flat_index,
             self.index,
@@ -189,6 +189,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
         // Determine the current environment markers.
         let tags = self.interpreter.tags()?;
+        let markers = self.interpreter.resolver_markers();
 
         // Determine the set of installed packages.
         let site_packages = SitePackages::from_environment(venv)?;
@@ -208,6 +209,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.index_locations,
             self.cache(),
             venv,
+            &markers,
             tags,
         )?;
 

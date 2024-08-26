@@ -27,7 +27,7 @@ use pep508_rs::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, Verbat
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{
     redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
-    RequirementSource,
+    RequirementSource, ResolverMarkerEnvironment,
 };
 use uv_configuration::ExtrasSpecification;
 use uv_distribution::DistributionDatabase;
@@ -419,7 +419,7 @@ impl Lock {
     pub fn to_resolution(
         &self,
         project: &VirtualProject,
-        marker_env: &MarkerEnvironment,
+        marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecification,
         dev: &[GroupName],
@@ -3641,7 +3641,7 @@ impl<'env> TreeDisplay<'env> {
     /// Create a new [`DisplayDependencyGraph`] for the set of installed packages.
     pub fn new(
         lock: &'env Lock,
-        markers: Option<&'env MarkerEnvironment>,
+        markers: Option<&'env ResolverMarkerEnvironment>,
         depth: usize,
         prune: Vec<PackageName>,
         package: Vec<PackageName>,

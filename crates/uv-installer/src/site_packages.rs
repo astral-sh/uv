@@ -11,7 +11,7 @@ use distribution_types::{
     Diagnostic, InstalledDist, Name, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use pep440_rs::{Version, VersionSpecifiers};
-use pypi_types::{Requirement, VerbatimParsedUrl};
+use pypi_types::{Requirement, ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
@@ -181,7 +181,10 @@ impl SitePackages {
     }
 
     /// Validate the installed packages in the virtual environment.
-    pub fn diagnostics(&self) -> Result<Vec<SitePackagesDiagnostic>> {
+    pub fn diagnostics(
+        &self,
+        markers: &ResolverMarkerEnvironment,
+    ) -> Result<Vec<SitePackagesDiagnostic>> {
         let mut diagnostics = Vec::new();
 
         for (package, indexes) in &self.by_name {
@@ -220,7 +223,7 @@ impl SitePackages {
 
                 // Verify that the package is compatible with the current Python version.
                 if let Some(requires_python) = metadata.requires_python.as_ref() {
-                    if !requires_python.contains(self.interpreter.python_version()) {
+                    if !requires_python.contains(markers.python_full_version()) {
                         diagnostics.push(SitePackagesDiagnostic::IncompatiblePythonVersion {
                             package: package.clone(),
                             version: self.interpreter.python_version().clone(),
@@ -231,7 +234,7 @@ impl SitePackages {
 
                 // Verify that the dependencies are installed.
                 for dependency in &metadata.requires_dist {
-                    if !dependency.evaluate_markers(self.interpreter.markers(), &[]) {
+                    if !dependency.evaluate_markers(markers, &[]) {
                         continue;
                     }
 
@@ -281,6 +284,7 @@ impl SitePackages {
         &self,
         requirements: &[UnresolvedRequirementSpecification],
         constraints: &[Requirement],
+        markers: &ResolverMarkerEnvironment,
     ) -> Result<SatisfiesResult> {
         // Collect the constraints.
         let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
@@ -299,10 +303,7 @@ impl SitePackages {
 
         // Add the direct requirements to the queue.
         for entry in requirements {
-            if entry
-                .requirement
-                .evaluate_markers(Some(self.interpreter.markers()), &[])
-            {
+            if entry.requirement.evaluate_markers(Some(markers), &[]) {
                 if seen.insert(entry.clone()) {
                     stack.push(entry.clone());
                 }
@@ -353,10 +354,7 @@ impl SitePackages {
 
                     // Add the dependencies to the queue.
                     for dependency in metadata.requires_dist {
-                        if dependency.evaluate_markers(
-                            self.interpreter.markers(),
-                            entry.requirement.extras(),
-                        ) {
+                        if dependency.evaluate_markers(markers, entry.requirement.extras()) {
                             let dependency = UnresolvedRequirementSpecification {
                                 requirement: UnresolvedRequirement::Named(Requirement::from(
                                     dependency,

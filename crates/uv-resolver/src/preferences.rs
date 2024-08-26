@@ -5,10 +5,12 @@ use tracing::trace;
 
 use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
 use pep440_rs::{Operator, Version};
-use pep508_rs::{MarkerEnvironment, MarkerTree, VersionOrUrl};
+use pep508_rs::{MarkerTree, VersionOrUrl};
 use pypi_types::{HashDigest, HashError};
 use requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 use uv_normalize::PackageName;
+
+use crate::ResolverMarkers;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
@@ -121,12 +123,12 @@ impl Preferences {
     /// to an applicable subset.
     pub fn from_iter<PreferenceIterator: IntoIterator<Item = Preference>>(
         preferences: PreferenceIterator,
-        markers: Option<&MarkerEnvironment>,
+        markers: &ResolverMarkers,
     ) -> Self {
         let mut slf = Self::default();
         for preference in preferences {
             // Filter non-matching preferences when resolving for an environment.
-            if let Some(markers) = markers {
+            if let Some(markers) = markers.marker_environment() {
                 if !preference.marker.evaluate(markers, &[]) {
                     trace!("Excluding {preference} from preferences due to unmatched markers");
                     continue;

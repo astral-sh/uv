@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt::Write;
 
 use anyhow::Result;
@@ -13,6 +12,7 @@ use uv_resolver::TreeDisplay;
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
+use crate::commands::pip::resolution_markers;
 use crate::commands::project::FoundInterpreter;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
@@ -75,20 +75,17 @@ pub(crate) async fn tree(
     .await?
     .into_lock();
 
-    // Apply the platform tags to the markers.
-    let markers = match (python_platform, python_version) {
-        (Some(python_platform), Some(python_version)) => {
-            Cow::Owned(python_version.markers(&python_platform.markers(interpreter.markers())))
-        }
-        (Some(python_platform), None) => Cow::Owned(python_platform.markers(interpreter.markers())),
-        (None, Some(python_version)) => Cow::Owned(python_version.markers(interpreter.markers())),
-        (None, None) => Cow::Borrowed(interpreter.markers()),
-    };
+    // Determine the markers to use for resolution.
+    let markers = resolution_markers(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        &interpreter,
+    );
 
     // Render the tree.
     let tree = TreeDisplay::new(
         &lock,
-        (!universal).then(|| markers.as_ref()),
+        (!universal).then_some(&markers),
         depth.into(),
         prune,
         package,

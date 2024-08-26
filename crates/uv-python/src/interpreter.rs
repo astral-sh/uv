@@ -17,7 +17,7 @@ use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
 use platform_tags::Platform;
 use platform_tags::{Tags, TagsError};
-use pypi_types::Scheme;
+use pypi_types::{ResolverMarkerEnvironment, Scheme};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 
@@ -140,6 +140,11 @@ impl Interpreter {
     #[inline]
     pub const fn markers(&self) -> &MarkerEnvironment {
         &self.markers
+    }
+
+    /// Return the [`ResolverMarkerEnvironment`] for this Python executable.
+    pub fn resolver_markers(&self) -> ResolverMarkerEnvironment {
+        ResolverMarkerEnvironment::from(self.markers().clone())
     }
 
     /// Returns the [`PythonInstallationKey`] for this interpreter.

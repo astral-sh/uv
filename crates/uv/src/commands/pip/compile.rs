@@ -248,10 +248,7 @@ pub(crate) async fn pip_compile(
     } else {
         let (tags, markers) =
             resolution_environment(python_version, python_platform, &interpreter)?;
-        (
-            Some(tags),
-            ResolverMarkers::specific_environment((*markers).clone()),
-        )
+        (Some(tags), ResolverMarkers::specific_environment(markers))
     };
 
     // Generate, but don't enforce hashes for the requirements.
