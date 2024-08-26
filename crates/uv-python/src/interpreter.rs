@@ -17,7 +17,7 @@ use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
 use platform_tags::Platform;
 use platform_tags::{Tags, TagsError};
-use pypi_types::Scheme;
+use pypi_types::{ResolverMarkerEnvironment, Scheme};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 
@@ -140,6 +140,11 @@ impl Interpreter {
     #[inline]
     pub const fn markers(&self) -> &MarkerEnvironment {
         &self.markers
+    }
+
+    /// Return the [`ResolverMarkerEnvironment`] for this Python executable.
+    pub fn resolver_markers(&self) -> ResolverMarkerEnvironment {
+        ResolverMarkerEnvironment::from(self.markers().clone())
     }
 
     /// Returns the [`PythonInstallationKey`] for this interpreter.
@@ -686,7 +691,7 @@ impl InterpreterInfo {
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
     pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
-        let absolute = uv_fs::absolutize_path(executable)?;
+        let absolute = std::path::absolute(executable)?;
 
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,

@@ -534,7 +534,7 @@ pub(crate) async fn resolve_environment<'a>(
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = interpreter.tags()?;
-    let markers = interpreter.markers();
+    let markers = interpreter.resolver_markers();
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Add all authenticated sources to the cache.
@@ -549,7 +549,7 @@ pub(crate) async fn resolve_environment<'a>(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .markers(markers)
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -629,7 +629,7 @@ pub(crate) async fn resolve_environment<'a>(
         &reinstall,
         &upgrade,
         Some(tags),
-        ResolverMarkers::specific_environment(markers.clone()),
+        ResolverMarkers::specific_environment(markers),
         python_requirement,
         &client,
         &flat_index,
@@ -662,6 +662,7 @@ pub(crate) async fn sync_environment(
         keyring_provider,
         config_setting,
         no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -672,10 +673,10 @@ pub(crate) async fn sync_environment(
 
     let site_packages = SitePackages::from_environment(&venv)?;
 
-    // Determine the tags, markers, and interpreter to use for resolution.
+    // Determine the markers tags to use for resolution.
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
-    let markers = venv.interpreter().markers();
+    let markers = interpreter.resolver_markers();
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -689,15 +690,17 @@ pub(crate) async fn sync_environment(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .markers(markers)
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
     // Determine whether to enable build isolation.
     let build_isolation = if no_build_isolation {
         BuildIsolation::Shared(&venv)
-    } else {
+    } else if no_build_isolation_package.is_empty() {
         BuildIsolation::Isolated
+    } else {
+        BuildIsolation::SharedPackage(&venv, no_build_isolation_package)
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -745,6 +748,7 @@ pub(crate) async fn sync_environment(
         compile_bytecode,
         index_locations,
         &hasher,
+        &markers,
         tags,
         &client,
         &state.in_flight,
@@ -824,10 +828,14 @@ pub(crate) async fn update_environment(
         ..
     } = spec;
 
+    // Determine markers to use for resolution.
+    let interpreter = venv.interpreter();
+    let markers = venv.interpreter().resolver_markers();
+
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
     if source_trees.is_empty() && reinstall.is_none() && upgrade.is_none() && overrides.is_empty() {
-        match site_packages.satisfies(&requirements, &constraints)? {
+        match site_packages.satisfies(&requirements, &constraints, &markers)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -851,12 +859,6 @@ pub(crate) async fn update_environment(
         }
     }
 
-    // Determine the tags, markers, and interpreter to use for resolution.
-    let interpreter = venv.interpreter();
-    let tags = venv.interpreter().tags()?;
-    let markers = venv.interpreter().markers();
-    let python_requirement = PythonRequirement::from_interpreter(interpreter);
-
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
         store_credentials_from_url(url);
@@ -869,7 +871,7 @@ pub(crate) async fn update_environment(
         .index_urls(index_locations.index_urls())
         .index_strategy(*index_strategy)
         .keyring(*keyring_provider)
-        .markers(markers)
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -897,6 +899,10 @@ pub(crate) async fn update_environment(
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
+
+    // Determine the tags to use for resolution.
+    let tags = venv.interpreter().tags()?;
+    let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -970,6 +976,7 @@ pub(crate) async fn update_environment(
         *compile_bytecode,
         index_locations,
         &hasher,
+        &markers,
         tags,
         &client,
         &state.in_flight,

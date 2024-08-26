@@ -154,6 +154,7 @@ pub(super) async fn do_sync(
         keyring_provider,
         config_setting,
         no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -172,11 +173,13 @@ pub(super) async fn do_sync(
         }
     }
 
+    // Determine the markers to use for resolution.
+    let markers = venv.interpreter().resolver_markers();
+
     // Validate that the platform is supported by the lockfile.
     let environments = lock.supported_environments();
     if !environments.is_empty() {
-        let platform = venv.interpreter().markers();
-        if !environments.iter().any(|env| env.evaluate(platform, &[])) {
+        if !environments.iter().any(|env| env.evaluate(&markers, &[])) {
             return Err(ProjectError::LockedPlatformIncompatibility(
                 environments
                     .iter()
@@ -194,11 +197,11 @@ pub(super) async fn do_sync(
         vec![]
     };
 
-    let markers = venv.interpreter().markers();
+    // Determine the tags to use for resolution.
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(project, markers, tags, extras, &dev)?;
+    let resolution = lock.to_resolution(project, &markers, tags, extras, &dev)?;
 
     // If `--no-install-project` is set, remove the project itself.
     let resolution = apply_no_install_project(no_install_project, resolution, project);
@@ -221,15 +224,17 @@ pub(super) async fn do_sync(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .markers(markers)
+        .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
         .build();
 
     // Determine whether to enable build isolation.
     let build_isolation = if no_build_isolation {
         BuildIsolation::Shared(venv)
-    } else {
+    } else if no_build_isolation_package.is_empty() {
         BuildIsolation::Isolated
+    } else {
+        BuildIsolation::SharedPackage(venv, no_build_isolation_package)
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -281,6 +286,7 @@ pub(super) async fn do_sync(
         compile_bytecode,
         index_locations,
         &hasher,
+        &markers,
         tags,
         &client,
         &state.in_flight,

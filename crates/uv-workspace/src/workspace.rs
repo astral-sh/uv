@@ -9,8 +9,8 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, trace, warn};
 
 use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
-use pypi_types::{Requirement, RequirementSource};
-use uv_fs::{absolutize_path, Simplified};
+use pypi_types::{Requirement, RequirementSource, VerbatimParsedUrl};
+use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::warn_user;
 
@@ -88,9 +88,9 @@ impl Workspace {
         path: &Path,
         options: &DiscoveryOptions<'_>,
     ) -> Result<Workspace, WorkspaceError> {
-        let path = absolutize_path(path)
+        let path = std::path::absolute(path)
             .map_err(WorkspaceError::Normalize)?
-            .to_path_buf();
+            .clone();
 
         let project_path = path
             .ancestors()
@@ -527,9 +527,9 @@ impl Workspace {
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
-                let member_root = absolutize_path(&member_root)
+                let member_root = std::path::absolute(&member_root)
                     .map_err(WorkspaceError::Normalize)?
-                    .to_path_buf();
+                    .clone();
 
                 // If the directory is explicitly ignored, skip it.
                 if options.ignore.contains(member_root.as_path()) {
@@ -869,9 +869,9 @@ impl ProjectWorkspace {
         project_pyproject_toml: &PyProjectToml,
         options: &DiscoveryOptions<'_>,
     ) -> Result<Self, WorkspaceError> {
-        let project_path = absolutize_path(install_path)
+        let project_path = std::path::absolute(install_path)
             .map_err(WorkspaceError::Normalize)?
-            .to_path_buf();
+            .clone();
 
         // Check if workspaces are explicitly disabled for the project.
         if project_pyproject_toml
@@ -1229,9 +1229,9 @@ impl VirtualProject {
             .and_then(|uv| uv.workspace.as_ref())
         {
             // Otherwise, if it contains a `tool.uv.workspace` table, it's a virtual workspace.
-            let project_path = absolutize_path(project_root)
+            let project_path = std::path::absolute(project_root)
                 .map_err(WorkspaceError::Normalize)?
-                .to_path_buf();
+                .clone();
 
             check_nested_workspaces(&project_path, options);
 
@@ -1309,7 +1309,10 @@ impl VirtualProject {
     /// Returns dependencies that apply to the workspace root, but not any of its members. As such,
     /// only returns a non-empty iterator for virtual workspaces, which can include dev dependencies
     /// on the virtual root.
-    pub fn group(&self, name: &GroupName) -> impl Iterator<Item = &PackageName> {
+    pub fn group(
+        &self,
+        name: &GroupName,
+    ) -> impl Iterator<Item = &pep508_rs::Requirement<VerbatimParsedUrl>> {
         match self {
             VirtualProject::Project(_) => {
                 // For non-virtual projects, dev dependencies are attached to the members.
@@ -1326,7 +1329,7 @@ impl VirtualProject {
                             .as_ref()
                             .and_then(|tool| tool.uv.as_ref())
                             .and_then(|uv| uv.dev_dependencies.as_ref())
-                            .map(|dev| dev.iter().map(|req| &req.name))
+                            .map(|dev| dev.iter())
                             .into_iter()
                             .flatten(),
                     )

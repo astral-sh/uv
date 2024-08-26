@@ -12,7 +12,7 @@ use distribution_types::{
     PathSourceDist, RemoteSource, Verbatim,
 };
 use platform_tags::Tags;
-use pypi_types::{Requirement, RequirementSource};
+use pypi_types::{Requirement, RequirementSource, ResolverMarkerEnvironment};
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, WheelCache};
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
@@ -58,6 +58,7 @@ impl<'a> Planner<'a> {
         index_locations: &IndexLocations,
         cache: &Cache,
         venv: &PythonEnvironment,
+        markers: &ResolverMarkerEnvironment,
         tags: &Tags,
     ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
@@ -72,7 +73,7 @@ impl<'a> Planner<'a> {
 
         for requirement in self.requirements {
             // Filter out incompatible requirements.
-            if !requirement.evaluate_markers(Some(venv.interpreter().markers()), &[]) {
+            if !requirement.evaluate_markers(Some(markers), &[]) {
                 continue;
             }
 

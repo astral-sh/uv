@@ -6,12 +6,12 @@ use tracing::debug;
 
 use cache_key::CanonicalUrl;
 use distribution_types::Verbatim;
-use pep508_rs::{MarkerEnvironment, VerbatimUrl};
+use pep508_rs::VerbatimUrl;
 use pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 
-use crate::{DependencyMode, Manifest, ResolveError};
+use crate::{DependencyMode, Manifest, ResolveError, ResolverMarkers};
 
 /// The URLs that are allowed for packages.
 ///
@@ -36,7 +36,7 @@ pub(crate) struct Urls {
 impl Urls {
     pub(crate) fn from_manifest(
         manifest: &Manifest,
-        markers: Option<&MarkerEnvironment>,
+        markers: &ResolverMarkers,
         git: &GitResolver,
         dependencies: DependencyMode,
     ) -> Result<Self, ResolveError> {

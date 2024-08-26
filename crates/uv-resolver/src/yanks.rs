@@ -1,12 +1,12 @@
-use pypi_types::RequirementSource;
-use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
 
+use rustc_hash::{FxHashMap, FxHashSet};
+
 use pep440_rs::Version;
-use pep508_rs::MarkerEnvironment;
+use pypi_types::RequirementSource;
 use uv_normalize::PackageName;
 
-use crate::{DependencyMode, Manifest};
+use crate::{DependencyMode, Manifest, ResolverMarkers};
 
 /// A set of package versions that are permitted, even if they're marked as yanked by the
 /// relevant index.
@@ -16,7 +16,7 @@ pub struct AllowedYanks(Arc<FxHashMap<PackageName, FxHashSet<Version>>>);
 impl AllowedYanks {
     pub fn from_manifest(
         manifest: &Manifest,
-        markers: Option<&MarkerEnvironment>,
+        markers: &ResolverMarkers,
         dependencies: DependencyMode,
     ) -> Self {
         let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();

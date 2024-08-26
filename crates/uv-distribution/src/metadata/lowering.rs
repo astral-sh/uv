@@ -9,7 +9,6 @@ use distribution_filename::DistExtension;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{VerbatimUrl, VersionOrUrl};
 use pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
-use uv_fs::Simplified;
 use uv_git::GitReference;
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
@@ -250,8 +249,6 @@ pub enum LoweringError {
     InvalidVerbatimUrl(#[from] pep508_rs::VerbatimUrlError),
     #[error("Can't combine URLs from both `project.dependencies` and `tool.uv.sources`")]
     ConflictingUrls,
-    #[error("Could not normalize path: `{}`", _0.user_display())]
-    Absolutize(PathBuf, #[source] io::Error),
     #[error("Fragments are not allowed in URLs: `{0}`")]
     ForbiddenFragment(Url),
     #[error("`workspace = false` is not yet supported")]

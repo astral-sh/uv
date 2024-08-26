@@ -27,7 +27,7 @@ use pep508_rs::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, Verbat
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{
     redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
-    RequirementSource,
+    RequirementSource, ResolverMarkerEnvironment,
 };
 use uv_configuration::ExtrasSpecification;
 use uv_distribution::DistributionDatabase;
@@ -419,7 +419,7 @@ impl Lock {
     pub fn to_resolution(
         &self,
         project: &VirtualProject,
-        marker_env: &MarkerEnvironment,
+        marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecification,
         dev: &[GroupName],
@@ -457,11 +457,20 @@ impl Lock {
         // dependencies in virtual workspaces).
         for group in dev {
             for dependency in project.group(group) {
-                let root = self
-                    .find_by_name(dependency)
-                    .expect("found too many packages matching root")
-                    .expect("could not find root");
-                queue.push_back((root, None));
+                if dependency.marker.evaluate(marker_env, &[]) {
+                    let root = self
+                        .find_by_markers(&dependency.name, marker_env)
+                        .expect("found too many packages matching root")
+                        .expect("could not find root");
+
+                    // Add the base package.
+                    queue.push_back((root, None));
+
+                    // Add any extras.
+                    for extra in &dependency.extras {
+                        queue.push_back((root, Some(extra)));
+                    }
+                }
             }
         }
 
@@ -669,6 +678,39 @@ impl Lock {
                     return Err(format!("found multiple packages matching `{name}`"));
                 }
                 found_dist = Some(dist);
+            }
+        }
+        Ok(found_dist)
+    }
+
+    /// Returns the package with the given name.
+    ///
+    /// If there are multiple matching packages, returns the package that
+    /// corresponds to the given marker tree.
+    ///
+    /// If there are multiple packages that are relevant to the current
+    /// markers, then an error is returned.
+    ///
+    /// If there are no matching packages, then `Ok(None)` is returned.
+    fn find_by_markers(
+        &self,
+        name: &PackageName,
+        marker_env: &MarkerEnvironment,
+    ) -> Result<Option<&Package>, String> {
+        let mut found_dist = None;
+        for dist in &self.packages {
+            if &dist.id.name == name {
+                if dist.fork_markers.is_empty()
+                    || dist
+                        .fork_markers
+                        .iter()
+                        .any(|marker| marker.evaluate(marker_env, &[]))
+                {
+                    if found_dist.is_some() {
+                        return Err(format!("found multiple packages matching `{name}`"));
+                    }
+                    found_dist = Some(dist);
+                }
             }
         }
         Ok(found_dist)
@@ -3599,7 +3641,7 @@ impl<'env> TreeDisplay<'env> {
     /// Create a new [`DisplayDependencyGraph`] for the set of installed packages.
     pub fn new(
         lock: &'env Lock,
-        markers: Option<&'env MarkerEnvironment>,
+        markers: Option<&'env ResolverMarkerEnvironment>,
         depth: usize,
         prune: Vec<PackageName>,
         package: Vec<PackageName>,
