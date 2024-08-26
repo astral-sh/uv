@@ -686,7 +686,7 @@ impl InterpreterInfo {
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
     pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
-        let absolute = uv_fs::absolutize_path(executable)?;
+        let absolute = std::path::absolute(executable)?;
 
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,

@@ -29,7 +29,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: tj-actions/changed-files@v44
+      - uses: tj-actions/changed-files@v45
         id: changed
         with:
           files_yaml: |
@@ -40,6 +40,9 @@ jobs:
               - "!**/*.md"
               - "!bin/**"
               - "!assets/**"
+              # Generated markdown files are checked during test runs
+              - "docs/reference/cli.md"
+              - "docs/reference/settings.md"
   cargo-fmt:
     name: "cargo fmt"
     runs-on: ubuntu-latest

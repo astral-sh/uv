@@ -405,7 +405,7 @@ pub enum CacheCommand {
     ///
     ///
     /// By default, the cache is stored in  `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
-    /// `{FOLDERID_LocalAppData}\uv\cache` on Windows.
+    /// `%LOCALAPPDATA%\uv\cache` on Windows.
     ///
     /// When `--no-cache` is used, the cache is stored in a temporary directory and discarded when
     /// the process exits.
@@ -520,7 +520,8 @@ pub enum ProjectCommand {
     /// script and run with a Python interpreter, i.e., `uv run file.py` is
     /// equivalent to `uv run python file.py`. If the script contains inline
     /// dependency metadata, it will be installed into an isolated, ephemeral
-    /// environment.
+    /// environment. When used with `-`, the input will be read from stdin,
+    /// and treated as a Python script.
     ///
     /// When used in a project, the project environment will be created and
     /// updated before invoking the command.
@@ -2271,6 +2272,34 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("inexact"), hide = true)]
     pub exact: bool,
 
+    /// Do not install the current project.
+    ///
+    /// By default, the current project is installed into the environment with all of its
+    /// dependencies. The `--no-install-project` option allows the project to be excluded, but all of
+    /// its dependencies are still installed. This is particularly useful in situations like
+    /// building Docker images where installing the project separately from its dependencies
+    /// allows optimal layer caching.
+    #[arg(long)]
+    pub no_install_project: bool,
+
+    /// Do not install any workspace members, including the root project.
+    ///
+    /// By default, all of the workspace members and their dependencies are installed into the
+    /// environment. The `--no-install-workspace` option allows exclusion of all the workspace
+    /// members while retaining their dependencies. This is particularly useful in situations like
+    /// building Docker images where installing the workspace separately from its dependencies
+    /// allows optimal layer caching.
+    #[arg(long)]
+    pub no_install_workspace: bool,
+
+    /// Do not install the given package(s).
+    ///
+    /// By default, all of the project's dependencies are installed into the environment. The
+    /// `--no-install-package` option allows exclusion of specific packages. Note this can result
+    /// in a broken environment, and should be used with caution.
+    #[arg(long)]
+    pub no_install_package: Vec<PackageName>,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or
@@ -2397,11 +2426,11 @@ pub struct AddArgs {
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
-    #[arg(long, overrides_with = "no_editable", hide = true)]
+    /// Add the requirements as editable.
+    #[arg(long, overrides_with = "no_editable")]
     pub editable: bool,
 
-    /// Don't add the requirements as editables.
-    #[arg(long, overrides_with = "editable")]
+    #[arg(long, overrides_with = "editable", hide = true)]
     pub no_editable: bool,
 
     /// Add source requirements to `project.dependencies`, rather than `tool.uv.sources`.
@@ -2715,7 +2744,7 @@ pub enum ToolCommand {
     /// The tools directory is used to store environments and metadata for installed tools.
     ///
     /// By default, tools are stored in the uv data directory at `$XDG_DATA_HOME/uv/tools` or
-    /// `$HOME/.local/share/uv/tools` on Unix and `{FOLDERID_RoamingAppData}\uv\data\tools` on
+    /// `$HOME/.local/share/uv/tools` on Unix and `%APPDATA%\uv\data\tools` on
     /// Windows.
     ///
     /// The tool installation directory may be overridden with `$UV_TOOL_DIR`.
@@ -2954,7 +2983,7 @@ pub enum PythonCommand {
     ///
     /// By default, Python installations are stored in the uv data directory at
     /// `$XDG_DATA_HOME/uv/python` or `$HOME/.local/share/uv/python` on Unix and
-    /// `{FOLDERID_RoamingAppData}\uv\data\python` on Windows.
+    /// `%APPDATA%\uv\data\python` on Windows.
     ///
     /// The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
     Dir,
@@ -3034,6 +3063,25 @@ pub struct PythonFindArgs {
     /// directory or parent directories will be used.
     #[arg(long, alias = "no_workspace")]
     pub no_project: bool,
+
+    /// Only find system Python interpreters.
+    ///
+    /// By default, uv will report the first Python interpreter it would use, including those in an
+    /// active virtual environment or a virtual environment in the current working directory or any
+    /// parent directory.
+    ///
+    /// The `--system` option instructs uv to skip virtual environment Python interpreters and
+    /// restrict its search to the system path.
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_system")
+    )]
+    pub system: bool,
+
+    #[arg(long, overrides_with("system"), hide = true)]
+    pub no_system: bool,
 }
 
 #[derive(Args)]
@@ -3060,13 +3108,13 @@ pub struct PythonPinArgs {
     #[arg(long, overrides_with("no_resolved"), hide = true)]
     pub no_resolved: bool,
 
-    /// Avoid validating the Python pin is compatible with the workspace.
+    /// Avoid validating the Python pin is compatible with the project or workspace.
     ///
-    /// By default, a workspace is discovered in the current directory or any parent
-    /// directory. If a workspace is found, the Python pin is validated against
-    /// the workspace's `requires-python` constraint.
-    #[arg(long)]
-    pub no_workspace: bool,
+    /// By default, a project or workspace is discovered in the current directory or any parent
+    /// directory. If a workspace is found, the Python pin is validated against the workspace's
+    /// `requires-python` constraint.
+    #[arg(long, alias = "no-workspace")]
+    pub no_project: bool,
 }
 
 #[derive(Args)]
@@ -3338,7 +3386,9 @@ pub struct InstallerArgs {
         long,
         alias = "compile",
         overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options"
+        help_heading = "Installer options",
+        env = "UV_COMPILE_BYTECODE",
+        value_parser = clap::builder::BoolishValueParser::new(),
     )]
     pub compile_bytecode: bool,
 
@@ -3684,7 +3734,9 @@ pub struct ResolverInstallerArgs {
         long,
         alias = "compile",
         overrides_with("no_compile_bytecode"),
-        help_heading = "Installer options"
+        help_heading = "Installer options",
+        env = "UV_COMPILE_BYTECODE",
+        value_parser = clap::builder::BoolishValueParser::new(),
     )]
     pub compile_bytecode: bool,
 

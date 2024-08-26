@@ -61,6 +61,8 @@ uv accepts the following command-line arguments as environment variables:
 - `UV_PYTHON_DOWNLOADS`: Equivalent to the
   [`python-downloads`](../reference/settings.md#python-downloads) setting and, when disabled, the
   `--no-python-downloads` option. Whether uv should allow Python downloads.
+- `UV_COMPILE_BYTECODE`: Equivalent to the `--compile-bytecode` command-line argument. If set, uv
+  will compile Python source files to bytecode after installation.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 

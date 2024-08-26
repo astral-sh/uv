@@ -28,7 +28,7 @@ fn branching_urls_disjoint() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -61,7 +61,7 @@ fn branching_urls_overlapping() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -127,7 +127,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -195,7 +195,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -276,14 +276,14 @@ fn root_package_splits_transitive_too() -> Result<()> {
 
     [package.metadata]
     requires-dist = [
-        { name = "b1", marker = "python_full_version < '3.12'", directory = "../b1" },
-        { name = "b2", marker = "python_full_version >= '3.12'", directory = "../b2" },
+        { name = "b1", marker = "python_full_version < '3.12'", directory = "b1" },
+        { name = "b2", marker = "python_full_version >= '3.12'", directory = "b2" },
     ]
 
     [[package]]
     name = "b1"
     version = "0.1.0"
-    source = { directory = "../b1" }
+    source = { directory = "b1" }
     dependencies = [
         { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "python_full_version < '3.12'" },
     ]
@@ -294,7 +294,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
     [[package]]
     name = "b2"
     version = "0.1.0"
-    source = { directory = "../b2" }
+    source = { directory = "b2" }
     dependencies = [
         { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "python_full_version >= '3.12'" },
     ]
@@ -390,7 +390,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -550,7 +550,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -635,7 +635,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -717,7 +717,7 @@ fn branching_urls_of_different_sources_conflict() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -763,7 +763,7 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     " };
     make_project(&context.temp_dir.join("c"), "c", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -804,12 +804,12 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     ]
 
     [package.metadata]
-    requires-dist = [{ name = "c", directory = "../c" }]
+    requires-dist = [{ name = "c", directory = "c" }]
 
     [[package]]
     name = "c"
     version = "0.1.0"
-    source = { directory = "../c" }
+    source = { directory = "c" }
     "###);
 
     Ok(())

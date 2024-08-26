@@ -1,7 +1,8 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use assert_fs::fixture::FileWriteStr;
 use assert_fs::prelude::PathChild;
+use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
+use fs_err::remove_dir_all;
 use indoc::indoc;
 
 use common::{uv_snapshot, TestContext};
@@ -21,7 +22,7 @@ fn python_find() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found in system path or `py` launcher
+        error: No interpreter found in virtual environments, system path, or `py` launcher
         "###);
     } else {
         uv_snapshot!(context.filters(), context.python_find().env("UV_TEST_PYTHON_PATH", ""), @r###"
@@ -30,7 +31,7 @@ fn python_find() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found in system path
+        error: No interpreter found in virtual environments or system path
         "###);
     }
 
@@ -117,7 +118,7 @@ fn python_find() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found for PyPy in system path or `py` launcher
+        error: No interpreter found for PyPy in virtual environments, system path, or `py` launcher
         "###);
     } else {
         uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r###"
@@ -126,7 +127,7 @@ fn python_find() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found for PyPy in system path
+        error: No interpreter found for PyPy in virtual environments or system path
         "###);
     }
 
@@ -239,6 +240,152 @@ fn python_find_project() {
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.11]
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
+fn python_find_venv() {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+        // Enable additional filters for Windows compatibility
+        .with_filtered_exe_suffix()
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+
+    // Create a virtual environment
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.12").arg("-q"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
+
+    // We should find it first
+    // TODO(zanieb): On Windows, this has in a different display path for virtual environments which
+    // is super annoying and requires some changes to how we represent working directories in the
+    // test context to resolve.
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
+
+    ----- stderr -----
+    "###);
+
+    // Even if the `VIRTUAL_ENV` is not set (the test context includes this by default)
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.python_find().env_remove("VIRTUAL_ENV"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
+
+    ----- stderr -----
+    "###);
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all().unwrap();
+
+    // Unless the system flag is passed
+    uv_snapshot!(context.filters(), context.python_find().arg("--system"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    "###);
+
+    // Or, `UV_SYSTEM_PYTHON` is set
+    uv_snapshot!(context.filters(), context.python_find().env("UV_SYSTEM_PYTHON", "1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    "###);
+
+    // Unless, `--no-system` is included
+    // TODO(zanieb): Report this as a bug upstream — this should be allowed.
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-system").env("UV_SYSTEM_PYTHON", "1"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--no-system' cannot be used with '--system'
+
+    Usage: uv python find --cache-dir [CACHE_DIR] [REQUEST]
+
+    For more information, try '--help'.
+    "###);
+
+    // We should find virtual environments from a child directory
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove("VIRTUAL_ENV"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
+
+    ----- stderr -----
+    "###);
+
+    // A virtual environment in the child directory takes precedence over the parent
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11").arg("-q").current_dir(&child_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
+
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove("VIRTUAL_ENV"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/.venv/[BIN]/python
+
+    ----- stderr -----
+    "###);
+
+    // But if we delete the parent virtual environment
+    remove_dir_all(context.temp_dir.child(".venv")).unwrap();
+
+    // And query from there... we should not find the child virtual environment
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    "###);
+
+    // Unless, it is requested by path
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.python_find().arg("child/.venv"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/.venv/[BIN]/python
+
+    ----- stderr -----
+    "###);
+
+    // Or activated via `VIRTUAL_ENV`
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.python_find().env("VIRTUAL_ENV", child_dir.join(".venv").as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/.venv/[BIN]/python
 
     ----- stderr -----
     "###);

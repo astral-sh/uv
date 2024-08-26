@@ -13,6 +13,7 @@ use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
+use etcetera::BaseStrategy;
 use indoc::formatdoc;
 use itertools::Itertools;
 use predicates::prelude::predicate;
@@ -72,10 +73,10 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
 /// * Set a cutoff for versions used in the resolution so the snapshots don't change after a new release.
 /// * Set the venv to a fresh `.venv` in `temp_dir`
 pub struct TestContext {
-    pub temp_dir: assert_fs::TempDir,
-    pub cache_dir: assert_fs::TempDir,
-    pub python_dir: assert_fs::TempDir,
-    pub home_dir: assert_fs::TempDir,
+    pub temp_dir: ChildPath,
+    pub cache_dir: ChildPath,
+    pub python_dir: ChildPath,
+    pub home_dir: ChildPath,
     pub venv: ChildPath,
     pub workspace_root: PathBuf,
 
@@ -87,6 +88,9 @@ pub struct TestContext {
 
     /// Standard filters for this test context.
     filters: Vec<(String, String)>,
+
+    #[allow(dead_code)]
+    _root: tempfile::TempDir,
 }
 
 impl TestContext {
@@ -134,7 +138,8 @@ impl TestContext {
         self
     }
 
-    /// Add extra standard filtering for Python executable names.
+    /// Add extra standard filtering for Python executable names, e.g., stripping version number
+    /// and `.exe` suffixes.
     #[must_use]
     pub fn with_filtered_python_names(mut self) -> Self {
         if cfg!(windows) {
@@ -167,10 +172,39 @@ impl TestContext {
     ///
     /// See [`TestContext::new`] if only a single version is desired.
     pub fn new_with_versions(python_versions: &[&str]) -> Self {
-        let temp_dir = assert_fs::TempDir::new().expect("Failed to create test working directory");
-        let cache_dir = assert_fs::TempDir::new().expect("Failed to create test cache directory");
-        let python_dir = assert_fs::TempDir::new().expect("Failed to create test Python directory");
-        let home_dir = assert_fs::TempDir::new().expect("Failed to create test home directory");
+        // Discover the path to the XDG state directory. We use this, rather than the OS-specific
+        // temporary directory, because on macOS (and Windows on GitHub Actions), they involve
+        // symlinks. (On macOS, the temporary directory is, like `/var/...`, which resolves to
+        // `/private/var/...`.)
+        //
+        // It turns out that, at least on macOS, if we pass a symlink as `current_dir`, it gets
+        // _immediately_ resolved (such that if you call `current_dir` in the running `Command`, it
+        // returns resolved symlink). This is problematic, as we _don't_ want to resolve symlinks
+        // for user-provided paths.
+        let bucket = env::var("UV_INTERNAL__TEST_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                etcetera::base_strategy::choose_base_strategy()
+                    .expect("Failed to find base strategy")
+                    .data_dir()
+                    .join("uv")
+                    .join("tests")
+            });
+        fs_err::create_dir_all(&bucket).expect("Failed to create test bucket");
+
+        let root = tempfile::TempDir::new_in(bucket).expect("Failed to create test root directory");
+
+        let temp_dir = ChildPath::new(root.path()).child("temp");
+        fs_err::create_dir_all(&temp_dir).expect("Failed to create test working directory");
+
+        let cache_dir = ChildPath::new(root.path()).child("cache");
+        fs_err::create_dir_all(&cache_dir).expect("Failed to create test cache directory");
+
+        let python_dir = ChildPath::new(root.path()).child("python");
+        fs_err::create_dir_all(&python_dir).expect("Failed to create test Python directory");
+
+        let home_dir = ChildPath::new(root.path()).child("home");
+        fs_err::create_dir_all(&home_dir).expect("Failed to create test home directory");
 
         // Canonicalize the temp dir for consistent snapshot behavior
         let canonical_temp_dir = temp_dir.canonicalize().unwrap();
@@ -330,6 +364,7 @@ impl TestContext {
             python_version,
             python_versions,
             filters,
+            _root: root,
         }
     }
 
@@ -851,7 +886,7 @@ pub fn get_python(version: &PythonVersion) -> PathBuf {
 /// Create a virtual environment at the given path.
 pub fn create_venv_from_executable<P: AsRef<std::path::Path>>(
     path: P,
-    cache_dir: &assert_fs::TempDir,
+    cache_dir: &ChildPath,
     python: &Path,
 ) {
     assert_cmd::Command::new(get_bin())
@@ -878,7 +913,7 @@ pub fn get_bin() -> PathBuf {
 ///
 /// Generally this should be used with `UV_TEST_PYTHON_PATH`.
 pub fn python_path_with_versions(
-    temp_dir: &assert_fs::TempDir,
+    temp_dir: &ChildPath,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
     Ok(std::env::join_paths(
@@ -892,7 +927,7 @@ pub fn python_path_with_versions(
 ///
 /// Generally this should be used with `UV_TEST_PYTHON_PATH`.
 pub fn python_installations_for_versions(
-    temp_dir: &assert_fs::TempDir,
+    temp_dir: &ChildPath,
     python_versions: &[&str],
 ) -> anyhow::Result<Vec<PathBuf>> {
     let cache = Cache::from_path(temp_dir.child("cache").to_path_buf()).init()?;

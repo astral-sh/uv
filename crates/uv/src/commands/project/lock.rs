@@ -67,7 +67,6 @@ pub(crate) async fn lock(
     frozen: bool,
     python: Option<String>,
     settings: ResolverSettings,
-
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -523,14 +522,12 @@ async fn do_lock(
             // Notify the user of any resolution diagnostics.
             pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
+            let manifest = ResolverManifest::new(members, requirements, constraints, overrides)
+                .relative_to(workspace)?;
+
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let lock = Lock::from_resolution_graph(&resolution)?
-                .with_manifest(ResolverManifest::new(
-                    members,
-                    requirements,
-                    constraints,
-                    overrides,
-                ))
+            let lock = Lock::from_resolution_graph(&resolution, workspace.install_path())?
+                .with_manifest(manifest)
                 .with_supported_environments(
                     environments
                         .cloned()
@@ -726,9 +723,15 @@ impl ValidatedLock {
                 debug!("Ignoring existing lockfile due to missing root package: `{name}`");
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MissingIndex(name, version, index) => {
+            SatisfiesResult::MissingRemoteIndex(name, version, index) => {
                 debug!(
-                    "Ignoring existing lockfile due to missing index: `{name}` `{version}` from `{index}`"
+                    "Ignoring existing lockfile due to missing remote index: `{name}` `{version}` from `{index}`"
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MissingLocalIndex(name, version, index) => {
+                debug!(
+                    "Ignoring existing lockfile due to missing local index: `{name}` `{version}` from `{}`", index.display()
                 );
                 Ok(Self::Preferable(lock))
             }

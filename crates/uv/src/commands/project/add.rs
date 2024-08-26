@@ -32,7 +32,9 @@ use uv_workspace::pyproject::{DependencyType, Source, SourceError};
 use uv_workspace::pyproject_mut::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
+use crate::commands::pip::loggers::{
+    DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
+};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
 use crate::commands::project::ProjectError;
@@ -457,13 +459,13 @@ pub(crate) async fn add(
     let existing = project.pyproject_toml();
 
     // Update the `pypackage.toml` in-memory.
-    let project = project
+    let mut project = project
         .clone()
         .with_pyproject_toml(toml::from_str(&content)?)
         .context("Failed to update `pyproject.toml`")?;
 
     // Lock and sync the environment, if necessary.
-    let lock = match project::lock::do_safe_lock(
+    let mut lock = match project::lock::do_safe_lock(
         locked,
         frozen,
         project.workspace(),
@@ -567,7 +569,51 @@ pub(crate) async fn add(
         // string content, since the above loop _must_ change an empty specifier to a non-empty
         // specifier.
         if modified {
-            fs_err::write(project.root().join("pyproject.toml"), toml.to_string())?;
+            let content = toml.to_string();
+
+            // Write the updated `pyproject.toml` to disk.
+            fs_err::write(project.root().join("pyproject.toml"), &content)?;
+
+            // Update the `pypackage.toml` in-memory.
+            project = project
+                .clone()
+                .with_pyproject_toml(toml::from_str(&content)?)
+                .context("Failed to update `pyproject.toml`")?;
+
+            // If the file was modified, we have to lock again, though the only expected change is
+            // the addition of the minimum version specifiers.
+            lock = match project::lock::do_safe_lock(
+                locked,
+                frozen,
+                project.workspace(),
+                venv.interpreter(),
+                settings.as_ref().into(),
+                Box::new(SummaryResolveLogger),
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await
+            {
+                Ok(result) => result.into_lock(),
+                Err(ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::NoSolution(err),
+                ))) => {
+                    let header = err.header();
+                    let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If this is intentional, run `uv add --frozen` to skip the lock and sync steps.") });
+                    anstream::eprint!("{report:?}");
+
+                    // Revert the changes to the `pyproject.toml`, if necessary.
+                    if modified {
+                        fs_err::write(project.root().join("pyproject.toml"), existing)?;
+                    }
+
+                    return Ok(ExitStatus::Failure);
+                }
+                Err(err) => return Err(err.into()),
+            };
         }
     }
 
@@ -596,13 +642,19 @@ pub(crate) async fn add(
 
     // Initialize any shared state.
     let state = SharedState::default();
+    let no_install_root = false;
+    let no_install_workspace = false;
+    let no_install_package = vec![];
 
-    project::sync::do_sync(
+    if let Err(err) = project::sync::do_sync(
         &project,
         &venv,
         &lock,
         &extras,
         dev,
+        no_install_root,
+        no_install_workspace,
+        no_install_package,
         Modifications::Sufficient,
         settings.as_ref().into(),
         &state,
@@ -613,7 +665,14 @@ pub(crate) async fn add(
         cache,
         printer,
     )
-    .await?;
+    .await
+    {
+        // Revert the changes to the `pyproject.toml`, if necessary.
+        if modified {
+            fs_err::write(project.root().join("pyproject.toml"), existing)?;
+        }
+        return Err(err.into());
+    }
 
     Ok(ExitStatus::Success)
 }

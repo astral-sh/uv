@@ -27,7 +27,7 @@ use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
-use crate::commands::{parse_script, ExitStatus, ToolRunCommand};
+use crate::commands::{ExitStatus, RunCommand, ToolRunCommand};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -130,10 +130,28 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         project.combine(user)
     };
 
+    // Parse the external command, if necessary.
+    let run_command = if let Commands::Project(command) = &*cli.command {
+        if let ProjectCommand::Run(uv_cli::RunArgs { command, .. }) = &**command {
+            Some(RunCommand::try_from(command)?)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // If the target is a PEP 723 script, parse it.
     let script = if let Commands::Project(command) = &*cli.command {
-        if let ProjectCommand::Run(uv_cli::RunArgs { command, .. }) = &**command {
-            parse_script(command).await?
+        if let ProjectCommand::Run(uv_cli::RunArgs { .. }) = &**command {
+            if let Some(
+                RunCommand::PythonScript(script, _) | RunCommand::PythonGuiScript(script, _),
+            ) = run_command.as_ref()
+            {
+                Pep723Script::read(&script).await?
+            } else {
+                None
+            }
         } else if let ProjectCommand::Remove(uv_cli::RemoveArgs {
             script: Some(script),
             ..
@@ -681,6 +699,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.exclude_newer,
                 globals.concurrency,
                 globals.native_tls,
+                cli.no_config,
                 &cache,
                 printer,
                 args.relocatable,
@@ -690,6 +709,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Project(project) => {
             Box::pin(run_project(
                 project,
+                run_command,
                 script,
                 globals,
                 cli.no_config,
@@ -926,6 +946,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.request,
                 args.no_project,
                 cli.no_config,
+                args.system,
                 globals.python_preference,
                 &cache,
             )
@@ -944,7 +965,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.request,
                 args.resolved,
                 globals.python_preference,
-                args.no_workspace,
+                args.no_project,
                 &cache,
                 printer,
             )
@@ -962,6 +983,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 /// Run a [`ProjectCommand`].
 async fn run_project(
     project_command: Box<ProjectCommand>,
+    command: Option<RunCommand>,
     script: Option<Pep723Script>,
     globals: GlobalSettings,
     // TODO(zanieb): Determine a better story for passing `no_config` in here
@@ -1038,9 +1060,12 @@ async fn run_project(
                 )
                 .collect::<Vec<_>>();
 
+            // Given `ProjectCommand::Run`, we always expect a `RunCommand` to be present.
+            let command = command.expect("run command is required");
+
             Box::pin(commands::run(
                 script,
-                args.command,
+                command,
                 requirements,
                 args.show_resolution || globals.verbose > 0,
                 args.locked,
@@ -1081,6 +1106,9 @@ async fn run_project(
                 args.package,
                 args.extras,
                 args.dev,
+                args.no_install_project,
+                args.no_install_workspace,
+                args.no_install_package,
                 args.modifications,
                 args.python,
                 globals.python_preference,

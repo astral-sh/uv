@@ -172,7 +172,6 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
 pub struct DirectorySourceUrl<'a> {
     pub url: &'a Url,
     pub install_path: Cow<'a, Path>,
-    pub lock_path: Cow<'a, Path>,
     pub editable: bool,
 }
 
@@ -187,7 +186,6 @@ impl<'a> From<&'a DirectorySourceDist> for DirectorySourceUrl<'a> {
         Self {
             url: &dist.url,
             install_path: Cow::Borrowed(&dist.install_path),
-            lock_path: Cow::Borrowed(&dist.lock_path),
             editable: dist.editable,
         }
     }

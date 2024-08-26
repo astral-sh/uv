@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
+use distribution_types::Name;
 use itertools::Itertools;
 use pep508_rs::MarkerTree;
+use rustc_hash::FxHashSet;
+use tracing::debug;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -30,6 +33,9 @@ pub(crate) async fn sync(
     package: Option<PackageName>,
     extras: ExtrasSpecification,
     dev: bool,
+    no_install_project: bool,
+    no_install_workspace: bool,
+    no_install_package: Vec<PackageName>,
     modifications: Modifications,
     python: Option<String>,
     python_preference: PythonPreference,
@@ -102,6 +108,9 @@ pub(crate) async fn sync(
         &lock,
         &extras,
         dev,
+        no_install_project,
+        no_install_workspace,
+        no_install_package,
         modifications,
         settings.as_ref().into(),
         &state,
@@ -118,12 +127,16 @@ pub(crate) async fn sync(
 }
 
 /// Sync a lockfile with an environment.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_sync(
     project: &VirtualProject,
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: &ExtrasSpecification,
     dev: bool,
+    no_install_project: bool,
+    no_install_workspace: bool,
+    no_install_package: Vec<PackageName>,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
@@ -187,6 +200,15 @@ pub(super) async fn do_sync(
 
     // Read the lockfile.
     let resolution = lock.to_resolution(project, markers, tags, extras, &dev)?;
+
+    // If `--no-install-project` is set, remove the project itself.
+    let resolution = apply_no_install_project(no_install_project, resolution, project);
+
+    // If `--no-install-workspace` is set, remove the project and any workspace members.
+    let resolution = apply_no_install_workspace(no_install_workspace, resolution, project);
+
+    // If `--no-install-package` is provided, remove the requested packages.
+    let resolution = apply_no_install_package(&no_install_package, resolution);
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -276,4 +298,49 @@ pub(super) async fn do_sync(
     .await?;
 
     Ok(())
+}
+
+fn apply_no_install_project(
+    no_install_project: bool,
+    resolution: distribution_types::Resolution,
+    project: &VirtualProject,
+) -> distribution_types::Resolution {
+    if !no_install_project {
+        return resolution;
+    }
+
+    let Some(project_name) = project.project_name() else {
+        debug!("Ignoring `--no-install-project` for virtual workspace");
+        return resolution;
+    };
+
+    resolution.filter(|dist| dist.name() != project_name)
+}
+
+fn apply_no_install_workspace(
+    no_install_workspace: bool,
+    resolution: distribution_types::Resolution,
+    project: &VirtualProject,
+) -> distribution_types::Resolution {
+    if !no_install_workspace {
+        return resolution;
+    }
+
+    let workspace_packages = project.workspace().packages();
+    resolution.filter(|dist| {
+        !workspace_packages.contains_key(dist.name()) && Some(dist.name()) != project.project_name()
+    })
+}
+
+fn apply_no_install_package(
+    no_install_package: &[PackageName],
+    resolution: distribution_types::Resolution,
+) -> distribution_types::Resolution {
+    if no_install_package.is_empty() {
+        return resolution;
+    }
+
+    let no_install_packages = no_install_package.iter().collect::<FxHashSet<_>>();
+
+    resolution.filter(|dist| !no_install_packages.contains(dist.name()))
 }

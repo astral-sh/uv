@@ -21,8 +21,10 @@ Ok(
                     ),
                     version: "4.3.0",
                     source: Registry(
-                        UrlString(
-                            "https://pypi.org/simple",
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
                         ),
                     ),
                 },
@@ -71,8 +73,10 @@ Ok(
                 ),
                 version: "4.3.0",
                 source: Registry(
-                    UrlString(
-                        "https://pypi.org/simple",
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
                     ),
                 ),
             }: 0,

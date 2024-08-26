@@ -192,7 +192,6 @@ pub(crate) struct RunSettings {
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
-    pub(crate) command: ExternalCommand,
     pub(crate) with: Vec<String>,
     pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
@@ -215,7 +214,7 @@ impl RunSettings {
             no_all_extras,
             dev,
             no_dev,
-            command,
+            command: _,
             with,
             with_editable,
             with_requirements,
@@ -239,7 +238,6 @@ impl RunSettings {
                 extra.unwrap_or_default(),
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
-            command,
             with,
             with_editable,
             with_requirements: with_requirements
@@ -298,12 +296,20 @@ impl ToolRunSettings {
 
         // If `--upgrade` was passed explicitly, warn.
         if installer.upgrade || !installer.upgrade_package.is_empty() {
-            warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool");
+            if with.is_empty() && with_requirements.is_empty() {
+                warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool.");
+            } else {
+                warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to upgrade any `--with` dependencies.");
+            }
         }
 
         // If `--reinstall` was passed explicitly, warn.
         if installer.reinstall || !installer.reinstall_package.is_empty() {
-            warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool");
+            if with.is_empty() && with_requirements.is_empty() {
+                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool.");
+            } else {
+                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to reinstall any `--with` dependencies.");
+            }
         }
 
         Self {
@@ -566,6 +572,7 @@ impl PythonUninstallSettings {
 pub(crate) struct PythonFindSettings {
     pub(crate) request: Option<String>,
     pub(crate) no_project: bool,
+    pub(crate) system: bool,
 }
 
 impl PythonFindSettings {
@@ -575,11 +582,14 @@ impl PythonFindSettings {
         let PythonFindArgs {
             request,
             no_project,
+            system,
+            no_system,
         } = args;
 
         Self {
             request,
             no_project,
+            system: flag(system, no_system).unwrap_or_default(),
         }
     }
 }
@@ -590,7 +600,7 @@ impl PythonFindSettings {
 pub(crate) struct PythonPinSettings {
     pub(crate) request: Option<String>,
     pub(crate) resolved: bool,
-    pub(crate) no_workspace: bool,
+    pub(crate) no_project: bool,
 }
 
 impl PythonPinSettings {
@@ -601,13 +611,13 @@ impl PythonPinSettings {
             request,
             no_resolved,
             resolved,
-            no_workspace,
+            no_project,
         } = args;
 
         Self {
             request,
             resolved: flag(resolved, no_resolved).unwrap_or(false),
-            no_workspace,
+            no_project,
         }
     }
 }
@@ -619,6 +629,9 @@ pub(crate) struct SyncSettings {
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
+    pub(crate) no_install_project: bool,
+    pub(crate) no_install_workspace: bool,
+    pub(crate) no_install_package: Vec<PackageName>,
     pub(crate) modifications: Modifications,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
@@ -631,8 +644,6 @@ impl SyncSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: SyncArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let SyncArgs {
-            locked,
-            frozen,
             extra,
             all_extras,
             no_all_extras,
@@ -640,6 +651,11 @@ impl SyncSettings {
             no_dev,
             inexact,
             exact,
+            no_install_project,
+            no_install_workspace,
+            no_install_package,
+            locked,
+            frozen,
             installer,
             build,
             refresh,
@@ -670,6 +686,9 @@ impl SyncSettings {
                 extra.unwrap_or_default(),
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
+            no_install_project,
+            no_install_workspace,
+            no_install_package,
             modifications,
             package,
             python,

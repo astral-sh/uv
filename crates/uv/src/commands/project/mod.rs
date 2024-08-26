@@ -701,6 +701,8 @@ pub(crate) async fn sync_environment(
         BuildIsolation::SharedPackage(&venv, no_build_isolation_package)
     } else {
         BuildIsolation::Isolated
+    } else {
+        BuildIsolation::SharedPackage(&venv, no_build_isolation_package)
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them

@@ -100,24 +100,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
-                    FileLocation::Path(path) => {
-                        let url = Url::from_file_path(path)
-                            .map_err(|()| Error::RelativePath(path.clone()))?;
-                        return self
-                            .archive(
-                                source,
-                                &PathSourceUrl {
-                                    url: &url,
-                                    path: Cow::Borrowed(path),
-                                    ext: dist.ext,
-                                },
-                                &cache_shard,
-                                tags,
-                                hashes,
-                            )
-                            .boxed_local()
-                            .await;
-                    }
                 };
 
                 // If the URL is a file URL, use the local path directly.
@@ -277,23 +259,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
-                    FileLocation::Path(path) => {
-                        let url = Url::from_file_path(path)
-                            .map_err(|()| Error::RelativePath(path.clone()))?;
-                        return self
-                            .archive_metadata(
-                                source,
-                                &PathSourceUrl {
-                                    url: &url,
-                                    path: Cow::Borrowed(path),
-                                    ext: dist.ext,
-                                },
-                                &cache_shard,
-                                hashes,
-                            )
-                            .boxed_local()
-                            .await;
-                    }
                 };
 
                 // If the URL is a file URL, use the local path directly.
@@ -424,7 +389,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let requires_dist = read_requires_dist(project_root).await?;
         let requires_dist = RequiresDist::from_project_maybe_workspace(
             requires_dist,
-            project_root,
             project_root,
             self.build_context.sources(),
         )
@@ -1009,7 +973,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
-                    resource.lock_path.as_ref(),
                     self.build_context.sources(),
                 )
                 .await?,
@@ -1024,7 +987,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
-                    resource.lock_path.as_ref(),
                     self.build_context.sources(),
                 )
                 .await?,
@@ -1049,7 +1011,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
-                    resource.lock_path.as_ref(),
                     self.build_context.sources(),
                 )
                 .await?,
@@ -1081,7 +1042,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Metadata::from_workspace(
                 metadata,
                 resource.install_path.as_ref(),
-                resource.lock_path.as_ref(),
                 self.build_context.sources(),
             )
             .await?,
@@ -1252,8 +1212,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Self::read_static_metadata(source, fetch.path(), resource.subdirectory).await?
         {
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
-                    .await?,
+                Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
             ));
         }
 
@@ -1276,8 +1235,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
-                    Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
-                        .await?,
+                    Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
                 ));
             }
         }
@@ -1297,8 +1255,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
-                    .await?,
+                Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
             ));
         }
 
@@ -1324,13 +1281,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_workspace(
-                metadata,
-                fetch.path(),
-                fetch.path(),
-                self.build_context.sources(),
-            )
-            .await?,
+            Metadata::from_workspace(metadata, fetch.path(), self.build_context.sources()).await?,
         ))
     }
 

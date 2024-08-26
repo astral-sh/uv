@@ -135,11 +135,9 @@ impl PubGrubRequirement {
                 ext,
                 url,
                 install_path,
-                lock_path,
             } => {
                 let parsed_url = ParsedUrl::Path(ParsedPathUrl::from_source(
                     install_path.clone(),
-                    lock_path.clone(),
                     *ext,
                     url.to_url(),
                 ));
@@ -149,11 +147,9 @@ impl PubGrubRequirement {
                 editable,
                 url,
                 install_path,
-                lock_path,
             } => {
                 let parsed_url = ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
                     install_path.clone(),
-                    lock_path.clone(),
                     *editable,
                     url.to_url(),
                 ));

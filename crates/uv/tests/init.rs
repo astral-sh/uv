@@ -700,7 +700,6 @@ fn init_no_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Ignoring workspace discovery error due to `--no-workspace`: No `project` table found in: `[TEMP_DIR]/`
     Initialized project `bar`
     "###);
 
@@ -728,7 +727,6 @@ fn init_no_workspace_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `--no-workspace` was provided, but no workspace was found
     Initialized project `project`
     "###);
 
