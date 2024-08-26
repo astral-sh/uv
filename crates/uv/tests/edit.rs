@@ -2077,8 +2077,8 @@ fn add_update_marker() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = [
-            "requests>=2.30; python_version >= '3.11'",
             "requests>=2.0,<2.29 ; python_full_version < '3.11'",
+            "requests>=2.30; python_version >= '3.11'",
         ]
         "###
         );
