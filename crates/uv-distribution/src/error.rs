@@ -71,8 +71,14 @@ pub enum Error {
     Extract(#[from] uv_extract::Error),
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
+    #[error("The source distribution is missing an `egg-info` directory")]
+    MissingEggInfo,
+    #[error("The source distribution is missing a `requires.txt` file")]
+    MissingRequiresTxt,
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] pypi_types::MetadataError),
+    #[error("Failed to extract metadata from `requires.txt`")]
+    RequiresTxt(#[source] pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
     MissingPyprojectToml,
     #[error("Failed to extract static metadata from `pyproject.toml`")]

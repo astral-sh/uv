@@ -20,7 +20,7 @@ use distribution_types::{
 };
 use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
-use pypi_types::{HashDigest, Metadata23};
+use pypi_types::{HashDigest, Metadata12, Metadata23, RequiresTxt};
 use uv_cache::{
     ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Timestamp, WheelCache,
 };
@@ -1505,31 +1505,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source_root: &Path,
         subdirectory: Option<&Path>,
     ) -> Result<Option<Metadata23>, Error> {
-        // Attempt to read static metadata from the `PKG-INFO` file.
-        match read_pkg_info(source_root, subdirectory).await {
-            Ok(metadata) => {
-                debug!("Found static `PKG-INFO` for: {source}");
-
-                // Validate the metadata.
-                validate(source, &metadata)?;
-
-                return Ok(Some(metadata));
-            }
-            Err(
-                err @ (Error::MissingPkgInfo
-                | Error::PkgInfo(
-                    pypi_types::MetadataError::Pep508Error(_)
-                    | pypi_types::MetadataError::DynamicField(_)
-                    | pypi_types::MetadataError::FieldNotFound(_)
-                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_)
-                    | pypi_types::MetadataError::PoetrySyntax,
-                )),
-            ) => {
-                debug!("No static `PKG-INFO` available for: {source} ({err:?})");
-            }
-            Err(err) => return Err(err),
-        }
-
         // Attempt to read static metadata from the `pyproject.toml`.
         match read_pyproject_toml(source_root, subdirectory).await {
             Ok(metadata) => {
@@ -1546,11 +1521,64 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     pypi_types::MetadataError::Pep508Error(_)
                     | pypi_types::MetadataError::DynamicField(_)
                     | pypi_types::MetadataError::FieldNotFound(_)
-                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_)
                     | pypi_types::MetadataError::PoetrySyntax,
                 )),
             ) => {
                 debug!("No static `pyproject.toml` available for: {source} ({err:?})");
+            }
+            Err(err) => return Err(err),
+        }
+
+        // Attempt to read static metadata from the `PKG-INFO` file.
+        match read_pkg_info(source_root, subdirectory).await {
+            Ok(metadata) => {
+                debug!("Found static `PKG-INFO` for: {source}");
+
+                // Validate the metadata.
+                validate(source, &metadata)?;
+
+                return Ok(Some(metadata));
+            }
+            Err(
+                err @ (Error::MissingPkgInfo
+                | Error::PkgInfo(
+                    pypi_types::MetadataError::Pep508Error(_)
+                    | pypi_types::MetadataError::DynamicField(_)
+                    | pypi_types::MetadataError::FieldNotFound(_)
+                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_),
+                )),
+            ) => {
+                debug!("No static `PKG-INFO` available for: {source} ({err:?})");
+            }
+            Err(err) => return Err(err),
+        }
+
+        // Attempt to read static metadata from the `egg-info` directory.
+        match read_egg_info(source_root, subdirectory).await {
+            Ok(metadata) => {
+                debug!("Found static `egg-info` for: {source}");
+
+                // Validate the metadata.
+                validate(source, &metadata)?;
+
+                return Ok(Some(metadata));
+            }
+            Err(
+                err @ (Error::MissingEggInfo
+                | Error::MissingRequiresTxt
+                | Error::MissingPkgInfo
+                | Error::RequiresTxt(
+                    pypi_types::MetadataError::Pep508Error(_)
+                    | pypi_types::MetadataError::RequiresTxtContents(_),
+                )
+                | Error::PkgInfo(
+                    pypi_types::MetadataError::Pep508Error(_)
+                    | pypi_types::MetadataError::DynamicField(_)
+                    | pypi_types::MetadataError::FieldNotFound(_)
+                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_),
+                )),
+            ) => {
+                debug!("No static `egg-info` available for: {source} ({err:?})");
             }
             Err(err) => return Err(err),
         }
@@ -1665,6 +1693,105 @@ impl LocalRevisionPointer {
     pub(crate) fn into_revision(self) -> Revision {
         self.revision
     }
+}
+
+/// Read the [`Metadata23`] by combining a source distribution's `PKG-INFO` file with a
+/// `requires.txt`.
+///
+/// `requires.txt` is a legacy concept from setuptools. For example, here's
+/// `Flask.egg-info/requires.txt` from Flask's 1.0 release:
+///
+/// ```txt
+/// Werkzeug>=0.14
+/// Jinja2>=2.10
+/// itsdangerous>=0.24
+/// click>=5.1
+///
+/// [dev]
+/// pytest>=3
+/// coverage
+/// tox
+/// sphinx
+/// pallets-sphinx-themes
+/// sphinxcontrib-log-cabinet
+///
+/// [docs]
+/// sphinx
+/// pallets-sphinx-themes
+/// sphinxcontrib-log-cabinet
+///
+/// [dotenv]
+/// python-dotenv
+/// ```
+///
+/// See: <https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#dependency-metadata>
+async fn read_egg_info(
+    source_tree: &Path,
+    subdirectory: Option<&Path>,
+) -> Result<Metadata23, Error> {
+    fn find_egg_info(source_tree: &Path) -> std::io::Result<Option<PathBuf>> {
+        for entry in fs_err::read_dir(source_tree)? {
+            let entry = entry?;
+            let ty = entry.file_type()?;
+            if ty.is_dir() {
+                let path = entry.path();
+                if path
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("egg-info"))
+                {
+                    return Ok(Some(path));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    let directory = match subdirectory {
+        Some(subdirectory) => Cow::Owned(source_tree.join(subdirectory)),
+        None => Cow::Borrowed(source_tree),
+    };
+
+    // Locate the `egg-info` directory.
+    let egg_info = match find_egg_info(directory.as_ref()) {
+        Ok(Some(path)) => path,
+        Ok(None) => return Err(Error::MissingEggInfo),
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    // Read the `requires.txt`.
+    let requires_txt = egg_info.join("requires.txt");
+    let content = match fs::read(requires_txt).await {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::MissingRequiresTxt);
+        }
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    // Parse the `requires.txt.
+    let requires_txt = RequiresTxt::parse(&content).map_err(Error::RequiresTxt)?;
+
+    // Read the `PKG-INFO` file.
+    let pkg_info = egg_info.join("PKG-INFO");
+    let content = match fs::read(pkg_info).await {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::MissingPkgInfo);
+        }
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    // Parse the metadata.
+    let metadata = Metadata12::parse_metadata(&content).map_err(Error::PkgInfo)?;
+
+    // Combine the sources.
+    Ok(Metadata23 {
+        name: metadata.name,
+        version: metadata.version,
+        requires_python: metadata.requires_python,
+        requires_dist: requires_txt.requires_dist,
+        provides_extras: requires_txt.provides_extras,
+    })
 }
 
 /// Read the [`Metadata23`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
