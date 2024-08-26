@@ -35,6 +35,7 @@ toml =  { workspace = true }
 toml_edit =  { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+itertools = { workspace = true }
 
 [dev-dependencies]
 insta = { version = "1.39.0", features = ["filters", "json", "redactions"] }
