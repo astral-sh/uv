@@ -1098,9 +1098,7 @@ uv sync [OPTIONS]
 
 </dd><dt><code>--inexact</code></dt><dd><p>Do not remove extraneous packages present in the environment.</p>
 
-<p>When enabled, uv will make the minimum necessary changes to satisfy the requirements.</p>
-
-<p>By default, syncing will remove any extraneous packages from the environment, unless <code>--no-build-isolation</code> is enabled, in which case extra packages are considered necessary for builds.</p>
+<p>When enabled, uv will make the minimum necessary changes to satisfy the requirements. By default, syncing will remove any extraneous packages from the environment</p>
 
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 

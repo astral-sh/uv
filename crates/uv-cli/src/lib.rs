@@ -2261,10 +2261,7 @@ pub struct SyncArgs {
     /// Do not remove extraneous packages present in the environment.
     ///
     /// When enabled, uv will make the minimum necessary changes to satisfy the requirements.
-    ///
-    /// By default, syncing will remove any extraneous packages from the environment, unless
-    /// `--no-build-isolation` is enabled, in which case extra packages are considered necessary for
-    /// builds.
+    /// By default, syncing will remove any extraneous packages from the environment
     #[arg(long, overrides_with("exact"), alias = "no-exact")]
     pub inexact: bool,
 

@@ -428,6 +428,7 @@ fn virtual_workspace_dev_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Use a `pip install` step to pre-install build dependencies for `--no-build-isolation`.
 #[test]
 fn sync_build_isolation() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -479,9 +480,17 @@ fn sync_build_isolation() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
+    Uninstalled 7 packages in [TIME]
     Installed 2 packages in [TIME]
+     - hatchling==1.22.4
+     - packaging==24.0
+     - pathspec==0.12.1
+     - pluggy==1.4.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
+     - setuptools==69.2.0
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     - trove-classifiers==2024.3.3
+     - wheel==0.43.0
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -489,6 +498,7 @@ fn sync_build_isolation() -> Result<()> {
     Ok(())
 }
 
+/// Use a `pip install` step to pre-install build dependencies for `--no-build-isolation-package`.
 #[test]
 fn sync_build_isolation_package() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -566,6 +576,118 @@ fn sync_build_isolation_package() -> Result<()> {
      - pathspec==0.12.1
      - pluggy==1.4.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     - trove-classifiers==2024.3.3
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Use dedicated extra groups to install dependencies for `--no-build-isolation-package`.
+#[test]
+fn sync_build_isolation_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        build = ["hatchling"]
+        compile = ["source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz"]
+
+        [build-system]
+        requires = ["setuptools >= 40.9.0"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv]
+        no-build-isolation-package = ["source-distribution"]
+        "#,
+    )?;
+
+    // Running `uv sync` should fail for the `compile` extra.
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(&filters, context.sync().arg("--extra").arg("compile"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
+      Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
+    --- stdout:
+
+    --- stderr:
+    Traceback (most recent call last):
+      File "<string>", line 8, in <module>
+    ModuleNotFoundError: No module named 'hatchling'
+    ---
+    "###);
+
+    // Running `uv sync` with `--all-extras` should also fail.
+    uv_snapshot!(&filters, context.sync().arg("--all-extras"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
+      Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
+    --- stdout:
+
+    --- stderr:
+    Traceback (most recent call last):
+      File "<string>", line 8, in <module>
+    ModuleNotFoundError: No module named 'hatchling'
+    ---
+    "###);
+
+    // Install the build dependencies.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("build"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + hatchling==1.22.4
+     + packaging==24.0
+     + pathspec==0.12.1
+     + pluggy==1.4.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + trove-classifiers==2024.3.3
+    "###);
+
+    // Running `uv sync` for the `compile` extra should succeed, and remove the build dependencies.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("compile"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 5 packages in [TIME]
+    Installed 1 package in [TIME]
+     - hatchling==1.22.4
+     - packaging==24.0
+     - pathspec==0.12.1
+     - pluggy==1.4.0
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
      - trove-classifiers==2024.3.3
     "###);
