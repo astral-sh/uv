@@ -32,15 +32,47 @@ pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Re
 
     // Clean up any empty directories.
     if uv_fs::directories(installed_tools.root()).all(|path| uv_fs::is_temporary(&path)) {
-        fs_err::tokio::remove_dir_all(&installed_tools.root()).await?;
+        fs_err::tokio::remove_dir_all(&installed_tools.root())
+            .await
+            .ignore_currently_being_deleted()?;
         if let Some(top_level) = installed_tools.root().parent() {
             if uv_fs::directories(top_level).all(|path| uv_fs::is_temporary(&path)) {
-                fs_err::tokio::remove_dir_all(top_level).await?;
+                fs_err::tokio::remove_dir_all(top_level)
+                    .await
+                    .ignore_currently_being_deleted()?;
             }
         }
     }
 
     Ok(ExitStatus::Success)
+}
+
+trait IoErrorExt: std::fmt::Display {
+    #[inline]
+    fn is_in_process_of_being_deleted(&self) -> bool {
+        if cfg!(target_os = "windows") {
+            return self.to_string().contains("The file cannot be opened because it is in the process of being deleted. (os error 303)");
+        } else {
+            false
+        }
+    }
+}
+
+impl IoErrorExt for std::io::Error {}
+
+/// An extension trait to suppress "cannot open file because it's currently being deleted"
+trait IgnoreCurrentlyBeingDeleted {
+    fn ignore_currently_being_deleted(self) -> Self;
+}
+
+impl IgnoreCurrentlyBeingDeleted for Result<(), std::io::Error> {
+    fn ignore_currently_being_deleted(self) -> Self {
+        match self {
+            Ok(()) => Ok(()),
+            Err(err) if err.is_in_process_of_being_deleted() => Ok(()),
+            Err(err) => Err(err),
+        }
+    }
 }
 
 /// Perform the uninstallation.
