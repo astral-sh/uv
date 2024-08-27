@@ -73,7 +73,7 @@ pub struct Options {
 
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    r#virtual: serde::de::IgnoredAny,
+    r#package: serde::de::IgnoredAny,
 }
 
 impl Options {

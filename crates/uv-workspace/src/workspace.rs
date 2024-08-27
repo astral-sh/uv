@@ -1535,7 +1535,7 @@ mod tests {
                         "exclude": null
                       },
                       "managed": null,
-                      "virtual": null,
+                      "package": null,
                       "dev-dependencies": null,
                       "environments": null,
                       "override-dependencies": null,
@@ -1608,7 +1608,7 @@ mod tests {
                         "exclude": null
                       },
                       "managed": null,
-                      "virtual": null,
+                      "package": null,
                       "dev-dependencies": null,
                       "environments": null,
                       "override-dependencies": null,

@@ -311,12 +311,12 @@ fn apply_no_virtual_project(
         .packages()
         .iter()
         .filter_map(|(name, package)| {
-            // A project is virtual if it's explicitly marked as virtual, _or_ if it's missing a
-            // build system.
-            if package.pyproject_toml().is_virtual() {
-                Some(name)
-            } else {
+            // A project is a package if it's explicitly marked as such, _or_ if a build system is
+            // present.
+            if package.pyproject_toml().is_package() {
                 None
+            } else {
+                Some(name)
             }
         })
         .collect::<FxHashSet<_>>();

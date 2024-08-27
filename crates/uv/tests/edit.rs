@@ -1746,6 +1746,10 @@ fn add_path() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     let child = workspace.child("child");
@@ -1755,6 +1759,10 @@ fn add_path() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     uv_snapshot!(context.filters(), context.add(&["./child"]).current_dir(workspace.path()), @r###"
@@ -1786,6 +1794,10 @@ fn add_path() -> Result<()> {
         dependencies = [
             "child",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         child = { path = "child" }

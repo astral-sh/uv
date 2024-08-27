@@ -890,6 +890,40 @@ requirements of any constituent packages.
 
 ---
 
+#### [`package`](#package) {: #package }
+
+Whether the project should be considered a Python package, or a non-package ("virtual")
+project.
+
+Packages are built and installed into the virtual environment in editable mode and thus
+require a build backend, while virtual projects are _not_ built or installed; instead, only
+their dependencies are included in the virtual environment.
+
+Creating a package requires that a `build-system` is present in the `pyproject.toml`, and
+that the project adheres to a structure that adheres to the build backend's expectations
+(e.g., a `src` layout).
+
+**Default value**: `true`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    package = false
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    package = false
+    ```
+
+---
+
 #### [`prerelease`](#prerelease) {: #prerelease }
 
 The strategy to use when considering pre-release versions.
@@ -1006,31 +1040,6 @@ those that are downloaded and installed by uv.
     ```toml
     
     python-preference = "managed"
-    ```
-
----
-
-#### [`r#virtual`](#r#virtual) {: #r#virtual }
-
-Whether the project should be considered "virtual".
-
-**Default value**: `true`
-
-**Type**: `bool`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv]
-    virtual = false
-    ```
-=== "uv.toml"
-
-    ```toml
-    
-    virtual = false
     ```
 
 ---

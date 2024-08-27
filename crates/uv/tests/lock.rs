@@ -11190,7 +11190,7 @@ fn lock_trailing_slash() -> Result<()> {
     Ok(())
 }
 
-/// Lock a project with `virtual = true`.
+/// Lock a project with `package = false`, making it a virtual project.
 #[test]
 fn lock_explicit_virtual_project() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -11203,11 +11203,13 @@ fn lock_explicit_virtual_project() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["black"]
+
         [build-system]
         requires = ["setuptools>=42", "wheel"]
         build-backend = "setuptools.build_meta"
+
         [tool.uv]
-        virtual = true
+        package = false
         dev-dependencies = [
             "anyio"
         ]
@@ -11423,6 +11425,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["black"]
+
         [tool.uv]
         dev-dependencies = [
             "anyio"
