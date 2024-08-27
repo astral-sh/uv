@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use owo_colors::OwoColorize;
 use pep440_rs::Version;
 use pep508_rs::PackageName;
@@ -27,7 +27,8 @@ use crate::printer::Printer;
 pub(crate) async fn init(
     explicit_path: Option<String>,
     name: Option<PackageName>,
-    r#virtual: bool,
+    package: bool,
+    project_kind: InitProjectKind,
     no_readme: bool,
     python: Option<String>,
     no_workspace: bool,
@@ -72,7 +73,8 @@ pub(crate) async fn init(
     init_project(
         &path,
         &name,
-        r#virtual,
+        package,
+        project_kind,
         no_readme,
         python,
         no_workspace,
@@ -93,16 +95,10 @@ pub(crate) async fn init(
         }
     }
 
-    let project = if r#virtual { "workspace" } else { "project" };
     match explicit_path {
         // Initialized a project in the current directory.
         None => {
-            writeln!(
-                printer.stderr(),
-                "Initialized {} `{}`",
-                project,
-                name.cyan()
-            )?;
+            writeln!(printer.stderr(), "Initialized project `{}`", name.cyan())?;
         }
         // Initialized a project in the given directory.
         Some(path) => {
@@ -112,8 +108,7 @@ pub(crate) async fn init(
 
             writeln!(
                 printer.stderr(),
-                "Initialized {} `{}` at `{}`",
-                project,
+                "Initialized project `{}` at `{}`",
                 name.cyan(),
                 path.display().cyan()
             )?;
@@ -128,7 +123,8 @@ pub(crate) async fn init(
 async fn init_project(
     path: &Path,
     name: &PackageName,
-    r#virtual: bool,
+    package: bool,
+    project_kind: InitProjectKind,
     no_readme: bool,
     python: Option<String>,
     no_workspace: bool,
@@ -245,57 +241,7 @@ async fn init_project(
         RequiresPython::greater_than_equal_version(&interpreter.python_minor_version())
     };
 
-    if r#virtual {
-        // Create the `pyproject.toml`, but omit `[build-system]`.
-        let pyproject = indoc::formatdoc! {r#"
-            [project]
-            name = "{name}"
-            version = "0.1.0"
-            description = "Add your description here"{readme}
-            requires-python = "{requires_python}"
-            dependencies = []
-            "#,
-            readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
-            requires_python = requires_python.specifiers(),
-        };
-
-        fs_err::create_dir_all(path)?;
-        fs_err::write(path.join("pyproject.toml"), pyproject)?;
-    } else {
-        // Create the `pyproject.toml`.
-        let pyproject = indoc::formatdoc! {r#"
-            [project]
-            name = "{name}"
-            version = "0.1.0"
-            description = "Add your description here"{readme}
-            requires-python = "{requires_python}"
-            dependencies = []
-
-            [build-system]
-            requires = ["hatchling"]
-            build-backend = "hatchling.build"
-            "#,
-            readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
-            requires_python = requires_python.specifiers(),
-        };
-
-        fs_err::create_dir_all(path)?;
-        fs_err::write(path.join("pyproject.toml"), pyproject)?;
-
-        // Create `src/{name}/__init__.py`, if it doesn't exist already.
-        let src_dir = path.join("src").join(&*name.as_dist_info_name());
-        let init_py = src_dir.join("__init__.py");
-        if !init_py.try_exists()? {
-            fs_err::create_dir_all(&src_dir)?;
-            fs_err::write(
-                init_py,
-                indoc::formatdoc! {r#"
-            def hello() -> str:
-                return "Hello from {name}!"
-            "#},
-            )?;
-        }
-    }
+    project_kind.init(name, path, &requires_python, no_readme, package)?;
 
     if let Some(workspace) = workspace {
         if workspace.excludes(path)? {
@@ -338,4 +284,172 @@ async fn init_project(
     }
 
     Ok(())
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) enum InitProjectKind {
+    #[default]
+    Application,
+    Library,
+}
+
+impl InitProjectKind {
+    /// Initialize this project kind at the target path.
+    fn init(
+        &self,
+        name: &PackageName,
+        path: &Path,
+        requires_python: &RequiresPython,
+        no_readme: bool,
+        package: bool,
+    ) -> Result<()> {
+        match self {
+            InitProjectKind::Application => {
+                init_application(name, path, requires_python, no_readme, package)
+            }
+            InitProjectKind::Library => {
+                init_library(name, path, requires_python, no_readme, package)
+            }
+        }
+    }
+
+    /// Whether or not this project kind is packaged by default.
+    pub(crate) fn packaged_by_default(&self) -> bool {
+        matches!(self, InitProjectKind::Library)
+    }
+}
+
+fn init_application(
+    name: &PackageName,
+    path: &Path,
+    requires_python: &RequiresPython,
+    no_readme: bool,
+    package: bool,
+) -> Result<()> {
+    // Create the `pyproject.toml`
+    let mut pyproject = pyproject_project(name, requires_python, no_readme);
+
+    // Include additional project configuration for packaged applications
+    if package {
+        // Since it'll be packaged, we can add a `[project.scripts]` entry
+        pyproject.push('\n');
+        pyproject.push_str(&pyproject_project_scripts(name, "hello", "hello"));
+
+        // Add a build system
+        pyproject.push('\n');
+        pyproject.push_str(pyproject_build_system());
+    }
+
+    fs_err::create_dir_all(path)?;
+
+    // Create the source structure.
+    if package {
+        // Create `src/{name}/__init__.py`, if it doesn't exist already.
+        let src_dir = path.join("src").join(&*name.as_dist_info_name());
+        let init_py = src_dir.join("__init__.py");
+        if !init_py.try_exists()? {
+            fs_err::create_dir_all(&src_dir)?;
+            fs_err::write(
+                init_py,
+                indoc::formatdoc! {r#"
+                def hello():
+                    print("Hello from {name}!")
+                "#},
+            )?;
+        }
+    } else {
+        // Create `hello.py` if it doesn't exist
+        // TODO(zanieb): Only create `hello.py` if there are no other Python files?
+        let hello_py = path.join("hello.py");
+        if !hello_py.try_exists()? {
+            fs_err::write(
+                path.join("hello.py"),
+                indoc::formatdoc! {r#"
+                def main():
+                    print("Hello from {name}!")
+
+                if __name__ == "__main__":
+                    main()
+                "#},
+            )?;
+        }
+    }
+    fs_err::write(path.join("pyproject.toml"), pyproject)?;
+
+    Ok(())
+}
+
+fn init_library(
+    name: &PackageName,
+    path: &Path,
+    requires_python: &RequiresPython,
+    no_readme: bool,
+    package: bool,
+) -> Result<()> {
+    if !package {
+        return Err(anyhow!("Library projects must be packaged"));
+    }
+
+    // Create the `pyproject.toml`
+    let mut pyproject = pyproject_project(name, requires_python, no_readme);
+
+    // Always include a build system if the project is packaged.
+    pyproject.push('\n');
+    pyproject.push_str(pyproject_build_system());
+
+    fs_err::create_dir_all(path)?;
+    fs_err::write(path.join("pyproject.toml"), pyproject)?;
+
+    // Create `src/{name}/__init__.py`, if it doesn't exist already.
+    let src_dir = path.join("src").join(&*name.as_dist_info_name());
+    let init_py = src_dir.join("__init__.py");
+    if !init_py.try_exists()? {
+        fs_err::create_dir_all(&src_dir)?;
+        fs_err::write(
+            init_py,
+            indoc::formatdoc! {r#"
+            def hello() -> str:
+                return "Hello from {name}!"
+            "#},
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Generate the `[project]` section of a `pyproject.toml`.
+fn pyproject_project(
+    name: &PackageName,
+    requires_python: &RequiresPython,
+    no_readme: bool,
+) -> String {
+    indoc::formatdoc! {r#"
+            [project]
+            name = "{name}"
+            version = "0.1.0"
+            description = "Add your description here"{readme}
+            requires-python = "{requires_python}"
+            dependencies = []
+            "#,
+        readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
+        requires_python = requires_python.specifiers(),
+    }
+}
+
+/// Generate the `[build-system]` section of a `pyproject.toml`.
+fn pyproject_build_system() -> &'static str {
+    indoc::indoc! {r#"
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#}
+}
+
+/// Generate the `[project.scripts]` section of a `pyproject.toml`.
+fn pyproject_project_scripts(package: &PackageName, executable_name: &str, target: &str) -> String {
+    let module_name = package.as_dist_info_name();
+    indoc::formatdoc! {r#"
+        [project.scripts]
+        {executable_name} = "{module_name}:{target}"
+    "#}
 }

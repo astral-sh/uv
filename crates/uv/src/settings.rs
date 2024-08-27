@@ -35,8 +35,8 @@ use uv_settings::{
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 
-use crate::commands::pip::operations::Modifications;
 use crate::commands::ToolRunCommand;
+use crate::commands::{pip::operations::Modifications, InitProjectKind};
 
 /// The resolved global settings to use for any invocation of the CLI.
 #[allow(clippy::struct_excessive_bools)]
@@ -154,7 +154,8 @@ impl CacheSettings {
 pub(crate) struct InitSettings {
     pub(crate) path: Option<String>,
     pub(crate) name: Option<PackageName>,
-    pub(crate) r#virtual: bool,
+    pub(crate) package: bool,
+    pub(crate) kind: InitProjectKind,
     pub(crate) no_readme: bool,
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
@@ -168,15 +169,29 @@ impl InitSettings {
             path,
             name,
             r#virtual,
+            package,
+            no_package,
+            app,
+            lib,
             no_readme,
             no_workspace,
             python,
         } = args;
 
+        let kind = match (app, lib) {
+            (true, false) => InitProjectKind::Application,
+            (false, true) => InitProjectKind::Library,
+            (false, false) => InitProjectKind::default(),
+            (true, true) => unreachable!("`app` and `lib` are mutually exclusive"),
+        };
+
+        let package = flag(package || r#virtual, no_package).unwrap_or(kind.packaged_by_default());
+
         Self {
             path,
             name,
-            r#virtual,
+            package,
+            kind,
             no_readme,
             no_workspace,
             python,

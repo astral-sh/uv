@@ -1025,7 +1025,8 @@ async fn run_project(
             commands::init(
                 args.path,
                 args.name,
-                args.r#virtual,
+                args.package,
+                args.kind,
                 args.no_readme,
                 args.python,
                 args.no_workspace,
