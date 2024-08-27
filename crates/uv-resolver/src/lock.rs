@@ -454,7 +454,7 @@ impl Lock {
         }
 
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
-        // dependencies in virtual workspaces).
+        // dependencies in (legacy) non-project workspace roots).
         for group in dev {
             for dependency in project.group(group) {
                 if dependency.marker.evaluate(marker_env, &[]) {

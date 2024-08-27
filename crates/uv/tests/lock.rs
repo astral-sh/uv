@@ -9463,7 +9463,7 @@ fn lock_new_constraints() -> Result<()> {
 /// Lock a `pyproject.toml`, add a new constraint, and ensure that the lockfile is updated on the
 /// next run.
 #[test]
-fn lock_remove_member_virtual() -> Result<()> {
+fn lock_remove_member_non_project() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create a virtual workspace root.
@@ -9592,6 +9592,7 @@ fn lock_remove_member_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -9603,6 +9604,7 @@ fn lock_remove_member_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
     Removed anyio v4.3.0
     Removed idna v3.6
@@ -10656,9 +10658,9 @@ fn lock_overlapping_environment() -> Result<()> {
     Ok(())
 }
 
-/// Lock a virtual project with forked dev dependencies.
+/// Lock a (legacy) non-project workspace root with forked dev dependencies.
 #[test]
-fn lock_virtual_fork() -> Result<()> {
+fn lock_non_project_fork() -> Result<()> {
     let context = TestContext::new("3.10");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -10681,6 +10683,7 @@ fn lock_virtual_fork() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
     Resolved 6 packages in [TIME]
     "###);
 
@@ -10787,6 +10790,7 @@ fn lock_virtual_fork() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
     Resolved 6 packages in [TIME]
     "###);
 
@@ -10798,6 +10802,7 @@ fn lock_virtual_fork() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
     Resolved 6 packages in [TIME]
     "###);
 
@@ -10822,6 +10827,7 @@ fn lock_virtual_fork() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
     Resolved 7 packages in [TIME]
     Added iniconfig v2.0.0
     "###);
@@ -10845,9 +10851,9 @@ fn lock_virtual_fork() -> Result<()> {
     Ok(())
 }
 
-/// Lock a virtual project with a conditional dependency.
+/// Lock a (legacy) non-project workspace root with a conditional dependency.
 #[test]
-fn lock_virtual_conditional() -> Result<()> {
+fn lock_non_project_conditional() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -10867,6 +10873,7 @@ fn lock_virtual_conditional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
     "###);
 
@@ -10927,6 +10934,7 @@ fn lock_virtual_conditional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
     "###);
 
@@ -10938,6 +10946,7 @@ fn lock_virtual_conditional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
     "###);
 

@@ -250,7 +250,7 @@ fn assert_pin_compatible_with_project(pin: &Pin, virtual_project: &VirtualProjec
             let requires_python = find_requires_python(project_workspace.workspace())?;
             (requires_python, "project")
         }
-        VirtualProject::Virtual(workspace) => {
+        VirtualProject::NonProject(workspace) => {
             debug!(
                 "Discovered virtual workspace at: {}",
                 workspace.install_path().display()

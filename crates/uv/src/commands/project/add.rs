@@ -200,14 +200,14 @@ pub(crate) async fn add(
             VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
         };
 
-        // For virtual projects, allow dev dependencies, but nothing else.
-        if project.is_virtual() {
+        // For non-project workspace roots, allow dev dependencies, but nothing else.
+        if project.is_non_project() {
             match dependency_type {
                 DependencyType::Production => {
-                    anyhow::bail!("Found a virtual workspace root, but virtual projects do not support production dependencies (instead, use: `{}`)", "uv add --dev".green())
+                    bail!("Found a non-project workspace root; production dependencies are unsupported (instead, use: `{}`)", "uv add --dev".green())
                 }
                 DependencyType::Optional(_) => {
-                    anyhow::bail!("Found a virtual workspace root, but virtual projects do not support optional dependencies (instead, use: `{}`)", "uv add --dev".green())
+                    bail!("Found a non-project workspace root; optional dependencies are unsupported (instead, use: `{}`)", "uv add --dev".green())
                 }
                 DependencyType::Dev => (),
             }
