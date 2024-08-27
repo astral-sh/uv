@@ -338,13 +338,14 @@ pub(crate) async fn add(
             Target::Script(_, _) | Target::Project(_, _) if raw_sources => {
                 (pep508_rs::Requirement::from(requirement), None)
             }
-            Target::Script(_, _) => resolve_requirement(
+            Target::Script(ref script, _) => resolve_requirement(
                 requirement,
                 false,
                 editable,
                 rev.clone(),
                 tag.clone(),
                 branch.clone(),
+                &script.path,
             )?,
             Target::Project(ref project, _) => {
                 let workspace = project
@@ -358,6 +359,7 @@ pub(crate) async fn add(
                     rev.clone(),
                     tag.clone(),
                     branch.clone(),
+                    project.root(),
                 )?
             }
         };
@@ -681,6 +683,7 @@ fn resolve_requirement(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    root: &Path,
 ) -> Result<(Requirement, Option<Source>), anyhow::Error> {
     let result = Source::from_requirement(
         &requirement.name,
@@ -690,6 +693,7 @@ fn resolve_requirement(
         rev,
         tag,
         branch,
+        root,
     );
 
     let source = match result {
