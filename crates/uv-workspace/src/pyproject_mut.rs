@@ -530,7 +530,25 @@ pub fn add_dependency(
                     },
                 );
             };
+
             deps.insert(index, req.to_string());
+            // `reformat_array_multiline` uses the indentation of the first dependency entry.
+            // Therefore, we retrieve the indentation of the first dependency entry and apply it to the new entry.
+            // Note that it is only necessary if the newly added dependency is going to be the first in the list
+            // _and_ the dependency list was not empty prior to adding the new dependency.
+            if deps.len() > 1 && index == 0 {
+                let prefix = deps
+                    .clone()
+                    .get(index + 1)
+                    .unwrap()
+                    .decor()
+                    .prefix()
+                    .unwrap()
+                    .clone();
+
+                deps.get_mut(index).unwrap().decor_mut().set_prefix(prefix);
+            }
+
             reformat_array_multiline(deps);
 
             Ok(ArrayEdit::Add(index))
