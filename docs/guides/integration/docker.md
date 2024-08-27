@@ -1,6 +1,13 @@
 # Using uv in Docker
 
-## Running in Docker
+## Getting started
+
+!!! tip
+
+    Check out the [`uv-docker-example`](https://github.com/astral-sh/uv-docker-example) project for
+    an example of best practices when using uv to build an application in Docker.
+
+### Running uv in a container
 
 A Docker image is published with a built version of uv available. To run a uv command in a
 container:
@@ -9,7 +16,7 @@ container:
 $ docker run ghcr.io/astral-sh/uv --help
 ```
 
-## Installing uv
+### Installing uv
 
 uv can be installed by copying from the official Docker image:
 
@@ -50,7 +57,7 @@ Or, with the installer:
 ADD https://astral.sh/uv/0.3.4/install.sh /uv-installer.sh
 ```
 
-## Installing a project
+### Installing a project
 
 If you're using uv to manage your project, you can copy it into the image and install it:
 
@@ -62,6 +69,12 @@ ADD . /app
 WORKDIR /app
 RUN uv sync --frozen
 ```
+
+!!! important
+
+    It is best practice to add `.venv` to a [`.dockerignore` file](https://docs.docker.com/build/concepts/context/#dockerignore-files)
+    in your repository to prevent it from being included in image builds. The project virtual
+    environment is dependent on your local platform and should be created from scratch in the image.
 
 Then, to start your application by default:
 
@@ -75,14 +88,15 @@ CMD ["uv", "run", "my_app"]
     It is best practice to use [intermediate layers](#intermediate-layers) separating installation
     of dependencies and the project itself to improve Docker image build times.
 
-## Activating the environment
+See a complete example in the
+[`uv-docker-example` project](https://github.com/astral-sh/uv-docker-example/blob/main/Dockerfile).
 
-Once the project is installed, you can either _activate_ the virtual environment:
+### Using the environment
+
+Once the project is installed, you can either _activate_ the project virtual environment by placing
+its binary directory at the front of the path:
 
 ```dockerfile title="Dockerfile"
-# Use the virtual environment automatically
-ENV VIRTUAL_ENV=/app/.venv
-# Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
 ```
 
@@ -92,7 +106,7 @@ Or, you can use `uv run` for any commands that require the environment:
 RUN uv run some_script.py
 ```
 
-## Using installed tools
+### Using installed tools
 
 To use installed tools, ensure the [tool bin directory](../../concepts/tools.md#the-bin-directory)
 is on the path:
@@ -117,6 +131,76 @@ $ docker run -it $(docker build -q .) /bin/bash -c "cowsay -t hello"
 ```
 
 To determine the tool bin directory, run `uv tool dir --bin` in the container.
+
+## Developing in a container
+
+When developing, it's useful to mount the project directory into a container. With this setup,
+changes to the project can be immediately reflected in a containerized service without rebuilding
+the image. However, it is important _not_ to include the project virtual environment (`.venv`) in
+the mount, because the virtual environment is platform specific and the one built for the image
+should be kept.
+
+### Mounting the project with `docker run`
+
+Bind mount the project (in the working directory) to `/app` while retaining the `.venv` directory
+with an [anonymous volume](https://docs.docker.com/engine/storage/#volumes):
+
+```console
+$ docker run --rm --volume .:/app --volume /app/.venv [...]
+```
+
+!!! tip
+
+    The `--rm` flag is included to ensure the container and anonymous volume are cleaned up when the
+    container exits.
+
+See a complete example in the
+[`uv-docker-example` project](https://github.com/astral-sh/uv-docker-example/blob/main/run.sh).
+
+### Configuring `watch` with `docker compose`
+
+When using Docker compose, more sophisticated tooling is available for container development. The
+[`watch`](https://docs.docker.com/compose/file-watch/#compose-watch-versus-bind-mounts) option
+allows for greater granularity than is practical with a bind mount and supports triggering updates
+to the containerized service when files change.
+
+!!! note
+
+    This feature requires Compose 2.22.0 which is bundled with Docker Desktop 4.24.
+
+Configure `watch` in your
+[Docker compose file](https://docs.docker.com/compose/compose-application-model/#the-compose-file)
+to mount the project directory without syncing the project virtual environment and to rebuild the
+image when the configuration changes:
+
+```yaml title="compose.yaml"
+services:
+  example:
+    build: .
+
+    # ...
+
+    develop:
+      # Create a `watch` configuration to update the appl
+      #
+      watch:
+        # Sync the working directory with the `/app` directory in the container
+        - action: sync
+          path: .
+          target: /app
+          # Exclude the project virtual environment
+          ignore:
+            - .venv/
+
+        # Rebuild the image on changes to the `pyproject.toml`
+        - action: rebuild
+          path: ./pyproject.toml
+```
+
+Then, run `docker compose watch` to run the container with the development setup.
+
+See a complete example in the
+[`uv-docker-example` project](https://github.com/astral-sh/uv-docker-example/blob/main/compose.yml).
 
 ## Optimizations
 
