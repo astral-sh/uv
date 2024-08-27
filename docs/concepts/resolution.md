@@ -296,6 +296,12 @@ To ensure reproducibility, messages for unsatisfiable resolutions will not menti
 distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated
 as if they do not exist.
 
+!!! note
+
+    The `--exclude-newer` option is only applied to packages read from a registry and will not downgrade
+    previously installed packages unless the `--reinstall` flag is provided, in which case uv will
+    perform a new resolution.
+
 ## Learn more
 
 For more details about the internals of the resolver, see the
