@@ -27,7 +27,7 @@ use uv_resolver::{
     ResolverMarkers, SatisfiesResult,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
@@ -248,7 +248,7 @@ async fn do_lock(
     } = settings;
 
     // Collect the requirements, etc.
-    let requirements = workspace.root_requirements().collect::<Vec<_>>();
+    let requirements = workspace.non_project_requirements().collect::<Vec<_>>();
     let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
     let constraints = workspace.constraints();
     let dev = vec![DEV_DEPENDENCIES.clone()];
@@ -262,7 +262,7 @@ async fn do_lock(
         // If this is a non-virtual project with a single member, we can omit it from the lockfile.
         // If any members are added or removed, it will inherently mismatch. If the member is
         // renamed, it will also mismatch.
-        if members.len() == 1 && !workspace.is_virtual() {
+        if members.len() == 1 && !workspace.is_non_project() {
             members.clear();
         }
 
@@ -313,19 +313,15 @@ async fn do_lock(
         if requires_python.is_unbounded() {
             let default =
                 RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-            warn_user!("The workspace `requires-python` value does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
+            warn_user_once!("The workspace `requires-python` value does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
         }
         requires_python
     } else {
         let default =
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-        if workspace.only_virtual() {
-            debug!("No `requires-python` in virtual-only workspace. Defaulting to `{default}`.");
-        } else {
-            warn_user!(
-                "No `requires-python` value found in the workspace. Defaulting to `{default}`."
-            );
-        }
+        warn_user_once!(
+            "No `requires-python` value found in the workspace. Defaulting to `{default}`."
+        );
         default
     };
 

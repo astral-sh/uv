@@ -3511,9 +3511,9 @@ fn add_lower_bound_local() -> Result<()> {
     Ok(())
 }
 
-/// Add dependencies to a virtual workspace root.
+/// Add dependencies to a (legacy) non-project workspace root.
 #[test]
-fn add_virtual() -> Result<()> {
+fn add_non_project() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -3530,7 +3530,7 @@ fn add_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Found a virtual workspace root, but virtual projects do not support production dependencies (instead, use: `uv add --dev`)
+    error: Found a non-project workspace root; production dependencies are unsupported (instead, use: `uv add --dev`)
     "###);
 
     // Adding `iniconfig` as optional should fail, since virtual workspace roots don't support
@@ -3541,7 +3541,7 @@ fn add_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Found a virtual workspace root, but virtual projects do not support optional dependencies (instead, use: `uv add --dev`)
+    error: Found a non-project workspace root; optional dependencies are unsupported (instead, use: `uv add --dev`)
     "###);
 
     // Adding `iniconfig` as a dev dependency should succeed.
@@ -3551,6 +3551,7 @@ fn add_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
