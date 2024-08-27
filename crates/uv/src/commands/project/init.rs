@@ -15,7 +15,7 @@ use uv_python::{
 };
 use uv_resolver::RequiresPython;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{check_nested_workspaces, DiscoveryOptions, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
 
 use crate::commands::project::find_requires_python;
 use crate::commands::reporters::PythonDownloadReporter;
@@ -69,24 +69,21 @@ pub(crate) async fn init(
         }
     };
 
-    if r#virtual {
-        init_virtual_workspace(&path, no_workspace)?;
-    } else {
-        init_project(
-            &path,
-            &name,
-            no_readme,
-            python,
-            no_workspace,
-            python_preference,
-            python_downloads,
-            connectivity,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?;
-    }
+    init_project(
+        &path,
+        &name,
+        r#virtual,
+        no_readme,
+        python,
+        no_workspace,
+        python_preference,
+        python_downloads,
+        connectivity,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await?;
 
     // Create the `README.md` if it does not already exist.
     if !no_readme {
@@ -126,29 +123,12 @@ pub(crate) async fn init(
     Ok(ExitStatus::Success)
 }
 
-/// Initialize a virtual workspace at the given path.
-fn init_virtual_workspace(path: &Path, no_workspace: bool) -> Result<()> {
-    // Ensure that we aren't creating a nested workspace.
-    if !no_workspace {
-        check_nested_workspaces(path, &DiscoveryOptions::default());
-    }
-
-    // Create the `pyproject.toml`.
-    let pyproject = indoc::indoc! {r"
-        [tool.uv.workspace]
-        members = []
-    "};
-
-    fs_err::create_dir_all(path)?;
-    fs_err::write(path.join("pyproject.toml"), pyproject)?;
-
-    Ok(())
-}
-
 /// Initialize a project (and, implicitly, a workspace root) at the given path.
+#[allow(clippy::fn_params_excessive_bools)]
 async fn init_project(
     path: &Path,
     name: &PackageName,
+    r#virtual: bool,
     no_readme: bool,
     python: Option<String>,
     no_workspace: bool,
@@ -265,38 +245,56 @@ async fn init_project(
         RequiresPython::greater_than_equal_version(&interpreter.python_minor_version())
     };
 
-    // Create the `pyproject.toml`.
-    let pyproject = indoc::formatdoc! {r#"
-        [project]
-        name = "{name}"
-        version = "0.1.0"
-        description = "Add your description here"{readme}
-        requires-python = "{requires_python}"
-        dependencies = []
+    if r#virtual {
+        // Create the `pyproject.toml`, but omit `[build-system]`.
+        let pyproject = indoc::formatdoc! {r#"
+            [project]
+            name = "{name}"
+            version = "0.1.0"
+            description = "Add your description here"{readme}
+            requires-python = "{requires_python}"
+            dependencies = []
+            "#,
+            readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
+            requires_python = requires_python.specifiers(),
+        };
 
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "#,
-        readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
-        requires_python = requires_python.specifiers(),
-    };
+        fs_err::create_dir_all(path)?;
+        fs_err::write(path.join("pyproject.toml"), pyproject)?;
+    } else {
+        // Create the `pyproject.toml`.
+        let pyproject = indoc::formatdoc! {r#"
+            [project]
+            name = "{name}"
+            version = "0.1.0"
+            description = "Add your description here"{readme}
+            requires-python = "{requires_python}"
+            dependencies = []
 
-    fs_err::create_dir_all(path)?;
-    fs_err::write(path.join("pyproject.toml"), pyproject)?;
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+            "#,
+            readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
+            requires_python = requires_python.specifiers(),
+        };
 
-    // Create `src/{name}/__init__.py`, if it doesn't exist already.
-    let src_dir = path.join("src").join(&*name.as_dist_info_name());
-    let init_py = src_dir.join("__init__.py");
-    if !init_py.try_exists()? {
-        fs_err::create_dir_all(&src_dir)?;
-        fs_err::write(
-            init_py,
-            indoc::formatdoc! {r#"
+        fs_err::create_dir_all(path)?;
+        fs_err::write(path.join("pyproject.toml"), pyproject)?;
+
+        // Create `src/{name}/__init__.py`, if it doesn't exist already.
+        let src_dir = path.join("src").join(&*name.as_dist_info_name());
+        let init_py = src_dir.join("__init__.py");
+        if !init_py.try_exists()? {
+            fs_err::create_dir_all(&src_dir)?;
+            fs_err::write(
+                init_py,
+                indoc::formatdoc! {r#"
             def hello() -> str:
                 return "Hello from {name}!"
             "#},
-        )?;
+            )?;
+        }
     }
 
     if let Some(workspace) = workspace {

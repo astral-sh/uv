@@ -27,6 +27,10 @@ fn run_with_python_version() -> Result<()> {
           "anyio==3.6.0 ; python_version == '3.11'",
           "anyio==3.7.0 ; python_version == '3.12'",
         ]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
     let test_script = context.temp_dir.child("main.py");
@@ -146,6 +150,10 @@ fn run_args() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.8"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -201,6 +209,10 @@ fn run_pep723_script() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.8"
         dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -363,6 +375,10 @@ fn run_pythonw_script() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.8"
         dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -473,6 +489,10 @@ fn run_managed_false() -> Result<()> {
         requires-python = ">=3.8"
         dependencies = ["anyio"]
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv]
         managed = false
         "#
@@ -501,6 +521,10 @@ fn run_with() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.8"
         dependencies = ["anyio", "sniffio==1.3.1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -597,6 +621,10 @@ fn run_with_editable() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.8"
         dependencies = ["anyio", "sniffio==1.3.1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -660,6 +688,10 @@ fn run_with_editable() -> Result<()> {
         requires-python = ">=3.8"
         dependencies = ["anyio", "sniffio==1.3.1"]
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.sources]
         anyio = { path = "./src/anyio_local", editable = true }
         "#
@@ -719,6 +751,10 @@ fn run_locked() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -745,6 +781,10 @@ fn run_locked() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -797,6 +837,10 @@ fn run_frozen() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -820,6 +864,10 @@ fn run_frozen() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -853,6 +901,10 @@ fn run_empty_requirements_txt() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.8"
         dependencies = ["anyio", "sniffio==1.3.1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -909,6 +961,10 @@ fn run_requirements_txt() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.8"
         dependencies = ["anyio", "sniffio==1.3.1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -1024,6 +1080,10 @@ fn run_requirements_txt_arguments() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.8"
         dependencies = ["typing_extensions"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -1069,15 +1129,15 @@ fn run_editable() -> Result<()> {
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-
         [project]
         name = "foo"
         version = "1.0.0"
         requires-python = ">=3.8"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -1136,6 +1196,10 @@ fn run_from_directory() -> Result<()> {
 
         [project.scripts]
         main = "main:main"
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
     let main_script = project_dir.child("main.py");
@@ -1180,6 +1244,10 @@ fn run_without_output() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.8"
         dependencies = ["anyio", "sniffio==1.3.1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -1219,15 +1287,15 @@ fn run_isolated_python_version() -> Result<()> {
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-
         [project]
         name = "foo"
         version = "1.0.0"
         requires-python = ">=3.8"
         dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
 
@@ -1318,15 +1386,15 @@ fn run_no_project() -> Result<()> {
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-
         [project]
         name = "foo"
         version = "1.0.0"
         requires-python = ">=3.8"
         dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
         "#
     })?;
 

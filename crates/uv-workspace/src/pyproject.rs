@@ -33,6 +33,10 @@ pub struct PyProjectToml {
     /// The raw unserialized document.
     #[serde(skip)]
     pub raw: String,
+
+    /// Used to determine whether a `build-system` is present.
+    #[serde(default, skip_serializing)]
+    build_system: Option<serde::de::IgnoredAny>,
 }
 
 impl PyProjectToml {
@@ -40,6 +44,23 @@ impl PyProjectToml {
     pub fn from_string(raw: String) -> Result<Self, toml::de::Error> {
         let pyproject = toml::from_str(&raw)?;
         Ok(PyProjectToml { raw, ..pyproject })
+    }
+
+    /// Returns `true` if the project should be considered a Python package, as opposed to a
+    /// non-package ("virtual") project.
+    pub fn is_package(&self) -> bool {
+        // If `tool.uv.package` is set, defer to that explicit setting.
+        if let Some(is_package) = self
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.package)
+        {
+            return is_package;
+        }
+
+        // Otherwise, a project is assumed to be a package if `build-system` is present.
+        self.build_system.is_some()
     }
 }
 
@@ -100,6 +121,24 @@ pub struct ToolUv {
         "#
     )]
     pub managed: Option<bool>,
+    /// Whether the project should be considered a Python package, or a non-package ("virtual")
+    /// project.
+    ///
+    /// Packages are built and installed into the virtual environment in editable mode and thus
+    /// require a build backend, while virtual projects are _not_ built or installed; instead, only
+    /// their dependencies are included in the virtual environment.
+    ///
+    /// Creating a package requires that a `build-system` is present in the `pyproject.toml`, and
+    /// that the project adheres to a structure that adheres to the build backend's expectations
+    /// (e.g., a `src` layout).
+    #[option(
+        default = r#"true"#,
+        value_type = "bool",
+        example = r#"
+            package = false
+        "#
+    )]
+    pub package: Option<bool>,
     /// The project's development dependencies. Development dependencies will be installed by
     /// default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
     #[cfg_attr(

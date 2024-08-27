@@ -2099,11 +2099,12 @@ pub struct InitArgs {
     #[arg(long)]
     pub name: Option<PackageName>,
 
-    /// Create a virtual workspace instead of a project.
+    /// Create a virtual project, rather than a package.
     ///
-    /// A virtual workspace does not define project dependencies and cannot be
-    /// published. Instead, workspace members declare project dependencies.
-    /// Development dependencies may still be declared.
+    /// A virtual project is a project that is not intended to be built as a Python package,
+    /// such as a project that only contains scripts or other application code.
+    ///
+    /// Virtual projects themselves are not installed into the Python environment.
     #[arg(long)]
     pub r#virtual: bool,
 
