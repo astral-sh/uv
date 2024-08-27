@@ -76,16 +76,6 @@ RUN uv sync --frozen
     in your repository to prevent it from being included in image builds. The project virtual
     environment is dependent on your local platform and should be created from scratch in the image.
 
-!!! note
-
-    uv does not yet support installing Python on musl-based distributions. For example, if you are
-    using an Alpine Linux base image that doesn't have Python installed, you need to add it with
-    the system package manager:
-
-    ```shell
-    apk add --no-cache python3~=3.12
-    ```
-
 Then, to start your application by default:
 
 ```dockerfile title="Dockerfile"
@@ -150,6 +140,17 @@ $ docker run -it $(docker build -q .) /bin/bash -c "cowsay -t hello"
     ```dockerfile title="Dockerfile"
     ENV UV_TOOL_BIN_DIR=/opt/uv-bin/
     ```
+
+### Installing Python in musl-based images
+
+While uv [installs a compatible Python version](../install-python.md) if there isn't one available
+in the image, uv does not yet support installing Python for musl-based distributions. For example,
+if you are using an Alpine Linux base image that doesn't have Python installed, you need to add it
+with the system package manager:
+
+```shell
+apk add --no-cache python3~=3.12
+```
 
 ## Developing in a container
 
