@@ -1529,6 +1529,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Err(err) => return Err(err),
         }
 
+        // If the source distribution is a source tree, avoid reading `PKG-INFO` or `egg-info`,
+        // since they could be out-of-date.
+        if source.is_source_tree() {
+            return Ok(None);
+        }
+
         // Attempt to read static metadata from the `PKG-INFO` file.
         match read_pkg_info(source_root, subdirectory).await {
             Ok(metadata) => {

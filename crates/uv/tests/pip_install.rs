@@ -6386,3 +6386,72 @@ fn switch_platform() -> Result<()> {
 
     Ok(())
 }
+
+/// See: <https://github.com/astral-sh/uv/pull/6714>
+#[test]
+fn stale_egg_info() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a project with dynamic metadata (version).
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+
+        dependencies = ["iniconfig"]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Ensure that `.egg-info` exists.
+    let egg_info = context.temp_dir.child("project.egg-info");
+    egg_info.assert(predicates::path::is_dir());
+
+    // Change the metadata.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+
+        dependencies = ["anyio"]
+        "#
+    })?;
+
+    // Reinstall. Ensure that the metadata is updated.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
