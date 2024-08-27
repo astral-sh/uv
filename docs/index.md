@@ -23,7 +23,7 @@ An extremely fast Python package and project manager, written in Rust.
 - ❇️ [Runs scripts](#script-support), with support for
   [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
 - 🗂️ Provides [comprehensive project management](#project-management), with a
-  [universal lockfile](./concepts/projects.md#lockfile).
+  [universal lockfile](./concepts/projects.md#project-lockfile).
 - 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
   familiar CLI.
 - 🏢 Supports Cargo-style [workspaces](./concepts/workspaces.md) for scalable projects.
