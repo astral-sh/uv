@@ -257,6 +257,8 @@ pub enum LoweringError {
     EditableFile(String),
     #[error(transparent)]
     ParsedUrl(#[from] ParsedUrlError),
+    #[error("Path must be UTF-8: `{0}`")]
+    NonUtf8Path(PathBuf),
     #[error(transparent)] // Function attaches the context
     RelativeTo(io::Error),
 }
@@ -264,7 +266,7 @@ pub enum LoweringError {
 /// Convert a Git source into a [`RequirementSource`].
 fn git_source(
     git: &Url,
-    subdirectory: Option<String>,
+    subdirectory: Option<PathBuf>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -282,7 +284,10 @@ fn git_source(
     if let Some(rev) = reference.as_str() {
         url.set_path(&format!("{}@{}", url.path(), rev));
     }
-    if let Some(subdirectory) = &subdirectory {
+    if let Some(subdirectory) = subdirectory.as_ref() {
+        let subdirectory = subdirectory
+            .to_str()
+            .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.clone()))?;
         url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
     }
     let url = VerbatimUrl::from_url(url);
@@ -294,17 +299,20 @@ fn git_source(
         repository,
         reference,
         precise: None,
-        subdirectory: subdirectory.map(PathBuf::from),
+        subdirectory,
     })
 }
 
 /// Convert a URL source into a [`RequirementSource`].
-fn url_source(url: Url, subdirectory: Option<String>) -> Result<RequirementSource, LoweringError> {
+fn url_source(url: Url, subdirectory: Option<PathBuf>) -> Result<RequirementSource, LoweringError> {
     let mut verbatim_url = url.clone();
     if verbatim_url.fragment().is_some() {
         return Err(LoweringError::ForbiddenFragment(url));
     }
-    if let Some(subdirectory) = &subdirectory {
+    if let Some(subdirectory) = subdirectory.as_ref() {
+        let subdirectory = subdirectory
+            .to_str()
+            .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.clone()))?;
         verbatim_url.set_fragment(Some(subdirectory));
     }
 

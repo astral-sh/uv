@@ -314,7 +314,7 @@ pub enum Source {
         /// The repository URL (without the `git+` prefix).
         git: Url,
         /// The path to the directory with the `pyproject.toml`, if it's not in the archive root.
-        subdirectory: Option<String>,
+        subdirectory: Option<PathBuf>,
         // Only one of the three may be used; we'll validate this later and emit a custom error.
         rev: Option<String>,
         tag: Option<String>,
@@ -331,13 +331,13 @@ pub enum Source {
         url: Url,
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
-        subdirectory: Option<String>,
+        subdirectory: Option<PathBuf>,
     },
     /// The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or
     /// `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
     /// `setup.py` file in the root).
     Path {
-        path: String,
+        path: PathBuf,
         /// `false` by default.
         editable: Option<bool>,
     },
@@ -355,12 +355,12 @@ pub enum Source {
     /// A catch-all variant used to emit precise error messages when deserializing.
     CatchAll {
         git: String,
-        subdirectory: Option<String>,
+        subdirectory: Option<PathBuf>,
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
         url: String,
-        patch: String,
+        path: PathBuf,
         index: String,
         workspace: bool,
     },
@@ -437,16 +437,13 @@ impl Source {
                 editable,
                 path: relative_to(&install_path, root)
                     .or_else(|_| std::path::absolute(&install_path))
-                    .map_err(SourceError::Absolute)?
-                    .to_str()
-                    .ok_or_else(|| SourceError::NonUtf8Path(install_path))?
-                    .to_string(),
+                    .map_err(SourceError::Absolute)?,
             },
             RequirementSource::Url {
                 subdirectory, url, ..
             } => Source::Url {
                 url: url.to_url(),
-                subdirectory: subdirectory.map(|path| path.to_string_lossy().into_owned()),
+                subdirectory,
             },
             RequirementSource::Git {
                 repository,
@@ -470,7 +467,7 @@ impl Source {
                         tag,
                         branch,
                         git: repository,
-                        subdirectory: subdirectory.map(|path| path.to_string_lossy().into_owned()),
+                        subdirectory,
                     }
                 } else {
                     Source::Git {
@@ -478,7 +475,7 @@ impl Source {
                         tag,
                         branch,
                         git: repository,
-                        subdirectory: subdirectory.map(|path| path.to_string_lossy().into_owned()),
+                        subdirectory,
                     }
                 }
             }

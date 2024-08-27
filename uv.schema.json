@@ -1252,7 +1252,7 @@
           "required": [
             "git",
             "index",
-            "patch",
+            "path",
             "url",
             "workspace"
           ],
@@ -1269,7 +1269,7 @@
             "index": {
               "type": "string"
             },
-            "patch": {
+            "path": {
               "type": "string"
             },
             "rev": {
