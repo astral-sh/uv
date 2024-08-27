@@ -1,6 +1,7 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
@@ -4188,16 +4189,12 @@ fn add_git_to_script() -> Result<()> {
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
-        #   "rich",
+        #   "anyio",
         # ]
         # ///
 
-        import requests
-        from rich.pretty import pprint
-
-        resp = requests.get("https://peps.python.org/api/peps.json")
-        data = resp.json()
-        pprint([(k, v["title"]) for k, v in data.items()][:10])
+        import anyio
+        import uv_public_pypackage
     "#})?;
 
     uv_snapshot!(context.filters(), context
@@ -4223,23 +4220,23 @@ fn add_git_to_script() -> Result<()> {
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
-        #   "rich",
+        #   "anyio",
         #   "uv-public-pypackage",
         # ]
-
+        #
         # [tool.uv.sources]
         # uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
         # ///
 
-        import requests
-        from rich.pretty import pprint
-
-        resp = requests.get("https://peps.python.org/api/peps.json")
-        data = resp.json()
-        pprint([(k, v["title"]) for k, v in data.items()][:10])
+        import anyio
+        import uv_public_pypackage
         "###
         );
     });
+
+    // Ensure that the script runs without error.
+    context.run().arg("script.py").assert().success();
+
     Ok(())
 }
 

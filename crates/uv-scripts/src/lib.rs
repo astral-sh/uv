@@ -350,13 +350,12 @@ fn serialize_metadata(metadata: &str) -> String {
     output.push('\n');
 
     for line in metadata.lines() {
-        if line.is_empty() {
-            output.push('\n');
-        } else {
-            output.push_str("# ");
+        output.push('#');
+        if !line.is_empty() {
+            output.push(' ');
             output.push_str(line);
-            output.push('\n');
         }
+        output.push('\n');
     }
 
     output.push_str("# ///");
