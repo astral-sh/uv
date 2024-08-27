@@ -24,6 +24,7 @@ mod environment;
 mod implementation;
 mod installation;
 mod interpreter;
+mod libc;
 pub mod managed;
 pub mod platform;
 mod pointer_size;
@@ -1559,6 +1560,32 @@ mod tests {
             "We should prefer the requested directory over the system and active virtual environments"
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_venv_symlink() -> Result<()> {
+        let context = TestContext::new()?;
+
+        let venv = context.tempdir.child("target").child("env");
+        TestContext::mock_venv(&venv, "3.10.6")?;
+        let symlink = context.tempdir.child("proj").child(".venv");
+        context.tempdir.child("proj").create_dir_all()?;
+        symlink.symlink_to_dir(venv)?;
+
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("../proj/.venv"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.10.6",
+            "We should find the symlinked venv"
+        );
         Ok(())
     }
 

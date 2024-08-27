@@ -57,6 +57,12 @@ hello world!
 
 Additionally, your script can be read directly from stdin:
 
+```console
+$ echo 'print("hello world!")' | uv run -
+```
+
+Or, if your shell supports [here-documents](https://en.wikipedia.org/wiki/Here_document):
+
 ```bash
 uv run - <<EOF
 print("hello world!")

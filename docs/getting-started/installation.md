@@ -35,11 +35,11 @@ By default, uv is installed to `~/.cargo/bin`.
 Request a specific version by including it in the URL:
 
 ```console title="macOS and Linux"
-$ curl -LsSf https://astral.sh/uv/0.3.2/install.sh | sh
+$ curl -LsSf https://astral.sh/uv/0.3.4/install.sh | sh
 ```
 
 ```console title="Windows"
-$ powershell -c "irm https://astral.sh/uv/0.3.2/install.ps1 | iex"
+$ powershell -c "irm https://astral.sh/uv/0.3.4/install.ps1 | iex"
 ```
 
 ### PyPI

@@ -11,7 +11,6 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
-
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -688,7 +687,11 @@ fn can_skip_ephemeral(
         return false;
     }
 
-    match site_packages.satisfies(&spec.requirements, &spec.constraints) {
+    match site_packages.satisfies(
+        &spec.requirements,
+        &spec.constraints,
+        &base_interpreter.resolver_markers(),
+    ) {
         // If the requirements are already satisfied, we're done.
         Ok(SatisfiesResult::Fresh {
             recursive_requirements,

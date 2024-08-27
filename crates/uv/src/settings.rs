@@ -7,7 +7,7 @@ use std::str::FromStr;
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{ExtraName, RequirementOrigin};
-use pypi_types::Requirement;
+use pypi_types::{Requirement, SupportedEnvironments};
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::{
     options::{flag, resolver_installer_options, resolver_options},
@@ -296,12 +296,20 @@ impl ToolRunSettings {
 
         // If `--upgrade` was passed explicitly, warn.
         if installer.upgrade || !installer.upgrade_package.is_empty() {
-            warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool");
+            if with.is_empty() && with_requirements.is_empty() {
+                warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool.");
+            } else {
+                warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to upgrade any `--with` dependencies.");
+            }
         }
 
         // If `--reinstall` was passed explicitly, warn.
         if installer.reinstall || !installer.reinstall_package.is_empty() {
-            warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool");
+            if with.is_empty() && with_requirements.is_empty() {
+                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool.");
+            } else {
+                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to reinstall any `--with` dependencies.");
+            }
         }
 
         Self {
@@ -613,6 +621,7 @@ impl PythonPinSettings {
         }
     }
 }
+
 /// The resolved settings to use for a `sync` invocation.
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
@@ -658,16 +667,6 @@ impl SyncSettings {
             filesystem,
         );
 
-        let exact = flag(exact, inexact).unwrap_or(true);
-
-        // By default, sync with exact semantics, unless the user set `--no-build-isolation`;
-        // otherwise, we'll end up removing build dependencies.
-        let modifications = if !exact || settings.no_build_isolation {
-            Modifications::Sufficient
-        } else {
-            Modifications::Exact
-        };
-
         Self {
             locked,
             frozen,
@@ -681,7 +680,11 @@ impl SyncSettings {
                 no_install_workspace,
                 no_install_package,
             ),
-            modifications,
+            modifications: if flag(exact, inexact).unwrap_or(true) {
+                Modifications::Exact
+            } else {
+                Modifications::Sufficient
+            },
             package,
             python,
             refresh: Refresh::from(refresh),
@@ -924,9 +927,10 @@ pub(crate) struct PipCompileSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
+    pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
-    pub(crate) build_constraint: Vec<PathBuf>,
+    pub(crate) environments: SupportedEnvironments,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -1012,6 +1016,12 @@ impl PipCompileSettings {
             Vec::new()
         };
 
+        let environments = if let Some(configuration) = &filesystem {
+            configuration.environments.clone().unwrap_or_default()
+        } else {
+            SupportedEnvironments::default()
+        };
+
         Self {
             src_file,
             constraint: constraint
@@ -1028,6 +1038,7 @@ impl PipCompileSettings {
                 .collect(),
             constraints_from_workspace,
             overrides_from_workspace,
+            environments,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
@@ -1586,6 +1597,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
+    pub(crate) no_build_isolation_package: &'a [PackageName],
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
@@ -2166,6 +2178,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for InstallerSettingsRef<'a> {
             keyring_provider: settings.keyring_provider,
             config_setting: settings.config_setting,
             no_build_isolation: settings.no_build_isolation,
+            no_build_isolation_package: settings.no_build_isolation_package,
             exclude_newer: settings.exclude_newer,
             link_mode: settings.link_mode,
             compile_bytecode: settings.compile_bytecode,

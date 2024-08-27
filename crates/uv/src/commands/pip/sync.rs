@@ -31,7 +31,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
-use crate::commands::pip::{operations, resolution_environment};
+use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 
@@ -183,8 +183,17 @@ pub(crate) async fn pip_sync(
         PythonRequirement::from_interpreter(interpreter)
     };
 
-    // Determine the environment for the resolution.
-    let (tags, markers) = resolution_environment(python_version, python_platform, interpreter)?;
+    // Determine the markers and tags to use for resolution.
+    let markers = resolution_markers(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    );
+    let tags = resolution_tags(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    )?;
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -213,7 +222,7 @@ pub(crate) async fn pip_sync(
         .cache(cache.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
-        .markers(&markers)
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -292,7 +301,7 @@ pub(crate) async fn pip_sync(
         &reinstall,
         &upgrade,
         Some(&tags),
-        ResolverMarkers::specific_environment((*markers).clone()),
+        ResolverMarkers::specific_environment(markers.clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -325,6 +334,7 @@ pub(crate) async fn pip_sync(
         compile,
         &index_locations,
         &hasher,
+        &markers,
         &tags,
         &client,
         &state.in_flight,
@@ -343,7 +353,7 @@ pub(crate) async fn pip_sync(
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run {
-        operations::diagnose_environment(&resolution, &environment, printer)?;
+        operations::diagnose_environment(&resolution, &environment, &markers, printer)?;
     }
 
     Ok(ExitStatus::Success)

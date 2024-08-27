@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
-use pypi_types::VerbatimParsedUrl;
+use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
@@ -40,15 +40,17 @@ pub struct Options {
     pub top_level: ResolverInstallerOptions,
     #[option_group]
     pub pip: Option<PipOptions>,
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "PEP 508 style requirements, e.g. `ruff==0.5.0`, or `ruff @ https://...`."
-        )
-    )]
+
+    // NOTE(charlie): These fields are shared with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`.
@@ -63,10 +65,6 @@ pub struct Options {
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
     dev_dependencies: serde::de::IgnoredAny,
-
-    #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    environments: serde::de::IgnoredAny,
 
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "schemars", schemars(skip))]

@@ -256,7 +256,6 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 SourceUrl::Directory(DirectorySourceUrl {
                     url: &requirement.url.verbatim,
                     install_path: Cow::Borrowed(&parsed_directory_url.install_path),
-                    lock_path: Cow::Borrowed(&parsed_directory_url.lock_path),
                     editable: parsed_directory_url.editable,
                 })
             }

@@ -1,6 +1,5 @@
 use pypi_types::RequirementSource;
 
-use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
 use crate::resolver::ForkSet;
@@ -68,7 +67,7 @@ impl PrereleaseStrategy {
     pub(crate) fn from_mode(
         mode: PrereleaseMode,
         manifest: &Manifest,
-        markers: Option<&MarkerEnvironment>,
+        markers: &ResolverMarkers,
         dependencies: DependencyMode,
     ) -> Self {
         let mut packages = ForkSet::default();

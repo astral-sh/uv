@@ -2261,10 +2261,7 @@ pub struct SyncArgs {
     /// Do not remove extraneous packages present in the environment.
     ///
     /// When enabled, uv will make the minimum necessary changes to satisfy the requirements.
-    ///
-    /// By default, syncing will remove any extraneous packages from the environment, unless
-    /// `--no-build-isolation` is enabled, in which case extra packages are considered necessary for
-    /// builds.
+    /// By default, syncing will remove any extraneous packages from the environment
     #[arg(long, overrides_with("exact"), alias = "no-exact")]
     pub inexact: bool,
 
@@ -2426,11 +2423,11 @@ pub struct AddArgs {
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
-    #[arg(long, overrides_with = "no_editable", hide = true)]
+    /// Add the requirements as editable.
+    #[arg(long, overrides_with = "no_editable")]
     pub editable: bool,
 
-    /// Don't add the requirements as editables.
-    #[arg(long, overrides_with = "editable")]
+    #[arg(long, overrides_with = "editable", hide = true)]
     pub no_editable: bool,
 
     /// Add source requirements to `project.dependencies`, rather than `tool.uv.sources`.

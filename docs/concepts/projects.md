@@ -233,3 +233,100 @@ dependencies listed.
 
 If working in a project composed of many packages, see the [workspaces](./workspaces.md)
 documentation.
+
+## Build isolation
+
+By default, uv builds all packages in isolated virtual environments, as per
+[PEP 517](https://peps.python.org/pep-0517/). Some packages are incompatible with build isolation,
+be it intentionally (e.g., due to the use of heavy build dependencies, mostly commonly PyTorch) or
+unintentionally (e.g., due to the use of legacy packaging setups).
+
+To disable build isolation for a specific dependency, add it to the `no-build-isolation-package`
+list in your `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[project]
+name = "project"
+version = "0.1.0"
+description = "..."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["cchardet"]
+
+[tool.uv]
+no-build-isolation-package = ["cchardet"]
+```
+
+Installing packages without build isolation requires that the package's build dependencies are
+installed in the project environment _prior_ to installing the package itself. This can be achieved
+by separating out the build dependencies and the packages that require them into distinct optional
+groups. For example:
+
+```toml title="pyproject.toml"
+[project]
+name = "project"
+version = "0.1.0"
+description = "..."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+build = ["setuptools", "cython"]
+compile = ["cchardet"]
+```
+
+Given the above, a user would first sync the `build` dependencies:
+
+```console
+$ uv sync --extra build
+ + cython==3.0.11
+ + foo==0.1.0 (from file:///Users/crmarsh/workspace/uv/foo)
+ + setuptools==73.0.1
+```
+
+Followed by the `compile` dependencies:
+
+```console
+$ uv sync --extra compile
+ + cchardet==2.1.7
+ - cython==3.0.11
+ - setuptools==73.0.1
+```
+
+Note that `uv sync --extra compile` would, by default, uninstall the `cython` and `setuptools`
+packages. To instead retain the build dependencies, include both extras in the second `uv sync`
+invocation:
+
+```console
+$ uv sync --extra build
+$ uv sync --extra build --extra compile
+```
+
+Some packages, like `cchardet`, only require build dependencies for the _installation_ phase of
+`uv sync`. Others, like `flash-atten`, require their build dependencies to be present even just to
+resolve the project's lockfile during the _resolution_ phase.
+
+In such cases, the build dependencies must be installed prior to running any `uv lock` or `uv sync`
+commands, using the lower lower-level `uv pip` API. For example, given:
+
+```toml title="pyproject.toml"
+[project]
+name = "project"
+version = "0.1.0"
+description = "..."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["flash-attn"]
+
+[tool.uv]
+no-build-isolation-package = ["flash-attn"]
+```
+
+You could run the following sequence of commands:
+
+```console
+$ uv venv
+$ uv pip install torch
+$ uv sync
+```

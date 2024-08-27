@@ -98,6 +98,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let builder = SourceBuild::setup(
         &args.sdist,
         args.subdirectory.as_deref(),
+        None,
         python.interpreter(),
         &build_dispatch,
         SourceBuildContext::default(),

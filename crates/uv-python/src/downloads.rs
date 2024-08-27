@@ -22,6 +22,7 @@ use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
 use crate::installation::PythonInstallationKey;
+use crate::libc::LibcDetectionError;
 use crate::platform::{self, Arch, Libc, Os};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
@@ -75,6 +76,8 @@ pub enum Error {
         "A mirror was provided via `{0}`, but the URL does not match the expected format: {0}"
     )]
     Mirror(&'static str, &'static str),
+    #[error(transparent)]
+    LibcDetection(#[from] LibcDetectionError),
 }
 
 #[derive(Debug, PartialEq)]
@@ -167,8 +170,7 @@ impl PythonDownloadRequest {
     /// Fill empty entries with default values.
     ///
     /// Platform information is pulled from the environment.
-    #[must_use]
-    pub fn fill(mut self) -> Self {
+    pub fn fill(mut self) -> Result<Self, Error> {
         if self.implementation.is_none() {
             self.implementation = Some(ImplementationName::CPython);
         }
@@ -179,9 +181,9 @@ impl PythonDownloadRequest {
             self.os = Some(Os::from_env());
         }
         if self.libc.is_none() {
-            self.libc = Some(Libc::from_env());
+            self.libc = Some(Libc::from_env()?);
         }
-        self
+        Ok(self)
     }
 
     /// Construct a new [`PythonDownloadRequest`] with platform information from the environment.
@@ -191,7 +193,7 @@ impl PythonDownloadRequest {
             None,
             Some(Arch::from_env()),
             Some(Os::from_env()),
-            Some(Libc::from_env()),
+            Some(Libc::from_env()?),
         ))
     }
 
@@ -387,7 +389,11 @@ impl ManagedPythonDownload {
 
     /// Iterate over all [`PythonDownload`]'s.
     pub fn iter_all() -> impl Iterator<Item = &'static ManagedPythonDownload> {
-        PYTHON_DOWNLOADS.iter()
+        PYTHON_DOWNLOADS
+            .iter()
+            // TODO(konsti): musl python-build-standalone builds are currently broken (statically
+            // linked), so we pretend they don't exist. https://github.com/astral-sh/uv/issues/4242
+            .filter(|download| download.key.libc != Libc::Some(target_lexicon::Environment::Musl))
     }
 
     pub fn url(&self) -> &str {

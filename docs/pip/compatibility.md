@@ -478,8 +478,13 @@ consistent with
 
 ## Package priority
 
-There are usually many possible solutions given a set of requirements — a resolver must choose
-between the solutions. Unlike pip, uv's resolver uses the ordering provided of packages to determine
-the default priority. This means that uv's resolution can differ based on the order of the packages.
-For example, `uv pip install foo bar` would prioritize a newer version of `foo` over `bar`.
-Similarly, this applies to the ordering of requirements in input files to `uv pip compile`.
+There are usually many possible solutions given a set of requirements, and a resolver must choose
+between them. uv's resolver and pip's resolver have a different set of package priorities. While
+both resolvers use the user-provided order as one of their priorities, pip has additional
+[priorities](https://pip.pypa.io/en/stable/topics/more-dependency-resolution/#the-resolver-algorithm)
+that uv does not have. Hence, uv is more likely to be affected by a change in user order than pip
+is.
+
+For example, `uv pip install foo bar` prioritizes newer versions of `foo` over `bar` and could
+result in a different resolution than `uv pip install bar foo`. Similarly, this behavior applies to
+the ordering of requirements in input files for `uv pip compile`.

@@ -1,9 +1,8 @@
 use rustc_hash::FxHashMap;
 
-use pep508_rs::MarkerEnvironment;
 use uv_normalize::{GroupName, PackageName};
 
-use crate::Manifest;
+use crate::{Manifest, ResolverMarkers};
 
 /// A map of package names to their activated dependency groups.
 #[derive(Debug, Default, Clone)]
@@ -11,7 +10,7 @@ pub(crate) struct Groups(FxHashMap<PackageName, Vec<GroupName>>);
 
 impl Groups {
     /// Determine the set of enabled dependency groups in the [`Manifest`].
-    pub(crate) fn from_manifest(manifest: &Manifest, markers: Option<&MarkerEnvironment>) -> Self {
+    pub(crate) fn from_manifest(manifest: &Manifest, markers: &ResolverMarkers) -> Self {
         let mut groups = FxHashMap::default();
 
         // Enable the groups for all direct dependencies. In practice, this tends to mean: when

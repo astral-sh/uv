@@ -32,6 +32,7 @@ clap = { workspace = true, optional = true }
 configparser = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+goblin = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 regex = { workspace = true }

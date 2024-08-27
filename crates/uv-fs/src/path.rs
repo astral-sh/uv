@@ -240,16 +240,6 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     normalized
 }
 
-/// Convert a path to an absolute path, relative to the current working directory.
-///
-/// Unlike [`std::fs::canonicalize`], this function does not resolve symlinks and does not require
-/// the path to exist.
-pub fn absolutize_path(path: &Path) -> Result<Cow<Path>, std::io::Error> {
-    use path_absolutize::Absolutize;
-
-    path.absolutize_from(CWD.simplified())
-}
-
 /// Like `fs_err::canonicalize`, but avoids attempting to resolve symlinks on Windows.
 pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
     let path = path.as_ref();
@@ -270,6 +260,9 @@ pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBu
 /// `lib/python/site-packages/foo/__init__.py` and `lib/python/site-packages` -> `foo/__init__.py`
 /// `lib/marker.txt` and `lib/python/site-packages` -> `../../marker.txt`
 /// `bin/foo_launcher` and `lib/python/site-packages` -> `../../../bin/foo_launcher`
+///
+/// Returns `Err` if there is no relative path between `path` and `base` (for example, if the paths
+/// are on different drives on Windows).
 pub fn relative_to(
     path: impl AsRef<Path>,
     base: impl AsRef<Path>,
