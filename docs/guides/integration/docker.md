@@ -78,8 +78,9 @@ RUN uv sync --frozen
 
 !!! note
 
-    We currently don't support installing Python on musl-based distributions. If you are using an
-    alpine base image that doesn't have Python installed, you need to add it manually:
+    uv does not yet support installing Python on musl-based distributions. For example, if you are
+    using an Alpine Linux base image that doesn't have Python installed, you need to add it with
+    the system package manager:
 
     ```shell
     apk add --no-cache python3~=3.12
