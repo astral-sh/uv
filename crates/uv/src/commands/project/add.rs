@@ -13,7 +13,7 @@ use pypi_types::redact_git_credentials;
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, SourceStrategy};
+use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions, SourceStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::{Simplified, CWD};
@@ -642,9 +642,7 @@ pub(crate) async fn add(
 
     // Initialize any shared state.
     let state = SharedState::default();
-    let no_install_root = false;
-    let no_install_workspace = false;
-    let no_install_package = vec![];
+    let install_options = InstallOptions::default();
 
     if let Err(err) = project::sync::do_sync(
         &project,
@@ -652,9 +650,7 @@ pub(crate) async fn add(
         &lock,
         &extras,
         dev,
-        no_install_root,
-        no_install_workspace,
-        no_install_package,
+        install_options,
         Modifications::Sufficient,
         settings.as_ref().into(),
         &state,

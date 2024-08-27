@@ -4765,6 +4765,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
+ "distribution-types",
  "either",
  "pep508_rs",
  "platform-tags",
@@ -4777,6 +4778,7 @@ dependencies = [
  "uv-auth",
  "uv-cache",
  "uv-normalize",
+ "uv-workspace",
 ]
 
 [[package]]
