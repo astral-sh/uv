@@ -95,7 +95,7 @@ impl<'a> Installer<'a> {
                 relocatable,
             );
 
-            // This may fail if the main thread returned early due to an error.
+            // This may fail if the main task was cancelled.
             let _ = tx.send(result);
         });
 
