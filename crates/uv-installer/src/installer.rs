@@ -94,7 +94,9 @@ impl<'a> Installer<'a> {
                 reporter,
                 relocatable,
             );
-            tx.send(result).unwrap();
+
+            // This may fail if the main thread returned early due to an error.
+            let _ = tx.send(result);
         });
 
         rx.await
