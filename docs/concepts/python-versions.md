@@ -249,16 +249,20 @@ uv supports downloading and installing CPython and PyPy distributions.
 
 ### CPython distributions
 
-Python does not publish official distributable CPython binaries, uv uses third-party standalone
-distributions from the
-[`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project. The
-project is partially maintained by the uv maintainers and is used by many other Python projects.
+As Python does not publish official distributable CPython binaries, uv instead uses pre-built
+third-party distributions from the
+[`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project.
+`python-build-standalone` is partially maintained by the uv maintainers and is used in many other
+Python projects, like [Rye](https://github.com/astral-sh/rye) and
+[bazelbuild/rules_python](https://github.com/bazelbuild/rules_python).
 
 The uv Python distributions are self-contained, highly-portable, and performant. While Python can be
-built from source, as in tools like `pyenv`, it requires preinstalled system dependencies and
-creating optimized, performant builds is very slow.
+built from source, as in tools like `pyenv`, doing so requires preinstalled system dependencies, and
+creating optimized, performant builds (e.g., with PGO and LTO enabled) is very slow.
 
-These distributions have some behavior quirks, generally as a consequence of portability. See the
+These distributions have some behavior quirks, generally as a consequence of portability; and, at
+present, uv does not support installing them on musl-based Linux distributions, like Alpine Linux.
+See the
 [`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)
 documentation for details.
 
