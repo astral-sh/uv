@@ -55,7 +55,7 @@ pub(crate) fn pip_show(
     let site_packages = SitePackages::from_environment(&environment)?;
 
     // Determine the markers to use for resolution.
-    let markers = environment.interpreter().markers();
+    let markers = environment.interpreter().resolver_markers();
 
     // Sort and deduplicate the packages, which are keyed by name.
     packages.sort_unstable();
@@ -101,7 +101,7 @@ pub(crate) fn pip_show(
                 metadata
                     .requires_dist
                     .into_iter()
-                    .filter(|req| req.evaluate_markers(markers, &[]))
+                    .filter(|req| req.evaluate_markers(&markers, &[]))
                     .map(|req| req.name)
                     .sorted_unstable()
                     .dedup()
@@ -119,7 +119,7 @@ pub(crate) fn pip_show(
                 let requires = metadata
                     .requires_dist
                     .into_iter()
-                    .filter(|req| req.evaluate_markers(markers, &[]))
+                    .filter(|req| req.evaluate_markers(&markers, &[]))
                     .map(|req| req.name)
                     .collect_vec();
                 if !requires.is_empty() {
@@ -192,7 +192,7 @@ pub(crate) fn pip_show(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics()? {
+        for diagnostic in site_packages.diagnostics(&markers)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",

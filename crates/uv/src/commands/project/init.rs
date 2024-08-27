@@ -5,16 +5,15 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use pep440_rs::Version;
 use pep508_rs::PackageName;
-use tracing::debug;
+use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_fs::{absolutize_path, Simplified, CWD};
+use uv_fs::{Simplified, CWD};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     VersionRequest,
 };
 use uv_resolver::RequiresPython;
-use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{check_nested_workspaces, DiscoveryOptions, Workspace, WorkspaceError};
 
@@ -42,7 +41,7 @@ pub(crate) async fn init(
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
         None => CWD.to_path_buf(),
-        Some(ref path) => absolutize_path(Path::new(path))?.to_path_buf(),
+        Some(ref path) => std::path::absolute(path)?,
     };
 
     // Make sure a project does not already exist in the given directory.
@@ -184,16 +183,14 @@ async fn init_project(
             Err(WorkspaceError::MissingPyprojectToml | WorkspaceError::NonWorkspace(_)) => {
                 // If the user runs with `--no-workspace` and we can't find a workspace, warn.
                 if no_workspace {
-                    warn_user_once!("`--no-workspace` was provided, but no workspace was found");
+                    warn!("`--no-workspace` was provided, but no workspace was found");
                 }
                 None
             }
             Err(err) => {
                 // If the user runs with `--no-workspace`, ignore the error.
                 if no_workspace {
-                    warn_user_once!(
-                        "Ignoring workspace discovery error due to `--no-workspace`: {err}"
-                    );
+                    warn!("Ignoring workspace discovery error due to `--no-workspace`: {err}");
                     None
                 } else {
                     return Err(err.into());

@@ -76,9 +76,12 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -211,9 +214,12 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -347,9 +353,12 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -515,9 +524,12 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -652,9 +664,12 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -775,9 +790,12 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -935,9 +953,12 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -1095,9 +1116,12 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -1300,9 +1324,12 @@ fn resolve_find_links() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -1459,9 +1486,12 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -1588,9 +1618,12 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -1745,9 +1778,12 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -1926,9 +1962,12 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -2045,9 +2084,12 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -2164,9 +2206,12 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -2285,9 +2330,12 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -2576,9 +2624,12 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -2723,9 +2774,12 @@ fn resolve_both() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -2885,9 +2939,12 @@ fn resolve_config_file() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -3122,9 +3179,12 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -3244,9 +3304,12 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        build_constraint: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
-        build_constraint: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
         refresh: None(
             Timestamp(
                 SystemTime {

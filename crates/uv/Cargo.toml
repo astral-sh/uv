@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.3.2"
+version = "0.3.4"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -86,6 +86,7 @@ assert_cmd = { version = "2.0.14" }
 assert_fs = { version = "1.1.0" }
 base64 = { version = "0.22.0" }
 byteorder = { version = "1.5.0" }
+etcetera = { workspace = true }
 filetime = { version = "0.2.23" }
 ignore = { version = "0.4.22" }
 indoc = { version = "2.0.4" }
@@ -94,6 +95,7 @@ predicates = { version = "3.0.4" }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
 similar = { version = "2.6.0" }
+tempfile = { workspace = true }
 zip = { workspace = true }
 
 [package.metadata.cargo-shear]

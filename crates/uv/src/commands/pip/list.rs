@@ -119,7 +119,10 @@ pub(crate) fn pip_list(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics()? {
+        // Determine the markers to use for resolution.
+        let markers = environment.interpreter().resolver_markers();
+
+        for diagnostic in site_packages.diagnostics(&markers)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",

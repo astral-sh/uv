@@ -427,7 +427,6 @@ impl RegistryClient {
                             WheelLocation::Url(url)
                         }
                     }
-                    FileLocation::Path(path) => WheelLocation::Path(path.clone()),
                 };
 
                 match location {

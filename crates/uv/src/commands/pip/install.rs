@@ -30,10 +30,10 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, HashStrategy};
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
-use crate::commands::pip::{operations, resolution_environment};
-use crate::commands::{elapsed, ExitStatus, SharedState};
+use crate::commands::pip::{operations, resolution_markers, resolution_tags};
+use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 
 /// Install packages into the current environment.
@@ -183,6 +183,14 @@ pub(crate) async fn pip_install(
 
     let _lock = environment.lock()?;
 
+    // Determine the markers to use for the resolution.
+    let interpreter = environment.interpreter();
+    let markers = resolution_markers(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    );
+
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_environment(&environment)?;
 
@@ -190,7 +198,7 @@ pub(crate) async fn pip_install(
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
     // it's an order of magnitude faster to validate the environment than to resolve the requirements.
     if reinstall.is_none() && upgrade.is_none() && source_trees.is_empty() && overrides.is_empty() {
-        match site_packages.satisfies(&requirements, &constraints)? {
+        match site_packages.satisfies(&requirements, &constraints, &markers)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -204,18 +212,7 @@ pub(crate) async fn pip_install(
                         debug!("Requirement satisfied: {requirement}");
                     }
                 }
-                let num_requirements = requirements.len();
-                let s = if num_requirements == 1 { "" } else { "s" };
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!(
-                        "Audited {} {}",
-                        format!("{num_requirements} package{s}").bold(),
-                        format!("in {}", elapsed(start.elapsed())).dimmed()
-                    )
-                    .dimmed()
-                )?;
+                DefaultInstallLogger.on_audit(requirements.len(), start, printer)?;
                 if dry_run {
                     writeln!(printer.stderr(), "Would make no changes")?;
                 }
@@ -227,8 +224,6 @@ pub(crate) async fn pip_install(
         }
     }
 
-    let interpreter = environment.interpreter();
-
     // Determine the Python requirement, if the user requested a specific version.
     let python_requirement = if let Some(python_version) = python_version.as_ref() {
         PythonRequirement::from_python_version(interpreter, python_version)
@@ -236,8 +231,12 @@ pub(crate) async fn pip_install(
         PythonRequirement::from_interpreter(interpreter)
     };
 
-    // Determine the environment for the resolution.
-    let (tags, markers) = resolution_environment(python_version, python_platform, interpreter)?;
+    // Determine the tags to use for the resolution.
+    let tags = resolution_tags(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    )?;
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -273,7 +272,7 @@ pub(crate) async fn pip_install(
         .cache(cache.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
-        .markers(&markers)
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -344,7 +343,7 @@ pub(crate) async fn pip_install(
         &reinstall,
         &upgrade,
         Some(&tags),
-        ResolverMarkers::specific_environment((*markers).clone()),
+        ResolverMarkers::specific_environment(markers.clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -377,6 +376,7 @@ pub(crate) async fn pip_install(
         compile,
         &index_locations,
         &hasher,
+        &markers,
         &tags,
         &client,
         &state.in_flight,
@@ -395,7 +395,7 @@ pub(crate) async fn pip_install(
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run {
-        operations::diagnose_environment(&resolution, &environment, printer)?;
+        operations::diagnose_environment(&resolution, &environment, &markers, printer)?;
     }
 
     Ok(ExitStatus::Success)

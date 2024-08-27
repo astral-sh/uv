@@ -37,7 +37,6 @@ impl RequiresDist {
     pub async fn from_project_maybe_workspace(
         metadata: pypi_types::RequiresDist,
         install_path: &Path,
-        lock_path: &Path,
         sources: SourceStrategy,
     ) -> Result<Self, MetadataError> {
         match sources {
@@ -46,7 +45,6 @@ impl RequiresDist {
                 // TODO(konsti): Cache workspace discovery.
                 let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
                     install_path,
-                    lock_path,
                     &DiscoveryOptions::default(),
                 )
                 .await?
@@ -160,7 +158,6 @@ mod test {
         let pyproject_toml = PyProjectToml::from_string(contents.to_string())?;
         let path = Path::new("pyproject.toml");
         let project_workspace = ProjectWorkspace::from_project(
-            path,
             path,
             pyproject_toml
                 .project

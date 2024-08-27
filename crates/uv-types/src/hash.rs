@@ -7,8 +7,9 @@ use distribution_types::{
     DistributionMetadata, HashPolicy, Name, Resolution, UnresolvedRequirement, VersionId,
 };
 use pep440_rs::Version;
-use pep508_rs::MarkerEnvironment;
-use pypi_types::{HashDigest, HashError, Requirement, RequirementSource};
+use pypi_types::{
+    HashDigest, HashError, Requirement, RequirementSource, ResolverMarkerEnvironment,
+};
 use uv_configuration::HashCheckingMode;
 use uv_normalize::PackageName;
 
@@ -125,7 +126,7 @@ impl HashStrategy {
     /// to "only evaluate marker expressions that reference an extra name.")
     pub fn from_requirements<'a>(
         requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
-        markers: Option<&MarkerEnvironment>,
+        marker_env: Option<&ResolverMarkerEnvironment>,
         mode: HashCheckingMode,
     ) -> Result<Self, HashStrategyError> {
         let mut hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
@@ -133,7 +134,9 @@ impl HashStrategy {
         // For each requirement, map from name to allowed hashes. We use the last entry for each
         // package.
         for (requirement, digests) in requirements {
-            if !requirement.evaluate_markers(markers, &[]) {
+            if !requirement
+                .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
+            {
                 continue;
             }
 

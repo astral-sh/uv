@@ -2261,16 +2261,41 @@ pub struct SyncArgs {
     /// Do not remove extraneous packages present in the environment.
     ///
     /// When enabled, uv will make the minimum necessary changes to satisfy the requirements.
-    ///
-    /// By default, syncing will remove any extraneous packages from the environment, unless
-    /// `--no-build-isolation` is enabled, in which case extra packages are considered necessary for
-    /// builds.
+    /// By default, syncing will remove any extraneous packages from the environment
     #[arg(long, overrides_with("exact"), alias = "no-exact")]
     pub inexact: bool,
 
     /// Perform an exact sync, removing extraneous packages.
     #[arg(long, overrides_with("inexact"), hide = true)]
     pub exact: bool,
+
+    /// Do not install the current project.
+    ///
+    /// By default, the current project is installed into the environment with all of its
+    /// dependencies. The `--no-install-project` option allows the project to be excluded, but all of
+    /// its dependencies are still installed. This is particularly useful in situations like
+    /// building Docker images where installing the project separately from its dependencies
+    /// allows optimal layer caching.
+    #[arg(long)]
+    pub no_install_project: bool,
+
+    /// Do not install any workspace members, including the root project.
+    ///
+    /// By default, all of the workspace members and their dependencies are installed into the
+    /// environment. The `--no-install-workspace` option allows exclusion of all the workspace
+    /// members while retaining their dependencies. This is particularly useful in situations like
+    /// building Docker images where installing the workspace separately from its dependencies
+    /// allows optimal layer caching.
+    #[arg(long)]
+    pub no_install_workspace: bool,
+
+    /// Do not install the given package(s).
+    ///
+    /// By default, all of the project's dependencies are installed into the environment. The
+    /// `--no-install-package` option allows exclusion of specific packages. Note this can result
+    /// in a broken environment, and should be used with caution.
+    #[arg(long)]
+    pub no_install_package: Vec<PackageName>,
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
@@ -2398,11 +2423,11 @@ pub struct AddArgs {
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
-    #[arg(long, overrides_with = "no_editable", hide = true)]
+    /// Add the requirements as editable.
+    #[arg(long, overrides_with = "no_editable")]
     pub editable: bool,
 
-    /// Don't add the requirements as editables.
-    #[arg(long, overrides_with = "editable")]
+    #[arg(long, overrides_with = "editable", hide = true)]
     pub no_editable: bool,
 
     /// Add source requirements to `project.dependencies`, rather than `tool.uv.sources`.
@@ -3035,6 +3060,25 @@ pub struct PythonFindArgs {
     /// directory or parent directories will be used.
     #[arg(long, alias = "no_workspace")]
     pub no_project: bool,
+
+    /// Only find system Python interpreters.
+    ///
+    /// By default, uv will report the first Python interpreter it would use, including those in an
+    /// active virtual environment or a virtual environment in the current working directory or any
+    /// parent directory.
+    ///
+    /// The `--system` option instructs uv to skip virtual environment Python interpreters and
+    /// restrict its search to the system path.
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_system")
+    )]
+    pub system: bool,
+
+    #[arg(long, overrides_with("system"), hide = true)]
+    pub no_system: bool,
 }
 
 #[derive(Args)]

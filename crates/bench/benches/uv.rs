@@ -88,6 +88,7 @@ mod resolver {
     use pep440_rs::Version;
     use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use platform_tags::{Arch, Os, Platform, Tags};
+    use pypi_types::ResolverMarkerEnvironment;
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
@@ -192,7 +193,7 @@ mod resolver {
         let markers = if universal {
             ResolverMarkers::universal(vec![])
         } else {
-            ResolverMarkers::specific_environment(MARKERS.clone())
+            ResolverMarkers::specific_environment(ResolverMarkerEnvironment::from(MARKERS.clone()))
         };
 
         let resolver = Resolver::new(

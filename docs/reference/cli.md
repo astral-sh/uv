@@ -515,6 +515,8 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 </dd><dt><code>--dev</code></dt><dd><p>Add the requirements as development dependencies</p>
 
+</dd><dt><code>--editable</code></dt><dd><p>Add the requirements as editable</p>
+
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
@@ -625,8 +627,6 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 </dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
-
-</dd><dt><code>--no-editable</code></dt><dd><p>Don&#8217;t add the requirements as editables</p>
 
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
@@ -1098,9 +1098,7 @@ uv sync [OPTIONS]
 
 </dd><dt><code>--inexact</code></dt><dd><p>Do not remove extraneous packages present in the environment.</p>
 
-<p>When enabled, uv will make the minimum necessary changes to satisfy the requirements.</p>
-
-<p>By default, syncing will remove any extraneous packages from the environment, unless <code>--no-build-isolation</code> is enabled, in which case extra packages are considered necessary for builds.</p>
+<p>When enabled, uv will make the minimum necessary changes to satisfy the requirements. By default, syncing will remove any extraneous packages from the environment</p>
 
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
@@ -1169,6 +1167,18 @@ uv sync [OPTIONS]
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit development dependencies</p>
 
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
+
+</dd><dt><code>--no-install-package</code> <i>no-install-package</i></dt><dd><p>Do not install the given package(s).</p>
+
+<p>By default, all of the project&#8217;s dependencies are installed into the environment. The <code>--no-install-package</code> option allows exclusion of specific packages. Note this can result in a broken environment, and should be used with caution.</p>
+
+</dd><dt><code>--no-install-project</code></dt><dd><p>Do not install the current project.</p>
+
+<p>By default, the current project is installed into the environment with all of its dependencies. The <code>--no-install-project</code> option allows the project to be excluded, but all of its dependencies are still installed. This is particularly useful in situations like building Docker images where installing the project separately from its dependencies allows optimal layer caching.</p>
+
+</dd><dt><code>--no-install-workspace</code></dt><dd><p>Do not install any workspace members, including the root project.</p>
+
+<p>By default, all of the workspace members and their dependencies are installed into the environment. The <code>--no-install-workspace</code> option allows exclusion of all the workspace members while retaining their dependencies. This is particularly useful in situations like building Docker images where installing the workspace separately from its dependencies allows optimal layer caching.</p>
 
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
 
@@ -3220,6 +3230,12 @@ uv python find [OPTIONS] [REQUEST]
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+
+</dd><dt><code>--system</code></dt><dd><p>Only find system Python interpreters.</p>
+
+<p>By default, uv will report the first Python interpreter it would use, including those in an active virtual environment or a virtual environment in the current working directory or any parent directory.</p>
+
+<p>The <code>--system</code> option instructs uv to skip virtual environment Python interpreters and restrict its search to the system path.</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 

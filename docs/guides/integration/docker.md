@@ -41,13 +41,13 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.3.2 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.3.4 /uv /bin/uv
 ```
 
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.3.2/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.3.4/install.sh /uv-installer.sh
 ```
 
 ## Installing a project
@@ -57,11 +57,16 @@ If you're using uv to manage your project, you can copy it into the image and in
 ```dockerfile title="Dockerfile"
 # Copy the project into the image
 ADD . /app
-WORKDIR /app
 
-# Sync the project into a new environment
-RUN uv sync
+# Sync the project into a new environment, using the frozen lockfile
+WORKDIR /app
+RUN uv sync --frozen
 ```
+
+!!! tip
+
+    It is best practice to use [intermediate layers](#intermediate-layers) separating installation
+    of dependencies and the project itself to improve Docker image build times.
 
 Once the project is installed, you can either _activate_ the virtual environment:
 
@@ -84,6 +89,32 @@ And, to start your application by default:
 # Presuming there is a `my_app` command provided by the project
 CMD ["uv", "run", "my_app"]
 ```
+
+## Using installed tools
+
+To use installed tools, ensure the [tool bin directory](../../concepts/tools.md#the-bin-directory)
+is on the path:
+
+```dockerfile title="Dockerfile"
+ENV PATH=/root/.local/bin:$PATH
+RUN uv tool install cowsay
+```
+
+```console
+$ docker run -it $(docker build -q .) /bin/bash -c "cowsay -t hello"
+  _____
+| hello |
+  =====
+     \
+      \
+        ^__^
+        (oo)\_______
+        (__)\       )\/\
+            ||----w |
+            ||     ||
+```
+
+To determine the tool bin directory, run `uv tool dir --bin` in the container.
 
 ## Using the pip interface
 
@@ -129,9 +160,9 @@ RUN uv pip install -r requirements.txt
 
 ### Installing a project
 
-When installing a project alongside requirements, it is prudent to separate copying the requirements
-from the rest of the source code. This allows the dependencies of the project (which do not change
-often) to be cached separately from the project itself (which changes very frequently).
+When installing a project alongside requirements, it is best practice to separate copying the
+requirements from the rest of the source code. This allows the dependencies of the project (which do
+not change often) to be cached separately from the project itself (which changes very frequently).
 
 ```dockerfile title="Dockerfile"
 COPY pyproject.toml .
@@ -147,7 +178,7 @@ RUN uv pip install -e .
 If uv isn't needed in the final image, the binary can be mounted in each invocation:
 
 ```dockerfile title="Dockerfile"
-RUN --mount=from=uv,source=/uv,target=/bin/uv \
+RUN --mount=from=ghcr.io/astral-sh/uv,source=/uv,target=/bin/uv \
     uv pip install --system ruff
 ```
 
@@ -187,3 +218,44 @@ ENV UV_CACHE_DIR=/opt/uv-cache/
 ```
 
 If not mounting the cache, image size can be reduced with `--no-cache` flag.
+
+### Intermediate layers
+
+If you're using uv to manage your project, you can improve build times by moving your transitive
+dependency installation into its own layer via the `--no-install` options.
+
+`uv sync --no-install-project` will install the dependencies of the project but not the project
+itself. Since the project changes frequently, but its dependencies are generally static, this can be
+a big time saver.
+
+```dockerfile title="Dockerfile"
+# Install uv
+FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Change the working directory to the `app` directory
+WORKDIR /app
+
+# Copy the lockfile and `pyproject.toml` into the image
+ADD uv.lock /app/uv.lock
+ADD pyproject.toml /app/pyproject.toml
+
+# Install dependencies
+RUN uv sync --frozen --no-install-project
+
+# Copy the project into the image
+ADD . /app
+
+# Sync the project
+RUN uv sync --frozen
+```
+
+Note that the `pyproject.toml` is required to identify the project root and name, but the project
+_contents_ are not copied into the image until the final `uv sync` command.
+
+!!! tip
+
+    If you're using a [workspace](../../concepts/workspaces.md), then use the
+    `--no-install-workspace` flag which excludes the project _and_ any workspace members.
+
+    If you want to remove specific packages from the sync, use `--no-install-package <name>`.

@@ -43,9 +43,15 @@ Tools are installed into temporary, isolated environments when using `uvx`.
 
 !!! note
 
-    If you are running a tool in a [_project_](../concepts/projects.md) and the tool requires that your project is installed,
-    e.g., when using `pytest` or `mypy`, you'll want to use [`uv run`](./projects.md#running-commands) instead of `uvx`.
-    Otherwise, the tool will be run in a virtual environment that is isolated from your project.
+    If you are running a tool in a [_project_](../concepts/projects.md) and the tool requires that
+    your project is installed, e.g., when using `pytest` or `mypy`, you'll want to use
+    [`uv run`](./projects.md#running-commands) instead of `uvx`. Otherwise, the tool will be run in
+    a virtual environment that is isolated from your project.
+
+    If your project has a flat structure, e.g., instead of using a `src` directory for modules,
+    the project itself does not need to be installed and `uvx` is fine. In this case, using
+    `uv run` is only beneficial if you want to pin the version of the tool in the project's
+    dependencies.
 
 ## Commands with different package names
 

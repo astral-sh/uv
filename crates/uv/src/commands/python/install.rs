@@ -118,8 +118,7 @@ pub(crate) async fn install(
     let downloads = unfilled_requests
         .into_iter()
         // Populate the download requests with defaults
-        .map(PythonDownloadRequest::fill)
-        .map(|request| ManagedPythonDownload::from_request(&request))
+        .map(|request| ManagedPythonDownload::from_request(&PythonDownloadRequest::fill(request)?))
         .collect::<Result<Vec<_>, uv_python::downloads::Error>>()?;
 
     // Ensure we only download each version once

@@ -144,7 +144,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     // If the target is a PEP 723 script, parse it.
     let script = if let Commands::Project(command) = &*cli.command {
         if let ProjectCommand::Run(uv_cli::RunArgs { .. }) = &**command {
-            if let Some(RunCommand::PythonScript(script, _)) = run_command.as_ref() {
+            if let Some(
+                RunCommand::PythonScript(script, _) | RunCommand::PythonGuiScript(script, _),
+            ) = run_command.as_ref()
+            {
                 Pep723Script::read(&script).await?
             } else {
                 None
@@ -300,6 +303,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.environments,
                 args.settings.extras,
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,
@@ -943,6 +947,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.request,
                 args.no_project,
                 cli.no_config,
+                args.system,
                 globals.python_preference,
                 &cache,
             )
@@ -1102,6 +1107,9 @@ async fn run_project(
                 args.package,
                 args.extras,
                 args.dev,
+                args.no_install_project,
+                args.no_install_workspace,
+                args.no_install_package,
                 args.modifications,
                 args.python,
                 globals.python_preference,
