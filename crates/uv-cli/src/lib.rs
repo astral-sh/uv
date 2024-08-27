@@ -2101,12 +2101,46 @@ pub struct InitArgs {
 
     /// Create a virtual project, rather than a package.
     ///
-    /// A virtual project is a project that is not intended to be built as a Python package,
-    /// such as a project that only contains scripts or other application code.
-    ///
-    /// Virtual projects themselves are not installed into the Python environment.
-    #[arg(long)]
+    /// This option is deprecated and will be removed in a future release.
+    #[arg(long, hide = true, conflicts_with = "package")]
     pub r#virtual: bool,
+
+    /// Set up the project to be built as a Python package.
+    ///
+    /// Defines a `[build-system]` for the project.
+    ///
+    /// This is the default behavior when using `--lib`.
+    ///
+    /// When using `--app`, this will include a `[project.scripts]` entrypoint and use a `src/`
+    /// project structure.
+    #[arg(long, overrides_with = "no_package")]
+    pub r#package: bool,
+
+    /// Do not set up the project to be built as a Python package.
+    ///
+    /// Does not include a `[build-system]` for the project.
+    ///
+    /// This is the default behavior when using `--app`.
+    #[arg(long, overrides_with = "package", conflicts_with = "lib")]
+    pub r#no_package: bool,
+
+    /// Create a project for an application.
+    ///
+    /// This is the default behavior if `--lib` is not requested.
+    ///
+    /// This project kind is for web servers, scripts, and command-line interfaces.
+    ///
+    /// By default, an application is not intended to be built and distributed as a Python package.
+    /// The `--package` option can be used to create an application that is distributable, e.g., if
+    /// you want to distribute a command-line interface via PyPI.
+    #[arg(long, alias = "application", conflicts_with = "lib")]
+    pub r#app: bool,
+
+    /// Create a project for a library.
+    ///
+    /// A library is a project that is intended to be built and distributed as a Python package.
+    #[arg(long, alias = "library", conflicts_with = "app")]
+    pub r#lib: bool,
 
     /// Do not create a `README.md` file.
     #[arg(long)]
