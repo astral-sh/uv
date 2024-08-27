@@ -2,6 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 
+use itertools::partition;
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 use thiserror::Error;
@@ -518,22 +519,20 @@ pub fn add_dependency(
                 .windows(2)
                 .all(|w| w[0].to_string() <= w[1].to_string());
 
-            deps.push(req.to_string());
+            let mut index = deps.len();
+            if sorted {
+                index = partition(
+                    &mut deps.clone().into_iter().collect::<Vec<_>>(),
+                    |d: &Value| {
+                        *d.to_string()
+                            .trim_matches(|c| c == '\"' || c == ' ' || c == '\n')
+                            < *req.to_string()
+                    },
+                );
+            };
+            deps.insert(index, req.to_string());
             reformat_array_multiline(deps);
 
-            if sorted {
-                deps.sort_by_key(|d| {
-                    d.as_str()
-                        .and_then(try_parse_requirement)
-                        .unwrap()
-                        .to_string()
-                });
-            }
-            let index = deps
-                .iter()
-                .map(|d| d.as_str().and_then(try_parse_requirement).unwrap())
-                .position(|r| r.name == req.name && r.extras == req.extras)
-                .unwrap();
             Ok(ArrayEdit::Add(index))
         }
         [_] => {
