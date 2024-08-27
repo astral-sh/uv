@@ -201,13 +201,14 @@ pub(crate) async fn add(
         };
 
         // For non-project workspace roots, allow dev dependencies, but nothing else.
+        // TODO(charlie): Automatically "upgrade" the project by adding a `[project]` table.
         if project.is_non_project() {
             match dependency_type {
                 DependencyType::Production => {
-                    bail!("Found a non-project workspace root; production dependencies are unsupported (instead, use: `{}`)", "uv add --dev".green())
+                    bail!("Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `{}` instead", "uv add --dev".green())
                 }
                 DependencyType::Optional(_) => {
-                    bail!("Found a non-project workspace root; optional dependencies are unsupported (instead, use: `{}`)", "uv add --dev".green())
+                    bail!("Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead", "uv add --dev".green())
                 }
                 DependencyType::Dev => (),
             }
