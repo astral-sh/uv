@@ -157,6 +157,12 @@ Or, to change the bounds for `httpx`:
 $ uv add 'httpx<0.2.0'
 ```
 
+Finally, to upgrade an existing package to the latest version.
+
+```console
+$ uv add httpx --upgrade
+```
+
 To add a dependency source, e.g., to use `httpx` from GitHub during development:
 
 ```console
