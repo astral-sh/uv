@@ -274,6 +274,9 @@ dependencies = []
 [project.optional-dependencies]
 build = ["setuptools", "cython"]
 compile = ["cchardet"]
+
+[tool.uv]
+no-build-isolation-package = ["cchardet"]
 ```
 
 Given the above, a user would first sync the `build` dependencies:
@@ -304,7 +307,7 @@ $ uv sync --extra build --extra compile
 ```
 
 Some packages, like `cchardet`, only require build dependencies for the _installation_ phase of
-`uv sync`. Others, like `flash-atten`, require their build dependencies to be present even just to
+`uv sync`. Others, like `flash-attn`, require their build dependencies to be present even just to
 resolve the project's lockfile during the _resolution_ phase.
 
 In such cases, the build dependencies must be installed prior to running any `uv lock` or `uv sync`
