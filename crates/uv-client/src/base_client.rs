@@ -1,10 +1,11 @@
 use std::error::Error;
 use std::fmt::Debug;
-use std::ops::Deref;
 use std::path::Path;
 use std::{env, iter};
 
 use itertools::Itertools;
+use pep508_rs::MarkerEnvironment;
+use platform_tags::Platform;
 use reqwest::{Client, ClientBuilder, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
@@ -12,11 +13,9 @@ use reqwest_retry::{
     DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
 };
 use tracing::debug;
-
-use pep508_rs::MarkerEnvironment;
-use platform_tags::Platform;
+use url::Url;
 use uv_auth::AuthMiddleware;
-use uv_configuration::KeyringProviderType;
+use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_version::version;
 use uv_warnings::warn_user_once;
@@ -30,6 +29,7 @@ use crate::Connectivity;
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
+    allow_insecure_host: Vec<TrustedHost>,
     native_tls: bool,
     retries: u32,
     pub connectivity: Connectivity,
@@ -48,6 +48,7 @@ impl BaseClientBuilder<'_> {
     pub fn new() -> Self {
         Self {
             keyring: KeyringProviderType::default(),
+            allow_insecure_host: vec![],
             native_tls: false,
             connectivity: Connectivity::Online,
             retries: 3,
@@ -62,6 +63,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
         self.keyring = keyring_type;
+        self
+    }
+
+    #[must_use]
+    pub fn allow_insecure_host(mut self, allow_insecure_host: Vec<TrustedHost>) -> Self {
+        self.allow_insecure_host = allow_insecure_host;
         self
     }
 
@@ -117,6 +124,18 @@ impl<'a> BaseClientBuilder<'a> {
             }
         }
 
+        // Check for the presence of an `SSL_CERT_FILE`.
+        let ssl_cert_file_exists = env::var_os("SSL_CERT_FILE").is_some_and(|path| {
+            let path_exists = Path::new(&path).exists();
+            if !path_exists {
+                warn_user_once!(
+                    "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
+                    path.simplified_display().cyan()
+                );
+            }
+            path_exists
+        });
+
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
         let default_timeout = 30;
@@ -134,54 +153,83 @@ impl<'a> BaseClientBuilder<'a> {
             .unwrap_or(default_timeout);
         debug!("Using request timeout of {timeout}s");
 
-        // Initialize the base client.
-        let client = self.client.clone().unwrap_or_else(|| {
-            // Check for the presence of an `SSL_CERT_FILE`.
-            let ssl_cert_file_exists = env::var_os("SSL_CERT_FILE").is_some_and(|path| {
-                let path_exists = Path::new(&path).exists();
-                if !path_exists {
-                    warn_user_once!(
-                        "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
-                        path.simplified_display().cyan()
-                    );
+        // Create a secure client that validates certificates.
+        let client = self.create_client(
+            &user_agent_string,
+            timeout,
+            ssl_cert_file_exists,
+            Security::Secure,
+        );
+
+        // Create an insecure client that accepts invalid certificates.
+        let dangerous_client = self.create_client(
+            &user_agent_string,
+            timeout,
+            ssl_cert_file_exists,
+            Security::Insecure,
+        );
+
+        // Wrap in any relevant middleware and handle connectivity.
+        let client = self.apply_middleware(client);
+        let dangerous_client = self.apply_middleware(dangerous_client);
+
+        BaseClient {
+            connectivity: self.connectivity,
+            allow_insecure_host: self.allow_insecure_host.clone(),
+            client,
+            dangerous_client,
+            timeout,
+        }
+    }
+
+    fn create_client(
+        &self,
+        user_agent: &str,
+        timeout: u64,
+        ssl_cert_file_exists: bool,
+        security: Security,
+    ) -> Client {
+        // Configure the builder.
+        let client_builder = ClientBuilder::new()
+            .user_agent(user_agent)
+            .pool_max_idle_per_host(20)
+            .read_timeout(std::time::Duration::from_secs(timeout))
+            .tls_built_in_root_certs(false);
+
+        // If necessary, accept invalid certificates.
+        let client_builder = match security {
+            Security::Secure => client_builder,
+            Security::Insecure => client_builder.danger_accept_invalid_certs(true),
+        };
+
+        let client_builder = if self.native_tls || ssl_cert_file_exists {
+            client_builder.tls_built_in_native_certs(true)
+        } else {
+            client_builder.tls_built_in_webpki_certs(true)
+        };
+
+        // Configure mTLS.
+        let client_builder = if let Some(ssl_client_cert) = env::var_os("SSL_CLIENT_CERT") {
+            match read_identity(&ssl_client_cert) {
+                Ok(identity) => client_builder.identity(identity),
+                Err(err) => {
+                    warn_user_once!("Ignoring invalid `SSL_CLIENT_CERT`: {err}");
+                    client_builder
                 }
-                path_exists
-            });
+            }
+        } else {
+            client_builder
+        };
 
-            // Configure the builder.
-            let client_core = ClientBuilder::new()
-                .user_agent(user_agent_string)
-                .pool_max_idle_per_host(20)
-                .read_timeout(std::time::Duration::from_secs(timeout))
-                .tls_built_in_root_certs(false);
+        client_builder
+            .build()
+            .expect("Failed to build HTTP client.")
+    }
 
-            // Configure TLS.
-            let client_core = if self.native_tls || ssl_cert_file_exists {
-                client_core.tls_built_in_native_certs(true)
-            } else {
-                client_core.tls_built_in_webpki_certs(true)
-            };
-
-            // Configure mTLS.
-            let client_core = if let Some(ssl_client_cert) = env::var_os("SSL_CLIENT_CERT") {
-                match read_identity(&ssl_client_cert) {
-                    Ok(identity) => client_core.identity(identity),
-                    Err(err) => {
-                        warn_user_once!("Ignoring invalid `SSL_CLIENT_CERT`: {err}");
-                        client_core
-                    }
-                }
-            } else {
-                client_core
-            };
-
-            client_core.build().expect("Failed to build HTTP client")
-        });
-
-        // Wrap in any relevant middleware.
-        let client = match self.connectivity {
+    fn apply_middleware(&self, client: Client) -> ClientWithMiddleware {
+        match self.connectivity {
             Connectivity::Online => {
-                let client = reqwest_middleware::ClientBuilder::new(client.clone());
+                let client = reqwest_middleware::ClientBuilder::new(client);
 
                 // Initialize the retry strategy.
                 let retry_policy =
@@ -198,15 +246,9 @@ impl<'a> BaseClientBuilder<'a> {
 
                 client.build()
             }
-            Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client.clone())
+            Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client)
                 .with(OfflineMiddleware)
                 .build(),
-        };
-
-        BaseClient {
-            connectivity: self.connectivity,
-            client,
-            timeout,
         }
     }
 }
@@ -214,18 +256,43 @@ impl<'a> BaseClientBuilder<'a> {
 /// A base client for HTTP requests
 #[derive(Debug, Clone)]
 pub struct BaseClient {
-    /// The underlying HTTP client.
+    /// The underlying HTTP client that enforces valid certificates.
     client: ClientWithMiddleware,
+    /// The underlying HTTP client that accepts invalid certificates.
+    dangerous_client: ClientWithMiddleware,
     /// The connectivity mode to use.
     connectivity: Connectivity,
     /// Configured client timeout, in seconds.
     timeout: u64,
+    /// Hosts that are trusted to use the insecure client.
+    allow_insecure_host: Vec<TrustedHost>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Security {
+    /// The client should use secure settings, i.e., valid certificates.
+    Secure,
+    /// The client should use insecure settings, i.e., skip certificate validation.
+    Insecure,
 }
 
 impl BaseClient {
-    /// The underlying [`ClientWithMiddleware`].
+    /// The underlying [`ClientWithMiddleware`] for secure requests.
     pub fn client(&self) -> ClientWithMiddleware {
         self.client.clone()
+    }
+
+    /// Selects the appropriate client based on the host's trustworthiness.
+    pub fn for_host(&self, url: &Url) -> &ClientWithMiddleware {
+        if self
+            .allow_insecure_host
+            .iter()
+            .any(|allow_insecure_host| allow_insecure_host.matches(url))
+        {
+            &self.dangerous_client
+        } else {
+            &self.client
+        }
     }
 
     /// The configured client timeout, in seconds.
@@ -236,16 +303,6 @@ impl BaseClient {
     /// The configured connectivity mode.
     pub fn connectivity(&self) -> Connectivity {
         self.connectivity
-    }
-}
-
-// To avoid excessively verbose call chains, as the [`BaseClient`] is often nested within other client types.
-impl Deref for BaseClient {
-    type Target = ClientWithMiddleware;
-
-    /// Deference to the underlying [`ClientWithMiddleware`].
-    fn deref(&self) -> &Self::Target {
-        &self.client
     }
 }
 

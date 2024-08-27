@@ -17,7 +17,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary,
-    NoBuild, SourceStrategy,
+    NoBuild, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
@@ -49,6 +49,7 @@ pub(crate) async fn venv(
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    allow_insecure_host: Vec<TrustedHost>,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -69,6 +70,7 @@ pub(crate) async fn venv(
         index_locations,
         index_strategy,
         keyring_provider,
+        allow_insecure_host,
         prompt,
         system_site_packages,
         connectivity,
@@ -122,6 +124,7 @@ async fn venv_impl(
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    allow_insecure_host: Vec<TrustedHost>,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -251,6 +254,7 @@ async fn venv_impl(
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
             .keyring(keyring_provider)
+            .allow_insecure_host(allow_insecure_host)
             .markers(interpreter.markers())
             .platform(interpreter.platform())
             .build();

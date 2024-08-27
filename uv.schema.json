@@ -4,6 +4,16 @@
   "description": "Metadata and configuration for uv.",
   "type": "object",
   "properties": {
+    "allow-insecure-host": {
+      "description": "Allow insecure connections to host.\n\nExpects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g., `localhost:8080`), or a URL (e.g., `https://localhost`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store. Only use `--allow-insecure-host` in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/TrustedHost"
+      }
+    },
     "cache-dir": {
       "description": "Path to the cache directory.\n\nDefaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux, and `%LOCALAPPDATA%\\uv\\cache` on Windows.",
       "type": [
@@ -560,6 +570,16 @@
             "boolean",
             "null"
           ]
+        },
+        "allow-insecure-host": {
+          "description": "Allow insecure connections to host.\n\nExpects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g., `localhost:8080`), or a URL (e.g., `https://localhost`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store. Only use `--allow-insecure-host` in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/TrustedHost"
+          }
         },
         "annotation-style": {
           "description": "The style of the annotation comments included in the output file, used to indicate the source of each package.",
@@ -1426,6 +1446,10 @@
         }
       },
       "additionalProperties": false
+    },
+    "TrustedHost": {
+      "description": "A host or host-port pair.",
+      "type": "string"
     }
   }
 }

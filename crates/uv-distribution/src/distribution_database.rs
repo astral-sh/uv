@@ -834,7 +834,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     fn request(&self, url: Url) -> Result<reqwest::Request, reqwest::Error> {
         self.client
             .unmanaged
-            .uncached_client()
+            .uncached_client(&url)
             .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.

@@ -17,7 +17,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary,
-    NoBuild, Reinstall, SourceStrategy, Upgrade,
+    NoBuild, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -75,6 +75,7 @@ pub(crate) async fn pip_compile(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    allow_insecure_host: Vec<TrustedHost>,
     config_settings: ConfigSettings,
     connectivity: Connectivity,
     no_build_isolation: bool,
@@ -107,7 +108,8 @@ pub(crate) async fn pip_compile(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .keyring(keyring_provider)
+        .allow_insecure_host(allow_insecure_host);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {

@@ -3,18 +3,18 @@ use std::fmt::Write;
 use anstream::eprint;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pep508_rs::PackageName;
 use tracing::{debug, enabled, Level};
 
 use distribution_types::{IndexLocations, Resolution, UnresolvedRequirementSpecification};
 use install_wheel_rs::linker::LinkMode;
+use pep508_rs::PackageName;
 use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, Reinstall, SourceStrategy, Upgrade,
+    IndexStrategy, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -53,6 +53,7 @@ pub(crate) async fn pip_install(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    allow_insecure_host: Vec<TrustedHost>,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -83,7 +84,8 @@ pub(crate) async fn pip_install(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .keyring(keyring_provider)
+        .allow_insecure_host(allow_insecure_host);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {

@@ -8,6 +8,7 @@ use pep508_rs::Requirement;
 use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
+    TrustedHost,
 };
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
@@ -213,6 +214,7 @@ pub struct InstallerOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
@@ -239,6 +241,7 @@ pub struct ResolverOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub config_settings: Option<ConfigSettings>,
@@ -350,6 +353,22 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+    /// Allow insecure connections to host.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            allow-insecure-host = ["localhost:8080"]
+        "#
+    )]
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
@@ -721,6 +740,22 @@ pub struct PipOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+    /// Allow insecure connections to host.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            allow-insecure-host = ["localhost:8080"]
+        "#
+    )]
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -1208,6 +1243,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             config_settings: value.config_settings,
@@ -1235,6 +1271,7 @@ impl From<ResolverInstallerOptions> for InstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            allow_insecure_host: value.allow_insecure_host,
             config_settings: value.config_settings,
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode,
@@ -1267,6 +1304,7 @@ pub struct ToolOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub config_settings: Option<ConfigSettings>,
@@ -1291,6 +1329,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             config_settings: value.config_settings,
@@ -1317,6 +1356,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             config_settings: value.config_settings,

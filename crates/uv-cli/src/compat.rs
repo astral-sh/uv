@@ -40,9 +40,6 @@ pub struct PipCompileCompatArgs {
     client_cert: Option<String>,
 
     #[clap(long, hide = true)]
-    trusted_host: Option<String>,
-
-    #[clap(long, hide = true)]
     emit_trusted_host: bool,
 
     #[clap(long, hide = true)]
@@ -118,15 +115,9 @@ impl CompatArgs for PipCompileCompatArgs {
             ));
         }
 
-        if self.trusted_host.is_some() {
-            return Err(anyhow!(
-                "pip-compile's `--trusted-host` is unsupported (uv always requires HTTPS)"
-            ));
-        }
-
         if self.emit_trusted_host {
             return Err(anyhow!(
-                "pip-compile's `--emit-trusted-host` is unsupported (uv always requires HTTPS)"
+                "pip-compile's `--emit-trusted-host` is unsupported"
             ));
         }
 
@@ -210,9 +201,6 @@ pub struct PipSyncCompatArgs {
     ask: bool,
 
     #[clap(long, hide = true)]
-    trusted_host: Option<String>,
-
-    #[clap(long, hide = true)]
     python_executable: Option<String>,
 
     #[clap(long, hide = true)]
@@ -262,12 +250,6 @@ impl CompatArgs for PipSyncCompatArgs {
         if self.client_cert.is_some() {
             return Err(anyhow!(
                 "pip-sync's `--client-cert` is unsupported (uv doesn't support dedicated client certificates)"
-            ));
-        }
-
-        if self.trusted_host.is_some() {
-            return Err(anyhow!(
-                "pip-sync's `--trusted-host` is unsupported (uv always requires HTTPS)"
             ));
         }
 
