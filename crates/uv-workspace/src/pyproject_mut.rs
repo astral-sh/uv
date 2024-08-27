@@ -512,7 +512,7 @@ pub fn add_dependency(
             // adding the new dependency; the new dependency list
             // will be sorted only when the original list is sorted
             // so that users' custom dependency ordering is preserved.
-            // Additionallly, if the table is invalid (i.e. contains non-string values)
+            // Additionally, if the table is invalid (i.e. contains non-string values)
             // we still treat it as unsorted for the sake of simplicity.
             let sorted = deps.iter().all(toml_edit::Value::is_str)
                 && deps
