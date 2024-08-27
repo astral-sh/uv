@@ -10,7 +10,10 @@ Python projects help manage Python applications spanning multiple files.
 
 Python project metadata is defined in a `pyproject.toml` file.
 
-`uv init` can be used to create a new project, with a basic `pyproject.toml` and package definition.
+!!!
+
+    `uv init` can be used to create a new project. See [Creating projects](#creating-projects) for
+    details.
 
 A minimal project definition includes a name, version, and description:
 
@@ -21,7 +24,7 @@ version = "0.1.0"
 description = "Add your description here"
 ```
 
-Additionally, it's recommended to include a Python version requirement:
+It's recommended, but not required, to include a Python version requirement:
 
 ```toml title="pyproject.toml"
 [project]
@@ -38,6 +41,72 @@ dependency list from the command line with `uv add` and `uv remove`. uv also sup
 !!! tip
 
     See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) for more details on getting started with a `pyproject.toml`.
+
+## Creating projects
+
+uv supports initializing a project with `uv init`. By default, uv will create a project in the
+working directory. Projects can be created in a target directory by providing a name, e.g.,
+`uv init foo`. If there's already a project in the target directory, i.e., there's a
+`pyproject.toml`, uv will exit with an error.
+
+By default, uv will create a project for an [application](#applications). However, the `--lib` flag
+can be used to create a project for a [library](#libraries).
+
+## Project types
+
+uv groups projects into two types: **applications** and **libraries**.
+
+### Applications
+
+Application projects are suitable for web servers, scripts, and command-line interfaces.
+
+Application projects have the following traits:
+
+- A build backend is not defined.
+- Source code is often in the top-level directory, e.g., `hello.py`.
+- The project package is not installed in the project environment.
+
+!!! note
+
+    The `--package` flag can be passed to `uv init` to create a distributable application,
+    e.g., if you want to publish a command-line interface via PyPI. uv will define a build
+    backend for the project, include a `[project.scripts]` entrypoint, and install the project
+    package into the project environment.
+
+    Similarly, a build backend can be manually defined to treat any application as a distributable
+    package. This may require changes to the project directory structure, depending on the build
+    backend.
+
+### Libraries
+
+A library is a project that is intended to be built and distributed as a Python package, for
+example, by uploading it to PyPI. A library provides functions and objects for other projects to
+consume.
+
+Library projects have the following traits:
+
+- A build backend is required.
+- Source code is typically in a `src/{package}` directory.
+- The project package is installed in the project environment.
+
+Libraries can be created with `uv init` by providing the `--lib` flag. uv will assume that any
+project that defines a `[build-system]` is a library.
+
+### Other types
+
+By default, uv uses the presence of a `[build-system]` in the `pyproject.toml` to determine if a
+project is an application or a library. However, uv also allows manually declaring if a project
+should be treated as a package.
+
+To enable or disable build and installation of the project package regardless of the presence of a
+`[build-system]` definition, use the [`tool.uv.package`](../reference/settings.md#package) setting.
+
+Setting `tool.uv.package = true` will force a project package to be built and installed into the
+project environment. If no build system is defined, uv will use the setuptools legacy backend.
+
+Setting `tool.uv.package = false` will force a project package _not_ to be built and installed into
+the project environment. uv will ignore the declared build system, if any, when interacting with the
+project.
 
 ## Project environments
 
