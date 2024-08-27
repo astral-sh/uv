@@ -508,17 +508,19 @@ pub fn add_dependency(
 
     match to_replace.as_slice() {
         [] => {
-            // determine the dependency list is sorted prior to
+            // Determine the dependency list is sorted prior to
             // adding the new dependency; the new dependency list
             // will be sorted only when the original list is sorted
             // so that users' custom dependency ordering is preserved.
-            let sorted = deps
-                .clone()
-                .into_iter()
-                .collect::<Vec<_>>()
-                .windows(2)
-                .all(|w| w[0].to_string() <= w[1].to_string());
-
+            // Additionallly, if the table is invalid (i.e. contains non-string values)
+            // we still treat it as unsorted for the sake of simplicity.
+            let sorted = deps.iter().all(|d| d.is_str())
+                && deps
+                    .clone()
+                    .into_iter()
+                    .collect::<Vec<_>>()
+                    .windows(2)
+                    .all(|w| w[0].to_string() <= w[1].to_string());
             let mut index = deps.len();
             if sorted {
                 index = partition(
