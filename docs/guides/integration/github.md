@@ -4,10 +4,10 @@
 
 uv installation differs depending on the platform:
 
-=== "Unix"
+=== "Linux"
 
     ```yaml title="example.yml"
-    name: Example on Unix
+    name: Example on Linux
 
     jobs:
       uv-example-linux:
@@ -61,10 +61,10 @@ uv installation differs depending on the platform:
 
 It is considered best practice to pin to a specific uv version, e.g., with:
 
-=== "Unix"
+=== "Linux"
 
     ```yaml title="example.yml"
-    name: Example on Unix
+    name: Example on Linux
 
     jobs:
       uv-example-linux:

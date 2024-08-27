@@ -45,13 +45,17 @@ $ uv pip install ruff
 
 The virtual environment can be "activated" to make its packages available:
 
-```console title="macOS and Linux"
-$ source .venv/bin/activate
-```
+=== "macOS and Linux"
 
-```console title="Windows"
-$ .venv\Scripts\activate
-```
+    ```console
+    $ source .venv/bin/activate
+    ```
+
+=== "Windows"
+
+    ```console
+    $ .venv\Scripts\activate
+    ```
 
 ## Using arbitrary Python environments
 
