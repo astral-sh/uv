@@ -9209,7 +9209,7 @@ fn lock_remove_member_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 0 packages in [TIME]
+    Resolved in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
 
@@ -9220,7 +9220,7 @@ fn lock_remove_member_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 0 packages in [TIME]
+    Resolved in [TIME]
     Removed anyio v4.3.0
     Removed idna v3.6
     Removed leaf v0.1.0

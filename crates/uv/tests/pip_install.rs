@@ -54,7 +54,7 @@ fn empty_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     warning: Requirements file requirements.txt does not contain any dependencies
-    Audited 0 packages in [TIME]
+    Audited in [TIME]
     "###
     );
 

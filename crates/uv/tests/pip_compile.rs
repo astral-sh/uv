@@ -136,7 +136,7 @@ fn missing_venv() -> Result<()> {
 
     ----- stderr -----
     warning: Requirements file requirements.in does not contain any dependencies
-    Resolved 0 packages in [TIME]
+    Resolved in [TIME]
     "###
     );
 
@@ -320,7 +320,7 @@ fn compile_constraints_inline() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
 
     ----- stderr -----
-    Resolved 0 packages in [TIME]
+    Resolved in [TIME]
     "###
     );
 
@@ -5475,7 +5475,7 @@ fn matching_index_urls_requirements_txt() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --constraint constraints.in
 
     ----- stderr -----
-    Resolved 0 packages in [TIME]
+    Resolved in [TIME]
     "###
     );
 
@@ -10074,7 +10074,7 @@ fn emit_marker_expression_conditional() -> Result<()> {
     #    sys_platform == 'linux'
 
     ----- stderr -----
-    Resolved 0 packages in [TIME]
+    Resolved in [TIME]
     "###);
 
     Ok(())
@@ -11644,7 +11644,7 @@ fn dynamic_pyproject_toml() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] pyproject.toml
 
     ----- stderr -----
-    Resolved 0 packages in [TIME]
+    Resolved in [TIME]
     "###);
 
     Ok(())

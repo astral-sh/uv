@@ -178,8 +178,8 @@ fn empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 0 packages in [TIME]
-    Audited 0 packages in [TIME]
+    Resolved in [TIME]
+    Audited in [TIME]
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -191,8 +191,8 @@ fn empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 0 packages in [TIME]
-    Audited 0 packages in [TIME]
+    Resolved in [TIME]
+    Audited in [TIME]
     "###);
 
     Ok(())
