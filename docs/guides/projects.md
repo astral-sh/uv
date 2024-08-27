@@ -103,6 +103,12 @@ the lockfile and project environment:
 $ uv add requests
 ```
 
+To upgrade an existing package to the latest version, you can use the `--upgrade` flag:
+
+```console
+$ uv add requests --upgrade
+```
+
 You can also specify version constraints or alternative sources:
 
 ```console
