@@ -47,10 +47,24 @@ pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Re
     Ok(ExitStatus::Success)
 }
 
-trait IoErrorExt: std::fmt::Display {
+trait IoErrorExt: std::error::Error + 'static {
     #[inline]
     fn is_in_process_of_being_deleted(&self) -> bool {
-        cfg!(target_os = "windows") && self.to_string().contains("The file cannot be opened because it is in the process of being deleted. (os error 303)")
+        if cfg!(target_os = "windows") {
+            use std::error::Error;
+            let mut e: &dyn Error = &self;
+            loop {
+                if e.to_string().contains("The file cannot be opened because it is in the process of being deleted. (os error 303)") {
+                    return true;
+                }
+                e = match e.source() {
+                    Some(e) => e,
+                    None => break,
+                }
+            }
+        }
+
+        false
     }
 }
 
