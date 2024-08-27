@@ -7,6 +7,7 @@
 //! Then lowers them into a dependency specification.
 
 use std::ops::Deref;
+use std::path::{Path, PathBuf};
 use std::{collections::BTreeMap, mem};
 
 use glob::Pattern;
@@ -16,6 +17,7 @@ use url::Url;
 
 use pep440_rs::VersionSpecifiers;
 use pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
+use uv_fs::relative_to;
 use uv_git::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, PackageName};
@@ -341,6 +343,10 @@ pub enum SourceError {
     UnusedTag(String, String),
     #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--branch {1}`) was provided.")]
     UnusedBranch(String, String),
+    #[error("Failed to resolve absolute path")]
+    Absolute(#[from] std::io::Error),
+    #[error("Path contains invalid characters: `{}`", _0.display())]
+    NonUtf8Path(PathBuf),
 }
 
 impl Source {
@@ -352,6 +358,7 @@ impl Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        root: &Path,
     ) -> Result<Option<Source>, SourceError> {
         // If we resolved to a non-Git source, and the user specified a Git reference, error.
         if !matches!(source, RequirementSource::Git { .. }) {
@@ -386,13 +393,15 @@ impl Source {
 
         let source = match source {
             RequirementSource::Registry { .. } => return Ok(None),
-            RequirementSource::Path { install_path, .. } => Source::Path {
+            RequirementSource::Path { install_path, .. }
+            | RequirementSource::Directory { install_path, .. } => Source::Path {
                 editable,
-                path: install_path.to_string_lossy().into_owned(),
-            },
-            RequirementSource::Directory { install_path, .. } => Source::Path {
-                editable,
-                path: install_path.to_string_lossy().into_owned(),
+                path: relative_to(&install_path, root)
+                    .or_else(|_| std::path::absolute(&install_path))
+                    .map_err(SourceError::Absolute)?
+                    .to_str()
+                    .ok_or_else(|| SourceError::NonUtf8Path(install_path))?
+                    .to_string(),
             },
             RequirementSource::Url {
                 subdirectory, url, ..
