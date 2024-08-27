@@ -3530,7 +3530,7 @@ fn add_non_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Found a non-project workspace root; production dependencies are unsupported (instead, use: `uv add --dev`)
+    error: Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `uv add --dev` instead
     "###);
 
     // Adding `iniconfig` as optional should fail, since virtual workspace roots don't support
@@ -3541,7 +3541,7 @@ fn add_non_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Found a non-project workspace root; optional dependencies are unsupported (instead, use: `uv add --dev`)
+    error: Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `uv add --dev` instead
     "###);
 
     // Adding `iniconfig` as a dev dependency should succeed.
