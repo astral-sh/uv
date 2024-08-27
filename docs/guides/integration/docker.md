@@ -116,7 +116,16 @@ $ docker run -it $(docker build -q .) /bin/bash -c "cowsay -t hello"
             ||     ||
 ```
 
-To determine the tool bin directory, run `uv tool dir --bin` in the container.
+!!! note
+
+    The tool bin directory's location can be determined by running the `uv tool dir --bin` command
+    in the container.
+
+    Alternatively, it can be set to a constant location:
+
+    ```dockerfile title="Dockerfile"
+    ENV UV_TOOL_BIN_DIR=/opt/uv-bin/
+    ```
 
 ## Optimizations
 
@@ -153,7 +162,8 @@ setting `UV_NO_CACHE`.
 
 !!! note
 
-    The cache directory's location can be determined with the `uv cache dir` command.
+    The cache directory's location can be determined by running the `uv cache dir` command in the
+    container.
 
     Alternatively, the cache can be set to a constant location:
 
