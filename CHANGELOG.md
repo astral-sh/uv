@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.5
+
+### Enhancements
+
+- Add support for `--allow-insecure-host` (aliased to `--trusted-host`) ([#6591](https://github.com/astral-sh/uv/pull/6591))
+- Read requirements from `requires.txt` when available ([#6655](https://github.com/astral-sh/uv/pull/6655))
+- Respect `tool.uv.environments` in `pip compile --universal` ([#6663](https://github.com/astral-sh/uv/pull/6663))
+- Use relative paths by default in `uv add` ([#6686](https://github.com/astral-sh/uv/pull/6686))
+- Improve messages for empty solves and installs ([#6588](https://github.com/astral-sh/uv/pull/6588))
+
+### Bug fixes
+
+- Avoid reusing state across tool upgrades ([#6660](https://github.com/astral-sh/uv/pull/6660))
+- Detect musl and error for musl Python builds ([#6643](https://github.com/astral-sh/uv/pull/6643))
+- Ignore `send` errors in installer ([#6667](https://github.com/astral-sh/uv/pull/6667))
+
+### Documentation
+
+- Add development section to Docker guide and reference new example project ([#6666](https://github.com/astral-sh/uv/pull/6666))
+- Add docs for `constraint-dependencies` and `override-dependencies` ([#6596](https://github.com/astral-sh/uv/pull/6596))
+- Clarify package priority order in pip compatibility guide ([#6619](https://github.com/astral-sh/uv/pull/6619))
+- Fix docs for disabling build isolation with `uv sync` ([#6674](https://github.com/astral-sh/uv/pull/6674))
+- Improve consistency of directory lookup instructions in Docker ([#6665](https://github.com/astral-sh/uv/pull/6665))
+- Improve lockfile concept documentation, add coverage for upgrades ([#6698](https://github.com/astral-sh/uv/pull/6698))
+- Shift the order of some of the Docker guide content ([#6664](https://github.com/astral-sh/uv/pull/6664))
+- Use `python` to highlight requirements and use more content tabs ([#6549](https://github.com/astral-sh/uv/pull/6549))
+
 ## 0.3.4
 
 ### CLI
