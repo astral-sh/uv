@@ -69,30 +69,13 @@ use [`uvx`](../guides/tools.md) or
     managed = false
     ```
 
-## Lockfile
+## Project lockfile
 
 uv creates a `uv.lock` file next to the `pyproject.toml`.
 
 `uv.lock` is a _universal_ or _cross-platform_ lockfile that captures the packages that would be
 installed across all possible Python markers such as operating system, architecture, and Python
 version.
-
-If your project supports a more limited set of platforms or Python versions, you can constrain the
-set of solved platforms via the `environments` setting, which accepts a list of PEP 508 environment
-markers. For example, to constrain the lockfile to macOS and Linux, and exclude Windows:
-
-```toml title="pyproject.toml"
-[tool.uv]
-environments = [
-    "sys_platform == 'darwin'",
-    "sys_platform == 'linux'",
-]
-```
-
-Entries in the `environments` setting must be disjoint (i.e., they must not overlap). For example,
-`sys_platform == 'darwin'` and `sys_platform == 'linux'` are disjoint, but
-`sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the
-same time.
 
 Unlike the `pyproject.toml`, which is used to specify the broad requirements of your project, the
 lockfile contains the exact resolved versions that are installed in the project environment. This
@@ -110,10 +93,38 @@ The lockfile is created and updated during uv invocations that use the project e
 There is no Python standard for lockfiles at this time, so the format of this file is specific to uv
 and not usable by other tools.
 
+### Checking if the lockfile is up-to-date
+
 To avoid updating the lockfile during `uv sync` and `uv run` invocations, use the `--frozen` flag.
 
-To assert the lockfile is up-to-date, use the `--locked` flag. If the lockfile is not up-to-date, an
-error will be raised instead of updating the lockfile.
+To assert the lockfile matches the project metadata, use the `--locked` flag. If the lockfile is not
+up-to-date, an error will be raised instead of updating the lockfile.
+
+### Upgrading locked package versions
+
+By default, uv will prefer the locked versions of packages when running `uv sync` and `uv lock`.
+Package versions will only change if project's dependency constraints exclude the previous, locked
+version. To upgrade to the latest package versions supported by the project's dependency
+constraints, use `uv lock --upgrade`.
+
+### Limited resolution environments
+
+If your project supports a more limited set of platforms or Python versions, you can constrain the
+set of solved platforms via the `environments` setting, which accepts a list of PEP 508 environment
+markers. For example, to constrain the lockfile to macOS and Linux, and exclude Windows:
+
+```toml title="pyproject.toml"
+[tool.uv]
+environments = [
+    "sys_platform == 'darwin'",
+    "sys_platform == 'linux'",
+]
+```
+
+Entries in the `environments` setting must be disjoint (i.e., they must not overlap). For example,
+`sys_platform == 'darwin'` and `sys_platform == 'linux'` are disjoint, but
+`sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the
+same time.
 
 ## Managing dependencies
 
@@ -150,6 +161,20 @@ To update an existing dependency, e.g., to add a lower bound to the `httpx` vers
 ```console
 $ uv add 'httpx>0.1.0'
 ```
+
+!!! note
+
+    "Updating" a dependency refers to changing the constraints for the dependency in the
+    `pyproject.toml`. The locked version of the dependency will only change if necessary to
+    satisfy the new constraints. To force the package version to update to the latest within
+    the constraints, use `--upgrade-package <name>`, e.g.:
+
+    ```console
+    $ uv add 'httpx>0.1.0' --upgrade-package httpx
+    ```
+
+    See the [lockfile](#upgrading-locked-package-versions) section for more details on upgrading
+    package versions.
 
 Or, to change the bounds for `httpx`:
 
