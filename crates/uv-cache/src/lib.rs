@@ -135,7 +135,11 @@ impl Cache {
 
     /// Create a temporary cache directory.
     pub fn temp() -> Result<Self, io::Error> {
-        let temp_dir = tempfile::tempdir()?;
+        let temp_dir = if let Ok(test_dir) = std::env::var("UV_INTERNAL__TEST_DIR") {
+            tempfile::tempdir_in(format!("${test_dir}/uv-cache"))?
+        } else {
+            tempfile::tempdir()?
+        };
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None(Timestamp::now()),
