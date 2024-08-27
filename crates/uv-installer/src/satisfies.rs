@@ -197,6 +197,7 @@ impl RequirementSatisfaction {
             RequirementSource::Directory {
                 install_path: requested_path,
                 editable: requested_editable,
+                r#virtual: _,
                 url: _,
             } => {
                 let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution

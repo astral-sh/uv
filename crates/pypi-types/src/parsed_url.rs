@@ -72,6 +72,7 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
                 url: verbatim.to_url(),
                 install_path: verbatim.as_path()?,
                 editable: false,
+                r#virtual: false,
             })
         } else {
             ParsedUrl::Path(ParsedPathUrl {
@@ -101,6 +102,7 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
                 url: verbatim.to_url(),
                 install_path: verbatim.as_path()?,
                 editable: false,
+                r#virtual: false,
             })
         } else {
             ParsedUrl::Path(ParsedPathUrl {
@@ -208,15 +210,17 @@ pub struct ParsedDirectoryUrl {
     /// The absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
     pub editable: bool,
+    pub r#virtual: bool,
 }
 
 impl ParsedDirectoryUrl {
     /// Construct a [`ParsedDirectoryUrl`] from a path requirement source.
-    pub fn from_source(install_path: PathBuf, editable: bool, url: Url) -> Self {
+    pub fn from_source(install_path: PathBuf, editable: bool, r#virtual: bool, url: Url) -> Self {
         Self {
             url,
             install_path,
             editable,
+            r#virtual,
         }
     }
 }
@@ -370,6 +374,7 @@ impl TryFrom<Url> for ParsedUrl {
                     url,
                     install_path: path.clone(),
                     editable: false,
+                    r#virtual: false,
                 }))
             } else {
                 Ok(Self::Path(ParsedPathUrl {

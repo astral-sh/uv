@@ -281,10 +281,20 @@ impl Workspace {
                 name: project.name.clone(),
                 extras,
                 marker: MarkerTree::TRUE,
-                source: RequirementSource::Directory {
-                    install_path: member.root.clone(),
-                    editable: true,
-                    url,
+                source: if member.pyproject_toml.is_package() {
+                    RequirementSource::Directory {
+                        install_path: member.root.clone(),
+                        editable: true,
+                        r#virtual: false,
+                        url,
+                    }
+                } else {
+                    RequirementSource::Directory {
+                        install_path: member.root.clone(),
+                        editable: false,
+                        r#virtual: true,
+                        url,
+                    }
                 },
                 origin: None,
             })

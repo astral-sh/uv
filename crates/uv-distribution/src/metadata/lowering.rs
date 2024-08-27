@@ -12,7 +12,7 @@ use pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedU
 use uv_git::GitReference;
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::Source;
+use uv_workspace::pyproject::{PyProjectToml, Source};
 use uv_workspace::Workspace;
 
 #[derive(Debug, Clone)]
@@ -148,10 +148,21 @@ impl LoweredRequirement {
                         "Invalid path in file URL",
                     ))
                 })?;
-                RequirementSource::Directory {
-                    install_path,
-                    url,
-                    editable: true,
+
+                if member.pyproject_toml().is_package() {
+                    RequirementSource::Directory {
+                        install_path,
+                        url,
+                        editable: true,
+                        r#virtual: false,
+                    }
+                } else {
+                    RequirementSource::Directory {
+                        install_path,
+                        url,
+                        editable: false,
+                        r#virtual: true,
+                    }
                 }
             }
             Source::CatchAll { .. } => {
@@ -372,17 +383,41 @@ fn path_source(
             "Invalid path in file URL",
         ))
     })?;
+
     let is_dir = if let Ok(metadata) = install_path.metadata() {
         metadata.is_dir()
     } else {
         install_path.extension().is_none()
     };
     if is_dir {
-        Ok(RequirementSource::Directory {
-            install_path,
-            url,
-            editable,
-        })
+        if editable {
+            Ok(RequirementSource::Directory {
+                install_path,
+                url,
+                editable,
+                r#virtual: false,
+            })
+        } else {
+            // Determine whether the project is a package or virtual.
+            let is_package = {
+                let pyproject_path = install_path.join("pyproject.toml");
+                fs_err::read_to_string(&pyproject_path)
+                    .ok()
+                    .and_then(|contents| PyProjectToml::from_string(contents).ok())
+                    .map(|pyproject_toml| pyproject_toml.is_package())
+                    .unwrap_or(true)
+            };
+
+            // If a project is not a package, treat it as a virtual dependency.
+            let r#virtual = !is_package;
+
+            Ok(RequirementSource::Directory {
+                install_path,
+                url,
+                editable,
+                r#virtual,
+            })
+        }
     } else {
         if editable {
             return Err(LoweringError::EditableFile(url.to_string()));
