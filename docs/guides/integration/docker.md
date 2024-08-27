@@ -48,13 +48,13 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.3.4 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.3.5 /uv /bin/uv
 ```
 
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.3.4/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.3.5/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
