@@ -163,6 +163,68 @@ impl Hashes {
         }
         digests
     }
+
+    /// Parse the hash from a fragment, as in: `sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`
+    pub fn parse_fragment(fragment: &str) -> Result<Self, HashError> {
+        let mut parts = fragment.split('=');
+
+        // Extract the key and value.
+        let name = parts
+            .next()
+            .ok_or_else(|| HashError::InvalidFragment(fragment.to_string()))?;
+        let value = parts
+            .next()
+            .ok_or_else(|| HashError::InvalidFragment(fragment.to_string()))?;
+
+        // Ensure there are no more parts.
+        if parts.next().is_some() {
+            return Err(HashError::InvalidFragment(fragment.to_string()));
+        }
+
+        match name {
+            "md5" => {
+                let md5 = std::str::from_utf8(value.as_bytes())?;
+                let md5 = md5.to_owned().into_boxed_str();
+                Ok(Hashes {
+                    md5: Some(md5),
+                    sha256: None,
+                    sha384: None,
+                    sha512: None,
+                })
+            }
+            "sha256" => {
+                let sha256 = std::str::from_utf8(value.as_bytes())?;
+                let sha256 = sha256.to_owned().into_boxed_str();
+                Ok(Hashes {
+                    md5: None,
+                    sha256: Some(sha256),
+                    sha384: None,
+                    sha512: None,
+                })
+            }
+            "sha384" => {
+                let sha384 = std::str::from_utf8(value.as_bytes())?;
+                let sha384 = sha384.to_owned().into_boxed_str();
+                Ok(Hashes {
+                    md5: None,
+                    sha256: None,
+                    sha384: Some(sha384),
+                    sha512: None,
+                })
+            }
+            "sha512" => {
+                let sha512 = std::str::from_utf8(value.as_bytes())?;
+                let sha512 = sha512.to_owned().into_boxed_str();
+                Ok(Hashes {
+                    md5: None,
+                    sha256: None,
+                    sha384: None,
+                    sha512: Some(sha512),
+                })
+            }
+            _ => Err(HashError::UnsupportedHashAlgorithm(fragment.to_string())),
+        }
+    }
 }
 
 impl FromStr for Hashes {
@@ -343,10 +405,16 @@ pub enum HashError {
     #[error("Unexpected hash (expected `<algorithm>:<hash>`): {0}")]
     InvalidStructure(String),
 
+    #[error("Unexpected fragment (expected `#sha256=...` or similar) on URL: {0}")]
+    InvalidFragment(String),
+
     #[error(
-        "Unsupported hash algorithm: `{0}` (expected one of: `md5`, `sha256`, `sha384`, or `sha512`)"
+        "Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, or `sha512`) on: `{0}`"
     )]
     UnsupportedHashAlgorithm(String),
+
+    #[error("Non-UTF-8 hash digest")]
+    NonUtf8(#[from] std::str::Utf8Error),
 }
 
 #[cfg(test)]
