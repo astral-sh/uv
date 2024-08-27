@@ -285,6 +285,7 @@ jobs:
         env:
           CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
           RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+          UV_INTERNAL__TEST_DIR: ${{ env.DEV_DRIVE }}/tmp-uv
         run: |
           cargo nextest run --no-default-features --features python,pypi --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
