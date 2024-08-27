@@ -63,10 +63,19 @@ WORKDIR /app
 RUN uv sync --frozen
 ```
 
+Then, to start your application by default:
+
+```dockerfile title="Dockerfile"
+# Presuming there is a `my_app` command provided by the project
+CMD ["uv", "run", "my_app"]
+```
+
 !!! tip
 
     It is best practice to use [intermediate layers](#intermediate-layers) separating installation
     of dependencies and the project itself to improve Docker image build times.
+
+## Activating the environment
 
 Once the project is installed, you can either _activate_ the virtual environment:
 
@@ -77,17 +86,10 @@ ENV VIRTUAL_ENV=/app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 ```
 
-Or, you can use `uv run` to run commands in the environment:
+Or, you can use `uv run` for any commands that require the environment:
 
 ```dockerfile title="Dockerfile"
 RUN uv run some_script.py
-```
-
-And, to start your application by default:
-
-```dockerfile title="Dockerfile"
-# Presuming there is a `my_app` command provided by the project
-CMD ["uv", "run", "my_app"]
 ```
 
 ## Using installed tools
@@ -115,6 +117,99 @@ $ docker run -it $(docker build -q .) /bin/bash -c "cowsay -t hello"
 ```
 
 To determine the tool bin directory, run `uv tool dir --bin` in the container.
+
+## Optimizations
+
+### Compiling bytecode
+
+Compiling Python source files to bytecode is typically desirable for production images as it tends
+to improve startup time (at the cost of increased installation time).
+
+To enable bytecode compilation, use the `--compile-bytecode` flag:
+
+```dockerfile title="Dockerfile"
+RUN uv sync --compile-bytecode
+```
+
+Alternatively, you can set the `UV_COMPILE_BYTECODE` environment variable to ensure that all
+commands within the Dockerfile compile bytecode:
+
+```dockerfile title="Dockerfile"
+ENV UV_COMPILE_BYTECODE=1
+```
+
+### Caching
+
+A [cache mount](https://docs.docker.com/build/guide/mounts/#add-a-cache-mount) can be used to
+improve performance across builds:
+
+```dockerfile title="Dockerfile"
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync
+```
+
+If you're not mounting the cache, image size can be reduced by using the `--no-cache` flag or
+setting `UV_NO_CACHE`.
+
+!!! note
+
+    The cache directory's location can be determined with the `uv cache dir` command.
+
+    Alternatively, the cache can be set to a constant location:
+
+    ```dockerfile title="Dockerfile"
+    ENV UV_CACHE_DIR=/opt/uv-cache/
+    ```
+
+### Intermediate layers
+
+If you're using uv to manage your project, you can improve build times by moving your transitive
+dependency installation into its own layer via the `--no-install` options.
+
+`uv sync --no-install-project` will install the dependencies of the project but not the project
+itself. Since the project changes frequently, but its dependencies are generally static, this can be
+a big time saver.
+
+```dockerfile title="Dockerfile"
+# Install uv
+FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Change the working directory to the `app` directory
+WORKDIR /app
+
+# Copy the lockfile and `pyproject.toml` into the image
+ADD uv.lock /app/uv.lock
+ADD pyproject.toml /app/pyproject.toml
+
+# Install dependencies
+RUN uv sync --frozen --no-install-project
+
+# Copy the project into the image
+ADD . /app
+
+# Sync the project
+RUN uv sync --frozen
+```
+
+Note that the `pyproject.toml` is required to identify the project root and name, but the project
+_contents_ are not copied into the image until the final `uv sync` command.
+
+!!! tip
+
+    If you're using a [workspace](../../concepts/workspaces.md), then use the
+    `--no-install-workspace` flag which excludes the project _and_ any workspace members.
+
+    If you want to remove specific packages from the sync, use `--no-install-package <name>`.
+
+### Using uv temporarily
+
+If uv isn't needed in the final image, the binary can be mounted in each invocation:
+
+```dockerfile title="Dockerfile"
+RUN --mount=from=ghcr.io/astral-sh/uv,source=/uv,target=/bin/uv \
+    uv sync
+```
 
 ## Using the pip interface
 
@@ -170,92 +265,3 @@ RUN uv pip install -r pyproject.toml
 COPY . .
 RUN uv pip install -e .
 ```
-
-## Optimizations
-
-### Using uv temporarily
-
-If uv isn't needed in the final image, the binary can be mounted in each invocation:
-
-```dockerfile title="Dockerfile"
-RUN --mount=from=ghcr.io/astral-sh/uv,source=/uv,target=/bin/uv \
-    uv pip install --system ruff
-```
-
-### Compiling bytecode
-
-Compiling Python source files to bytecode is typically desirable for production images as it tends
-to improve startup time (at the cost of increased installation time).
-
-To enable bytecode compilation, use the `--compile-bytecode` flag:
-
-```dockerfile title="Dockerfile"
-RUN uv sync --compile-bytecode
-```
-
-Alternatively, you can set the `UV_COMPILE_BYTECODE` environment variable to ensure that all
-commands within the Dockerfile compile bytecode:
-
-```dockerfile title="Dockerfile"
-ENV UV_COMPILE_BYTECODE=1
-```
-
-### Caching
-
-A [cache mount](https://docs.docker.com/build/guide/mounts/#add-a-cache-mount) can be used to
-improve performance across builds:
-
-```dockerfile title="Dockerfile"
-RUN --mount=type=cache,target=/root/.cache/uv \
- ./uv pip install -r requirements.txt -->
-```
-
-Note the cache directory's location can be determined with the `uv cache dir` command.
-Alternatively, the cache can be set to a constant location:
-
-```dockerfile title="Dockerfile"
-ENV UV_CACHE_DIR=/opt/uv-cache/
-```
-
-If not mounting the cache, image size can be reduced with `--no-cache` flag.
-
-### Intermediate layers
-
-If you're using uv to manage your project, you can improve build times by moving your transitive
-dependency installation into its own layer via the `--no-install` options.
-
-`uv sync --no-install-project` will install the dependencies of the project but not the project
-itself. Since the project changes frequently, but its dependencies are generally static, this can be
-a big time saver.
-
-```dockerfile title="Dockerfile"
-# Install uv
-FROM python:3.12-slim
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
-
-# Change the working directory to the `app` directory
-WORKDIR /app
-
-# Copy the lockfile and `pyproject.toml` into the image
-ADD uv.lock /app/uv.lock
-ADD pyproject.toml /app/pyproject.toml
-
-# Install dependencies
-RUN uv sync --frozen --no-install-project
-
-# Copy the project into the image
-ADD . /app
-
-# Sync the project
-RUN uv sync --frozen
-```
-
-Note that the `pyproject.toml` is required to identify the project root and name, but the project
-_contents_ are not copied into the image until the final `uv sync` command.
-
-!!! tip
-
-    If you're using a [workspace](../../concepts/workspaces.md), then use the
-    `--no-install-workspace` flag which excludes the project _and_ any workspace members.
-
-    If you want to remove specific packages from the sync, use `--no-install-package <name>`.
