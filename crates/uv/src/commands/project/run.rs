@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use anstream::eprint;
 use anyhow::{anyhow, bail, Context};
+use fs_err::File;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
@@ -882,6 +883,20 @@ impl TryFrom<&ExternalCommand> for RunCommand {
         {
             Ok(Self::PythonGuiScript(target_path, args.to_vec()))
         } else {
+            // Sniff the shebang to avoid infinite recursion
+            let known_shebang = br"#!/usr/bin/env -S uv run";
+            let mut buffer = Vec::with_capacity(known_shebang.len());
+            if File::open(&target_path)
+                .and_then(|file| {
+                    file.take(known_shebang.len() as u64)
+                        .read_to_end(&mut buffer)
+                })
+                .is_ok()
+                && buffer == known_shebang
+            {
+                return Ok(Self::PythonScript(target_path, args.to_vec()));
+            };
+
             Ok(Self::External(
                 target.clone(),
                 args.iter().map(std::clone::Clone::clone).collect(),
