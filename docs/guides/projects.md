@@ -1,7 +1,6 @@
 # Working on projects
 
-uv is capable of managing Python projects using a `pyproject.toml` with a `[project]` metadata
-table.
+uv supports managing Python projects, which define their dependencies in a `pyproject.toml` file.
 
 ## Creating a new project
 
@@ -20,34 +19,42 @@ $ cd hello-world
 $ uv init
 ```
 
-This will create the following directory structure:
+uv will create the following files:
 
 ```text
 .
-├── pyproject.toml
 ├── README.md
-└── src
-    └── hello_world
-        └── __init__.py
+├── hello.py
+└── pyproject.toml
 ```
 
-### Working on an existing project
+The `hello.py` file contains a simple "Hello world" program. Try it out with `uv run`:
 
-If your project already contains a standard `pyproject.toml`, you can start using uv immediately.
-Commands like `uv add` and `uv run` will create a [lockfile](#uvlock) and [environment](#venv) the
-first time they are used.
-
-If you are migrating from an alternative Python package manager, you may need to edit your
-`pyproject.toml` manually before using uv. Most Python package managers extend the `pyproject.toml`
-standard to support common features, such as development dependencies. These extensions are specific
-to each package manager and will need to be converted to uv's format. See the documentation on
-[project dependencies](../concepts/dependencies.md) for more details.
+```console
+$ uv run hello.py
+Hello from hello-world!
+```
 
 ## Project structure
 
 A project consists of a few important parts that work together and allow uv to manage your project.
-Along with the files created by `uv init`, uv will create a virtual environment and `uv.lock` file
-in the root of your project the first time you run a project command.
+In addition to the files created by `uv init`, uv will create a virtual environment and `uv.lock`
+file in the root of your project the first time you run a project command, i.e., `uv run`,
+`uv sync`, or `uv lock`.
+
+A complete listing would look like:
+
+```text
+.
+├── .venv
+│   ├── bin
+│   ├── lib
+│   └── pyvenv.cfg
+├── README.md
+├── hello.py
+├── pyproject.toml
+└── uv.lock
+```
 
 ### `pyproject.toml`
 
@@ -60,19 +67,19 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 dependencies = []
-
-[tool.uv]
-dev-dependencies = []
 ```
 
-This is where you specify dependencies, as well as details about the project such as its description
-or license. You can edit this file manually, or use commands like `uv add` and `uv remove` to manage
-your project through the CLI.
+You'll use this file to specify dependencies, as well as details about the project such as its
+description or license. You can edit this file manually, or use commands like `uv add` and
+`uv remove` to manage your project from the terminal.
 
 !!! tip
 
     See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
     for more details on getting started with the `pyproject.toml` format.
+
+You'll also use this file to specify uv [configuration options](../configuration/files.md) in a
+[`[tool.uv]`](../reference/settings.md) section.
 
 ### `.venv`
 
