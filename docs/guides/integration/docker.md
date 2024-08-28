@@ -16,6 +16,17 @@ container:
 $ docker run ghcr.io/astral-sh/uv --help
 ```
 
+### Available images
+
+uv builds and publishes the following Docker tags:
+
+- `uv:latest`
+- `uv:{major}.{minor}.{patch}`, e.g., `uv:0.4.0`
+- `uv:{major}.{minor}`, e.g., `uv:0.4` (the latest patch version)
+
+For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
+page.
+
 ### Installing uv
 
 uv can be installed by copying from the official Docker image:
