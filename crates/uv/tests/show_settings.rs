@@ -3419,7 +3419,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
 
     let config = context.temp_dir.child("uv.toml");
     config.write_str(indoc::indoc! {r#"
-        allow-insecure-host = ["google.com"]
+        allow-insecure-host = ["google.com", { host = "example.com" }]
     "#})?;
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -3493,6 +3493,11 @@ fn allow_insecure_host() -> anyhow::Result<()> {
                 TrustedHost {
                     scheme: None,
                     host: "google.com",
+                    port: None,
+                },
+                TrustedHost {
+                    scheme: None,
+                    host: "example.com",
                     port: None,
                 },
             ],

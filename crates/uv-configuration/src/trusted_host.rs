@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use url::Url;
 
 /// A trusted host, which could be a host or a host-port pair.
@@ -31,13 +33,28 @@ impl TrustedHost {
     }
 }
 
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum TrustHostWire {
+    String(String),
+    Struct {
+        scheme: Option<String>,
+        host: String,
+        port: Option<u16>,
+    },
+}
+
 impl<'de> serde::de::Deserialize<'de> for TrustedHost {
     fn deserialize<D>(deserializer: D) -> Result<TrustedHost, D::Error>
     where
         D: serde::de::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        s.parse().map_err(serde::de::Error::custom)
+        let helper = TrustHostWire::deserialize(deserializer)?;
+
+        match helper {
+            TrustHostWire::String(s) => TrustedHost::from_str(&s).map_err(serde::de::Error::custom),
+            TrustHostWire::Struct { scheme, host, port } => Ok(TrustedHost { scheme, host, port }),
+        }
     }
 }
 
