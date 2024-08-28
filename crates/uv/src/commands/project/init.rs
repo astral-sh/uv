@@ -15,7 +15,7 @@ use uv_python::{
 };
 use uv_resolver::RequiresPython;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
 
 use crate::commands::project::find_requires_python;
 use crate::commands::reporters::PythonDownloadReporter;
@@ -141,7 +141,7 @@ async fn init_project(
         match Workspace::discover(
             parent,
             &DiscoveryOptions {
-                ignore: std::iter::once(path).collect(),
+                members: MemberDiscovery::Ignore(std::iter::once(path).collect()),
                 ..DiscoveryOptions::default()
             },
         )
