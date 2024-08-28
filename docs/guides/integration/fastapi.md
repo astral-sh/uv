@@ -27,8 +27,20 @@ follows:
 │       └── admin.py
 ```
 
-To migrate this project to uv, add a `pyproject.toml` file to the root directory of the project, as
-a sibling to the `app` directory.
+To migrate this project to uv, add a `pyproject.toml` file to the root directory of the project with
+`uv init`:
+
+```console
+$ uv init
+$ uv add fastapi --extra standard
+```
+
+!!! tip
+
+    If you have an existing `pyproject.toml`, `uv init` cannot be used — but you may not need to
+    make any changes to the file.
+
+You should now have the following structure:
 
 ```plaintext
 .
@@ -46,11 +58,11 @@ a sibling to the `app` directory.
 │       └── admin.py
 ```
 
-The contents of the `pyproject.toml` file should look something like this:
+And the contents of the `pyproject.toml` file should look something like this:
 
 ```toml title="pyproject.toml"
 [project]
-name = "app"
+name = "uv-fastapi-example"
 version = "0.1.0"
 description = "FastAPI project"
 readme = "README.md"
@@ -67,7 +79,7 @@ build-backend = "hatchling.build"
 From there, you can run the FastAPI application with:
 
 ```console
-$ uv run fastapi dev app/main.py
+$ uv run fastapi dev
 ```
 
 `uv run` will automatically resolve and lock the project dependencies (i.e., create a `uv.lock`
