@@ -107,7 +107,7 @@ One difficulty in a forking resolver is that where splits occur is dependent on 
 are seen, which is in turn dependent on the preferences, e.g., from `uv.lock`. So it is possible for
 the resolver to solve the requirements with specific forks, write this to the lockfile, and when the
 resolver is invoked again, a different solution is found because the preferences result in different
-fork points. To avoid this, the `environment-markers` of each fork and each package that diverges
+fork points. To avoid this, the `resolution-markers` of each fork and each package that diverges
 between forks is written to the lockfile. When performing a new resolution, the forks from the
 lockfile are used to ensure the resolution is stable. When requirements change, new forks may be
 added to the saved forks.
