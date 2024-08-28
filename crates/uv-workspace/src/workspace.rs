@@ -1006,17 +1006,17 @@ async fn find_workspace(
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.workspace.as_ref())
         {
-            if is_excluded_from_workspace(project_root, workspace_root, workspace)? {
+            if !is_included_in_workspace(project_root, workspace_root, workspace)? {
                 debug!(
-                    "Found workspace root `{}`, but project is excluded",
+                    "Found workspace root `{}`, but project is not included",
                     workspace_root.simplified_display()
                 );
                 return Ok(None);
             }
 
-            if !is_included_in_workspace(project_root, workspace_root, workspace)? {
+            if is_excluded_from_workspace(project_root, workspace_root, workspace)? {
                 debug!(
-                    "Found workspace root `{}`, but project is not included",
+                    "Found workspace root `{}`, but project is excluded",
                     workspace_root.simplified_display()
                 );
                 return Ok(None);
@@ -1109,7 +1109,7 @@ pub fn check_nested_workspaces(inner_workspace_root: &Path, options: &DiscoveryO
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.workspace.as_ref())
         {
-            let is_excluded = match is_excluded_from_workspace(
+            let is_included = match is_included_in_workspace(
                 inner_workspace_root,
                 outer_workspace_root,
                 workspace,
@@ -1124,7 +1124,7 @@ pub fn check_nested_workspaces(inner_workspace_root: &Path, options: &DiscoveryO
                 }
             };
 
-            let is_included = match is_included_in_workspace(
+            let is_excluded = match is_excluded_from_workspace(
                 inner_workspace_root,
                 outer_workspace_root,
                 workspace,

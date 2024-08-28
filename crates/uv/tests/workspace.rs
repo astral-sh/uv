@@ -970,9 +970,9 @@ fn workspace_non_included_member() -> Result<()> {
     make_project(&workspace.join("packages").join("a"), "a", deps)?;
 
     // ... and b.
-    let deps = indoc! {r#"
+    let deps = indoc! {r"
         dependencies = []
-    "#};
+    "};
     make_project(&workspace.join("packages").join("b"), "b", deps)?;
 
     // ... and c, which is _not_ a member, but also isn't explicitly excluded.
@@ -993,7 +993,9 @@ fn workspace_non_included_member() -> Result<()> {
     "###
     );
 
-    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("c").join("uv.lock"))?)?;
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(
+        workspace.join("c").join("uv.lock"),
+    )?)?;
 
     assert_json_snapshot!(lock.sources(), @r###"
     {
