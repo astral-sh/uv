@@ -20,7 +20,7 @@ use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
 use crate::managed::ManagedPythonInstallations;
-use crate::py_launcher::{self, py_list_paths};
+use crate::py_launcher::registry_pythons;
 use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable,
@@ -189,9 +189,8 @@ pub enum Error {
     #[error(transparent)]
     VirtualEnv(#[from] crate::virtualenv::Error),
 
-    /// An error was encountered when using the `py` launcher on Windows.
-    #[error(transparent)]
-    PyLauncher(#[from] crate::py_launcher::Error),
+    #[error("Failed to query installed Python versions from the Windows registry")]
+    RegistryError(#[from] windows_result::Error),
 
     /// An invalid version request was given
     #[error("Invalid version request: {0}")]
@@ -311,15 +310,24 @@ fn python_executables_from_installed<'a>(
     let from_py_launcher = std::iter::once_with(move || {
         (cfg!(windows) && env::var_os("UV_TEST_PYTHON_PATH").is_none())
             .then(|| {
-                py_list_paths()
-                    .map(|entries|
-                // We can avoid querying the interpreter using versions from the py launcher output unless a patch is requested
-                entries.into_iter().filter(move |entry|
-                    version.is_none() || version.is_some_and(|version|
-                        version.has_patch() || version.matches_major_minor(entry.major, entry.minor)
-                    )
-                )
-                .map(|entry| (PythonSource::PyLauncher, entry.executable_path)))
+                registry_pythons()
+                    // We can avoid querying the interpreter using versions from the py launcher output unless a patch is requested
+                    .map(|entries| {
+                        entries
+                            .into_iter()
+                            .filter(move |entry| {
+                                if let Some(version_request) = version {
+                                    if let Some(version) = &entry.version {
+                                        version_request.matches_version(version)
+                                    } else {
+                                        true
+                                    }
+                                } else {
+                                    true
+                                }
+                            })
+                            .map(|entry| (PythonSource::PyLauncher, entry.path))
+                    })
                     .map_err(Error::from)
             })
             .into_iter()
@@ -626,11 +634,6 @@ impl Error {
                     false
                 }
             },
-            // Ignore `py` if it's not installed
-            Error::PyLauncher(py_launcher::Error::NotFound) => {
-                debug!("The `py` launcher could not be found to query for Python versions");
-                false
-            }
             _ => true,
         }
     }

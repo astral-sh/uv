@@ -61,9 +61,6 @@ pub enum Error {
     Discovery(#[from] discovery::Error),
 
     #[error(transparent)]
-    PyLauncher(#[from] py_launcher::Error),
-
-    #[error(transparent)]
     ManagedPython(#[from] managed::Error),
 
     #[error(transparent)]

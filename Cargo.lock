@@ -5042,6 +5042,8 @@ dependencies = [
  "uv-state",
  "uv-warnings",
  "which",
+ "windows-registry",
+ "windows-result",
  "windows-sys 0.59.0",
  "winsafe 0.0.22",
 ]
