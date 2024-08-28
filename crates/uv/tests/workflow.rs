@@ -466,7 +466,7 @@ fn jax_instability() -> Result<()> {
         +[[package]]
          name = "uv-lock-instability"
          version = "0.1.0"
-         source = { editable = "." }
+         source = { virtual = "." }
          dependencies = [
              { name = "jax" },
         +    { name = "tzdata" },
@@ -519,7 +519,7 @@ fn jax_instability() -> Result<()> {
         -[[package]]
          name = "uv-lock-instability"
          version = "0.1.0"
-         source = { editable = "." }
+         source = { virtual = "." }
          dependencies = [
              { name = "jax" },
         -    { name = "tzdata" },

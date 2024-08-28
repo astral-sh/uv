@@ -145,12 +145,14 @@ impl PubGrubRequirement {
             }
             RequirementSource::Directory {
                 editable,
+                r#virtual,
                 url,
                 install_path,
             } => {
                 let parsed_url = ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
                     install_path.clone(),
                     *editable,
+                    *r#virtual,
                     url.to_url(),
                 ));
                 (url, parsed_url)

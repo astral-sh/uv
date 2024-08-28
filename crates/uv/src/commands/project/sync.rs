@@ -1,8 +1,7 @@
 use anyhow::{Context, Result};
 use itertools::Itertools;
-use rustc_hash::FxHashSet;
 
-use distribution_types::Name;
+use distribution_types::{Dist, ResolvedDist, SourceDist};
 use pep508_rs::MarkerTree;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -199,7 +198,7 @@ pub(super) async fn do_sync(
     let resolution = lock.to_resolution(project, &markers, tags, extras, &dev)?;
 
     // Always skip virtual projects, which shouldn't be built or installed.
-    let resolution = apply_no_virtual_project(resolution, project);
+    let resolution = apply_no_virtual_project(resolution);
 
     // Filter resolution based on install-specific options.
     let resolution = install_options.filter_resolution(resolution, project);
@@ -299,28 +298,20 @@ pub(super) async fn do_sync(
 /// Filter out any virtual workspace members.
 fn apply_no_virtual_project(
     resolution: distribution_types::Resolution,
-    project: &VirtualProject,
 ) -> distribution_types::Resolution {
-    let VirtualProject::Project(project) = project else {
-        // If the project is _only_ a virtual workspace root, we don't need to filter it out.
-        return resolution;
-    };
+    resolution.filter(|dist| {
+        let ResolvedDist::Installable(dist) = dist else {
+            return true;
+        };
 
-    let virtual_members = project
-        .workspace()
-        .packages()
-        .iter()
-        .filter_map(|(name, package)| {
-            // A project is a package if it's explicitly marked as such, _or_ if a build system is
-            // present.
-            if package.pyproject_toml().is_package() {
-                None
-            } else {
-                Some(name)
-            }
-        })
-        .collect::<FxHashSet<_>>();
+        let Dist::Source(dist) = dist else {
+            return true;
+        };
 
-    // Remove any virtual members from the resolution.
-    resolution.filter(|dist| !virtual_members.contains(dist.name()))
+        let SourceDist::Directory(dist) = dist else {
+            return true;
+        };
+
+        !dist.r#virtual
+    })
 }

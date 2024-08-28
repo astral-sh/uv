@@ -1861,6 +1861,7 @@ mod test {
                                             },
                                             install_path: "/foo/bar",
                                             editable: true,
+                                            virtual: false,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {

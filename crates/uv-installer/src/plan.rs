@@ -264,6 +264,7 @@ impl<'a> Planner<'a> {
                 }
 
                 RequirementSource::Directory {
+                    r#virtual,
                     url,
                     editable,
                     install_path,
@@ -284,6 +285,7 @@ impl<'a> Planner<'a> {
                         url: url.clone(),
                         install_path,
                         editable: *editable,
+                        r#virtual: *r#virtual,
                     };
 
                     // Find the most-compatible wheel from the cache, since we don't know

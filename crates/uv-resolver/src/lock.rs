@@ -1394,6 +1394,11 @@ impl Package {
                     source_type: "editable",
                 }
                 .into()),
+                Source::Virtual(_) => Err(LockErrorKind::InvalidWheelSource {
+                    id: self.id.clone(),
+                    source_type: "virtual",
+                }
+                .into()),
             };
         };
 
@@ -1431,6 +1436,7 @@ impl Package {
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     editable: false,
+                    r#virtual: false,
                 };
                 distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -1440,6 +1446,17 @@ impl Package {
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     editable: true,
+                    r#virtual: false,
+                };
+                distribution_types::SourceDist::Directory(dir_dist)
+            }
+            Source::Virtual(path) => {
+                let dir_dist = DirectorySourceDist {
+                    name: self.id.name.clone(),
+                    url: verbatim_url(workspace_root.join(path), &self.id)?,
+                    install_path: workspace_root.join(path),
+                    editable: false,
+                    r#virtual: true,
                 };
                 distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -1985,6 +2002,8 @@ enum Source {
     Directory(PathBuf),
     /// A path to a local directory that should be installed as editable.
     Editable(PathBuf),
+    /// A path to a local directory that should not be built or installed.
+    Virtual(PathBuf),
 }
 
 impl Source {
@@ -2093,6 +2112,8 @@ impl Source {
             .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable {
             Ok(Source::Editable(path))
+        } else if directory_dist.r#virtual {
+            Ok(Source::Virtual(path))
         } else {
             Ok(Source::Directory(path))
         }
@@ -2182,6 +2203,9 @@ impl Source {
                     Value::from(PortablePath::from(path).to_string()),
                 );
             }
+            Source::Virtual(ref path) => {
+                source_table.insert("virtual", Value::from(PortablePath::from(path).to_string()));
+            }
         }
         table.insert("source", value(source_table));
     }
@@ -2198,7 +2222,8 @@ impl std::fmt::Display for Source {
             Source::Registry(RegistrySource::Path(path))
             | Source::Path(path)
             | Source::Directory(path)
-            | Source::Editable(path) => {
+            | Source::Editable(path)
+            | Source::Virtual(path) => {
                 write!(f, "{}+{}", self.name(), PortablePath::from(path))
             }
         }
@@ -2214,6 +2239,7 @@ impl Source {
             Self::Path(..) => "path",
             Self::Directory(..) => "directory",
             Self::Editable(..) => "editable",
+            Self::Virtual(..) => "virtual",
         }
     }
 
@@ -2228,7 +2254,9 @@ impl Source {
         match *self {
             Self::Registry(..) => None,
             Self::Direct(..) | Self::Path(..) => Some(true),
-            Self::Git(..) | Self::Directory(..) | Self::Editable(..) => Some(false),
+            Self::Git(..) | Self::Directory(..) | Self::Editable(..) | Self::Virtual(..) => {
+                Some(false)
+            }
         }
     }
 }
@@ -2255,6 +2283,9 @@ enum SourceWire {
     },
     Editable {
         editable: PortablePathBuf,
+    },
+    Virtual {
+        r#virtual: PortablePathBuf,
     },
 }
 
@@ -2292,6 +2323,7 @@ impl TryFrom<SourceWire> for Source {
             Path { path } => Ok(Source::Path(path.into())),
             Directory { directory } => Ok(Source::Directory(directory.into())),
             Editable { editable } => Ok(Source::Editable(editable.into())),
+            Virtual { r#virtual } => Ok(Source::Virtual(r#virtual.into())),
         }
     }
 }
@@ -3280,6 +3312,7 @@ fn normalize_requirement(
         RequirementSource::Directory {
             install_path,
             editable,
+            r#virtual,
             url: _,
         } => {
             let install_path = uv_fs::normalize_path(&workspace.install_path().join(&install_path));
@@ -3293,6 +3326,7 @@ fn normalize_requirement(
                 source: RequirementSource::Directory {
                     install_path,
                     editable,
+                    r#virtual,
                     url,
                 },
                 origin: None,

@@ -23,6 +23,7 @@ RequirementsTxt {
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
                                 editable: false,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
@@ -72,6 +73,7 @@ RequirementsTxt {
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
                                 editable: false,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
@@ -125,6 +127,7 @@ RequirementsTxt {
                                 },
                                 install_path: "/scripts/packages/black_editable",
                                 editable: false,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
