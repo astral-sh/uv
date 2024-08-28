@@ -751,6 +751,22 @@ impl Lock {
             }
         }
 
+        // Validate that the member sources have not changed (e.g., switched from packaged to
+        // virtual).
+        {
+            for (name, member) in workspace.packages() {
+                let expected = !member.pyproject_toml().is_package();
+                let actual = self
+                    .find_by_name(name)
+                    .ok()
+                    .flatten()
+                    .map(|package| matches!(package.id.source, Source::Virtual(_)));
+                if actual.map_or(true, |actual| actual != expected) {
+                    return Ok(SatisfiesResult::MismatchedSources(name.clone(), expected));
+                }
+            }
+        }
+
         // Validate that the lockfile was generated with the same requirements.
         {
             let expected: BTreeSet<_> = requirements
@@ -1030,6 +1046,8 @@ pub enum SatisfiesResult<'lock> {
     Satisfied,
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
+    /// The lockfile uses a different set of sources for its workspace members.
+    MismatchedSources(PackageName, bool),
     /// The lockfile uses a different set of requirements.
     MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.
