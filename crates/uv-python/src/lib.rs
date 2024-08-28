@@ -29,6 +29,7 @@ pub mod managed;
 pub mod platform;
 mod pointer_size;
 mod prefix;
+#[cfg(windows)]
 mod py_launcher;
 mod python_version;
 mod target;

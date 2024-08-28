@@ -32,7 +32,7 @@ pub(crate) fn registry_pythons() -> Result<Vec<RegistryPython>, windows_result::
         };
         for company in key_python.keys()? {
             // Reserved name according to the PEP.
-            if company == "PyLauncher" {
+            if company == "Registry" {
                 continue;
             }
             let Ok(company_key) = key_python.open(&company) else {
@@ -51,7 +51,8 @@ pub(crate) fn registry_pythons() -> Result<Vec<RegistryPython>, windows_result::
 
     // The registry has no natural ordering, so we're processing the latest version first.
     registry_pythons.sort_by(|a, b| {
-        // Highest version first (reverse), but missing versions at the bottom (regular order).
+        // Highest version first (reverse), but entries without version at the bottom (regular
+        // order).
         if let (Some(version_a), Some(version_b)) = (&a.version, &b.version) {
             version_a.cmp(version_b).reverse().then(a.path.cmp(&b.path))
         } else {
@@ -75,15 +76,11 @@ fn read_registry_entry(company: &str, tag: &str, tag_key: &Key) -> Option<Regist
         .and_then(value_to_string)
     else {
         debug!(
-            r"Registry Python is not executable: `Software\Python\{}\{}",
+            r"Python interpreter in the registry is not executable: `Software\Python\{}\{}",
             company, tag
         );
         return None;
     };
-    debug!(
-        "Found registry Python {} {}: `{}`",
-        company, tag, executable_path
-    );
 
     // `SysVersion` is optional.
     let version = tag_key
@@ -97,8 +94,8 @@ fn read_registry_entry(company: &str, tag: &str, tag_key: &Key) -> Option<Regist
             Ok(version) => Some(version),
             Err(err) => {
                 debug!(
-                    "Invalid registry Python version at {}: {}",
-                    executable_path, err
+                    "Skipping Python interpreter ({executable_path}) \
+                    with invalid registry version {s}: {err}",
                 );
                 None
             }

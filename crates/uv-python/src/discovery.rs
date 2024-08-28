@@ -20,6 +20,7 @@ use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
 use crate::managed::ManagedPythonInstallations;
+#[cfg(windows)]
 use crate::py_launcher::registry_pythons;
 use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
@@ -164,8 +165,8 @@ pub enum PythonSource {
     DiscoveredEnvironment,
     /// An executable was found in the search path i.e. `PATH`
     SearchPath,
-    /// An executable was found via the `py` launcher
-    PyLauncher,
+    /// An executable was found in the Windows registry via PEP 514
+    Registry,
     /// The Python installation was found in the uv managed Python directory
     Managed,
     /// The Python installation was found via the invoking interpreter i.e. via `python -m uv ...`
@@ -189,6 +190,7 @@ pub enum Error {
     #[error(transparent)]
     VirtualEnv(#[from] crate::virtualenv::Error),
 
+    #[cfg(windows)]
     #[error("Failed to query installed Python versions from the Windows registry")]
     RegistryError(#[from] windows_result::Error),
 
@@ -308,30 +310,39 @@ fn python_executables_from_installed<'a>(
 
     // TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python installations from the registry instead.
     let from_py_launcher = std::iter::once_with(move || {
-        (cfg!(windows) && env::var_os("UV_TEST_PYTHON_PATH").is_none())
-            .then(|| {
-                registry_pythons()
-                    // We can avoid querying the interpreter using versions from the py launcher output unless a patch is requested
-                    .map(|entries| {
-                        entries
-                            .into_iter()
-                            .filter(move |entry| {
-                                if let Some(version_request) = version {
-                                    if let Some(version) = &entry.version {
-                                        version_request.matches_version(version)
+        #[cfg(windows)]
+        {
+            env::var_os("UV_TEST_PYTHON_PATH")
+                .is_none()
+                .then(|| {
+                    registry_pythons()
+                        .map(|entries| {
+                            entries
+                                .into_iter()
+                                .filter(move |entry| {
+                                    // Skip interpreter probing if we already know the version
+                                    // doesn't match.
+                                    if let Some(version_request) = version {
+                                        if let Some(version) = &entry.version {
+                                            version_request.matches_version(version)
+                                        } else {
+                                            true
+                                        }
                                     } else {
                                         true
                                     }
-                                } else {
-                                    true
-                                }
-                            })
-                            .map(|entry| (PythonSource::PyLauncher, entry.path))
-                    })
-                    .map_err(Error::from)
-            })
-            .into_iter()
-            .flatten_ok()
+                                })
+                                .map(|entry| (PythonSource::Registry, entry.path))
+                        })
+                        .map_err(Error::from)
+                })
+                .into_iter()
+                .flatten_ok()
+        }
+        #[cfg(not(windows))]
+        {
+            Vec::new()
+        }
     })
     .flatten();
 
@@ -1296,7 +1307,7 @@ impl PythonPreference {
         // If not dealing with a system interpreter source, we don't care about the preference
         if !matches!(
             source,
-            PythonSource::Managed | PythonSource::SearchPath | PythonSource::PyLauncher
+            PythonSource::Managed | PythonSource::SearchPath | PythonSource::Registry
         ) {
             return true;
         }
@@ -1305,10 +1316,10 @@ impl PythonPreference {
             PythonPreference::OnlyManaged => matches!(source, PythonSource::Managed),
             Self::Managed | Self::System => matches!(
                 source,
-                PythonSource::Managed | PythonSource::SearchPath | PythonSource::PyLauncher
+                PythonSource::Managed | PythonSource::SearchPath | PythonSource::Registry
             ),
             PythonPreference::OnlySystem => {
-                matches!(source, PythonSource::SearchPath | PythonSource::PyLauncher)
+                matches!(source, PythonSource::SearchPath | PythonSource::Registry)
             }
         }
     }
@@ -1619,7 +1630,7 @@ impl fmt::Display for PythonSource {
             Self::CondaPrefix => f.write_str("conda prefix"),
             Self::DiscoveredEnvironment => f.write_str("virtual environment"),
             Self::SearchPath => f.write_str("search path"),
-            Self::PyLauncher => f.write_str("`py` launcher output"),
+            Self::Registry => f.write_str("registry"),
             Self::Managed => f.write_str("managed installations"),
             Self::ParentInterpreter => f.write_str("parent interpreter"),
         }
