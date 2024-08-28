@@ -2,9 +2,18 @@
 
 ## 0.4.0
 
-This release includes breaking changes to uv's handling of projects that do not need to be packaged. Previously, uv required that all projects (with the minor exception of virtual workspace roots) were able to be built into Python packages and installed them into the project environment. All projects created by `uv init` included a `[build-system]` definition and existing projects that did not define a `[build-system]` would use the legacy setuptools build backend.
+This release adds first-class support for Python projects that are not designed as Python packages (e.g., web
+applications).
 
-However, most users are not developing libraries that need to be packaged and published to PyPI. Instead, people are building applications using web frameworks or have a pile of `.py` files in the project's root directory. In these cases, requiring a `[build-system]` was confusing and error prone. In this release, uv changes the default behavior to orient around these common use cases.
+In doing so, it also includes some breaking changes around uv's handling of such projects. Previously, uv required that
+all projects (with the minor exception of virtual workspace roots) were buildable, and always built and installed such
+projects into the virtual environment. All projects created by `uv init` included a `[build-system]` definition and
+existing projects that did not define a `[build-system]` would use the legacy setuptools build backend by default.
+
+However, most users are not developing libraries that need to be packaged and published to PyPI. Instead, they're
+building applications using web frameworks, or running collections of Python scripts in the project's root directory. In
+these cases, requiring a `[build-system]` was confusing and error-prone. In this release, uv changes the default behavior
+to orient around these common use cases.
 
 In summary, the major changes are:
 
@@ -22,7 +31,7 @@ See the latest documentation on [build systems in projects](http://localhost:800
 
 - Add first-class support for non-packaged projects ([#6585](https://github.com/astral-sh/uv/pull/6585))
 - Add `--app` and `--lib` options to `uv init` ([#6689](https://github.com/astral-sh/uv/pull/6689))
-- Avoid using editable tag in lockfile for non-package dependencies ([#6728](https://github.com/astral-sh/uv/pull/6728))
+- Use `virtual` source label in lockfile for non-packaged dependencies ([#6728](https://github.com/astral-sh/uv/pull/6728))
 - Read hash from URL fragment if `--hashes` are omitted  ([#6731](https://github.com/astral-sh/uv/pull/6731))
 - Support `{package}@{version}` in `uv tool install` ([#6762](https://github.com/astral-sh/uv/pull/6762))
 - Publish additional Docker tags without patch version ([#6734](https://github.com/astral-sh/uv/pull/6734))
