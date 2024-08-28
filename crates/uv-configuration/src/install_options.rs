@@ -1,9 +1,10 @@
+use std::collections::BTreeSet;
+
 use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use distribution_types::{Name, Resolution};
 use pep508_rs::PackageName;
-use uv_workspace::VirtualProject;
 
 #[derive(Debug, Clone, Default)]
 pub struct InstallOptions {
@@ -28,13 +29,14 @@ impl InstallOptions {
     pub fn filter_resolution(
         &self,
         resolution: Resolution,
-        project: &VirtualProject,
+        project_name: Option<&PackageName>,
+        members: &BTreeSet<PackageName>,
     ) -> Resolution {
         // If `--no-install-project` is set, remove the project itself.
-        let resolution = self.apply_no_install_project(resolution, project);
+        let resolution = self.apply_no_install_project(resolution, project_name);
 
         // If `--no-install-workspace` is set, remove the project and any workspace members.
-        let resolution = self.apply_no_install_workspace(resolution, project);
+        let resolution = self.apply_no_install_workspace(resolution, members);
 
         // If `--no-install-package` is provided, remove the requested packages.
         self.apply_no_install_package(resolution)
@@ -43,13 +45,13 @@ impl InstallOptions {
     fn apply_no_install_project(
         &self,
         resolution: Resolution,
-        project: &VirtualProject,
+        project_name: Option<&PackageName>,
     ) -> Resolution {
         if !self.no_install_project {
             return resolution;
         }
 
-        let Some(project_name) = project.project_name() else {
+        let Some(project_name) = project_name else {
             debug!("Ignoring `--no-install-project` for virtual workspace");
             return resolution;
         };
@@ -60,17 +62,13 @@ impl InstallOptions {
     fn apply_no_install_workspace(
         &self,
         resolution: Resolution,
-        project: &VirtualProject,
+        members: &BTreeSet<PackageName>,
     ) -> Resolution {
         if !self.no_install_workspace {
             return resolution;
         }
 
-        let workspace_packages = project.workspace().packages();
-        resolution.filter(|dist| {
-            !workspace_packages.contains_key(dist.name())
-                && Some(dist.name()) != project.project_name()
-        })
+        resolution.filter(|dist| !members.contains(dist.name()))
     }
 
     fn apply_no_install_package(&self, resolution: Resolution) -> Resolution {

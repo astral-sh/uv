@@ -4743,7 +4743,6 @@ dependencies = [
  "uv-auth",
  "uv-cache",
  "uv-normalize",
- "uv-workspace",
 ]
 
 [[package]]

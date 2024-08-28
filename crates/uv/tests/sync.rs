@@ -1103,16 +1103,48 @@ fn no_install_workspace() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    // However, we do require the `pyproject.toml`.
+    // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    // We don't require the `pyproject.toml` for non-root members, if `--frozen` is provided.
     fs_err::remove_file(child.join("pyproject.toml"))?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace").arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    "###);
+
+    // Unless `--package` is used.
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--no-install-workspace").arg("--frozen"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Workspace member `[TEMP_DIR]/child` is missing a `pyproject.toml` (matches: `child`)
+    "###);
+
+    // But we do require the root `pyproject.toml`.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace").arg("--frozen"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `pyproject.toml` found in current directory or any parent directory
     "###);
 
     Ok(())

@@ -409,6 +409,11 @@ impl Lock {
         &self.supported_environments
     }
 
+    /// Returns the workspace members that were used to generate this lock.
+    pub fn members(&self) -> &BTreeSet<PackageName> {
+        &self.manifest.members
+    }
+
     /// If this lockfile was built from a forking resolution with non-identical forks, return the
     /// markers of those forks, otherwise `None`.
     pub fn fork_markers(&self) -> &[MarkerTree] {

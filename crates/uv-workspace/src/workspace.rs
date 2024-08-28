@@ -45,11 +45,22 @@ pub enum WorkspaceError {
 }
 
 #[derive(Debug, Default, Clone)]
+pub enum MemberDiscovery<'a> {
+    /// Discover all workspace members.
+    #[default]
+    All,
+    /// Don't discover any workspace members.
+    None,
+    /// Discover workspace members, but ignore the given paths.
+    Ignore(FxHashSet<&'a Path>),
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct DiscoveryOptions<'a> {
     /// The path to stop discovery at.
     pub stop_discovery_at: Option<&'a Path>,
-    /// The set of member paths to ignore.
-    pub ignore: FxHashSet<&'a Path>,
+    /// The strategy to use when discovering workspace members.
+    pub members: MemberDiscovery<'a>,
 }
 
 /// A workspace, consisting of a root directory and members. See [`ProjectWorkspace`].
@@ -546,7 +557,12 @@ impl Workspace {
                     .clone();
 
                 // If the directory is explicitly ignored, skip it.
-                if options.ignore.contains(member_root.as_path()) {
+                let skip = match &options.members {
+                    MemberDiscovery::All => false,
+                    MemberDiscovery::None => true,
+                    MemberDiscovery::Ignore(ignore) => ignore.contains(member_root.as_path()),
+                };
+                if skip {
                     debug!(
                         "Ignoring workspace member: `{}`",
                         member_root.simplified_display()

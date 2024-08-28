@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
-use itertools::Itertools;
-
 use distribution_types::{Dist, ResolvedDist, SourceDist};
+use itertools::Itertools;
 use pep508_rs::MarkerTree;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -14,7 +13,7 @@ use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
@@ -52,6 +51,15 @@ pub(crate) async fn sync(
                 .with_current_project(package.clone())
                 .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
+    } else if frozen {
+        VirtualProject::discover(
+            &CWD,
+            &DiscoveryOptions {
+                members: MemberDiscovery::None,
+                ..DiscoveryOptions::default()
+            },
+        )
+        .await?
     } else {
         VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
     };
@@ -201,7 +209,8 @@ pub(super) async fn do_sync(
     let resolution = apply_no_virtual_project(resolution);
 
     // Filter resolution based on install-specific options.
-    let resolution = install_options.filter_resolution(resolution, project);
+    let resolution =
+        install_options.filter_resolution(resolution, project.project_name(), lock.members());
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
