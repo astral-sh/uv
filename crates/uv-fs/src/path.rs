@@ -13,7 +13,7 @@ pub static CWD: LazyLock<PathBuf> =
 pub static CANONICAL_CWD: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::current_dir()
         .expect("The current directory must exist")
-        .canonicalize()
+        .simple_canonicalize()
         .expect("The current directory must be canonicalized")
 });
 
