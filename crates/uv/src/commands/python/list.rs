@@ -131,7 +131,9 @@ pub(crate) async fn list(
     let width = include
         .iter()
         .fold(0usize, |acc, (key, _)| acc.max(key.to_string().len()));
-
+    // Remove duplicates in include
+    let mut seen = HashSet::new();
+    include.retain(|pair| seen.insert(pair.clone()));
     for (key, path) in include {
         let key = key.to_string();
         if let Some(path) = path {
