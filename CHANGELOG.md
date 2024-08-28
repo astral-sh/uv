@@ -2,6 +2,22 @@
 
 ## 0.4.0
 
+This release includes breaking changes to uv's handling of projects that do not need to be packaged. Previously, uv required that all projects (with the minor exception of virtual workspace roots) were able to be built into Python packages and installed them into the project environment. All projects created by `uv init` included a `[build-system]` definition and existing projects that did not define a `[build-system]` would use the legacy setuptools build backend.
+
+However, most users are not developing libraries that need to be packaged and published to PyPI. Instead, people are building applications using web frameworks or have a pile of `.py` files in the project's root directory. In these cases, requiring a `[build-system]` was confusing and error prone. In this release, uv changes the default behavior to orient around these common use cases.
+
+In summary, the major changes are:
+
+- uv no longer attempts to package and install projects that do not define a `[build-system]`.
+    - The previous behavior can be recovered by setting `package = true` in the `[tool.uv]` section of your `pyproject.toml`.
+- `uv init` no longer creates a `src/` directory or defines a `[build-system]` by default.
+    - The previous behavior can be recovered with `uv init --lib` or `uv init --app --package`.
+- uv allows and recommends including `[project]` definitions in virtual workspace roots.
+    - Previously, the uv required the `[project]` section to be omitted.
+- uv allows disabling packaging of projects, even if they define a `[build-system]`, by setting `package = false` in the `[tool.uv]` section of your `pyproject.toml`.
+
+See the latest documentation on [build systems in projects](http://localhost:8000/uv/concepts/projects/#build-systems) for more details.
+
 ### Enhancements
 
 - Add first-class support for non-packaged projects ([#6585](https://github.com/astral-sh/uv/pull/6585))
@@ -28,7 +44,6 @@
 - Add dependabot and renovate documentation page ([#6236](https://github.com/astral-sh/uv/pull/6236))
 - Bind to the host to allow connections in FastAPI Docker example ([#6753](https://github.com/astral-sh/uv/pull/6753))
 - Fix some broken links ([#6705](https://github.com/astral-sh/uv/pull/6705))
-- Remove build system from FastAPI guide ([#6751](https://github.com/astral-sh/uv/pull/6751))
 - Update FastAPI guide for virtual projects and use `uv init` to create the `pyproject.toml` ([#6752](https://github.com/astral-sh/uv/pull/6752))
 - Update project documentation for the application / library concepts ([#6718](https://github.com/astral-sh/uv/pull/6718))
 - Update workspace documentation to remove legacy virtual projects ([#6720](https://github.com/astral-sh/uv/pull/6720))
