@@ -8,7 +8,7 @@ use distribution_types::{
 };
 use pep440_rs::Version;
 use pypi_types::{
-    HashDigest, HashError, Requirement, RequirementSource, ResolverMarkerEnvironment,
+    HashDigest, HashError, Hashes, Requirement, RequirementSource, ResolverMarkerEnvironment,
 };
 use uv_configuration::HashCheckingMode;
 use uv_normalize::PackageName;
@@ -153,6 +153,21 @@ impl HashStrategy {
                 }
             };
 
+            let digests = if digests.is_empty() {
+                // If there are no hashes, and the distribution is URL-based, attempt to extract
+                // it from the fragment.
+                requirement
+                    .hashes()
+                    .map(Hashes::into_digests)
+                    .unwrap_or_default()
+            } else {
+                // Parse the hashes.
+                digests
+                    .iter()
+                    .map(|digest| HashDigest::from_str(digest))
+                    .collect::<Result<Vec<_>, _>>()?
+            };
+
             if digests.is_empty() {
                 // Under `--require-hashes`, every requirement must include a hash.
                 if mode.is_require() {
@@ -163,12 +178,6 @@ impl HashStrategy {
                 }
                 continue;
             }
-
-            // Parse the hashes.
-            let digests = digests
-                .iter()
-                .map(|digest| HashDigest::from_str(digest))
-                .collect::<Result<Vec<_>, _>>()?;
 
             hashes.insert(id, digests);
         }

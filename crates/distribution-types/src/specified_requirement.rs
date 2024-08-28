@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 
 use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
-use pypi_types::{Requirement, RequirementSource};
+use pypi_types::{Hashes, ParsedUrl, Requirement, RequirementSource};
 use uv_normalize::ExtraName;
 
 use crate::VerbatimParsedUrl;
@@ -80,6 +80,26 @@ impl UnresolvedRequirement {
         match self {
             Self::Named(requirement) => requirement.is_editable(),
             Self::Unnamed(requirement) => requirement.url.is_editable(),
+        }
+    }
+
+    /// Return the hashes of the requirement, as specified in the URL fragment.
+    pub fn hashes(&self) -> Option<Hashes> {
+        match self {
+            Self::Named(requirement) => {
+                let RequirementSource::Url { ref url, .. } = requirement.source else {
+                    return None;
+                };
+                let fragment = url.fragment()?;
+                Hashes::parse_fragment(fragment).ok()
+            }
+            Self::Unnamed(requirement) => {
+                let ParsedUrl::Archive(ref url) = requirement.url.parsed_url else {
+                    return None;
+                };
+                let fragment = url.url.fragment()?;
+                Hashes::parse_fragment(fragment).ok()
+            }
         }
     }
 }
