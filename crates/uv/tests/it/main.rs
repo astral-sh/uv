@@ -73,6 +73,9 @@ mod python_find;
 mod python_install;
 
 #[cfg(feature = "python")]
+mod python_list;
+
+#[cfg(feature = "python")]
 mod python_pin;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
