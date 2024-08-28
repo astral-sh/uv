@@ -827,7 +827,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
-                &cache,
+                cache,
                 printer,
             )
             .await
