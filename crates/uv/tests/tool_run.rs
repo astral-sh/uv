@@ -991,3 +991,51 @@ fn tool_run_latest() {
     ----- stderr -----
     "###);
 }
+
+#[cfg(windows)]
+#[test]
+fn tool_run_exe() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run().arg("--from")
+        .arg("pytest")
+        .arg("pytest.exe")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 8.1.1
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run().arg("--from")
+        .arg("pytest")
+        .arg("pytest.bat")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    The executable `pytest.bat` was not found.
+    The following executables are provided by `pytest`:
+    - py.test
+    - pytest
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    warning: An executable named `pytest.bat` is not provided by package `pytest`.
+    "###);
+}
