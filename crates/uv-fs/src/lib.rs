@@ -324,6 +324,8 @@ impl LockedFile {
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures
+                // TODO(zanieb): When `raw_os_error` stabilizes, use that to avoid displaying
+                // the error when it is `WouldBlock`, which is expected and noisy otherwise.
                 debug!("Try lock error, waiting for exclusive lock: {:?}", err);
                 warn_user!(
                     "Waiting to acquire lock for {} (lockfile: {})",
@@ -337,6 +339,8 @@ impl LockedFile {
                         format!("Could not lock {}: {}", path.as_ref().user_display(), err),
                     )
                 })?;
+
+                debug!("Acquired lock for `{resource}`");
                 Ok(Self(file))
             }
         }
@@ -351,6 +355,8 @@ impl Drop for LockedFile {
                 self.0.path().display(),
                 err
             );
+        } else {
+            debug!("Released lock at `{}`", self.0.path().display());
         }
     }
 }
