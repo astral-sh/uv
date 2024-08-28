@@ -696,6 +696,18 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedSources(name, expected) => {
+                if expected {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `virtual`)"
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedRequirements(expected, actual) => {
                 debug!(
                     "Ignoring existing lockfile due to mismatched requirements:\n  Expected: {:?}\n  Actual: {:?}",
