@@ -1891,7 +1891,7 @@ Run a command provided by a Python package.
 
 By default, the package to install is assumed to match the command name.
 
-The name of the command can include an exact version in the format `<package>@<version>`, e.g., `uv run ruff@0.3.0`. If more complex version specification is desired or if the command is provided by a different package, use `--from`.
+The name of the command can include an exact version in the format `<package>@<version>`, e.g., `uv tool run ruff@0.3.0`. If more complex version specification is desired or if the command is provided by a different package, use `--from`.
 
 If the tool was previously installed, i.e., via `uv tool install`, the installed version will be used unless a version is requested or the `--isolated` flag is used.
 

@@ -101,6 +101,14 @@ $ uvx --isolated ruff --version
 0.6.2
 ```
 
+`uv tool install` will also respect the `{package}@{version}` and `{package}@latest` specifiers, as
+in:
+
+```console
+$ uv tool install ruff@latest
+$ uv tool install ruff@0.6.0
+```
+
 ### Tools directory
 
 By default, the uv tools directory is named `tools` and is in the uv application state directory,

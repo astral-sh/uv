@@ -2758,7 +2758,7 @@ pub enum ToolCommand {
     /// By default, the package to install is assumed to match the command name.
     ///
     /// The name of the command can include an exact version in the format
-    /// `<package>@<version>`, e.g., `uv run ruff@0.3.0`. If more complex
+    /// `<package>@<version>`, e.g., `uv tool run ruff@0.3.0`. If more complex
     /// version specification is desired or if the command is provided by a
     /// different package, use `--from`.
     ///
