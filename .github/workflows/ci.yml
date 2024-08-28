@@ -77,14 +77,17 @@ jobs:
         with:
           python-version: 3.12
 
-      - name: "Ruff format"
-        run: pipx run ruff format --diff .
+      - name: "Install uv"
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      - name: "Ruff check"
-        run: pipx run ruff check .
+      - name: "Format"
+        run: uvx ruff format --diff .
 
-      - name: "Mypy check"
-        run: pipx run --python 3.12 mypy
+      - name: "Lint"
+        run: uvx ruff check .
+
+      - name: "Type check"
+        run: uvx mypy
 
   cargo-clippy:
     needs: determine_changes
