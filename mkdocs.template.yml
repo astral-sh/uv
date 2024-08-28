@@ -48,8 +48,6 @@ markdown_extensions:
   - pymdownx.magiclink:
   - attr_list:
   - md_in_html:
-  - pymdownx.highlight:
-      anchor_linenums: true
   - pymdownx.inlinehilite:
   - pymdownx.superfences:
   - markdown.extensions.attr_list:
