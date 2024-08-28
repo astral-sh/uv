@@ -4,7 +4,7 @@
 
 This release adds first-class support for Python projects that are not designed as Python packages (e.g., web applications, data science projects, etc.).
 
-In doing so, it includes some breaking changes around uv's handling of projects. Previously, uv required that all projects (with the minor exception of virtual workspace roots) were buildable, and always installed them into the virtual environment. Projects created by `uv init` always included a `[build-system]` definition and existing projects that did not define a `[build-system]` would use the legacy setuptools build backend by default.
+In doing so, it includes some breaking changes around uv's handling of projects. Previously, uv required that all projects could be built into distributable Python packages, and installed them into the virtual environment. Projects created by `uv init` always included a `[build-system]` definition and existing projects that did not define a `[build-system]` would use the legacy setuptools build backend by default.
 
 Most users are not developing libraries that need to be packaged and published to PyPI. Instead, they're building applications using web frameworks, or running collections of Python scripts in the project's root directory. In these cases, requiring a `[build-system]` was confusing and error-prone. In this release, uv changes the default behavior to orient around these common use cases.
 
