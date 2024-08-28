@@ -948,6 +948,64 @@ fn workspace_hidden_member() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that workspace discovery accepts valid hidden directories.
+#[test]
+fn workspace_non_included_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Build the main workspace ...
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r#"
+        dependencies = []
+    "#};
+    make_project(&workspace.join("packages").join("b"), "b", deps)?;
+
+    // ... and c, which is _not_ a member, but also isn't explicitly excluded.
+    let deps = indoc! {r"
+        dependencies = []
+    "};
+    make_project(&workspace.join("c"), "c", deps)?;
+
+    // Locking from `c` should not include any workspace members.
+    uv_snapshot!(context.filters(), context.lock().current_dir(workspace.join("c")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    "###
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("c").join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r###"
+    {
+      "c": {
+        "editable": "."
+      }
+    }
+    "###);
+
+    Ok(())
+}
+
 /// Ensure workspace members inherit sources from the root, if not specified in the member.
 ///
 /// In such cases, relative paths should be resolved relative to the workspace root, rather than

@@ -1014,6 +1014,14 @@ async fn find_workspace(
                 return Ok(None);
             }
 
+            if !is_included_in_workspace(project_root, workspace_root, workspace)? {
+                debug!(
+                    "Found workspace root `{}`, but project is not included",
+                    workspace_root.simplified_display()
+                );
+                return Ok(None);
+            }
+
             // We found a workspace root.
             Ok(Some((
                 workspace_root.to_path_buf(),
@@ -1115,7 +1123,23 @@ pub fn check_nested_workspaces(inner_workspace_root: &Path, options: &DiscoveryO
                     return;
                 }
             };
-            if !is_excluded {
+
+            let is_included = match is_included_in_workspace(
+                inner_workspace_root,
+                outer_workspace_root,
+                workspace,
+            ) {
+                Ok(contents) => contents,
+                Err(err) => {
+                    warn!(
+                        "Invalid pyproject.toml `{}`: {err}",
+                        pyproject_toml_path.simplified_display()
+                    );
+                    return;
+                }
+            };
+
+            if is_included && !is_excluded {
                 warn_user!(
                     "Nested workspaces are not supported, but outer workspace (`{}`) includes `{}`",
                     outer_workspace_root.simplified_display().cyan(),
