@@ -5043,7 +5043,7 @@ dependencies = [
  "uv-state",
  "uv-warnings",
  "which",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
  "winsafe 0.0.22",
 ]
 
