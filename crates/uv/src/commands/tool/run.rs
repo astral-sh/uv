@@ -9,6 +9,8 @@ use anyhow::{bail, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
+use tokio::select;
+use tokio::signal::unix::{signal, SignalKind};
 use tracing::{debug, warn};
 
 use distribution_types::{Name, UnresolvedRequirementSpecification};
@@ -214,7 +216,28 @@ pub(crate) async fn run(
     // signal handlers after the command completes.
     let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
 
-    let status = handle.wait().await.context("Child process disappeared")?;
+    let mut term_signal = signal(SignalKind::terminate())?;
+    let mut int_signal = signal(SignalKind::interrupt())?;
+
+    let status = select! {
+        status = handle.wait() => status,
+
+        // `SIGTERM`
+        _ = term_signal.recv() => {
+            handle.kill().await?;
+            handle.wait().await.context("Child process disappeared")?;
+            return Ok(ExitStatus::Failure);
+        }
+
+        // `SIGINT`
+        _ = int_signal.recv() => {
+            handle.kill().await?;
+            handle.wait().await.context("Child process disappeared")?;
+            return Ok(ExitStatus::Failure);
+        }
+    };
+
+    let status = status.context("Child process disappeared")?;
 
     // Exit based on the result of the command
     // TODO(zanieb): Do we want to exit with the code of the child process? Probably.
