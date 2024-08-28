@@ -58,10 +58,6 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]",
 ]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
 ```
 
 From there, you can run the FastAPI application with:
