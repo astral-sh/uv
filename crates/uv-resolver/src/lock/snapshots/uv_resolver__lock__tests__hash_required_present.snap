@@ -1,5 +1,5 @@
 ---
-source: crates/uv-resolver/src/lock.rs
+source: crates/uv-resolver/src/lock/mod.rs
 expression: result
 ---
 Ok(
@@ -20,12 +20,8 @@ Ok(
                         "anyio",
                     ),
                     version: "4.3.0",
-                    source: Registry(
-                        Url(
-                            UrlString(
-                                "https://pypi.org/simple",
-                            ),
-                        ),
+                    source: Path(
+                        "file:///foo/bar",
                     ),
                 },
                 sdist: None,
@@ -33,7 +29,7 @@ Ok(
                     Wheel {
                         url: Url {
                             url: UrlString(
-                                "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl",
+                                "file:///foo/bar/anyio-4.3.0-py3-none-any.whl",
                             ),
                         },
                         hash: Some(
@@ -79,12 +75,8 @@ Ok(
                     "anyio",
                 ),
                 version: "4.3.0",
-                source: Registry(
-                    Url(
-                        UrlString(
-                            "https://pypi.org/simple",
-                        ),
-                    ),
+                source: Path(
+                    "file:///foo/bar",
                 ),
             }: 0,
         },
