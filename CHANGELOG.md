@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.4.0
+
+### Enhancements
+
+- Add first-class support for non-packaged projects ([#6585](https://github.com/astral-sh/uv/pull/6585))
+- Add `--app` and `--lib` options to `uv init` ([#6689](https://github.com/astral-sh/uv/pull/6689))
+- Avoid using editable tag in lockfile for non-package dependencies ([#6728](https://github.com/astral-sh/uv/pull/6728))
+- Read hash from URL fragment if `--hashes` are omitted  ([#6731](https://github.com/astral-sh/uv/pull/6731))
+- Support `{package}@{version}` in `uv tool install` ([#6762](https://github.com/astral-sh/uv/pull/6762))
+- Publish additional Docker tags without patch version ([#6734](https://github.com/astral-sh/uv/pull/6734))
+
+### Bug fixes
+
+- Accept either strings or structs for hosts ([#6763](https://github.com/astral-sh/uv/pull/6763))
+- Avoid including non-excluded members in parent workspaces ([#6735](https://github.com/astral-sh/uv/pull/6735))
+- Avoid reading stale `.egg-info` from mutable sources ([#6714](https://github.com/astral-sh/uv/pull/6714))
+- Avoid writing invalid PEP 723 scripts on `tool.uv.sources` ([#6706](https://github.com/astral-sh/uv/pull/6706))
+- Compare virtual members when invalidating lockfile ([#6754](https://github.com/astral-sh/uv/pull/6754))
+- Do not require workspace members to sync with `--frozen` ([#6737](https://github.com/astral-sh/uv/pull/6737))
+- Implement deserialization for trusted host ([#6716](https://github.com/astral-sh/uv/pull/6716))
+- Avoid showing duplicate paths in `uv python list` ([#6740](https://github.com/astral-sh/uv/pull/6740))
+- Raise an error for unclosed script tags in PEP 723 scripts ([#6704](https://github.com/astral-sh/uv/pull/6704))
+
+### Documentation
+
+- Add dependabot and renovate documentation page ([#6236](https://github.com/astral-sh/uv/pull/6236))
+- Bind to the host to allow connections in FastAPI Docker example ([#6753](https://github.com/astral-sh/uv/pull/6753))
+- Fix some broken links ([#6705](https://github.com/astral-sh/uv/pull/6705))
+- Remove build system from FastAPI guide ([#6751](https://github.com/astral-sh/uv/pull/6751))
+- Update FastAPI guide for virtual projects and use `uv init` to create the `pyproject.toml` ([#6752](https://github.com/astral-sh/uv/pull/6752))
+- Update project documentation for the application / library concepts ([#6718](https://github.com/astral-sh/uv/pull/6718))
+- Update workspace documentation to remove legacy virtual projects ([#6720](https://github.com/astral-sh/uv/pull/6720))
+
 ## 0.3.5
 
 ### Enhancements
