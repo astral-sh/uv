@@ -19,7 +19,7 @@ In summary, the major changes are:
     - Previously, the uv required the `[project]` section to be omitted.
 - uv allows disabling packaging of projects, even if they define a `[build-system]`, by setting `package = false` in the `[tool.uv]` section of your `pyproject.toml`.
 
-See the latest documentation on [build systems in projects](http://localhost:8000/uv/concepts/projects/#build-systems) for more details.
+See the latest documentation on [build systems in projects](http://docs.astral.sh/uv/concepts/projects/#build-systems) for more details.
 
 ### Enhancements
 
