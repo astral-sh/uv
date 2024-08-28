@@ -4,13 +4,14 @@
 
 This release adds first-class support for Python projects that are not designed as Python packages (e.g., web applications, data science projects, etc.).
 
-In doing so, it also includes some breaking changes around uv's handling of such projects. Previously, uv required that all projects (with the minor exception of virtual workspace roots) were buildable, and always installed such projects into the virtual environment. Projects created by `uv init` always included a `[build-system]` definition and existing projects that did not define a `[build-system]` would use the legacy setuptools build backend by default.
+In doing so, it includes some breaking changes around uv's handling of projects. Previously, uv required that all projects (with the minor exception of virtual workspace roots) were buildable, and always installed them into the virtual environment. Projects created by `uv init` always included a `[build-system]` definition and existing projects that did not define a `[build-system]` would use the legacy setuptools build backend by default.
 
-However, most users are not developing libraries that need to be packaged and published to PyPI. Instead, they're building applications using web frameworks, or running collections of Python scripts in the project's root directory. In these cases, requiring a `[build-system]` was confusing and error-prone. In this release, uv changes the default behavior to orient around these common use cases.
+Most users are not developing libraries that need to be packaged and published to PyPI. Instead, they're building applications using web frameworks, or running collections of Python scripts in the project's root directory. In these cases, requiring a `[build-system]` was confusing and error-prone. In this release, uv changes the default behavior to orient around these common use cases.
 
 In summary, the major changes are:
 
 - uv no longer attempts to package and install projects that do not define a `[build-system]`.
+    - While the project itself will not be installed into the virtual environment, its dependencies will still be included.
     - The previous behavior can be recovered by setting `package = true` in the `[tool.uv]` section of your `pyproject.toml`.
 - `uv init` no longer creates a `src/` directory or defines a `[build-system]` by default.
     - The previous behavior can be recovered with `uv init --lib` or `uv init --app --package`.
