@@ -44,6 +44,7 @@ jobs:
               - "docs/reference/cli.md"
               - "docs/reference/settings.md"
   cargo-fmt:
+    timeout-minutes: 10
     name: "cargo fmt"
     runs-on: ubuntu-latest
     steps:
@@ -68,6 +69,7 @@ jobs:
         run: python scripts/transform_readme.py --target pypi
 
   python-lint:
+    timeout-minutes: 10
     name: "Python lint"
     runs-on: ubuntu-latest
     steps:
@@ -90,6 +92,7 @@ jobs:
         run: uvx mypy
 
   cargo-clippy:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
@@ -105,6 +108,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-clippy-xwin:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
@@ -135,6 +139,7 @@ jobs:
           XWIN_CACHE_DIR: "${{ github.workspace}}/.xwin"
 
   cargo-shear:
+    timeout-minutes: 10
     name: "cargo shear"
     runs-on: ubuntu-latest
     steps:
@@ -148,6 +153,7 @@ jobs:
   # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
 
   cargo-test-linux:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
@@ -187,6 +193,7 @@ jobs:
           $uv pip install ruff
 
   cargo-test-macos:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
@@ -226,6 +233,7 @@ jobs:
           $uv pip install ruff
 
   cargo-test-windows:
+    timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
@@ -306,6 +314,7 @@ jobs:
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
@@ -364,6 +373,7 @@ jobs:
 
   # Separate jobs for the nightly crate
   windows-trampoline-test:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: windows-latest
@@ -400,9 +410,9 @@ jobs:
       - uses: crate-ci/typos@master
 
   docs:
+    timeout-minutes: 10
     name: "mkdocs"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     env:
       MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
     steps:
@@ -427,6 +437,7 @@ jobs:
         run: mkdocs build --strict -f mkdocs.insiders.yml
 
   build-binary-linux:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
@@ -454,6 +465,7 @@ jobs:
           retention-days: 1
 
   build-binary-macos-aarch64:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
@@ -476,6 +488,7 @@ jobs:
           retention-days: 1
 
   build-binary-macos-x86_64:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
@@ -499,6 +512,7 @@ jobs:
 
   build-binary-windows:
     needs: determine_changes
+    timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: windows-latest-large
@@ -545,6 +559,7 @@ jobs:
           retention-days: 1
 
   ecosystem-test:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "ecosystem test | ${{ matrix.repo }}"
     runs-on: ubuntu-latest
@@ -581,6 +596,7 @@ jobs:
           ./${{ matrix.command }}
 
   integration-test-conda:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "integration test | conda on ubuntu"
     runs-on: ubuntu-latest
@@ -611,6 +627,7 @@ jobs:
           ./uv pip install anyio
 
   integration-test-pypy-linux:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "integration test | pypy on ubuntu"
     runs-on: ubuntu-latest
@@ -674,6 +691,7 @@ jobs:
           ./uv pip install anyio
 
   integration-test-pypy-windows:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "integration test | pypy on windows"
     runs-on: windows-latest
@@ -736,6 +754,7 @@ jobs:
           .\uv.exe pip install anyio
 
   integration-test-graalpy-linux:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "integration test | graalpy on ubuntu"
     runs-on: ubuntu-latest
@@ -805,6 +824,7 @@ jobs:
           ./uv pip install anyio
 
   integration-test-graalpy-windows:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "integration test | graalpy on windows"
     runs-on: windows-latest
@@ -867,6 +887,7 @@ jobs:
           .\uv.exe pip install anyio
 
   integration-test-github-actions:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "integration test | github actions"
     runs-on: ubuntu-latest
@@ -900,6 +921,7 @@ jobs:
           ./uv pip install anyio --reinstall
 
   cache-test-ubuntu:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check cache | ubuntu"
     runs-on: ubuntu-latest
@@ -925,6 +947,7 @@ jobs:
         run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-x86_64-unknown-linux-gnu/uv
 
   cache-test-macos-aarch64:
+    timeout-minutes: 10
     needs: build-binary-macos-aarch64
     name: "check cache | macos aarch64"
     runs-on: macos-14
@@ -946,6 +969,7 @@ jobs:
         run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-aarch64-apple-darwin/uv
 
   system-test-debian:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | python on debian"
     runs-on: ubuntu-latest
@@ -971,6 +995,7 @@ jobs:
         run: python3.11 scripts/check_system_python.py --uv ./uv --externally-managed
 
   system-test-fedora:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | python on fedora"
     runs-on: ubuntu-latest
@@ -996,6 +1021,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv
 
   system-test-ubuntu:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | python on ubuntu"
     runs-on: ubuntu-latest
@@ -1021,11 +1047,11 @@ jobs:
         run: python scripts/check_system_python.py --uv ./uv
 
   system-test-opensuse:
+    timeout-minutes: 5
     needs: build-binary-linux
     name: "check system | python on opensuse"
     runs-on: ubuntu-latest
     container: opensuse/tumbleweed
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -1057,6 +1083,7 @@ jobs:
   # rockylinux mimics centos but with added maintenance stability
   # and avoids issues with centos stream uptime concerns
   system-test-rocky-linux:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | python on rocky linux ${{ matrix.rocky-version }}"
     runs-on: ubuntu-latest
@@ -1093,6 +1120,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv
 
   system-test-pypy:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | pypy on ubuntu"
     runs-on: ubuntu-latest
@@ -1118,6 +1146,7 @@ jobs:
         run: pypy scripts/check_system_python.py --uv ./uv
 
   system-test-pyston:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | pyston"
     runs-on: ubuntu-latest
@@ -1140,6 +1169,7 @@ jobs:
         run: pyston scripts/check_system_python.py --uv ./uv
 
   system-test-alpine:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | alpine"
     runs-on: ubuntu-latest
@@ -1165,6 +1195,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
 
   system-test-macos-aarch64:
+    timeout-minutes: 10
     needs: build-binary-macos-aarch64
     name: "check system | python on macos aarch64"
     runs-on: macos-14
@@ -1188,6 +1219,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
 
   system-test-macos-aarch64-homebrew:
+    timeout-minutes: 10
     needs: build-binary-macos-aarch64
     name: "check system | homebrew python on macos aarch64"
     runs-on: macos-14
@@ -1212,6 +1244,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
 
   system-test-macos-x86_64:
+    timeout-minutes: 10
     needs: build-binary-macos-x86_64
     name: "check system | python on macos x86_64"
     runs-on: macos-12
@@ -1237,6 +1270,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv
 
   system-test-windows-python-310:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "check system | python3.10 on windows"
     runs-on: windows-latest
@@ -1262,6 +1296,7 @@ jobs:
         run: py -3.10 ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-windows-x86-python-310:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "check system | python3.10 on windows x86"
     runs-on: windows-latest
@@ -1288,6 +1323,7 @@ jobs:
         run: python ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-windows-python-313:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "check system | python3.13 on windows"
     runs-on: windows-latest
@@ -1315,6 +1351,7 @@ jobs:
         run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-choco:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "check system | python3.12 via chocolatey"
     runs-on: windows-latest
@@ -1339,6 +1376,7 @@ jobs:
         run: py -3.9 ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-pyenv:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | python via pyenv"
     runs-on: ubuntu-latest
@@ -1365,6 +1403,7 @@ jobs:
         run: python3.9 scripts/check_system_python.py --uv ./uv
 
   system-test-conda:
+    timeout-minutes: 10
     needs:
       [build-binary-windows, build-binary-macos-aarch64, build-binary-linux]
     name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }}
@@ -1416,6 +1455,7 @@ jobs:
         run: python ./scripts/check_system_python.py --uv ./uv
 
   system-test-amazonlinux:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | amazonlinux"
     runs-on: ubuntu-latest
@@ -1444,6 +1484,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv
 
   system-test-windows-embedded-python-310:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "check system | embedded python3.10 on windows"
     runs-on: windows-latest
