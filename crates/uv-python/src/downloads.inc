@@ -6878,8 +6878,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
-        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.16-macos_arm64.tar.bz2",
-        sha256: Some("6c003376667a95c7a228544649677b9927b8210d6444b901817aad24b8719b93")
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.17-macos_arm64.tar.bz2",
+        sha256: Some("a050e25e8d686853dd5afc363e55625165825dacfb55f8753d8225ebe417cfd2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6891,8 +6891,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.16-aarch64.tar.bz2",
-        sha256: Some("fc720999bc5050e1d3706b3b6445e695cf42bfc71ebc7c88ed6bb88828b1d385")
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.17-aarch64.tar.bz2",
+        sha256: Some("53b6e5907df869c49e4eae7aca09fba16d150741097efb245892c1477d2395f2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6904,8 +6904,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.16-linux32.tar.bz2",
-        sha256: Some("0df48aa780159e879ac89a805d143e4a6cd1b842f98046f5a3f865814bfaa2a4")
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.17-linux32.tar.bz2",
+        sha256: Some("e534110e1047da37c1d586c392f74de3424f871d906a2083de6d41f2a8cc9164")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6930,8 +6930,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
-        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.16-macos_x86_64.tar.bz2",
-        sha256: Some("490f2c6ba2489f405444f3b4ad42166da6e2eb73489a9535b206067eaaf21737")
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.17-macos_x86_64.tar.bz2",
+        sha256: Some("6c2c5f2300d7564e711421b4968abd63243cb96f76e363975dd648ebf4a362ee")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6943,8 +6943,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.16-linux64.tar.bz2",
-        sha256: Some("404e6180d6caf9258eaab0c02c72018e9aa8eb03ab9094a0ff17ee5e3b265ac1")
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.17-linux64.tar.bz2",
+        sha256: Some("fdcdb9b24f1a7726003586503fdeb264fd68fc37fbfcea022dcfe825a7fee18b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6956,8 +6956,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.16-win64.zip",
-        sha256: Some("e08415a2f35c6ecf2342b504bdfde11e4c5eca3fc5ef7fd2214ff064a5a54396")
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.17-win64.zip",
+        sha256: Some("cab794a03ddda26238c72942ea6f225612e0dc17c76cac6652da83a95024e6e8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {

@@ -1,5 +1,83 @@
 # Changelog
 
+## 0.4.0
+
+This release adds first-class support for Python projects that are not designed as Python packages (e.g., web applications, data science projects, etc.).
+
+In doing so, it includes some breaking changes around uv's handling of projects. Previously, uv required that all projects could be built into distributable Python packages, and installed them into the virtual environment. Projects created by `uv init` always included a `[build-system]` definition and existing projects that did not define a `[build-system]` would use the legacy setuptools build backend by default.
+
+Most users are not developing libraries that need to be packaged and published to PyPI. Instead, they're building applications using web frameworks, or running collections of Python scripts in the project's root directory. In these cases, requiring a `[build-system]` was confusing and error-prone. In this release, uv changes the default behavior to orient around these common use cases.
+
+In summary, the major changes are:
+
+- uv no longer attempts to package and install projects that do not define a `[build-system]`.
+    - While the project itself will not be installed into the virtual environment, its dependencies will still be included.
+    - The previous behavior can be recovered by setting `package = true` in the `[tool.uv]` section of your `pyproject.toml`.
+- `uv init` no longer creates a `src/` directory or defines a `[build-system]` by default.
+    - The previous behavior can be recovered with `uv init --lib` or `uv init --app --package`.
+- uv allows and recommends including `[project]` definitions in virtual workspace roots.
+    - Previously, the uv required the `[project]` section to be omitted.
+- uv allows disabling packaging of projects, even if they define a `[build-system]`, by setting `package = false` in the `[tool.uv]` section of your `pyproject.toml`.
+
+See the latest documentation on [build systems in projects](http://docs.astral.sh/uv/concepts/projects/#build-systems) for more details.
+
+### Enhancements
+
+- Add first-class support for non-packaged projects ([#6585](https://github.com/astral-sh/uv/pull/6585))
+- Add `--app` and `--lib` options to `uv init` ([#6689](https://github.com/astral-sh/uv/pull/6689))
+- Use `virtual` source label in lockfile for non-packaged dependencies ([#6728](https://github.com/astral-sh/uv/pull/6728))
+- Read hash from URL fragment if `--hashes` are omitted  ([#6731](https://github.com/astral-sh/uv/pull/6731))
+- Support `{package}@{version}` in `uv tool install` ([#6762](https://github.com/astral-sh/uv/pull/6762))
+- Publish additional Docker tags without patch version ([#6734](https://github.com/astral-sh/uv/pull/6734))
+
+### Bug fixes
+
+- Accept either strings or structs for hosts ([#6763](https://github.com/astral-sh/uv/pull/6763))
+- Avoid including non-excluded members in parent workspaces ([#6735](https://github.com/astral-sh/uv/pull/6735))
+- Avoid reading stale `.egg-info` from mutable sources ([#6714](https://github.com/astral-sh/uv/pull/6714))
+- Avoid writing invalid PEP 723 scripts on `tool.uv.sources` ([#6706](https://github.com/astral-sh/uv/pull/6706))
+- Compare virtual members when invalidating lockfile ([#6754](https://github.com/astral-sh/uv/pull/6754))
+- Do not require workspace members to sync with `--frozen` ([#6737](https://github.com/astral-sh/uv/pull/6737))
+- Implement deserialization for trusted host ([#6716](https://github.com/astral-sh/uv/pull/6716))
+- Avoid showing duplicate paths in `uv python list` ([#6740](https://github.com/astral-sh/uv/pull/6740))
+- Raise an error for unclosed script tags in PEP 723 scripts ([#6704](https://github.com/astral-sh/uv/pull/6704))
+
+### Documentation
+
+- Add dependabot and renovate documentation page ([#6236](https://github.com/astral-sh/uv/pull/6236))
+- Bind to the host to allow connections in FastAPI Docker example ([#6753](https://github.com/astral-sh/uv/pull/6753))
+- Fix some broken links ([#6705](https://github.com/astral-sh/uv/pull/6705))
+- Update FastAPI guide for virtual projects and use `uv init` to create the `pyproject.toml` ([#6752](https://github.com/astral-sh/uv/pull/6752))
+- Update project documentation for the application / library concepts ([#6718](https://github.com/astral-sh/uv/pull/6718))
+- Update workspace documentation to remove legacy virtual projects ([#6720](https://github.com/astral-sh/uv/pull/6720))
+
+## 0.3.5
+
+### Enhancements
+
+- Add support for `--allow-insecure-host` (aliased to `--trusted-host`) ([#6591](https://github.com/astral-sh/uv/pull/6591))
+- Read requirements from `requires.txt` when available ([#6655](https://github.com/astral-sh/uv/pull/6655))
+- Respect `tool.uv.environments` in `pip compile --universal` ([#6663](https://github.com/astral-sh/uv/pull/6663))
+- Use relative paths by default in `uv add` ([#6686](https://github.com/astral-sh/uv/pull/6686))
+- Improve messages for empty solves and installs ([#6588](https://github.com/astral-sh/uv/pull/6588))
+
+### Bug fixes
+
+- Avoid reusing state across tool upgrades ([#6660](https://github.com/astral-sh/uv/pull/6660))
+- Detect musl and error for musl Python builds ([#6643](https://github.com/astral-sh/uv/pull/6643))
+- Ignore `send` errors in installer ([#6667](https://github.com/astral-sh/uv/pull/6667))
+
+### Documentation
+
+- Add development section to Docker guide and reference new example project ([#6666](https://github.com/astral-sh/uv/pull/6666))
+- Add docs for `constraint-dependencies` and `override-dependencies` ([#6596](https://github.com/astral-sh/uv/pull/6596))
+- Clarify package priority order in pip compatibility guide ([#6619](https://github.com/astral-sh/uv/pull/6619))
+- Fix docs for disabling build isolation with `uv sync` ([#6674](https://github.com/astral-sh/uv/pull/6674))
+- Improve consistency of directory lookup instructions in Docker ([#6665](https://github.com/astral-sh/uv/pull/6665))
+- Improve lockfile concept documentation, add coverage for upgrades ([#6698](https://github.com/astral-sh/uv/pull/6698))
+- Shift the order of some of the Docker guide content ([#6664](https://github.com/astral-sh/uv/pull/6664))
+- Use `python` to highlight requirements and use more content tabs ([#6549](https://github.com/astral-sh/uv/pull/6549))
+
 ## 0.3.4
 
 ### CLI

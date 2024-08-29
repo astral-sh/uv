@@ -44,21 +44,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alloc-no-stdlib"
-version = "2.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc7bb162ec39d46ab1ca8c77bf72e890535becd1751bb45f64c597edb4c8c6b3"
-
-[[package]]
-name = "alloc-stdlib"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94fb8275041c72129eb51b7d0322c29b8387a0386127718b096429201a5d6ece"
-dependencies = [
- "alloc-no-stdlib",
-]
-
-[[package]]
 name = "android-tzdata"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -211,7 +196,6 @@ version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fec134f64e2bc57411226dfc4e52dec859ddfc7e711fc5e07b612584f000e4aa"
 dependencies = [
- "brotli",
  "bzip2",
  "flate2",
  "futures-core",
@@ -460,27 +444,6 @@ name = "boxcar"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "510a90332002c1af3317ef6b712f0dab697f30bbe809b86965eac2923c0bca8e"
-
-[[package]]
-name = "brotli"
-version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74f7971dbd9326d58187408ab83117d8ac1bb9c17b085fdacd1cf2f598719b6b"
-dependencies = [
- "alloc-no-stdlib",
- "alloc-stdlib",
- "brotli-decompressor",
-]
-
-[[package]]
-name = "brotli-decompressor"
-version = "4.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a45bd2e4095a8b518033b128020dd4a55aab1c0a381ba4404a472630f4bc362"
-dependencies = [
- "alloc-no-stdlib",
- "alloc-stdlib",
-]
 
 [[package]]
 name = "bstr"
@@ -4529,7 +4492,7 @@ checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
 
 [[package]]
 name = "uv"
-version = "0.3.4"
+version = "0.4.0"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4780,7 +4743,6 @@ dependencies = [
  "uv-auth",
  "uv-cache",
  "uv-normalize",
- "uv-workspace",
 ]
 
 [[package]]
@@ -5080,7 +5042,7 @@ dependencies = [
  "uv-state",
  "uv-warnings",
  "which",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
  "winsafe 0.0.22",
 ]
 
@@ -5284,7 +5246,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.3.4"
+version = "0.4.0"
 
 [[package]]
 name = "uv-virtualenv"

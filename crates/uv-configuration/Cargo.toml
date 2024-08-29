@@ -20,7 +20,6 @@ pypi-types = { workspace = true }
 uv-auth = { workspace = true }
 uv-cache = { workspace = true }
 uv-normalize = { workspace = true }
-uv-workspace = { workspace = true }
 
 clap = { workspace = true, features = ["derive"], optional = true }
 either = { workspace = true }

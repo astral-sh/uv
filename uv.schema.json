@@ -274,6 +274,13 @@
         "type": "string"
       }
     },
+    "package": {
+      "description": "Whether the project should be considered a Python package, or a non-package (\"virtual\") project.\n\nPackages are built and installed into the virtual environment in editable mode and thus require a build backend, while virtual projects are _not_ built or installed; instead, only their dependencies are included in the virtual environment.\n\nCreating a package requires that a `build-system` is present in the `pyproject.toml`, and that the project adheres to a structure that adheres to the build backend's expectations (e.g., a `src` layout).",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
     "pip": {
       "anyOf": [
         {
@@ -1245,7 +1252,7 @@
           "required": [
             "git",
             "index",
-            "patch",
+            "path",
             "url",
             "workspace"
           ],
@@ -1262,7 +1269,7 @@
             "index": {
               "type": "string"
             },
-            "patch": {
+            "path": {
               "type": "string"
             },
             "rev": {

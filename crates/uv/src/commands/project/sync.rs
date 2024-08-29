@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use distribution_types::{Dist, ResolvedDist, SourceDist};
 use itertools::Itertools;
 use pep508_rs::MarkerTree;
 use uv_auth::store_credentials_from_url;
@@ -12,7 +13,7 @@ use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
@@ -50,6 +51,15 @@ pub(crate) async fn sync(
                 .with_current_project(package.clone())
                 .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
+    } else if frozen {
+        VirtualProject::discover(
+            &CWD,
+            &DiscoveryOptions {
+                members: MemberDiscovery::None,
+                ..DiscoveryOptions::default()
+            },
+        )
+        .await?
     } else {
         VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
     };
@@ -195,8 +205,12 @@ pub(super) async fn do_sync(
     // Read the lockfile.
     let resolution = lock.to_resolution(project, &markers, tags, extras, &dev)?;
 
+    // Always skip virtual projects, which shouldn't be built or installed.
+    let resolution = apply_no_virtual_project(resolution);
+
     // Filter resolution based on install-specific options.
-    let resolution = install_options.filter_resolution(resolution, project);
+    let resolution =
+        install_options.filter_resolution(resolution, project.project_name(), lock.members());
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -288,4 +302,25 @@ pub(super) async fn do_sync(
     .await?;
 
     Ok(())
+}
+
+/// Filter out any virtual workspace members.
+fn apply_no_virtual_project(
+    resolution: distribution_types::Resolution,
+) -> distribution_types::Resolution {
+    resolution.filter(|dist| {
+        let ResolvedDist::Installable(dist) = dist else {
+            return true;
+        };
+
+        let Dist::Source(dist) = dist else {
+            return true;
+        };
+
+        let SourceDist::Directory(dist) = dist else {
+            return true;
+        };
+
+        !dist.r#virtual
+    })
 }

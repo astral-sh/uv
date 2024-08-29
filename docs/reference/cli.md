@@ -372,7 +372,15 @@ uv init [OPTIONS] [PATH]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<dl class="cli-reference"><dt><code>--app</code></dt><dd><p>Create a project for an application.</p>
+
+<p>This is the default behavior if <code>--lib</code> is not requested.</p>
+
+<p>This project kind is for web servers, scripts, and command-line interfaces.</p>
+
+<p>By default, an application is not intended to be built and distributed as a Python package. The <code>--package</code> option can be used to create an application that is distributable, e.g., if you want to distribute a command-line interface via PyPI.</p>
+
+</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 
@@ -394,6 +402,10 @@ uv init [OPTIONS] [PATH]
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--lib</code></dt><dd><p>Create a project for a library.</p>
+
+<p>A library is a project that is intended to be built and distributed as a Python package.</p>
+
 </dd><dt><code>--name</code> <i>name</i></dt><dd><p>The name of the project.</p>
 
 <p>Defaults to the name of the directory.</p>
@@ -409,6 +421,12 @@ uv init [OPTIONS] [PATH]
 </dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+
+</dd><dt><code>--no-package</code></dt><dd><p>Do not set up the project to be built as a Python package.</p>
+
+<p>Does not include a <code>[build-system]</code> for the project.</p>
+
+<p>This is the default behavior when using <code>--app</code>.</p>
 
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
 
@@ -427,6 +445,14 @@ uv init [OPTIONS] [PATH]
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--package</code></dt><dd><p>Set up the project to be built as a Python package.</p>
+
+<p>Defines a <code>[build-system]</code> for the project.</p>
+
+<p>This is the default behavior when using <code>--lib</code>.</p>
+
+<p>When using <code>--app</code>, this will include a <code>[project.scripts]</code> entrypoint and use a <code>src/</code> project structure.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to determine the minimum supported Python version.</p>
 
@@ -454,10 +480,6 @@ uv init [OPTIONS] [PATH]
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
-</dd><dt><code>--virtual</code></dt><dd><p>Create a virtual workspace instead of a project.</p>
-
-<p>A virtual workspace does not define project dependencies and cannot be published. Instead, workspace members declare project dependencies. Development dependencies may still be declared.</p>
 
 </dd></dl>
 
@@ -1869,7 +1891,7 @@ Run a command provided by a Python package.
 
 By default, the package to install is assumed to match the command name.
 
-The name of the command can include an exact version in the format `<package>@<version>`, e.g., `uv run ruff@0.3.0`. If more complex version specification is desired or if the command is provided by a different package, use `--from`.
+The name of the command can include an exact version in the format `<package>@<version>`, e.g., `uv tool run ruff@0.3.0`. If more complex version specification is desired or if the command is provided by a different package, use `--from`.
 
 If the tool was previously installed, i.e., via `uv tool install`, the installed version will be used unless a version is requested or the `--isolated` flag is used.
 

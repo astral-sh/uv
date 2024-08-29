@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
-use clap::builder::styling::Style;
+use clap::builder::styling::{AnsiColor, Effects, Style};
+use clap::builder::Styles;
 use clap::{Args, Parser, Subcommand};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
@@ -51,6 +52,13 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
     })
 }
 
+// Configures Clap v3-style help menu colors
+const STYLES: Styles = Styles::styled()
+    .header(AnsiColor::Green.on_default().effects(Effects::BOLD))
+    .usage(AnsiColor::Green.on_default().effects(Effects::BOLD))
+    .literal(AnsiColor::Cyan.on_default().effects(Effects::BOLD))
+    .placeholder(AnsiColor::Cyan.on_default());
+
 #[derive(Parser)]
 #[command(name = "uv", author, long_version = crate::version::version())]
 #[command(about = "An extremely fast Python package manager.")]
@@ -62,6 +70,7 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
     disable_help_subcommand = true,
     disable_version_flag = true
 )]
+#[command(styles=STYLES)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     #[command(subcommand)]
@@ -2099,13 +2108,48 @@ pub struct InitArgs {
     #[arg(long)]
     pub name: Option<PackageName>,
 
-    /// Create a virtual workspace instead of a project.
+    /// Create a virtual project, rather than a package.
     ///
-    /// A virtual workspace does not define project dependencies and cannot be
-    /// published. Instead, workspace members declare project dependencies.
-    /// Development dependencies may still be declared.
-    #[arg(long)]
+    /// This option is deprecated and will be removed in a future release.
+    #[arg(long, hide = true, conflicts_with = "package")]
     pub r#virtual: bool,
+
+    /// Set up the project to be built as a Python package.
+    ///
+    /// Defines a `[build-system]` for the project.
+    ///
+    /// This is the default behavior when using `--lib`.
+    ///
+    /// When using `--app`, this will include a `[project.scripts]` entrypoint and use a `src/`
+    /// project structure.
+    #[arg(long, overrides_with = "no_package")]
+    pub r#package: bool,
+
+    /// Do not set up the project to be built as a Python package.
+    ///
+    /// Does not include a `[build-system]` for the project.
+    ///
+    /// This is the default behavior when using `--app`.
+    #[arg(long, overrides_with = "package", conflicts_with = "lib")]
+    pub r#no_package: bool,
+
+    /// Create a project for an application.
+    ///
+    /// This is the default behavior if `--lib` is not requested.
+    ///
+    /// This project kind is for web servers, scripts, and command-line interfaces.
+    ///
+    /// By default, an application is not intended to be built and distributed as a Python package.
+    /// The `--package` option can be used to create an application that is distributable, e.g., if
+    /// you want to distribute a command-line interface via PyPI.
+    #[arg(long, alias = "application", conflicts_with = "lib")]
+    pub r#app: bool,
+
+    /// Create a project for a library.
+    ///
+    /// A library is a project that is intended to be built and distributed as a Python package.
+    #[arg(long, alias = "library", conflicts_with = "app")]
+    pub r#lib: bool,
 
     /// Do not create a `README.md` file.
     #[arg(long)]
@@ -2723,7 +2767,7 @@ pub enum ToolCommand {
     /// By default, the package to install is assumed to match the command name.
     ///
     /// The name of the command can include an exact version in the format
-    /// `<package>@<version>`, e.g., `uv run ruff@0.3.0`. If more complex
+    /// `<package>@<version>`, e.g., `uv tool run ruff@0.3.0`. If more complex
     /// version specification is desired or if the command is provided by a
     /// different package, use `--from`.
     ///

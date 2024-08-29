@@ -16,6 +16,17 @@ container:
 $ docker run ghcr.io/astral-sh/uv --help
 ```
 
+### Available images
+
+uv builds and publishes the following Docker tags:
+
+- `uv:latest`
+- `uv:{major}.{minor}.{patch}`, e.g., `uv:0.4.0`
+- `uv:{major}.{minor}`, e.g., `uv:0.4` (the latest patch version)
+
+For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
+page.
+
 ### Installing uv
 
 uv can be installed by copying from the official Docker image:
@@ -48,13 +59,13 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.3.4 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.4.0 /uv /bin/uv
 ```
 
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.3.4/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.4.0/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -140,6 +151,17 @@ $ docker run -it $(docker build -q .) /bin/bash -c "cowsay -t hello"
     ```dockerfile title="Dockerfile"
     ENV UV_TOOL_BIN_DIR=/opt/uv-bin/
     ```
+
+### Installing Python in musl-based images
+
+While uv [installs a compatible Python version](../install-python.md) if there isn't one available
+in the image, uv does not yet support installing Python for musl-based distributions. For example,
+if you are using an Alpine Linux base image that doesn't have Python installed, you need to add it
+with the system package manager:
+
+```shell
+apk add --no-cache python3~=3.12
+```
 
 ## Developing in a container
 

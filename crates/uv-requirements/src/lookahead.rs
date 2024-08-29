@@ -288,6 +288,7 @@ fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, distribution
         } => Dist::from_file_url(requirement.name.clone(), url.clone(), install_path, *ext)?,
         RequirementSource::Directory {
             install_path,
+            r#virtual,
             url,
             editable,
         } => Dist::from_directory_url(
@@ -295,6 +296,7 @@ fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, distribution
             url.clone(),
             install_path,
             *editable,
+            *r#virtual,
         )?,
     }))
 }

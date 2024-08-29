@@ -220,6 +220,7 @@ impl From<&ResolvedDist> for Requirement {
                     install_path: sdist.install_path.clone(),
                     url: sdist.url.clone(),
                     editable: sdist.editable,
+                    r#virtual: sdist.r#virtual,
                 },
             },
             ResolvedDist::Installed(dist) => RequirementSource::Registry {

@@ -118,6 +118,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.UV_BASE_IMG }}
+          tags: |
+            type=pep440,pattern={{ version }},value=${{ fromJson(inputs.plan).announcement_tag }}
+            type=pep440,pattern={{ major }}.{{ minor }},value=${{ fromJson(inputs.plan).announcement_tag }}
 
       - uses: docker/login-action@v3
         with:
@@ -128,8 +131,10 @@ jobs:
       # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
       - name: Create manifest list and push
         working-directory: /tmp/digests
+        # The jq command expands the docker/metadata json "tags" array entry to `-t tag1 -t tag2 ...` for each tag in the array
+        # The printf will expand the base image with the `<UV_BASE_IMG>@sha256:<sha256> ...` for each sha256 in the directory
+        # The final command becomes `docker buildx imagetools create -t tag1 -t tag2 ... <UV_BASE_IMG>@sha256:<sha256_1> <UV_BASE_IMG>@sha256:<sha256_2> ...`
         run: |
           docker buildx imagetools create \
-            -t ${{ env.UV_BASE_IMG }}:latest \
-            -t ${{ env.UV_BASE_IMG }}:${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || 'dry-run' }} \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.UV_BASE_IMG }}@sha256:%s ' *)

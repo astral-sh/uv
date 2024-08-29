@@ -200,14 +200,15 @@ pub(crate) async fn add(
             VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
         };
 
-        // For virtual projects, allow dev dependencies, but nothing else.
-        if project.is_virtual() {
+        // For non-project workspace roots, allow dev dependencies, but nothing else.
+        // TODO(charlie): Automatically "upgrade" the project by adding a `[project]` table.
+        if project.is_non_project() {
             match dependency_type {
                 DependencyType::Production => {
-                    anyhow::bail!("Found a virtual workspace root, but virtual projects do not support production dependencies (instead, use: `{}`)", "uv add --dev".green())
+                    bail!("Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `{}` instead", "uv add --dev".green())
                 }
                 DependencyType::Optional(_) => {
-                    anyhow::bail!("Found a virtual workspace root, but virtual projects do not support optional dependencies (instead, use: `{}`)", "uv add --dev".green())
+                    bail!("Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead", "uv add --dev".green())
                 }
                 DependencyType::Dev => (),
             }

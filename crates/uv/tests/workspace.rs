@@ -948,6 +948,66 @@ fn workspace_hidden_member() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that workspace discovery accepts valid hidden directories.
+#[test]
+fn workspace_non_included_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Build the main workspace ...
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r"
+        dependencies = []
+    "};
+    make_project(&workspace.join("packages").join("b"), "b", deps)?;
+
+    // ... and c, which is _not_ a member, but also isn't explicitly excluded.
+    let deps = indoc! {r"
+        dependencies = []
+    "};
+    make_project(&workspace.join("c"), "c", deps)?;
+
+    // Locking from `c` should not include any workspace members.
+    uv_snapshot!(context.filters(), context.lock().current_dir(workspace.join("c")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    "###
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(
+        workspace.join("c").join("uv.lock"),
+    )?)?;
+
+    assert_json_snapshot!(lock.sources(), @r###"
+    {
+      "c": {
+        "editable": "."
+      }
+    }
+    "###);
+
+    Ok(())
+}
+
 /// Ensure workspace members inherit sources from the root, if not specified in the member.
 ///
 /// In such cases, relative paths should be resolved relative to the workspace root, rather than
@@ -965,6 +1025,10 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = []
         requires-python = ">=3.12"
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.workspace]
         members = ["packages/*"]
     "#})?;
@@ -977,6 +1041,10 @@ fn workspace_inherit_sources() -> Result<()> {
         name = "leaf"
         version = "0.1.0"
         dependencies = ["library"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     leaf.child("src/__init__.py").touch()?;
 
@@ -987,6 +1055,10 @@ fn workspace_inherit_sources() -> Result<()> {
         name = "library"
         version = "0.1.0"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     library.child("src/__init__.py").touch()?;
 
@@ -1013,6 +1085,10 @@ fn workspace_inherit_sources() -> Result<()> {
         version = "0.1.0"
         dependencies = ["library"]
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.sources]
         library = { path = "../../../library", editable = true }
     "#})?;
@@ -1036,6 +1112,10 @@ fn workspace_inherit_sources() -> Result<()> {
         name = "leaf"
         version = "0.1.0"
         dependencies = ["library"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     // Update the root to include the source.
@@ -1045,6 +1125,10 @@ fn workspace_inherit_sources() -> Result<()> {
         version = "0.1.0"
         dependencies = []
         requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         library = { path = "../library", editable = true }
@@ -1117,6 +1201,10 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = []
         requires-python = ">=3.12"
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.sources]
         library = { path = "../library", editable = true }
 
@@ -1131,9 +1219,12 @@ fn workspace_inherit_sources() -> Result<()> {
         version = "0.1.0"
         dependencies = ["library"]
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.sources]
         application = { path = "../application", editable = true }
-
     "#})?;
 
     // Resolving should succeed; the member should still use the root's source, despite defining
@@ -1167,6 +1258,10 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
         dependencies = []
         requires-python = ">=3.12"
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.workspace]
         members = ["packages/*"]
     "#})?;
@@ -1179,6 +1274,10 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
         name = "leaf"
         version = "0.1.0"
         dependencies = ["httpx>9999"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     leaf.child("src/__init__.py").touch()?;
 
@@ -1215,6 +1314,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
         dependencies = []
         requires-python = ">=3.12"
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.workspace]
         members = ["packages/*"]
     "#})?;
@@ -1227,6 +1330,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
         name = "foo"
         version = "0.1.0"
         dependencies = ["anyio==4.1.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     foo.child("src/__init__.py").touch()?;
     let bar = workspace.child("packages").child("bar");
@@ -1235,6 +1342,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
         name = "bar"
         version = "0.1.0"
         dependencies = ["anyio==4.2.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     bar.child("src/__init__.py").touch()?;
 
@@ -1271,6 +1382,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
         dependencies = []
         requires-python = ">=3.12"
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.workspace]
         members = ["packages/*"]
     "#})?;
@@ -1283,6 +1398,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
         name = "red"
         version = "0.1.0"
         dependencies = ["anyio==4.1.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     red.child("src/__init__.py").touch()?;
     let knot = workspace.child("packages").child("knot");
@@ -1291,6 +1410,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
         name = "knot"
         version = "0.1.0"
         dependencies = ["anyio==4.2.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     knot.child("src/__init__.py").touch()?;
 
@@ -1302,6 +1425,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
         name = "bird"
         version = "0.1.0"
         dependencies = ["anyio==4.3.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     bird.child("src/__init__.py").touch()?;
 
@@ -1338,6 +1465,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
         dependencies = []
         requires-python = ">=3.12"
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.workspace]
         members = ["packages/*"]
     "#})?;
@@ -1350,6 +1481,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
         name = "foo"
         version = "0.1.0"
         dependencies = ["anyio==4.1.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     foo.child("src/__init__.py").touch()?;
     let bar = workspace.child("packages").child("bar");
@@ -1360,6 +1495,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
 
         [project.optional-dependencies]
         some_extra = ["anyio==4.2.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     bar.child("src/__init__.py").touch()?;
 
@@ -1396,6 +1535,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
         dependencies = []
         requires-python = ">=3.12"
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.workspace]
         members = ["packages/*"]
     "#})?;
@@ -1408,6 +1551,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
         name = "foo"
         version = "0.1.0"
         dependencies = ["anyio==4.1.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     foo.child("src/__init__.py").touch()?;
     let bar = workspace.child("packages").child("bar");
@@ -1415,6 +1562,10 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
         [project]
         name = "bar"
         version = "0.1.0"
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         dev-dependencies = ["anyio==4.2.0"]
@@ -1455,6 +1606,10 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
         dependencies = []
         requires-python = ">=3.12"
 
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
         [tool.uv.workspace]
         members = ["packages/*"]
     "#})?;
@@ -1467,6 +1622,10 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
         name = "foo"
         version = "0.1.0"
         dependencies = ["anyio==4.1.0"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     foo.child("src/__init__.py").touch()?;
 
@@ -1477,6 +1636,10 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
         name = "anyio"
         version = "0.1.0"
         dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
     "#})?;
     anyio.child("src/__init__.py").touch()?;
 

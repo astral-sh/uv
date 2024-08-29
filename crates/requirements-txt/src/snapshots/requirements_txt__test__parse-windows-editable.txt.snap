@@ -25,6 +25,7 @@ RequirementsTxt {
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
                                 editable: true,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
@@ -81,6 +82,7 @@ RequirementsTxt {
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
                                 editable: true,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
@@ -137,6 +139,7 @@ RequirementsTxt {
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
                                 editable: true,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
@@ -193,6 +196,7 @@ RequirementsTxt {
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
                                 editable: true,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
@@ -249,6 +253,7 @@ RequirementsTxt {
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
                                 editable: true,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
@@ -298,6 +303,7 @@ RequirementsTxt {
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable[d",
                                 editable: true,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {

@@ -3407,7 +3407,7 @@ fn require_hashes_unknown_algorithm() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unsupported hash algorithm: `foo` (expected one of: `md5`, `sha256`, `sha384`, or `sha512`)
+    error: Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, or `sha512`) on: `foo`
     "###
     );
 
@@ -5000,6 +5000,155 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
     Computed:
       sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the hash in the URL directly.
+#[test]
+fn require_hashes_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
+
+    uv_snapshot!(context.pip_sync()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374)
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include an irrelevant fragment in the URL.
+#[test]
+fn require_hashes_url_other_fragment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar")?;
+
+    uv_snapshot!(context.pip_sync()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include an invalid hash in the URL directly.
+#[test]
+fn require_hashes_url_invalid() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
+
+    uv_snapshot!(context.pip_sync()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+      Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+
+    Expected:
+      sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+
+    Computed:
+      sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+    "###
+    );
+
+    Ok(())
+}
+
+/// Ignore the (valid) hash on the fragment if (invalid) hashes are provided directly.
+#[test]
+fn require_hashes_url_ignore() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374 --hash sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
+
+    uv_snapshot!(context.pip_sync()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+      Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+
+    Expected:
+      sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+
+    Computed:
+      sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the hash in the URL directly.
+#[test]
+fn require_hashes_url_unnamed() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
+
+    uv_snapshot!(context.pip_sync()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374)
     "###
     );
 

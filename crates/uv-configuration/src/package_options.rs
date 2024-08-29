@@ -74,7 +74,7 @@ pub enum Upgrade {
 }
 
 impl Upgrade {
-    /// Determine the upgrade strategy from the command-line arguments.
+    /// Determine the [`Upgrade`] strategy from the command-line arguments.
     pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<Requirement>) -> Self {
         match upgrade {
             Some(true) => Self::All,
@@ -95,6 +95,15 @@ impl Upgrade {
                 }
             }
         }
+    }
+
+    /// Create an [`Upgrade`] strategy to upgrade a single package.
+    pub fn package(package_name: PackageName) -> Self {
+        Self::Packages({
+            let mut map = FxHashMap::default();
+            map.insert(package_name, vec![]);
+            map
+        })
     }
 
     /// Returns `true` if no packages should be upgraded.
@@ -128,6 +137,25 @@ impl Upgrade {
             )
         } else {
             Either::Left(std::iter::empty())
+        }
+    }
+
+    /// Combine a set of [`Upgrade`] values.
+    #[must_use]
+    pub fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            // If both are `None`, the result is `None`.
+            (Self::None, Self::None) => Self::None,
+            // If either is `All`, the result is `All`.
+            (Self::All, _) | (_, Self::All) => Self::All,
+            // If one is `None`, the result is the other.
+            (Self::Packages(a), Self::None) => Self::Packages(a),
+            (Self::None, Self::Packages(b)) => Self::Packages(b),
+            // If both are `Packages`, the result is the union of the two.
+            (Self::Packages(mut a), Self::Packages(b)) => {
+                a.extend(b);
+                Self::Packages(a)
+            }
         }
     }
 }

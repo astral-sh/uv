@@ -1,8 +1,9 @@
-use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+
 use url::Url;
 
 /// A trusted host, which could be a host or a host-port pair.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrustedHost {
     scheme: Option<String>,
     host: String,
@@ -29,6 +30,41 @@ impl TrustedHost {
         }
 
         true
+    }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum TrustHostWire {
+    String(String),
+    Struct {
+        scheme: Option<String>,
+        host: String,
+        port: Option<u16>,
+    },
+}
+
+impl<'de> serde::de::Deserialize<'de> for TrustedHost {
+    fn deserialize<D>(deserializer: D) -> Result<TrustedHost, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let helper = TrustHostWire::deserialize(deserializer)?;
+
+        match helper {
+            TrustHostWire::String(s) => TrustedHost::from_str(&s).map_err(serde::de::Error::custom),
+            TrustHostWire::Struct { scheme, host, port } => Ok(TrustedHost { scheme, host, port }),
+        }
+    }
+}
+
+impl serde::Serialize for TrustedHost {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        let s = self.to_string();
+        serializer.serialize_str(&s)
     }
 }
 
@@ -70,6 +106,22 @@ impl std::str::FromStr for TrustedHost {
             .map_err(|_| TrustedHostError::InvalidPort(s.to_string()))?;
 
         Ok(Self { scheme, host, port })
+    }
+}
+
+impl std::fmt::Display for TrustedHost {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if let Some(scheme) = &self.scheme {
+            write!(f, "{}://{}", scheme, self.host)?;
+        } else {
+            write!(f, "{}", self.host)?;
+        }
+
+        if let Some(port) = self.port {
+            write!(f, ":{port}")?;
+        }
+
+        Ok(())
     }
 }
 
