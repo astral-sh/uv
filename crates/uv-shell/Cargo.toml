@@ -11,8 +11,8 @@ workspace = true
 uv-fs = { workspace = true }
 
 anyhow = { workspace = true }
-home =  { workspace = true }
-same-file =  { workspace = true }
+home = { workspace = true }
+same-file = { workspace = true }
 tracing = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
