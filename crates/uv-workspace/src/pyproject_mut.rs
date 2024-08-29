@@ -2,10 +2,11 @@ use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
+
+use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep508_rs::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 use uv_fs::PortablePath;
 
 use crate::pyproject::{DependencyType, Source};
@@ -196,7 +197,7 @@ impl PyProjectTomlMut {
             .doc()?
             .entry("optional-dependencies")
             .or_insert(Item::Table(Table::new()))
-            .as_table_mut()
+            .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
         let group = optional_dependencies
@@ -207,6 +208,8 @@ impl PyProjectTomlMut {
 
         let name = req.name.clone();
         let added = add_dependency(req, group, source.is_some())?;
+
+        optional_dependencies.fmt();
 
         if let Some(source) = source {
             self.add_source(&name, source)?;
@@ -348,7 +351,11 @@ impl PyProjectTomlMut {
         let Some(dependencies) = self
             .doc_mut()?
             .and_then(|project| project.get_mut("dependencies"))
-            .map(|dependencies| dependencies.as_array_mut().ok_or(Error::MalformedSources))
+            .map(|dependencies| {
+                dependencies
+                    .as_array_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
             .transpose()?
         else {
             return Ok(Vec::new());
@@ -366,13 +373,17 @@ impl PyProjectTomlMut {
         let Some(dev_dependencies) = self
             .doc
             .get_mut("tool")
-            .map(|tool| tool.as_table_mut().ok_or(Error::MalformedSources))
+            .map(|tool| tool.as_table_mut().ok_or(Error::MalformedDependencies))
             .transpose()?
             .and_then(|tool| tool.get_mut("uv"))
-            .map(|tool_uv| tool_uv.as_table_mut().ok_or(Error::MalformedSources))
+            .map(|tool_uv| tool_uv.as_table_mut().ok_or(Error::MalformedDependencies))
             .transpose()?
             .and_then(|tool_uv| tool_uv.get_mut("dev-dependencies"))
-            .map(|dependencies| dependencies.as_array_mut().ok_or(Error::MalformedSources))
+            .map(|dependencies| {
+                dependencies
+                    .as_array_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
             .transpose()?
         else {
             return Ok(Vec::new());
@@ -394,10 +405,18 @@ impl PyProjectTomlMut {
         let Some(optional_dependencies) = self
             .doc_mut()?
             .and_then(|project| project.get_mut("optional-dependencies"))
-            .map(|extras| extras.as_table_mut().ok_or(Error::MalformedSources))
+            .map(|extras| {
+                extras
+                    .as_table_like_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
             .transpose()?
             .and_then(|extras| extras.get_mut(group.as_ref()))
-            .map(|dependencies| dependencies.as_array_mut().ok_or(Error::MalformedSources))
+            .map(|dependencies| {
+                dependencies
+                    .as_array_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
             .transpose()?
         else {
             return Ok(Vec::new());
