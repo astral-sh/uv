@@ -34,7 +34,7 @@ pub(crate) async fn install(
     let installations = ManagedPythonInstallations::from_settings()?.init()?;
     let installations_dir = installations.root();
     let cache_dir = installations.cache();
-    let _lock = installations.acquire_lock()?;
+    let _lock = installations.lock().await?;
 
     let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {

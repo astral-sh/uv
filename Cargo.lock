@@ -4898,6 +4898,7 @@ dependencies = [
  "path-slash",
  "serde",
  "tempfile",
+ "tokio",
  "tracing",
  "urlencoding",
  "uv-warnings",

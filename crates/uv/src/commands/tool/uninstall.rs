@@ -15,7 +15,7 @@ use crate::printer::Printer;
 /// Uninstall a tool.
 pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
-    let _lock = match installed_tools.acquire_lock() {
+    let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
         Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
             if let Some(name) = name {

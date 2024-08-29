@@ -67,7 +67,8 @@ impl GitResolver {
         let _lock = LockedFile::acquire(
             lock_dir.join(cache_key::cache_digest(&repository_url)),
             &repository_url,
-        )?;
+        )
+        .await?;
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {

@@ -69,12 +69,10 @@ impl ManagedPythonInstallations {
         Self { root: root.into() }
     }
 
-    /// Lock the toolchains directory.
-    pub fn acquire_lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(
-            self.root.join(".lock"),
-            self.root.user_display(),
-        )?)
+    /// Grab a file lock for the managed Python distribution directory to prevent concurrent access
+    /// across processes.
+    pub async fn lock(&self) -> Result<LockedFile, Error> {
+        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
     }
 
     /// Prefer, in order:

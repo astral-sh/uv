@@ -124,7 +124,7 @@ impl PythonInstallation {
         let installations = ManagedPythonInstallations::from_settings()?.init()?;
         let installations_dir = installations.root();
         let cache_dir = installations.cache();
-        let _lock = installations.acquire_lock()?;
+        let _lock = installations.lock().await?;
 
         let download = ManagedPythonDownload::from_request(&request)?;
         let client = client_builder.build();
