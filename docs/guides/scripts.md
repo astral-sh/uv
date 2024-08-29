@@ -207,9 +207,8 @@ uv supports an `exclude-newer` field in the `tool.uv` section of inline script m
 to only considering distributions released before a specific date. This is useful for improving the
 reproducibility of your script when run at a later point in time.
 
-The date may be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp
-(e.g., `2006-12-02T02:07:43Z`) or a local date in the same format (e.g., `2006-12-02`) in your
-system's configured time zone.
+The date must be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp
+(e.g., `2006-12-02T02:07:43Z`).
 
 ```python title="example.py"
 # /// script
@@ -217,7 +216,7 @@ system's configured time zone.
 #   "requests",
 # ]
 # [tool.uv]
-# exclude-newer = "2023-10-16"
+# exclude-newer = "2023-10-16T00:00:00Z"
 # ///
 
 import requests
