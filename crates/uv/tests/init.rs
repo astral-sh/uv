@@ -102,6 +102,7 @@ fn init_application() -> Result<()> {
         def main():
             print("Hello from foo!")
 
+
         if __name__ == "__main__":
             main()
         "###
@@ -221,6 +222,7 @@ fn init_application_other_python_exists() -> Result<()> {
             hello, @r###"
         def main():
             print("Hello from foo!")
+
 
         if __name__ == "__main__":
             main()
@@ -560,6 +562,7 @@ fn init_application_current_dir() -> Result<()> {
             hello_py, @r###"
         def main():
             print("Hello from foo!")
+
 
         if __name__ == "__main__":
             main()
