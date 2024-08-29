@@ -56,7 +56,34 @@ $ # Configure the index URL with the username
 $ export UV_EXTRA_INDEX_URL=https://VssSessionToken@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
 ```
 
+## AWS CodeArtifact
+
+If you publish your private packages to
+[AWS CodeArtifact](https://docs.aws.amazon.com/codeartifact/latest/ug/using-python.html), you can
+configure `uv` to use it as an extra index. Your AWS credentials need to be available in your
+environment. You'll also need `awscli` installed.
+
+Then, configure `UV_EXTRA_INDEX_URL` (replace `{domain}`, `{account_id}`, `{region}`, and
+`{repository}` with your own values):
+
+```bash
+export UV_EXTRA_INDEX_URL=https://aws:$(aws codeartifact get-authorization-token --domain {domain} --domain-owner {account_id} --query authorizationToken --output text)@{domain}-{account_id}.d.codeartifact.{region}.amazonaws.com/pypi/{repository}/simple/
+```
+
+If you also want to publish your own packages to AWS CodeArtifact, you can use `twine` along with
+`uv` to do so (assuming you have already built your package and the artifacts are in the `dist`
+directory):
+
+```bash
+# Configure twine to use AWS CodeArtifact
+export TWINE_REPOSITORY_URL=https://{domain}-{account_id}.d.codeartifact.{region}.amazonaws.com/pypi/{repository}/
+export TWINE_USERNAME=aws
+export TWINE_PASSWORD=$(aws codeartifact get-authorization-token --domain {domain} --domain-owner {account_id} --query authorizationToken --output text)
+
+# Publish the package
+uv run twine upload dist/* --verbose
+```
+
 ## Other indexes
 
-uv is also known to work with JFrog's Artifactory, the Google Cloud Artifact Registry, and AWS Code
-Artifact.
+uv is also known to work with JFrog's Artifactory and the Google Cloud Artifact Registry.
