@@ -169,8 +169,8 @@ When searching for a Python version, the following locations are checked:
 - Managed Python installations in the `UV_PYTHON_INSTALL_DIR`.
 - A Python interpreter on the `PATH` as `python`, `python3`, or `python3.x` on macOS and Linux, or
   `python.exe` on Windows.
-- On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
-  version.
+- On Windows, the Python interpreters in the Windows registry and Microsoft Store Python
+  interpreters (see `py --list-paths`) that match the requested version.
 
 In some cases, uv allows using a Python version from a virtual environment. In this case, the
 virtual environment's interpreter will be checked for compatibility with the request before
@@ -263,7 +263,8 @@ creating optimized, performant builds (e.g., with PGO and LTO enabled) is very s
 These distributions have some behavior quirks, generally as a consequence of portability; and, at
 present, uv does not support installing them on musl-based Linux distributions, like Alpine Linux.
 See the
-[`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)
+[
+`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)
 documentation for details.
 
 ### PyPy distributions
