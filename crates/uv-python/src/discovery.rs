@@ -20,10 +20,10 @@ use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
 use crate::managed::ManagedPythonInstallations;
+#[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
 #[cfg(windows)]
-use crate::py_launcher::registry_pythons;
-use crate::py_launcher::WindowsPython;
+use crate::py_launcher::{registry_pythons, WindowsPython};
 use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable,
