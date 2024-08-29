@@ -13,8 +13,7 @@ use windows::Win32::{
         TRUE,
     },
     System::Console::{
-        GetStdHandle, SetConsoleCtrlHandler, SetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE,
-        STD_OUTPUT_HANDLE,
+        GetStdHandle, SetConsoleCtrlHandler, SetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
     },
     System::Environment::GetCommandLineA,
     System::JobObjects::{
@@ -329,7 +328,8 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
 // https://github.com/huangqinjin/ucrt/blob/10.0.19041.0/lowio/ioinit.cpp#L190-L223
 fn close_handles(si: &STARTUPINFOA) {
     // See distlib/PC/launcher.c::cleanup_standard_io()
-    for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+    // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain eprintln!
+    for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE] {
         if let Ok(handle) = unsafe { GetStdHandle(std_handle) } {
             unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
                 eprintln!("Failed to close standard device handle {}", handle.0 as u32);
@@ -348,11 +348,13 @@ fn close_handles(si: &STARTUPINFOA) {
     let handle_count = unsafe { crt_magic.read_unaligned() } as isize;
     let handle_start = unsafe { crt_magic.offset(1 + handle_count) };
     for i in 0..handle_count {
-        let handle_ptr = unsafe { handle_start.offset(i).read_unaligned() } as *const HANDLE;
+        let handle = HANDLE(unsafe { handle_start.offset(i).read_unaligned() as _ });
         // Close all fds inherited from the parent, except for the standard I/O fds.
-        unsafe { CloseHandle(*handle_ptr) }.unwrap_or_else(|_| {
-            eprintln!("Failed to close child file descriptors at {}", i);
-        });
+        if !handle.is_invalid() {
+            unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
+                eprintln!("Failed to close child file descriptors at {}", i);
+            });
+        }
     }
 }
 
