@@ -2,7 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 
-use itertools::partition;
+use itertools::Itertools;
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 use thiserror::Error;
@@ -508,36 +508,33 @@ pub fn add_dependency(
 
     match to_replace.as_slice() {
         [] => {
-            // Determine the dependency list is sorted prior to
+            // Determine if the dependency list is sorted prior to
             // adding the new dependency; the new dependency list
             // will be sorted only when the original list is sorted
-            // so that users' custom dependency ordering is preserved.
+            // so that user's custom dependency ordering is preserved.
             // Additionally, if the table is invalid (i.e. contains non-string values)
             // we still treat it as unsorted for the sake of simplicity.
             let sorted = deps.iter().all(toml_edit::Value::is_str)
                 && deps
-                    .clone()
-                    .into_iter()
-                    .collect::<Vec<_>>()
-                    .windows(2)
-                    .all(|w| w[0].to_string() <= w[1].to_string());
-            let mut index = deps.len();
-            if sorted {
-                index = partition(
-                    &mut deps.clone().into_iter().collect::<Vec<_>>(),
-                    |d: &Value| {
-                        *d.to_string()
-                            .trim_matches(|c| c == '\"' || c == ' ' || c == '\n')
-                            < *req.to_string()
-                    },
-                );
+                    .iter()
+                    .tuple_windows()
+                    .all(|(a, b)| a.as_str() <= b.as_str());
+
+            let req_string = req.to_string();
+            let index = if sorted {
+                deps.iter()
+                    .position(|d: &Value| d.as_str() > Some(req_string.as_str()))
+                    .unwrap_or(deps.len())
+            } else {
+                deps.len()
             };
 
-            deps.insert(index, req.to_string());
+            deps.insert(index, req_string);
             // `reformat_array_multiline` uses the indentation of the first dependency entry.
-            // Therefore, we retrieve the indentation of the first dependency entry and apply it to the new entry.
-            // Note that it is only necessary if the newly added dependency is going to be the first in the list
-            // _and_ the dependency list was not empty prior to adding the new dependency.
+            // Therefore, we retrieve the indentation of the first dependency entry and apply it to
+            // the new entry. Note that it is only necessary if the newly added dependency is going
+            // to be the first in the list _and_ the dependency list was not empty prior to adding
+            // the new dependency.
             if deps.len() > 1 && index == 0 {
                 let prefix = deps
                     .clone()
