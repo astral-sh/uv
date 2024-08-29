@@ -1441,7 +1441,10 @@ impl VersionRequest {
                     interpreter.python_patch(),
                 ) == (*major, *minor, *patch)
             }
-            Self::Range(specifiers) => specifiers.contains(interpreter.python_version()),
+            Self::Range(specifiers) => {
+                let version = interpreter.python_version().only_release();
+                specifiers.contains(&version)
+            }
         }
     }
 
