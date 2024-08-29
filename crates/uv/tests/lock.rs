@@ -11962,3 +11962,37 @@ fn lock_implicit_virtual_path() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn lock_conflicting_environment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv]
+        environments = ["python_version < '3.11'"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Environment markers `python_full_version < '3.11'` don't overlap with Python requirement `>=3.12`
+    "###);
+
+    Ok(())
+}
