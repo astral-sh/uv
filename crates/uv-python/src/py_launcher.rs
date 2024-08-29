@@ -32,7 +32,7 @@ pub(crate) fn registry_pythons() -> Result<Vec<RegistryPython>, windows_result::
         };
         for company in key_python.keys()? {
             // Reserved name according to the PEP.
-            if company == "Registry" {
+            if company == "PyLauncher" {
                 continue;
             }
             let Ok(company_key) = key_python.open(&company) else {
