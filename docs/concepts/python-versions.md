@@ -263,8 +263,7 @@ creating optimized, performant builds (e.g., with PGO and LTO enabled) is very s
 These distributions have some behavior quirks, generally as a consequence of portability; and, at
 present, uv does not support installing them on musl-based Linux distributions, like Alpine Linux.
 See the
-[
-`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)
+[`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)
 documentation for details.
 
 ### PyPy distributions
