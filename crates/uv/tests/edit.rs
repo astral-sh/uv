@@ -4061,13 +4061,12 @@ fn sorted_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["pydantic"]).arg("--no-sync"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["pydantic"]).arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -4085,7 +4084,7 @@ fn sorted_dependencies() -> Result<()> {
         dependencies = [
             "CacheControl[filecache]>=0.14,<0.15",
             "mwparserfromhell",
-            "pydantic>=2.6.4",
+            "pydantic",
             "pywikibot",
             "sentry-sdk",
             "yarl",
@@ -4118,13 +4117,12 @@ fn custom_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["pydantic"]).arg("--no-sync"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["pydantic"]).arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -4145,7 +4143,7 @@ fn custom_dependencies() -> Result<()> {
             "mwparserfromhell",
             "pywikibot",
             "sentry-sdk",
-            "pydantic>=2.6.4",
+            "pydantic",
         ]
         "###
         );
