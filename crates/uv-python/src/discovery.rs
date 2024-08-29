@@ -308,7 +308,6 @@ fn python_executables_from_installed<'a>(
     })
     .flatten();
 
-    // TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python installations from the registry instead.
     let from_py_launcher = std::iter::once_with(move || {
         #[cfg(windows)]
         {
