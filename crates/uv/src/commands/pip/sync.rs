@@ -174,7 +174,7 @@ pub(crate) async fn pip_sync(
         }
     }
 
-    let _lock = environment.lock()?;
+    let _lock = environment.lock().await?;
 
     let interpreter = environment.interpreter();
 

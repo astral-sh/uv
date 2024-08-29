@@ -239,7 +239,7 @@ pub(crate) async fn install(
     let options = ToolOptions::from(options);
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
-    let _lock = installed_tools.acquire_lock()?;
+    let _lock = installed_tools.lock().await?;
 
     // Find the existing receipt, if it exists. If the receipt is present but malformed, we'll
     // remove the environment and continue with the install.

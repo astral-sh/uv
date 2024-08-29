@@ -1897,12 +1897,9 @@ async fn lock_shard(cache_shard: &CacheShard) -> Result<LockedFile, Error> {
 
     fs_err::create_dir_all(root).map_err(Error::CacheWrite)?;
 
-    let lock: LockedFile = tokio::task::spawn_blocking({
-        let root = root.to_path_buf();
-        move || LockedFile::acquire(root.join(".lock"), root.display())
-    })
-    .await?
-    .map_err(Error::CacheWrite)?;
+    let lock = LockedFile::acquire(root.join(".lock"), root.display())
+        .await
+        .map_err(Error::CacheWrite)?;
 
     Ok(lock)
 }

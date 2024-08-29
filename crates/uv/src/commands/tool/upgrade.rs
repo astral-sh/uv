@@ -32,7 +32,7 @@ pub(crate) async fn upgrade(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
-    let _lock = installed_tools.acquire_lock()?;
+    let _lock = installed_tools.lock().await?;
 
     let names: BTreeSet<PackageName> =
         name.map(|name| BTreeSet::from_iter([name]))

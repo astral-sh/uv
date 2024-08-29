@@ -183,7 +183,7 @@ pub(crate) async fn pip_install(
         }
     }
 
-    let _lock = environment.lock()?;
+    let _lock = environment.lock().await?;
 
     // Determine the markers to use for the resolution.
     let interpreter = environment.interpreter();

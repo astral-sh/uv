@@ -100,7 +100,7 @@ pub(crate) async fn pip_uninstall(
         }
     }
 
-    let _lock = environment.lock()?;
+    let _lock = environment.lock().await?;
 
     // Index the current `site-packages` directory.
     let site_packages = uv_installer::SitePackages::from_environment(&environment)?;
