@@ -22,7 +22,7 @@ impl PubGrubSpecifier {
         self.0.iter()
     }
 
-    /// Return the bounding [`Range`] of the [`PubGrubSpecifier].
+    /// Return the bounding [`Range`] of the [`PubGrubSpecifier`].
     pub fn bounding_range(&self) -> Option<(Bound<&Version>, Bound<&Version>)> {
         self.0.bounding_range()
     }

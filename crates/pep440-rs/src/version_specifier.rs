@@ -495,35 +495,6 @@ impl VersionSpecifier {
     /// Returns the version specifiers whose union represents the given range.
     ///
     /// This function is not applicable to ranges involving pre-release versions.
-    pub fn from_release_only_range(
-        bounds: impl IntoIterator<Item = (&Bound<Version>, &Bound<Version>)>,
-    ) -> impl Iterator<Item = VersionSpecifier> {
-        let (b1, b2) = match bounds {
-            (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
-                (Some(VersionSpecifier::equals_version(v1.clone())), None)
-            }
-            // `v >= 3.7 && v < 3.8` is equivalent to `v == 3.7.*`
-            (Bound::Included(v1), Bound::Excluded(v2))
-            if v1.release().len() == 2
-                && v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
-                {
-                    (
-                        Some(VersionSpecifier::equals_star_version(v1.clone())),
-                        None,
-                    )
-                }
-            (lower, upper) => (
-                VersionSpecifier::from_lower_bound(lower),
-                VersionSpecifier::from_upper_bound(upper),
-            ),
-        };
-
-        b1.into_iter().chain(b2)
-    }
-
-    /// Returns the version specifiers whose union represents the given range.
-    ///
-    /// This function is not applicable to ranges involving pre-release versions.
     pub fn from_release_only_bounds(
         bounds: (&Bound<Version>, &Bound<Version>),
     ) -> impl Iterator<Item = VersionSpecifier> {

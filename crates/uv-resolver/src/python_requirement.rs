@@ -1,8 +1,7 @@
 use pep440_rs::{Version, VersionSpecifiers};
 use uv_python::{Interpreter, PythonVersion};
 
-use crate::requires_python::RequiresPythonRange;
-use crate::{RequiresPython, RequiresPythonBound};
+use crate::{RequiresPython, RequiresPythonRange};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PythonRequirement {

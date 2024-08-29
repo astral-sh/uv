@@ -3292,14 +3292,15 @@ fn lock_requires_python() -> Result<()> {
     Ok(())
 }
 
-/// Lock a requirement from PyPI, respecting the `Requires-Python` metadata
+/// Lock a requirement from PyPI, ignoring any dependencies that exceed the `requires-python`
+/// upper-bound.
 #[test]
 fn lock_requires_python_upper() -> Result<()> {
     let context = TestContext::new("3.11");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
-    // Require ==3.12.*.
+    // Require `==3.11.*`.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -3315,7 +3316,7 @@ fn lock_requires_python_upper() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.lock().env("UV_EXCLUDE_NEWER", "2024-08-29T00:00:00Z"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3333,6 +3334,9 @@ fn lock_requires_python_upper() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = "==3.11.*"
+
+        [options]
+        exclude-newer = "2024-08-29T00:00:00Z"
 
         [[package]]
         name = "annotated-types"
@@ -3426,6 +3430,16 @@ fn lock_requires_python_upper() -> Result<()> {
         "###
         );
     });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").env("UV_EXCLUDE_NEWER", "2024-08-29T00:00:00Z"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###);
 
     Ok(())
 }
