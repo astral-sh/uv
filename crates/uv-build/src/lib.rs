@@ -7,7 +7,7 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use regex::Regex;
 use rustc_hash::FxHashMap;
-use serde::de::{value, SeqAccess, Visitor};
+use serde::de::{value, IntoDeserializer, SeqAccess, Visitor};
 use serde::{de, Deserialize, Deserializer};
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
@@ -82,7 +82,9 @@ pub enum Error {
     #[error("Invalid source distribution: {0}")]
     InvalidSourceDist(String),
     #[error("Invalid `pyproject.toml`")]
-    InvalidPyprojectToml(#[from] toml::de::Error),
+    InvalidPyprojectTomlSyntax(#[from] toml_edit::TomlError),
+    #[error("`pyproject.toml` does not match required schema. Note: When using any `[project]` field, at least `project.name` needs to be set.")]
+    InvalidPyprojectTomlSchema(#[from] toml_edit::de::Error),
     #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
     EditableSetupPy,
     #[error("Failed to install requirements from {0}")]
@@ -563,8 +565,12 @@ impl SourceBuild {
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
+                let pyproject_toml: toml_edit::ImDocument<_> =
+                    toml_edit::ImDocument::from_str(&toml)
+                        .map_err(Error::InvalidPyprojectTomlSyntax)?;
                 let pyproject_toml: PyProjectToml =
-                    toml::from_str(&toml).map_err(Error::InvalidPyprojectToml)?;
+                    PyProjectToml::deserialize(pyproject_toml.into_deserializer())
+                        .map_err(Error::InvalidPyprojectTomlSchema)?;
                 let backend = if let Some(build_system) = pyproject_toml.build_system {
                     Pep517Backend {
                         // If `build-backend` is missing, inject the legacy setuptools backend, but

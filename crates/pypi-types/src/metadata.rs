@@ -6,6 +6,7 @@ use std::str::FromStr;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use mailparse::{MailHeaderMap, MailParseError};
+use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::warn;
@@ -44,8 +45,12 @@ pub struct Metadata23 {
 pub enum MetadataError {
     #[error(transparent)]
     MailParse(#[from] MailParseError),
+    #[error("Invalid `pyproject.toml`")]
+    InvalidPyprojectTomlSyntax(#[source] toml_edit::TomlError),
+    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` is not set.")]
+    InvalidPyprojectTomlMissingName(#[source] toml_edit::de::Error),
     #[error(transparent)]
-    Toml(#[from] toml::de::Error),
+    InvalidPyprojectTomlSchema(toml_edit::de::Error),
     #[error("metadata field {0} not found")]
     FieldNotFound(&'static str),
     #[error("invalid version: {0}")]
@@ -196,7 +201,7 @@ impl Metadata23 {
 
     /// Extract the metadata from a `pyproject.toml` file, as specified in PEP 621.
     pub fn parse_pyproject_toml(contents: &str) -> Result<Self, MetadataError> {
-        let pyproject_toml: PyProjectToml = toml::from_str(contents)?;
+        let pyproject_toml = PyProjectToml::from_toml(contents)?;
 
         let project = pyproject_toml
             .project
@@ -277,6 +282,23 @@ impl Metadata23 {
 struct PyProjectToml {
     project: Option<Project>,
     tool: Option<Tool>,
+}
+
+impl PyProjectToml {
+    fn from_toml(toml: &str) -> Result<Self, MetadataError> {
+        let pyproject_toml: toml_edit::ImDocument<_> = toml_edit::ImDocument::from_str(toml)
+            .map_err(MetadataError::InvalidPyprojectTomlSyntax)?;
+        let pyproject_toml: Self = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
+            .map_err(|err| {
+            // TODO(konsti): A typed error would be nicer, this can break on toml upgrades.
+            if err.message().contains("missing field `name`") {
+                MetadataError::InvalidPyprojectTomlMissingName(err)
+            } else {
+                MetadataError::InvalidPyprojectTomlSchema(err)
+            }
+        })?;
+        Ok(pyproject_toml)
+    }
 }
 
 /// PEP 621 project metadata.
@@ -435,7 +457,7 @@ pub struct RequiresDist {
 impl RequiresDist {
     /// Extract the [`RequiresDist`] from a `pyproject.toml` file, as specified in PEP 621.
     pub fn parse_pyproject_toml(contents: &str) -> Result<Self, MetadataError> {
-        let pyproject_toml: PyProjectToml = toml::from_str(contents)?;
+        let pyproject_toml = PyProjectToml::from_toml(contents)?;
 
         let project = pyproject_toml
             .project
