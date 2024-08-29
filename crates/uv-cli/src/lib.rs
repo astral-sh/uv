@@ -12,8 +12,8 @@ use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
-    TrustedHost,
+    ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
+    TargetTriple, TrustedHost,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -654,6 +654,23 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Lock(LockArgs),
+    /// Export the project's lockfile to an alternate format.
+    ///
+    /// At present, only `requirements-txt` is supported.
+    ///
+    /// The project is re-locked before exporting unless the `--locked` or `--frozen` flag is
+    /// provided.
+    ///
+    /// uv will search for a project in the current directory or any parent directory. If a project
+    /// cannot be found, uv will exit with an error.
+    ///
+    /// If operating in a workspace, the root will be exported by default; however, a specific
+    /// member can be selected using the `--package` option.
+    #[command(
+        after_help = "Use `uv help export` for more details.",
+        after_long_help = ""
+    )]
+    Export(ExportArgs),
     /// Display the project's dependency tree.
     Tree(TreeArgs),
 }
@@ -2290,8 +2307,7 @@ pub struct RunArgs {
 
     /// Run the command in a specific package in the workspace.
     ///
-    /// If not in a workspace, or if the workspace member does not exist, uv
-    /// will exit with an error.
+    /// If the workspace member does not exist, uv will exit with an error.
     #[arg(long)]
     pub package: Option<PackageName>,
 
@@ -2422,8 +2438,7 @@ pub struct SyncArgs {
     /// The workspace's environment (`.venv`) is updated to reflect the subset
     /// of dependencies declared by the specified workspace member package.
     ///
-    /// If not in a workspace, or if the workspace member does not exist, uv
-    /// will exit with an error.
+    /// If the workspace member does not exist, uv will exit with an error.
     #[arg(long)]
     pub package: Option<PackageName>,
 
@@ -2740,6 +2755,84 @@ pub struct TreeArgs {
     /// the Python interpreter. Use `--universal` to display the tree for all
     /// platforms, or use `--python-version` or `--python-platform` to override
     /// a subset of markers.
+    ///
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
+    pub python: Option<String>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct ExportArgs {
+    /// The format to which `uv.lock` should be exported.
+    ///
+    /// At present, only `requirements-txt` is supported.
+    #[arg(long, value_enum, default_value_t = ExportFormat::default())]
+    pub format: ExportFormat,
+
+    /// Export the dependencies for a specific package in the workspace.
+    ///
+    /// If the workspace member does not exist, uv will exit with an error.
+    #[arg(long)]
+    pub package: Option<PackageName>,
+
+    /// Include optional dependencies from the extra group name.
+    ///
+    /// May be provided more than once.
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    pub extra: Option<Vec<ExtraName>>,
+
+    /// Include all optional dependencies.
+    #[arg(long, conflicts_with = "extra")]
+    pub all_extras: bool,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub no_all_extras: bool,
+
+    /// Include development dependencies.
+    #[arg(long, overrides_with("no_dev"), hide = true)]
+    pub dev: bool,
+
+    /// Omit development dependencies.
+    #[arg(long, overrides_with("dev"))]
+    pub no_dev: bool,
+
+    /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
+    #[arg(long, conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Do not update the `uv.lock` before exporting.
+    ///
+    /// If a `uv.lock` does not exist, uv will exit with an error.
+    #[arg(long, conflicts_with = "locked")]
+    pub frozen: bool,
+
+    #[command(flatten)]
+    pub resolver: ResolverArgs,
+
+    #[command(flatten)]
+    pub build: BuildArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+
+    /// The Python interpreter to use during resolution.
+    ///
+    /// A Python interpreter is required for building source distributions to
+    /// determine package metadata when there are not wheels.
+    ///
+    /// The interpreter is also used as the fallback value for the minimum
+    /// Python version if `requires-python` is not set.
     ///
     /// See `uv help python` for details on Python discovery and supported
     /// request formats.

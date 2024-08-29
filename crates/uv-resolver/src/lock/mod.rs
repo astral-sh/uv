@@ -37,10 +37,12 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_types::BuildContext;
 use uv_workspace::{VirtualProject, Workspace};
 
+pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::{ExcludeNewer, PrereleaseMode, RequiresPython, ResolutionGraph, ResolutionMode};
 
+mod requirements_txt;
 mod tree;
 
 /// The current version of the lockfile format.

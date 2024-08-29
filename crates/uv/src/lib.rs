@@ -1262,6 +1262,33 @@ async fn run_project(
             )
             .await
         }
+        ProjectCommand::Export(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ExportSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::export(
+                args.format,
+                args.package,
+                args.extras,
+                args.dev,
+                args.locked,
+                args.frozen,
+                args.python,
+                args.settings,
+                globals.python_preference,
+                globals.python_downloads,
+                globals.connectivity,
+                globals.concurrency,
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
     }
 }
 
