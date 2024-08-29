@@ -115,6 +115,7 @@ The created script defines a `main` function with some standard boilerplate:
 def main():
     print("Hello from example-app!")
 
+
 if __name__ == "__main__":
     main()
 ```
