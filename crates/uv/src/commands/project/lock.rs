@@ -647,7 +647,7 @@ impl ValidatedLock {
         // Requires-Python bound in the workspace, we should have the necessary wheels to perform
         // a locked resolution.
         if let Some(locked) = lock.requires_python() {
-            if locked.bound() != requires_python.bound() {
+            if locked.range() != requires_python.range() {
                 // On the other hand, if the bound in the lockfile is stricter, meaning the
                 // bound has since been weakened, we have to perform a clean resolution to ensure
                 // we fetch the necessary wheels.

@@ -919,7 +919,7 @@ fn fork_incomplete_markers() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
-            { name = "package-c", marker = "python_full_version < '3.11'" },
+            { name = "package-c", marker = "python_full_version == '3.10.*'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_b-1.0.0.tar.gz", hash = "sha256:c4deba44768923473d077bdc0e177033fcb6e6fd406d56830d7ee6f4ffad68c1" }
         wheels = [
