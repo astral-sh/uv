@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 use thiserror::Error;
 use url::{ParseError, Url};
 
-use uv_fs::{normalize_absolute_path, normalize_url_path, Simplified};
+use uv_fs::{normalize_absolute_path, normalize_url_path};
 
 use crate::Pep508Url;
 
@@ -40,34 +40,6 @@ impl VerbatimUrl {
         Self { url, given: None }
     }
 
-    /// Create a [`VerbatimUrl`] from a file path.
-    ///
-    /// Assumes that the path is absolute.
-    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, VerbatimUrlError> {
-        let path = path.as_ref();
-
-        // Normalize the path (and canonicalize it, if possible).
-        let path = match path.simple_canonicalize() {
-            Ok(path) => path,
-            Err(_) => normalize_absolute_path(path)
-                .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?,
-        };
-
-        // Extract the fragment, if it exists.
-        let (path, fragment) = split_fragment(&path);
-
-        // Convert to a URL.
-        let mut url = Url::from_file_path(path.clone())
-            .map_err(|()| VerbatimUrlError::UrlConversion(path.to_path_buf()))?;
-
-        // Set the fragment, if it exists.
-        if let Some(fragment) = fragment {
-            url.set_fragment(Some(fragment));
-        }
-
-        Ok(Self { url, given: None })
-    }
-
     /// Parse a URL from a string, expanding any environment variables.
     pub fn parse_url(given: impl AsRef<str>) -> Result<Self, ParseError> {
         let url = Url::parse(given.as_ref())?;
@@ -76,7 +48,7 @@ impl VerbatimUrl {
 
     /// Parse a URL from an absolute or relative path.
     #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
-    pub fn parse_path(
+    pub fn from_path(
         path: impl AsRef<Path>,
         base_dir: impl AsRef<Path>,
     ) -> Result<Self, VerbatimUrlError> {
@@ -85,17 +57,13 @@ impl VerbatimUrl {
 
         // Convert the path to an absolute path, if necessary.
         let path = if path.is_absolute() {
-            path.to_path_buf()
+            Cow::Borrowed(path)
         } else {
-            base_dir.as_ref().join(path)
+            Cow::Owned(base_dir.as_ref().join(path))
         };
 
-        // Normalize the path (and canonicalize it, if possible).
-        let path = match path.simple_canonicalize() {
-            Ok(path) => path,
-            Err(_) => normalize_absolute_path(&path)
-                .map_err(|err| VerbatimUrlError::Normalization(path.clone(), err))?,
-        };
+        let path = normalize_absolute_path(&path)
+            .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
@@ -113,22 +81,19 @@ impl VerbatimUrl {
     }
 
     /// Parse a URL from an absolute path.
-    pub fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, VerbatimUrlError> {
+    pub fn from_absolute_path(path: impl AsRef<Path>) -> Result<Self, VerbatimUrlError> {
         let path = path.as_ref();
 
-        // Convert the path to an absolute path, if necessary.
+        // Error if the path is relative.
         let path = if path.is_absolute() {
-            path.to_path_buf()
+            path
         } else {
             return Err(VerbatimUrlError::WorkingDirectory(path.to_path_buf()));
         };
 
-        // Normalize the path (and canonicalize it, if possible).
-        let path = match path.simple_canonicalize() {
-            Ok(path) => path,
-            Err(_) => normalize_absolute_path(&path)
-                .map_err(|_| VerbatimUrlError::WorkingDirectory(path))?,
-        };
+        // Normalize the path.
+        let path = normalize_absolute_path(path)
+            .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
@@ -262,14 +227,11 @@ impl Pep508Url for VerbatimUrl {
 
                     #[cfg(feature = "non-pep508-extensions")]
                     if let Some(working_dir) = working_dir {
-                        return Ok(VerbatimUrl::parse_path(path.as_ref(), working_dir)?
+                        return Ok(VerbatimUrl::from_path(path.as_ref(), working_dir)?
                             .with_given(url.to_string()));
                     }
 
-                    Ok(
-                        VerbatimUrl::parse_absolute_path(path.as_ref())?
-                            .with_given(url.to_string()),
-                    )
+                    Ok(VerbatimUrl::from_absolute_path(path.as_ref())?.with_given(url.to_string()))
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
@@ -282,11 +244,11 @@ impl Pep508Url for VerbatimUrl {
                 _ => {
                     #[cfg(feature = "non-pep508-extensions")]
                     if let Some(working_dir) = working_dir {
-                        return Ok(VerbatimUrl::parse_path(expanded.as_ref(), working_dir)?
+                        return Ok(VerbatimUrl::from_path(expanded.as_ref(), working_dir)?
                             .with_given(url.to_string()));
                     }
 
-                    Ok(VerbatimUrl::parse_absolute_path(expanded.as_ref())?
+                    Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?
                         .with_given(url.to_string()))
                 }
             }
@@ -294,11 +256,11 @@ impl Pep508Url for VerbatimUrl {
             // Ex) `../editable/`
             #[cfg(feature = "non-pep508-extensions")]
             if let Some(working_dir) = working_dir {
-                return Ok(VerbatimUrl::parse_path(expanded.as_ref(), working_dir)?
+                return Ok(VerbatimUrl::from_path(expanded.as_ref(), working_dir)?
                     .with_given(url.to_string()));
             }
 
-            Ok(VerbatimUrl::parse_absolute_path(expanded.as_ref())?.with_given(url.to_string()))
+            Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?.with_given(url.to_string()))
         }
     }
 }

@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -10,7 +11,7 @@ use pep440_rs::VersionSpecifiers;
 use pep508_rs::{
     marker, MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl,
 };
-use uv_fs::{PortablePathBuf, CWD};
+use uv_fs::{relative_to, PortablePathBuf, CWD};
 use uv_git::{GitReference, GitSha, GitUrl};
 use uv_normalize::{ExtraName, PackageName};
 
@@ -105,6 +106,14 @@ impl Requirement {
             _ => self,
         }
     }
+
+    /// Convert the requirement to a [`Requirement`] relative to the given path.
+    pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
+        Ok(Self {
+            source: self.source.relative_to(path)?,
+            ..self
+        })
+    }
 }
 
 impl From<Requirement> for pep508_rs::Requirement<VerbatimUrl> {
@@ -175,29 +184,27 @@ impl From<Requirement> for pep508_rs::Requirement<VerbatimParsedUrl> {
                 }
                 RequirementSource::Path {
                     install_path,
-                    lock_path,
                     ext,
                     url,
                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
                     parsed_url: ParsedUrl::Path(ParsedPathUrl {
                         url: url.to_url(),
                         install_path,
-                        lock_path,
                         ext,
                     }),
                     verbatim: url,
                 })),
                 RequirementSource::Directory {
                     install_path,
-                    lock_path,
                     editable,
+                    r#virtual,
                     url,
                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
                     parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
                         url: url.to_url(),
                         install_path,
-                        lock_path,
                         editable,
+                        r#virtual,
                     }),
                     verbatim: url,
                 })),
@@ -340,12 +347,8 @@ pub enum RequirementSource {
     /// be a binary distribution (a `.whl` file) or a source distribution archive (a `.zip` or
     /// `.tar.gz` file).
     Path {
-        /// The absolute, canonicalized path to the distribution which we use for installing.
+        /// The absolute path to the distribution which we use for installing.
         install_path: PathBuf,
-        /// The absolute path or path relative to the workspace root pointing to the distribution
-        /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
-        /// are resolved, and unlike the install path, we did not yet join it on the base directory.
-        lock_path: PathBuf,
         /// The file extension, e.g. `tar.gz`, `zip`, etc.
         ext: DistExtension,
         /// The PEP 508 style URL in the format
@@ -355,14 +358,12 @@ pub enum RequirementSource {
     /// A local source tree (a directory with a pyproject.toml in, or a legacy
     /// source distribution with only a setup.py but non pyproject.toml in it).
     Directory {
-        /// The absolute, canonicalized path to the distribution which we use for installing.
+        /// The absolute path to the distribution which we use for installing.
         install_path: PathBuf,
-        /// The absolute path or path relative to the workspace root pointing to the distribution
-        /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
-        /// are resolved, and unlike the install path, we did not yet join it on the base directory.
-        lock_path: PathBuf,
         /// For a source tree (a directory), whether to install as an editable.
         editable: bool,
+        /// For a source tree (a directory), whether the project should be built and installed.
+        r#virtual: bool,
         /// The PEP 508 style URL in the format
         /// `file:///<path>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
@@ -376,14 +377,13 @@ impl RequirementSource {
         match parsed_url {
             ParsedUrl::Path(local_file) => RequirementSource::Path {
                 install_path: local_file.install_path.clone(),
-                lock_path: local_file.lock_path.clone(),
                 ext: local_file.ext,
                 url,
             },
             ParsedUrl::Directory(directory) => RequirementSource::Directory {
                 install_path: directory.install_path.clone(),
-                lock_path: directory.lock_path.clone(),
                 editable: directory.editable,
+                r#virtual: directory.r#virtual,
                 url,
             },
             ParsedUrl::Git(git) => RequirementSource::Git {
@@ -427,13 +427,11 @@ impl RequirementSource {
             }),
             Self::Path {
                 install_path,
-                lock_path,
                 ext,
                 url,
             } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Path(ParsedPathUrl::from_source(
                     install_path.clone(),
-                    lock_path.clone(),
                     *ext,
                     url.to_url(),
                 )),
@@ -441,14 +439,14 @@ impl RequirementSource {
             }),
             Self::Directory {
                 install_path,
-                lock_path,
                 editable,
+                r#virtual,
                 url,
             } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
                     install_path.clone(),
-                    lock_path.clone(),
                     *editable,
+                    *r#virtual,
                     url.to_url(),
                 )),
                 verbatim: url.clone(),
@@ -502,6 +500,38 @@ impl RequirementSource {
             | RequirementSource::Git { .. }
             | RequirementSource::Path { .. }
             | RequirementSource::Directory { .. } => None,
+        }
+    }
+
+    /// Convert the source to a [`RequirementSource`] relative to the given path.
+    pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
+        match self {
+            RequirementSource::Registry { .. }
+            | RequirementSource::Url { .. }
+            | RequirementSource::Git { .. } => Ok(self),
+            RequirementSource::Path {
+                install_path,
+                ext,
+                url,
+            } => Ok(Self::Path {
+                install_path: relative_to(&install_path, path)
+                    .or_else(|_| std::path::absolute(install_path))?,
+                ext,
+                url,
+            }),
+            RequirementSource::Directory {
+                install_path,
+                editable,
+                r#virtual,
+                url,
+                ..
+            } => Ok(Self::Directory {
+                install_path: relative_to(&install_path, path)
+                    .or_else(|_| std::path::absolute(install_path))?,
+                editable,
+                r#virtual,
+                url,
+            }),
         }
     }
 }
@@ -562,6 +592,8 @@ enum RequirementSourceWire {
     Directory { directory: PortablePathBuf },
     /// Ex) `source = { editable = "/home/ferris/iniconfig" }`
     Editable { editable: PortablePathBuf },
+    /// Ex) `source = { editable = "/home/ferris/iniconfig" }`
+    Virtual { r#virtual: PortablePathBuf },
     /// Ex) `source = { specifier = "foo >1,<2" }`
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
@@ -639,26 +671,29 @@ impl From<RequirementSource> for RequirementSourceWire {
                 }
             }
             RequirementSource::Path {
-                install_path: _,
-                lock_path,
+                install_path,
                 ext: _,
                 url: _,
             } => Self::Path {
-                path: PortablePathBuf::from(lock_path),
+                path: PortablePathBuf::from(install_path),
             },
             RequirementSource::Directory {
-                install_path: _,
-                lock_path,
+                install_path,
                 editable,
+                r#virtual,
                 url: _,
             } => {
                 if editable {
                     Self::Editable {
-                        editable: PortablePathBuf::from(lock_path),
+                        editable: PortablePathBuf::from(install_path),
+                    }
+                } else if r#virtual {
+                    Self::Virtual {
+                        r#virtual: PortablePathBuf::from(install_path),
                     }
                 } else {
                     Self::Directory {
-                        directory: PortablePathBuf::from(lock_path),
+                        directory: PortablePathBuf::from(install_path),
                     }
                 }
             }
@@ -728,32 +763,41 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             // sources in the lockfile, we replace the URL anyway.
             RequirementSourceWire::Path { path } => {
                 let path = PathBuf::from(path);
-                let url = VerbatimUrl::parse_path(&path, &*CWD)?;
+                let url = VerbatimUrl::from_path(&path, &*CWD)?;
                 Ok(Self::Path {
                     ext: DistExtension::from_path(path.as_path())
                         .map_err(|err| ParsedUrlError::MissingExtensionPath(path.clone(), err))?,
-                    install_path: path.clone(),
-                    lock_path: path,
+                    install_path: path,
                     url,
                 })
             }
             RequirementSourceWire::Directory { directory } => {
                 let directory = PathBuf::from(directory);
-                let url = VerbatimUrl::parse_path(&directory, &*CWD)?;
+                let url = VerbatimUrl::from_path(&directory, &*CWD)?;
                 Ok(Self::Directory {
-                    install_path: directory.clone(),
-                    lock_path: directory,
+                    install_path: directory,
                     editable: false,
+                    r#virtual: false,
                     url,
                 })
             }
             RequirementSourceWire::Editable { editable } => {
                 let editable = PathBuf::from(editable);
-                let url = VerbatimUrl::parse_path(&editable, &*CWD)?;
+                let url = VerbatimUrl::from_path(&editable, &*CWD)?;
                 Ok(Self::Directory {
-                    install_path: editable.clone(),
-                    lock_path: editable,
+                    install_path: editable,
                     editable: true,
+                    r#virtual: false,
+                    url,
+                })
+            }
+            RequirementSourceWire::Virtual { r#virtual } => {
+                let r#virtual = PathBuf::from(r#virtual);
+                let url = VerbatimUrl::from_path(&r#virtual, &*CWD)?;
+                Ok(Self::Directory {
+                    install_path: r#virtual,
+                    editable: false,
+                    r#virtual: true,
                     url,
                 })
             }
@@ -775,7 +819,7 @@ pub fn redact_git_credentials(url: &mut Url) {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use pep508_rs::{MarkerTree, VerbatimUrl};
 
@@ -809,9 +853,9 @@ mod tests {
             marker: MarkerTree::TRUE,
             source: RequirementSource::Directory {
                 install_path: PathBuf::from(path),
-                lock_path: PathBuf::from(path),
                 editable: false,
-                url: VerbatimUrl::from_path(Path::new(path)).unwrap(),
+                r#virtual: false,
+                url: VerbatimUrl::from_absolute_path(path).unwrap(),
             },
             origin: None,
         };

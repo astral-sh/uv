@@ -30,7 +30,7 @@ An extremely fast Python package and project manager, written in Rust.
 - ❇️ [Runs single-file scripts](#script-support), with support for
   [inline dependency metadata](https://docs.astral.sh/uv/guides/scripts#declaring-script-dependencies).
 - 🗂️ Provides [comprehensive project management](#project-management), with a
-  [universal lockfile](https://docs.astral.sh/uv/concepts/projects#lockfile).
+  [universal lockfile](https://docs.astral.sh/uv/concepts/projects#project-lockfile).
 - 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
   familiar CLI.
 - 🏢 Supports Cargo-style [workspaces](https://docs.astral.sh/uv/concepts/workspaces) for scalable

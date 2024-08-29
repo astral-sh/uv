@@ -1,5 +1,5 @@
 ---
-source: crates/uv-resolver/src/lock.rs
+source: crates/uv-resolver/src/lock/mod.rs
 expression: result
 ---
 Ok(
@@ -21,8 +21,10 @@ Ok(
                     ),
                     version: "0.1.0",
                     source: Registry(
-                        UrlString(
-                            "https://pypi.org/simple",
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
                         ),
                     ),
                 },
@@ -63,8 +65,10 @@ Ok(
                     ),
                     version: "0.1.0",
                     source: Registry(
-                        UrlString(
-                            "https://pypi.org/simple",
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
                         ),
                     ),
                 },
@@ -98,8 +102,10 @@ Ok(
                             ),
                             version: "0.1.0",
                             source: Registry(
-                                UrlString(
-                                    "https://pypi.org/simple",
+                                Url(
+                                    UrlString(
+                                        "https://pypi.org/simple",
+                                    ),
                                 ),
                             ),
                         },
@@ -122,8 +128,10 @@ Ok(
                 ),
                 version: "0.1.0",
                 source: Registry(
-                    UrlString(
-                        "https://pypi.org/simple",
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
                     ),
                 ),
             }: 0,
@@ -133,8 +141,10 @@ Ok(
                 ),
                 version: "0.1.0",
                 source: Registry(
-                    UrlString(
-                        "https://pypi.org/simple",
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
                     ),
                 ),
             }: 1,

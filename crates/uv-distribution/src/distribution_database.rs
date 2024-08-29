@@ -151,16 +151,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
-                    FileLocation::Path(path) => {
-                        let cache_entry = self.build_context.cache().entry(
-                            CacheBucket::Wheels,
-                            WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
-                            wheel.filename.stem(),
-                        );
-                        return self
-                            .load_wheel(path, &wheel.filename, cache_entry, dist, hashes)
-                            .await;
-                    }
                 };
 
                 // Create a cache entry for the wheel.
@@ -844,7 +834,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     fn request(&self, url: Url) -> Result<reqwest::Request, reqwest::Error> {
         self.client
             .unmanaged
-            .uncached_client()
+            .uncached_client(&url)
             .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.

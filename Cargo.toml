@@ -90,6 +90,7 @@ fs-err = { version = "2.11.0" }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }
+goblin = { version = "0.8.2", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
 hex = { version = "0.4.3" }
 home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
@@ -106,7 +107,6 @@ memchr = { version = "2.7.4" }
 miette = { version = "7.2.0" }
 nanoid = { version = "0.4.0" }
 owo-colors = { version = "4.0.0" }
-path-absolutize = { version = "3.1.1" }
 path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
@@ -119,7 +119,7 @@ quote = { version = "1.0.36" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.15" }
 regex = { version = "1.10.2" }
-reqwest = { version = "0.12.3", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls", "rustls-tls-native-roots"] }
+reqwest = { version = "0.12.3", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots"] }
 reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
 reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
 rkyv = { version = "0.7.43", features = ["strict", "validation"] }
@@ -140,7 +140,7 @@ target-lexicon = { version = "0.12.14" }
 tempfile = { version = "3.9.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "1.0.56" }
-tl = { version = "0.7.7" }
+tl = { git = "https://github.com/charliermarsh/tl.git", rev = "6e25b2ee2513d75385101a8ff9f591ef51f314ec" }
 tokio = { version = "1.35.1", features = ["fs", "io-util", "macros", "process", "signal", "sync"] }
 tokio-stream = { version = "0.1.14" }
 tokio-tar = { version = "0.3.1" }
@@ -157,7 +157,9 @@ url = { version = "2.5.0" }
 urlencoding = { version = "2.1.3" }
 walkdir = { version = "2.5.0" }
 which = { version = "6.0.0", features = ["regex"] }
-windows-sys = { version = "0.52.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
+windows-registry = { version = "0.2.0" }
+windows-result = { version = "0.2.0" }
+windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
 winreg = { version = "0.52.0" }
 winsafe = { version = "0.0.22", features = ["kernel"] }
 wiremock = { version = "0.6.0" }

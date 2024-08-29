@@ -11,7 +11,7 @@ use pypi_types::Requirement;
 use pypi_types::VerbatimParsedUrl;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::KeyringProviderType;
+use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_python::EnvironmentPreference;
 use uv_python::PythonRequest;
@@ -33,6 +33,7 @@ pub(crate) async fn pip_uninstall(
     connectivity: Connectivity,
     native_tls: bool,
     keyring_provider: KeyringProviderType,
+    allow_insecure_host: Vec<TrustedHost>,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -40,7 +41,8 @@ pub(crate) async fn pip_uninstall(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .keyring(keyring_provider)
+        .allow_insecure_host(allow_insecure_host);
 
     // Read all requirements from the provided sources.
     let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
@@ -98,7 +100,7 @@ pub(crate) async fn pip_uninstall(
         }
     }
 
-    let _lock = environment.lock()?;
+    let _lock = environment.lock().await?;
 
     // Index the current `site-packages` directory.
     let site_packages = uv_installer::SitePackages::from_environment(&environment)?;

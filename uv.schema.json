@@ -4,6 +4,16 @@
   "description": "Metadata and configuration for uv.",
   "type": "object",
   "properties": {
+    "allow-insecure-host": {
+      "description": "Allow insecure connections to host.\n\nExpects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g., `localhost:8080`), or a URL (e.g., `https://localhost`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store. Only use `--allow-insecure-host` in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/TrustedHost"
+      }
+    },
     "cache-dir": {
       "description": "Path to the cache directory.\n\nDefaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux, and `%LOCALAPPDATA%\\uv\\cache` on Windows.",
       "type": [
@@ -57,12 +67,13 @@
       ]
     },
     "constraint-dependencies": {
+      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
       "type": [
         "array",
         "null"
       ],
       "items": {
-        "$ref": "#/definitions/Requirement"
+        "type": "string"
       }
     },
     "dev-dependencies": {
@@ -76,7 +87,7 @@
       }
     },
     "environments": {
-      "description": "A list of environment markers, e.g. `python_version >= '3.6'`.",
+      "description": "A list of environment markers, e.g., `python_version >= '3.6'`.",
       "type": [
         "array",
         "null"
@@ -254,7 +265,7 @@
       ]
     },
     "override-dependencies": {
-      "description": "PEP 508-style requirements, e.g. `ruff==0.5.0`, or `ruff @ https://...`.",
+      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
       "type": [
         "array",
         "null"
@@ -262,6 +273,13 @@
       "items": {
         "type": "string"
       }
+    },
+    "package": {
+      "description": "Whether the project should be considered a Python package, or a non-package (\"virtual\") project.\n\nPackages are built and installed into the virtual environment in editable mode and thus require a build backend, while virtual projects are _not_ built or installed; instead, only their dependencies are included in the virtual environment.\n\nCreating a package requires that a `build-system` is present in the `pyproject.toml`, and that the project adheres to a structure that adheres to the build backend's expectations (e.g., a `src` layout).",
+      "type": [
+        "boolean",
+        "null"
+      ]
     },
     "pip": {
       "anyOf": [
@@ -559,6 +577,16 @@
             "boolean",
             "null"
           ]
+        },
+        "allow-insecure-host": {
+          "description": "Allow insecure connections to host.\n\nExpects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g., `localhost:8080`), or a URL (e.g., `https://localhost`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store. Only use `--allow-insecure-host` in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/TrustedHost"
+          }
         },
         "annotation-style": {
           "description": "The style of the annotation comments included in the output file, used to indicate the source of each package.",
@@ -859,7 +887,7 @@
           ]
         },
         "python": {
-          "description": "The Python interpreter into which packages should be installed.\n\nBy default, uv installs into the virtual environment in the current working directory or any parent directory. The `--python` option allows you to specify a different interpreter, which is intended for use in continuous integration (CI) environments or other automated workflows.\n\nSupported formats: - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or `python3.10` on Linux and macOS. - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`. - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.",
+          "description": "The Python interpreter into which packages should be installed.\n\nBy default, uv installs into the virtual environment in the current working directory or any parent directory. The `--python` option allows you to specify a different interpreter, which is intended for use in continuous integration (CI) environments or other automated workflows.\n\nSupported formats: - `3.10` looks for an installed Python 3.10 in the registry on Windows (see `py --list-paths`), or `python3.10` on Linux and macOS. - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`. - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.",
           "type": [
             "string",
             "null"
@@ -1224,7 +1252,7 @@
           "required": [
             "git",
             "index",
-            "patch",
+            "path",
             "url",
             "workspace"
           ],
@@ -1241,7 +1269,7 @@
             "index": {
               "type": "string"
             },
-            "patch": {
+            "path": {
               "type": "string"
             },
             "rev": {
@@ -1425,6 +1453,10 @@
         }
       },
       "additionalProperties": false
+    },
+    "TrustedHost": {
+      "description": "A host or host-port pair.",
+      "type": "string"
     }
   }
 }

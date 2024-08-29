@@ -112,8 +112,8 @@ impl FromStr for IndexUrl {
     type Err = IndexUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let url = if let Ok(path) = Path::new(s).canonicalize() {
-            VerbatimUrl::from_path(path)?
+        let url = if Path::new(s).exists() {
+            VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
         } else {
             VerbatimUrl::parse_url(s)?
         };
@@ -247,8 +247,8 @@ impl FromStr for FlatIndexLocation {
     type Err = IndexUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let url = if let Ok(path) = Path::new(s).canonicalize() {
-            VerbatimUrl::from_path(path)?
+        let url = if Path::new(s).exists() {
+            VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
         } else {
             VerbatimUrl::parse_url(s)?
         };

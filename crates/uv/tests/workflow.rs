@@ -69,7 +69,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "pyyaml", specifier = ">=6.0.1" },
              { name = "setuptools", specifier = ">=69.1.1" },
              { name = "twine", specifier = ">=4.0.2" },
-        +    { name = "tzdata" },
+        +    { name = "tzdata", specifier = ">=2024.1" },
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
 
@@ -153,7 +153,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "pyyaml", specifier = ">=6.0.1" },
              { name = "setuptools", specifier = ">=69.1.1" },
              { name = "twine", specifier = ">=4.0.2" },
-        -    { name = "tzdata" },
+        -    { name = "tzdata", specifier = ">=2024.1" },
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
 
@@ -303,7 +303,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
              { name = "pypiserver", marker = "extra == 'index'", specifier = ">=2.0.1" },
              { name = "pyyaml", specifier = ">=6.0.1" },
              { name = "setuptools", specifier = ">=69.1.1" },
-        +    { name = "sniffio" },
+        +    { name = "sniffio", specifier = ">=1.3.1" },
              { name = "twine", specifier = ">=4.0.2" },
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
@@ -357,7 +357,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
              { name = "pypiserver", marker = "extra == 'index'", specifier = ">=2.0.1" },
              { name = "pyyaml", specifier = ">=6.0.1" },
              { name = "setuptools", specifier = ">=69.1.1" },
-        -    { name = "sniffio" },
+        -    { name = "sniffio", specifier = ">=1.3.1" },
              { name = "twine", specifier = ">=4.0.2" },
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
@@ -466,7 +466,7 @@ fn jax_instability() -> Result<()> {
         +[[package]]
          name = "uv-lock-instability"
          version = "0.1.0"
-         source = { editable = "." }
+         source = { virtual = "." }
          dependencies = [
              { name = "jax" },
         +    { name = "tzdata" },
@@ -476,7 +476,7 @@ fn jax_instability() -> Result<()> {
         -requires-dist = [{ name = "jax", specifier = "==0.4.17" }]
         +requires-dist = [
         +    { name = "jax", specifier = "==0.4.17" },
-        +    { name = "tzdata" },
+        +    { name = "tzdata", specifier = ">=2024.1" },
         +]
 
          [[package]]
@@ -519,7 +519,7 @@ fn jax_instability() -> Result<()> {
         -[[package]]
          name = "uv-lock-instability"
          version = "0.1.0"
-         source = { editable = "." }
+         source = { virtual = "." }
          dependencies = [
              { name = "jax" },
         -    { name = "tzdata" },
@@ -528,7 +528,7 @@ fn jax_instability() -> Result<()> {
          [package.metadata]
         -requires-dist = [
         -    { name = "jax", specifier = "==0.4.17" },
-        -    { name = "tzdata" },
+        -    { name = "tzdata", specifier = ">=2024.1" },
         -]
         +requires-dist = [{ name = "jax", specifier = "==0.4.17" }]
 

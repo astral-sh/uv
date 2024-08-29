@@ -3,17 +3,17 @@ use std::fmt::Write;
 use anstream::eprint;
 use anyhow::Result;
 use owo_colors::OwoColorize;
-use pep508_rs::PackageName;
 use tracing::debug;
 
 use distribution_types::{IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
+use pep508_rs::PackageName;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, Reinstall, SourceStrategy, Upgrade,
+    IndexStrategy, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -31,7 +31,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
-use crate::commands::pip::{operations, resolution_environment};
+use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 
@@ -48,6 +48,7 @@ pub(crate) async fn pip_sync(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    allow_insecure_host: Vec<TrustedHost>,
     allow_empty_requirements: bool,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -73,7 +74,8 @@ pub(crate) async fn pip_sync(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .keyring(keyring_provider)
+        .allow_insecure_host(allow_insecure_host);
 
     // Initialize a few defaults.
     let overrides = &[];
@@ -172,7 +174,7 @@ pub(crate) async fn pip_sync(
         }
     }
 
-    let _lock = environment.lock()?;
+    let _lock = environment.lock().await?;
 
     let interpreter = environment.interpreter();
 
@@ -183,8 +185,17 @@ pub(crate) async fn pip_sync(
         PythonRequirement::from_interpreter(interpreter)
     };
 
-    // Determine the environment for the resolution.
-    let (tags, markers) = resolution_environment(python_version, python_platform, interpreter)?;
+    // Determine the markers and tags to use for resolution.
+    let markers = resolution_markers(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    );
+    let tags = resolution_tags(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    )?;
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -213,7 +224,7 @@ pub(crate) async fn pip_sync(
         .cache(cache.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
-        .markers(&markers)
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -292,7 +303,7 @@ pub(crate) async fn pip_sync(
         &reinstall,
         &upgrade,
         Some(&tags),
-        ResolverMarkers::specific_environment((*markers).clone()),
+        ResolverMarkers::specific_environment(markers.clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -325,6 +336,7 @@ pub(crate) async fn pip_sync(
         compile,
         &index_locations,
         &hasher,
+        &markers,
         &tags,
         &client,
         &state.in_flight,
@@ -343,7 +355,7 @@ pub(crate) async fn pip_sync(
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run {
-        operations::diagnose_environment(&resolution, &environment, printer)?;
+        operations::diagnose_environment(&resolution, &environment, &markers, printer)?;
     }
 
     Ok(ExitStatus::Success)

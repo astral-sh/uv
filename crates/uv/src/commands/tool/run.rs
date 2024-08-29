@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::PathBuf;
@@ -12,7 +11,7 @@ use tokio::process::Command;
 use tracing::{debug, warn};
 
 use distribution_types::{Name, UnresolvedRequirementSpecification};
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::MarkerTree;
 use pypi_types::{Requirement, RequirementSource};
 use uv_cache::{Cache, Refresh, Timestamp};
@@ -35,6 +34,7 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations;
 use crate::commands::project::{resolve_names, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::tool::Target;
 use crate::commands::{
     project::environment::CachedEnvironment, tool::common::matching_packages, tool_list,
 };
@@ -88,7 +88,11 @@ pub(crate) async fn run(
         return Err(anyhow::anyhow!("No tool command provided"));
     };
 
-    let target = Target::parse(target, from.as_deref())?;
+    let Some(target) = target.to_str() else {
+        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+    };
+
+    let target = Target::parse(target, from.as_deref());
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
     let cache = if target.is_latest() {
@@ -291,78 +295,6 @@ fn warn_executable_not_provided_by_package(
     }
 }
 
-#[derive(Debug, Clone)]
-enum Target<'a> {
-    /// e.g., `ruff`
-    Unspecified(&'a str),
-    /// e.g., `ruff@0.6.0`
-    Version(&'a str, Version),
-    /// e.g., `ruff@latest`
-    Latest(&'a str),
-    /// e.g., `--from ruff==0.6.0`
-    UserDefined(&'a str, &'a str),
-}
-
-impl<'a> Target<'a> {
-    /// Parse a target into a command name and a requirement.
-    fn parse(target: &'a OsString, from: Option<&'a str>) -> anyhow::Result<Self> {
-        let Some(target_str) = target.to_str() else {
-            return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
-        };
-
-        if let Some(from) = from {
-            return Ok(Self::UserDefined(target_str, from));
-        }
-
-        // e.g. `ruff`, no special handling
-        let Some((name, version)) = target_str.split_once('@') else {
-            return Ok(Self::Unspecified(target_str));
-        };
-
-        // e.g. `ruff@`, warn and treat the whole thing as the command
-        if version.is_empty() {
-            debug!("Ignoring empty version request in command");
-            return Ok(Self::Unspecified(target_str));
-        }
-
-        // e.g., ignore `git+https://github.com/astral-sh/ruff.git@main`
-        if PackageName::from_str(name).is_err() {
-            debug!("Ignoring non-package name `{name}` in command");
-            return Ok(Self::Unspecified(target_str));
-        }
-
-        match version {
-            // e.g., `ruff@latest`
-            "latest" => return Ok(Self::Latest(name)),
-            // e.g., `ruff@0.6.0`
-            version => {
-                if let Ok(version) = Version::from_str(version) {
-                    return Ok(Self::Version(name, version));
-                }
-            }
-        };
-
-        // e.g. `ruff@invalid`, warn and treat the whole thing as the command
-        debug!("Ignoring invalid version request `{version}` in command");
-        Ok(Self::Unspecified(target_str))
-    }
-
-    /// Returns the name of the executable.
-    fn executable(&self) -> &str {
-        match self {
-            Self::Unspecified(name) => name,
-            Self::Version(name, _) => name,
-            Self::Latest(name) => name,
-            Self::UserDefined(name, _) => name,
-        }
-    }
-
-    /// Returns `true` if the target is `latest`.
-    fn is_latest(&self) -> bool {
-        matches!(self, Self::Latest(_))
-    }
-}
-
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
 ///
 /// If the target tool is already installed in a compatible environment, returns that
@@ -492,7 +424,7 @@ async fn get_or_create_environment(
     // Check if the tool is already installed in a compatible environment.
     if !isolated && !target.is_latest() {
         let installed_tools = InstalledTools::from_settings()?.init()?;
-        let _lock = installed_tools.acquire_lock()?;
+        let _lock = installed_tools.lock().await?;
 
         let existing_environment =
             installed_tools
@@ -514,7 +446,11 @@ async fn get_or_create_environment(
             let constraints = [];
 
             if matches!(
-                site_packages.satisfies(&requirements, &constraints),
+                site_packages.satisfies(
+                    &requirements,
+                    &constraints,
+                    &interpreter.resolver_markers()
+                ),
                 Ok(SatisfiesResult::Fresh { .. })
             ) {
                 debug!("Using existing tool `{}`", from.name);

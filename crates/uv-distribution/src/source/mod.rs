@@ -20,7 +20,7 @@ use distribution_types::{
 };
 use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
-use pypi_types::{HashDigest, Metadata23};
+use pypi_types::{HashDigest, Metadata12, Metadata23, RequiresTxt};
 use uv_cache::{
     ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Timestamp, WheelCache,
 };
@@ -100,24 +100,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
-                    FileLocation::Path(path) => {
-                        let url = Url::from_file_path(path)
-                            .map_err(|()| Error::RelativePath(path.clone()))?;
-                        return self
-                            .archive(
-                                source,
-                                &PathSourceUrl {
-                                    url: &url,
-                                    path: Cow::Borrowed(path),
-                                    ext: dist.ext,
-                                },
-                                &cache_shard,
-                                tags,
-                                hashes,
-                            )
-                            .boxed_local()
-                            .await;
-                    }
                 };
 
                 // If the URL is a file URL, use the local path directly.
@@ -277,23 +259,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
-                    FileLocation::Path(path) => {
-                        let url = Url::from_file_path(path)
-                            .map_err(|()| Error::RelativePath(path.clone()))?;
-                        return self
-                            .archive_metadata(
-                                source,
-                                &PathSourceUrl {
-                                    url: &url,
-                                    path: Cow::Borrowed(path),
-                                    ext: dist.ext,
-                                },
-                                &cache_shard,
-                                hashes,
-                            )
-                            .boxed_local()
-                            .await;
-                    }
                 };
 
                 // If the URL is a file URL, use the local path directly.
@@ -424,7 +389,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let requires_dist = read_requires_dist(project_root).await?;
         let requires_dist = RequiresDist::from_project_maybe_workspace(
             requires_dist,
-            project_root,
             project_root,
             self.build_context.sources(),
         )
@@ -1009,7 +973,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
-                    resource.lock_path.as_ref(),
                     self.build_context.sources(),
                 )
                 .await?,
@@ -1024,7 +987,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
-                    resource.lock_path.as_ref(),
                     self.build_context.sources(),
                 )
                 .await?,
@@ -1049,7 +1011,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
-                    resource.lock_path.as_ref(),
                     self.build_context.sources(),
                 )
                 .await?,
@@ -1081,7 +1042,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Metadata::from_workspace(
                 metadata,
                 resource.install_path.as_ref(),
-                resource.lock_path.as_ref(),
                 self.build_context.sources(),
             )
             .await?,
@@ -1158,7 +1118,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.uncached_client().client(),
+                client.unmanaged.uncached_client(resource.url).clone(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
             )
@@ -1228,7 +1188,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.uncached_client().client(),
+                client.unmanaged.uncached_client(resource.url).clone(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
             )
@@ -1252,8 +1212,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Self::read_static_metadata(source, fetch.path(), resource.subdirectory).await?
         {
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
-                    .await?,
+                Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
             ));
         }
 
@@ -1276,8 +1235,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
-                    Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
-                        .await?,
+                    Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
                 ));
             }
         }
@@ -1297,8 +1255,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
-                    .await?,
+                Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
             ));
         }
 
@@ -1324,13 +1281,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_workspace(
-                metadata,
-                fetch.path(),
-                fetch.path(),
-                self.build_context.sources(),
-            )
-            .await?,
+            Metadata::from_workspace(metadata, fetch.path(), self.build_context.sources()).await?,
         ))
     }
 
@@ -1554,31 +1505,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source_root: &Path,
         subdirectory: Option<&Path>,
     ) -> Result<Option<Metadata23>, Error> {
-        // Attempt to read static metadata from the `PKG-INFO` file.
-        match read_pkg_info(source_root, subdirectory).await {
-            Ok(metadata) => {
-                debug!("Found static `PKG-INFO` for: {source}");
-
-                // Validate the metadata.
-                validate(source, &metadata)?;
-
-                return Ok(Some(metadata));
-            }
-            Err(
-                err @ (Error::MissingPkgInfo
-                | Error::PkgInfo(
-                    pypi_types::MetadataError::Pep508Error(_)
-                    | pypi_types::MetadataError::DynamicField(_)
-                    | pypi_types::MetadataError::FieldNotFound(_)
-                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_)
-                    | pypi_types::MetadataError::PoetrySyntax,
-                )),
-            ) => {
-                debug!("No static `PKG-INFO` available for: {source} ({err:?})");
-            }
-            Err(err) => return Err(err),
-        }
-
         // Attempt to read static metadata from the `pyproject.toml`.
         match read_pyproject_toml(source_root, subdirectory).await {
             Ok(metadata) => {
@@ -1595,11 +1521,70 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     pypi_types::MetadataError::Pep508Error(_)
                     | pypi_types::MetadataError::DynamicField(_)
                     | pypi_types::MetadataError::FieldNotFound(_)
-                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_)
                     | pypi_types::MetadataError::PoetrySyntax,
                 )),
             ) => {
                 debug!("No static `pyproject.toml` available for: {source} ({err:?})");
+            }
+            Err(err) => return Err(err),
+        }
+
+        // If the source distribution is a source tree, avoid reading `PKG-INFO` or `egg-info`,
+        // since they could be out-of-date.
+        if source.is_source_tree() {
+            return Ok(None);
+        }
+
+        // Attempt to read static metadata from the `PKG-INFO` file.
+        match read_pkg_info(source_root, subdirectory).await {
+            Ok(metadata) => {
+                debug!("Found static `PKG-INFO` for: {source}");
+
+                // Validate the metadata.
+                validate(source, &metadata)?;
+
+                return Ok(Some(metadata));
+            }
+            Err(
+                err @ (Error::MissingPkgInfo
+                | Error::PkgInfo(
+                    pypi_types::MetadataError::Pep508Error(_)
+                    | pypi_types::MetadataError::DynamicField(_)
+                    | pypi_types::MetadataError::FieldNotFound(_)
+                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_),
+                )),
+            ) => {
+                debug!("No static `PKG-INFO` available for: {source} ({err:?})");
+            }
+            Err(err) => return Err(err),
+        }
+
+        // Attempt to read static metadata from the `egg-info` directory.
+        match read_egg_info(source_root, subdirectory).await {
+            Ok(metadata) => {
+                debug!("Found static `egg-info` for: {source}");
+
+                // Validate the metadata.
+                validate(source, &metadata)?;
+
+                return Ok(Some(metadata));
+            }
+            Err(
+                err @ (Error::MissingEggInfo
+                | Error::MissingRequiresTxt
+                | Error::MissingPkgInfo
+                | Error::RequiresTxt(
+                    pypi_types::MetadataError::Pep508Error(_)
+                    | pypi_types::MetadataError::RequiresTxtContents(_),
+                )
+                | Error::PkgInfo(
+                    pypi_types::MetadataError::Pep508Error(_)
+                    | pypi_types::MetadataError::DynamicField(_)
+                    | pypi_types::MetadataError::FieldNotFound(_)
+                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_),
+                )),
+            ) => {
+                debug!("No static `egg-info` available for: {source} ({err:?})");
             }
             Err(err) => return Err(err),
         }
@@ -1610,7 +1595,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Returns a GET [`reqwest::Request`] for the given URL.
     fn request(url: Url, client: &RegistryClient) -> Result<reqwest::Request, reqwest::Error> {
         client
-            .uncached_client()
+            .uncached_client(&url)
             .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.
@@ -1716,6 +1701,105 @@ impl LocalRevisionPointer {
     }
 }
 
+/// Read the [`Metadata23`] by combining a source distribution's `PKG-INFO` file with a
+/// `requires.txt`.
+///
+/// `requires.txt` is a legacy concept from setuptools. For example, here's
+/// `Flask.egg-info/requires.txt` from Flask's 1.0 release:
+///
+/// ```txt
+/// Werkzeug>=0.14
+/// Jinja2>=2.10
+/// itsdangerous>=0.24
+/// click>=5.1
+///
+/// [dev]
+/// pytest>=3
+/// coverage
+/// tox
+/// sphinx
+/// pallets-sphinx-themes
+/// sphinxcontrib-log-cabinet
+///
+/// [docs]
+/// sphinx
+/// pallets-sphinx-themes
+/// sphinxcontrib-log-cabinet
+///
+/// [dotenv]
+/// python-dotenv
+/// ```
+///
+/// See: <https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#dependency-metadata>
+async fn read_egg_info(
+    source_tree: &Path,
+    subdirectory: Option<&Path>,
+) -> Result<Metadata23, Error> {
+    fn find_egg_info(source_tree: &Path) -> std::io::Result<Option<PathBuf>> {
+        for entry in fs_err::read_dir(source_tree)? {
+            let entry = entry?;
+            let ty = entry.file_type()?;
+            if ty.is_dir() {
+                let path = entry.path();
+                if path
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("egg-info"))
+                {
+                    return Ok(Some(path));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    let directory = match subdirectory {
+        Some(subdirectory) => Cow::Owned(source_tree.join(subdirectory)),
+        None => Cow::Borrowed(source_tree),
+    };
+
+    // Locate the `egg-info` directory.
+    let egg_info = match find_egg_info(directory.as_ref()) {
+        Ok(Some(path)) => path,
+        Ok(None) => return Err(Error::MissingEggInfo),
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    // Read the `requires.txt`.
+    let requires_txt = egg_info.join("requires.txt");
+    let content = match fs::read(requires_txt).await {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::MissingRequiresTxt);
+        }
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    // Parse the `requires.txt.
+    let requires_txt = RequiresTxt::parse(&content).map_err(Error::RequiresTxt)?;
+
+    // Read the `PKG-INFO` file.
+    let pkg_info = egg_info.join("PKG-INFO");
+    let content = match fs::read(pkg_info).await {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::MissingPkgInfo);
+        }
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    // Parse the metadata.
+    let metadata = Metadata12::parse_metadata(&content).map_err(Error::PkgInfo)?;
+
+    // Combine the sources.
+    Ok(Metadata23 {
+        name: metadata.name,
+        version: metadata.version,
+        requires_python: metadata.requires_python,
+        requires_dist: requires_txt.requires_dist,
+        provides_extras: requires_txt.provides_extras,
+    })
+}
+
 /// Read the [`Metadata23`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
 /// or later _and_ none of the required fields (`Requires-Python`, `Requires-Dist`, and
 /// `Provides-Extra`) are marked as dynamic.
@@ -1813,12 +1897,9 @@ async fn lock_shard(cache_shard: &CacheShard) -> Result<LockedFile, Error> {
 
     fs_err::create_dir_all(root).map_err(Error::CacheWrite)?;
 
-    let lock: LockedFile = tokio::task::spawn_blocking({
-        let root = root.to_path_buf();
-        move || LockedFile::acquire(root.join(".lock"), root.display())
-    })
-    .await?
-    .map_err(Error::CacheWrite)?;
+    let lock = LockedFile::acquire(root.join(".lock"), root.display())
+        .await
+        .map_err(Error::CacheWrite)?;
 
     Ok(lock)
 }

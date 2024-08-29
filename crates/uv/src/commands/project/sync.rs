@@ -1,13 +1,12 @@
 use anyhow::{Context, Result};
-use distribution_types::Name;
 use itertools::Itertools;
+
+use distribution_types::{Dist, ResolvedDist, SourceDist};
 use pep508_rs::MarkerTree;
-use rustc_hash::FxHashSet;
-use tracing::debug;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, HashCheckingMode};
+use uv_configuration::{Concurrency, ExtrasSpecification, HashCheckingMode, InstallOptions};
 use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
 use uv_installer::SitePackages;
@@ -15,7 +14,7 @@ use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
@@ -33,9 +32,7 @@ pub(crate) async fn sync(
     package: Option<PackageName>,
     extras: ExtrasSpecification,
     dev: bool,
-    no_install_project: bool,
-    no_install_workspace: bool,
-    no_install_package: Vec<PackageName>,
+    install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
     python_preference: PythonPreference,
@@ -55,6 +52,15 @@ pub(crate) async fn sync(
                 .with_current_project(package.clone())
                 .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
+    } else if frozen {
+        VirtualProject::discover(
+            &CWD,
+            &DiscoveryOptions {
+                members: MemberDiscovery::None,
+                ..DiscoveryOptions::default()
+            },
+        )
+        .await?
     } else {
         VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
     };
@@ -108,9 +114,7 @@ pub(crate) async fn sync(
         &lock,
         &extras,
         dev,
-        no_install_project,
-        no_install_workspace,
-        no_install_package,
+        install_options,
         modifications,
         settings.as_ref().into(),
         &state,
@@ -134,9 +138,7 @@ pub(super) async fn do_sync(
     lock: &Lock,
     extras: &ExtrasSpecification,
     dev: bool,
-    no_install_project: bool,
-    no_install_workspace: bool,
-    no_install_package: Vec<PackageName>,
+    install_options: InstallOptions,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
@@ -152,8 +154,10 @@ pub(super) async fn do_sync(
         index_locations,
         index_strategy,
         keyring_provider,
+        allow_insecure_host,
         config_setting,
         no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -172,11 +176,13 @@ pub(super) async fn do_sync(
         }
     }
 
+    // Determine the markers to use for resolution.
+    let markers = venv.interpreter().resolver_markers();
+
     // Validate that the platform is supported by the lockfile.
     let environments = lock.supported_environments();
     if !environments.is_empty() {
-        let platform = venv.interpreter().markers();
-        if !environments.iter().any(|env| env.evaluate(platform, &[])) {
+        if !environments.iter().any(|env| env.evaluate(&markers, &[])) {
             return Err(ProjectError::LockedPlatformIncompatibility(
                 environments
                     .iter()
@@ -194,20 +200,18 @@ pub(super) async fn do_sync(
         vec![]
     };
 
-    let markers = venv.interpreter().markers();
+    // Determine the tags to use for resolution.
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(project, markers, tags, extras, &dev)?;
+    let resolution = lock.to_resolution(project, &markers, tags, extras, &dev)?;
 
-    // If `--no-install-project` is set, remove the project itself.
-    let resolution = apply_no_install_project(no_install_project, resolution, project);
+    // Always skip virtual projects, which shouldn't be built or installed.
+    let resolution = apply_no_virtual_project(resolution);
 
-    // If `--no-install-workspace` is set, remove the project and any workspace members.
-    let resolution = apply_no_install_workspace(no_install_workspace, resolution, project);
-
-    // If `--no-install-package` is provided, remove the requested packages.
-    let resolution = apply_no_install_package(&no_install_package, resolution);
+    // Filter resolution based on install-specific options.
+    let resolution =
+        install_options.filter_resolution(resolution, project.project_name(), lock.members());
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -221,15 +225,18 @@ pub(super) async fn do_sync(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .markers(markers)
+        .allow_insecure_host(allow_insecure_host.to_vec())
+        .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
         .build();
 
     // Determine whether to enable build isolation.
     let build_isolation = if no_build_isolation {
         BuildIsolation::Shared(venv)
-    } else {
+    } else if no_build_isolation_package.is_empty() {
         BuildIsolation::Isolated
+    } else {
+        BuildIsolation::SharedPackage(venv, no_build_isolation_package)
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -281,6 +288,7 @@ pub(super) async fn do_sync(
         compile_bytecode,
         index_locations,
         &hasher,
+        &markers,
         tags,
         &client,
         &state.in_flight,
@@ -297,47 +305,23 @@ pub(super) async fn do_sync(
     Ok(())
 }
 
-fn apply_no_install_project(
-    no_install_project: bool,
+/// Filter out any virtual workspace members.
+fn apply_no_virtual_project(
     resolution: distribution_types::Resolution,
-    project: &VirtualProject,
 ) -> distribution_types::Resolution {
-    if !no_install_project {
-        return resolution;
-    }
-
-    let Some(project_name) = project.project_name() else {
-        debug!("Ignoring `--no-install-project` for virtual workspace");
-        return resolution;
-    };
-
-    resolution.filter(|dist| dist.name() != project_name)
-}
-
-fn apply_no_install_workspace(
-    no_install_workspace: bool,
-    resolution: distribution_types::Resolution,
-    project: &VirtualProject,
-) -> distribution_types::Resolution {
-    if !no_install_workspace {
-        return resolution;
-    }
-
-    let workspace_packages = project.workspace().packages();
     resolution.filter(|dist| {
-        !workspace_packages.contains_key(dist.name()) && Some(dist.name()) != project.project_name()
+        let ResolvedDist::Installable(dist) = dist else {
+            return true;
+        };
+
+        let Dist::Source(dist) = dist else {
+            return true;
+        };
+
+        let SourceDist::Directory(dist) = dist else {
+            return true;
+        };
+
+        !dist.r#virtual
     })
-}
-
-fn apply_no_install_package(
-    no_install_package: &[PackageName],
-    resolution: distribution_types::Resolution,
-) -> distribution_types::Resolution {
-    if no_install_package.is_empty() {
-        return resolution;
-    }
-
-    let no_install_packages = no_install_package.iter().collect::<FxHashSet<_>>();
-
-    resolution.filter(|dist| !no_install_packages.contains(dist.name()))
 }

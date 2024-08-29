@@ -23,7 +23,7 @@ pub(crate) async fn uninstall(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let installations = ManagedPythonInstallations::from_settings()?.init()?;
-    let _lock = installations.acquire_lock()?;
+    let _lock = installations.lock().await?;
 
     // Perform the uninstallation.
     do_uninstall(&installations, targets, all, printer).await?;

@@ -10,12 +10,11 @@ use anyhow::{anyhow, bail, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
-use tracing::debug;
-
+use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, ExtrasSpecification};
+use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions};
 use uv_distribution::LoweredRequirement;
 use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -264,19 +263,34 @@ pub(crate) async fn run(
             ))
         } else {
             match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
-                Ok(project) => Some(project),
-                Err(WorkspaceError::MissingPyprojectToml) => None,
-                Err(WorkspaceError::NonWorkspace(_)) => None,
-                Err(err) => return Err(err.into()),
+                Ok(project) => {
+                    if no_project {
+                        debug!("Ignoring discovered project due to `--no-project`");
+                        None
+                    } else {
+                        Some(project)
+                    }
+                }
+                Err(WorkspaceError::MissingPyprojectToml | WorkspaceError::NonWorkspace(_)) => {
+                    // If the user runs with `--no-project` and we can't find a project, warn.
+                    if no_project {
+                        warn!("`--no-project` was provided, but no project was found");
+                    }
+                    None
+                }
+                Err(err) => {
+                    // If the user runs with `--no-project`, ignore the error.
+                    if no_project {
+                        warn!("Ignoring project discovery error due to `--no-project`: {err}");
+                        None
+                    } else {
+                        return Err(err.into());
+                    }
+                }
             }
         };
 
-        let project = if no_project {
-            // If the user runs with `--no-project` and we can't find a project, warn.
-            if project.is_none() {
-                debug!("`--no-project` was provided, but no project was found; ignoring...");
-            }
-
+        if no_project {
             // If the user ran with `--no-project` and provided a project-only setting, warn.
             if !extras.is_empty() {
                 warn_user_once!("Extras have no effect when used alongside `--no-project`");
@@ -290,27 +304,21 @@ pub(crate) async fn run(
             if frozen {
                 warn_user_once!("`--frozen` has no effect when used alongside `--no-project`");
             }
-
-            None
-        } else {
+        } else if project.is_none() {
             // If we can't find a project and the user provided a project-only setting, warn.
-            if project.is_none() {
-                if !extras.is_empty() {
-                    warn_user_once!("Extras have no effect when used outside of a project");
-                }
-                if !dev {
-                    warn_user_once!("`--no-dev` has no effect when used outside of a project");
-                }
-                if locked {
-                    warn_user_once!("`--locked` has no effect when used outside of a project");
-                }
-                if frozen {
-                    warn_user_once!("`--frozen` has no effect when used outside of a project");
-                }
+            if !extras.is_empty() {
+                warn_user_once!("Extras have no effect when used outside of a project");
             }
-
-            project
-        };
+            if !dev {
+                warn_user_once!("`--no-dev` has no effect when used outside of a project");
+            }
+            if locked {
+                warn_user_once!("`--locked` has no effect when used outside of a project");
+            }
+            if frozen {
+                warn_user_once!("`--frozen` has no effect when used outside of a project");
+            }
+        }
 
         let interpreter = if let Some(project) = project {
             if let Some(project_name) = project.project_name() {
@@ -411,9 +419,7 @@ pub(crate) async fn run(
                 Err(err) => return Err(err.into()),
             };
 
-            let no_install_root = false;
-            let no_install_workspace = false;
-            let no_install_package = vec![];
+            let install_options = InstallOptions::default();
 
             project::sync::do_sync(
                 &project,
@@ -421,9 +427,7 @@ pub(crate) async fn run(
                 result.lock(),
                 &extras,
                 dev,
-                no_install_root,
-                no_install_workspace,
-                no_install_package,
+                install_options,
                 Modifications::Sufficient,
                 settings.as_ref().into(),
                 &state,
@@ -683,7 +687,11 @@ fn can_skip_ephemeral(
         return false;
     }
 
-    match site_packages.satisfies(&spec.requirements, &spec.constraints) {
+    match site_packages.satisfies(
+        &spec.requirements,
+        &spec.constraints,
+        &base_interpreter.resolver_markers(),
+    ) {
         // If the requirements are already satisfied, we're done.
         Ok(SatisfiesResult::Fresh {
             recursive_requirements,

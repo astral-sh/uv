@@ -34,6 +34,7 @@ pub struct CachedDirectUrlDist {
     pub url: VerbatimUrl,
     pub path: PathBuf,
     pub editable: bool,
+    pub r#virtual: bool,
     pub hashes: Vec<HashDigest>,
 }
 
@@ -57,6 +58,7 @@ impl CachedDist {
                 hashes,
                 path,
                 editable: false,
+                r#virtual: false,
             }),
             Dist::Built(BuiltDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
@@ -64,6 +66,7 @@ impl CachedDist {
                 hashes,
                 path,
                 editable: false,
+                r#virtual: false,
             }),
             Dist::Source(SourceDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
                 filename,
@@ -76,6 +79,7 @@ impl CachedDist {
                 hashes,
                 path,
                 editable: false,
+                r#virtual: false,
             }),
             Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
@@ -83,6 +87,7 @@ impl CachedDist {
                 hashes,
                 path,
                 editable: false,
+                r#virtual: false,
             }),
             Dist::Source(SourceDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
@@ -90,6 +95,7 @@ impl CachedDist {
                 hashes,
                 path,
                 editable: false,
+                r#virtual: false,
             }),
             Dist::Source(SourceDist::Directory(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
@@ -97,6 +103,7 @@ impl CachedDist {
                 hashes,
                 path,
                 editable: dist.editable,
+                r#virtual: dist.r#virtual,
             }),
         }
     }
@@ -122,9 +129,9 @@ impl CachedDist {
                         .map_err(|()| anyhow!("Invalid path in file URL"))?;
                     Ok(Some(ParsedUrl::Directory(ParsedDirectoryUrl {
                         url: dist.url.raw().clone(),
-                        install_path: path.clone(),
-                        lock_path: path,
+                        install_path: path,
                         editable: dist.editable,
+                        r#virtual: dist.r#virtual,
                     })))
                 } else {
                     Ok(Some(ParsedUrl::try_from(dist.url.to_url())?))
@@ -162,6 +169,7 @@ impl CachedDirectUrlDist {
             hashes,
             path,
             editable: false,
+            r#virtual: false,
         }
     }
 }

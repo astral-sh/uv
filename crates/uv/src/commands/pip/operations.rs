@@ -17,7 +17,7 @@ use distribution_types::{
 };
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
-use pypi_types::Requirement;
+use pypi_types::{Requirement, ResolverMarkerEnvironment};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
@@ -40,9 +40,9 @@ use uv_resolver::{
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
-use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
+use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::commands::{compile_bytecode, elapsed, ChangeEventKind, DryRunEvent};
+use crate::commands::{compile_bytecode, ChangeEventKind, DryRunEvent};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -199,7 +199,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
-    let preferences = Preferences::from_iter(preferences, markers.marker_environment());
+    let preferences = Preferences::from_iter(preferences, &markers);
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -349,6 +349,7 @@ pub(crate) async fn install(
     compile: bool,
     index_urls: &IndexLocations,
     hasher: &HashStrategy,
+    markers: &ResolverMarkerEnvironment,
     tags: &Tags,
     client: &RegistryClient,
     in_flight: &InFlight,
@@ -376,6 +377,7 @@ pub(crate) async fn install(
             index_urls,
             cache,
             venv,
+            markers,
             tags,
         )
         .context("Failed to determine installation plan")?;
@@ -524,17 +526,7 @@ fn report_dry_run(
 
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
-        let s = if resolution.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Audited {} {}",
-                format!("{} package{}", resolution.len(), s).bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
-            .dimmed()
-        )?;
+        DefaultInstallLogger.on_audit(resolution.len(), start, printer)?;
         writeln!(printer.stderr(), "Would make no changes")?;
         return Ok(());
     }
@@ -671,10 +663,11 @@ pub(crate) fn diagnose_resolution(
 pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,
+    markers: &ResolverMarkerEnvironment,
     printer: Printer,
 ) -> Result<(), Error> {
     let site_packages = SitePackages::from_environment(venv)?;
-    for diagnostic in site_packages.diagnostics()? {
+    for diagnostic in site_packages.diagnostics(markers)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
             .packages()

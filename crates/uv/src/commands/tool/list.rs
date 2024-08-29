@@ -14,7 +14,7 @@ use crate::printer::Printer;
 /// List installed tools.
 pub(crate) async fn list(show_paths: bool, cache: &Cache, printer: Printer) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?;
-    let _lock = match installed_tools.acquire_lock() {
+    let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
         Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
             writeln!(printer.stderr(), "No tools installed")?;

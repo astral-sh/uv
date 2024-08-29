@@ -113,7 +113,7 @@ dependencies of the current project.
 
 To define a constraint, define a bound for a package:
 
-```text title="constraints.txt"
+```python title="constraints.txt"
 pydantic<2.0
 ```
 
@@ -141,7 +141,7 @@ then the dependencies cannot be resolved.
 
 To define an override, define the new requirement for the problematic package:
 
-```text title="overrides.txt"
+```python title="overrides.txt"
 c>=2.0
 ```
 

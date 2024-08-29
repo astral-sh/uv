@@ -4,10 +4,10 @@
 
 uv installation differs depending on the platform:
 
-=== "Unix"
+=== "Linux"
 
     ```yaml title="example.yml"
-    name: Example on Unix
+    name: Example on Linux
 
     jobs:
       uv-example-linux:
@@ -61,10 +61,10 @@ uv installation differs depending on the platform:
 
 It is considered best practice to pin to a specific uv version, e.g., with:
 
-=== "Unix"
+=== "Linux"
 
     ```yaml title="example.yml"
-    name: Example on Unix
+    name: Example on Linux
 
     jobs:
       uv-example-linux:
@@ -76,7 +76,7 @@ It is considered best practice to pin to a specific uv version, e.g., with:
 
           - name: Set up uv
             # Install a specific uv version using the installer
-            run: curl -LsSf https://astral.sh/uv/0.3.2/install.sh | sh
+            run: curl -LsSf https://astral.sh/uv/0.4.0/install.sh | sh
     ```
 
 === "macOS"
@@ -94,7 +94,7 @@ It is considered best practice to pin to a specific uv version, e.g., with:
 
           - name: Set up uv
             # Install a specific uv version using the installer
-            run: curl -LsSf https://astral.sh/uv/0.3.2/install.sh | sh
+            run: curl -LsSf https://astral.sh/uv/0.4.0/install.sh | sh
     ```
 
 === "Windows"
@@ -112,7 +112,7 @@ It is considered best practice to pin to a specific uv version, e.g., with:
 
           - name: Set up uv
             # Install a specific uv version using the installer
-            run: irm https://astral.sh/uv/0.3.2/install.ps1 | iex
+            run: irm https://astral.sh/uv/0.4.0/install.ps1 | iex
             shell: powershell
     ```
 

@@ -1,3 +1,4 @@
+use crate::libc::{detect_linux_libc, LibcDetectionError, LibcVersion};
 use std::fmt::Display;
 use std::ops::Deref;
 use std::{fmt, str::FromStr};
@@ -26,15 +27,15 @@ pub enum Libc {
 }
 
 impl Libc {
-    pub(crate) fn from_env() -> Self {
+    pub(crate) fn from_env() -> Result<Self, LibcDetectionError> {
         match std::env::consts::OS {
-            // TODO(zanieb): On Linux, we use the uv target host to determine the libc variant
-            // but we should only use this as a fallback and should instead inspect the
-            // machine's `/bin/sh` (or similar).
-            "linux" => Self::Some(target_lexicon::Environment::Gnu),
-            "windows" | "macos" => Self::None,
+            "linux" => Ok(Self::Some(match detect_linux_libc()? {
+                LibcVersion::Manylinux { .. } => target_lexicon::Environment::Gnu,
+                LibcVersion::Musllinux { .. } => target_lexicon::Environment::Musl,
+            })),
+            "windows" | "macos" => Ok(Self::None),
             // Use `None` on platforms without explicit support.
-            _ => Self::None,
+            _ => Ok(Self::None),
         }
     }
 }

@@ -67,6 +67,13 @@ mimalloc = { version = "0.1.39" }
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
 tikv-jemallocator = { version = "0.6.0" }
 
+[[bin]]
+name = "uv-dev"
+# We don't want to build the dev CLI by default, so we skip it by requiring an off-by-default feature
+required-features = ["dev"]
+
 [features]
 default = []
+# Actually build the dev CLI.
+dev = []
 render = ["poloto", "resvg", "tagu"]

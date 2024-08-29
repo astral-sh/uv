@@ -2,18 +2,17 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use thiserror::Error;
+use url::Url;
+
 use distribution_filename::DistExtension;
-use path_absolutize::Absolutize;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{VerbatimUrl, VersionOrUrl};
 use pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
-use thiserror::Error;
-use url::Url;
-use uv_fs::{relative_to, Simplified};
 use uv_git::GitReference;
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::Source;
+use uv_workspace::pyproject::{PyProjectToml, Source};
 use uv_workspace::Workspace;
 
 #[derive(Debug, Clone)]
@@ -142,16 +141,28 @@ impl LoweredRequirement {
                 // relative to workspace: `packages/current_project`
                 // workspace lock root: `../current_workspace`
                 // relative to main workspace: `../current_workspace/packages/current_project`
-                let relative_to_workspace = relative_to(member.root(), workspace.install_path())
-                    .map_err(LoweringError::RelativeTo)?;
-                let relative_to_main_workspace = workspace.lock_path().join(relative_to_workspace);
-                let url = VerbatimUrl::parse_absolute_path(member.root())?
-                    .with_given(relative_to_main_workspace.to_string_lossy());
-                RequirementSource::Directory {
-                    install_path: member.root().clone(),
-                    lock_path: relative_to_main_workspace,
-                    url,
-                    editable: true,
+                let url = VerbatimUrl::from_absolute_path(member.root())?;
+                let install_path = url.to_file_path().map_err(|()| {
+                    LoweringError::RelativeTo(io::Error::new(
+                        io::ErrorKind::Other,
+                        "Invalid path in file URL",
+                    ))
+                })?;
+
+                if member.pyproject_toml().is_package() {
+                    RequirementSource::Directory {
+                        install_path,
+                        url,
+                        editable: true,
+                        r#virtual: false,
+                    }
+                } else {
+                    RequirementSource::Directory {
+                        install_path,
+                        url,
+                        editable: false,
+                        r#virtual: true,
+                    }
                 }
             }
             Source::CatchAll { .. } => {
@@ -249,8 +260,6 @@ pub enum LoweringError {
     InvalidVerbatimUrl(#[from] pep508_rs::VerbatimUrlError),
     #[error("Can't combine URLs from both `project.dependencies` and `tool.uv.sources`")]
     ConflictingUrls,
-    #[error("Could not normalize path: `{}`", _0.user_display())]
-    Absolutize(PathBuf, #[source] io::Error),
     #[error("Fragments are not allowed in URLs: `{0}`")]
     ForbiddenFragment(Url),
     #[error("`workspace = false` is not yet supported")]
@@ -259,6 +268,8 @@ pub enum LoweringError {
     EditableFile(String),
     #[error(transparent)]
     ParsedUrl(#[from] ParsedUrlError),
+    #[error("Path must be UTF-8: `{0}`")]
+    NonUtf8Path(PathBuf),
     #[error(transparent)] // Function attaches the context
     RelativeTo(io::Error),
 }
@@ -266,7 +277,7 @@ pub enum LoweringError {
 /// Convert a Git source into a [`RequirementSource`].
 fn git_source(
     git: &Url,
-    subdirectory: Option<String>,
+    subdirectory: Option<PathBuf>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -284,7 +295,10 @@ fn git_source(
     if let Some(rev) = reference.as_str() {
         url.set_path(&format!("{}@{}", url.path(), rev));
     }
-    if let Some(subdirectory) = &subdirectory {
+    if let Some(subdirectory) = subdirectory.as_ref() {
+        let subdirectory = subdirectory
+            .to_str()
+            .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.clone()))?;
         url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
     }
     let url = VerbatimUrl::from_url(url);
@@ -296,17 +310,20 @@ fn git_source(
         repository,
         reference,
         precise: None,
-        subdirectory: subdirectory.map(PathBuf::from),
+        subdirectory,
     })
 }
 
 /// Convert a URL source into a [`RequirementSource`].
-fn url_source(url: Url, subdirectory: Option<String>) -> Result<RequirementSource, LoweringError> {
+fn url_source(url: Url, subdirectory: Option<PathBuf>) -> Result<RequirementSource, LoweringError> {
     let mut verbatim_url = url.clone();
     if verbatim_url.fragment().is_some() {
         return Err(LoweringError::ForbiddenFragment(url));
     }
-    if let Some(subdirectory) = &subdirectory {
+    if let Some(subdirectory) = subdirectory.as_ref() {
+        let subdirectory = subdirectory
+            .to_str()
+            .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.clone()))?;
         verbatim_url.set_fragment(Some(subdirectory));
     }
 
@@ -359,41 +376,56 @@ fn path_source(
         Origin::Project => project_dir,
         Origin::Workspace => workspace_root,
     };
-    let url = VerbatimUrl::parse_path(path, base)?.with_given(path.to_string_lossy());
-    let absolute_path = path
-        .to_path_buf()
-        .absolutize_from(base)
-        .map_err(|err| LoweringError::Absolutize(path.to_path_buf(), err))?
-        .to_path_buf();
-    let relative_to_workspace = if path.is_relative() {
-        // Relative paths in a project are relative to the project root, but the lockfile is
-        // relative to the workspace root.
-        relative_to(&absolute_path, workspace_root).map_err(LoweringError::RelativeTo)?
-    } else {
-        // If the user gave us an absolute path, we respect that.
-        path.to_path_buf()
-    };
-    let is_dir = if let Ok(metadata) = absolute_path.metadata() {
+    let url = VerbatimUrl::from_path(path, base)?.with_given(path.to_string_lossy());
+    let install_path = url.to_file_path().map_err(|()| {
+        LoweringError::RelativeTo(io::Error::new(
+            io::ErrorKind::Other,
+            "Invalid path in file URL",
+        ))
+    })?;
+
+    let is_dir = if let Ok(metadata) = install_path.metadata() {
         metadata.is_dir()
     } else {
-        absolute_path.extension().is_none()
+        install_path.extension().is_none()
     };
     if is_dir {
-        Ok(RequirementSource::Directory {
-            install_path: absolute_path,
-            lock_path: relative_to_workspace,
-            url,
-            editable,
-        })
+        if editable {
+            Ok(RequirementSource::Directory {
+                install_path,
+                url,
+                editable,
+                r#virtual: false,
+            })
+        } else {
+            // Determine whether the project is a package or virtual.
+            let is_package = {
+                let pyproject_path = install_path.join("pyproject.toml");
+                fs_err::read_to_string(&pyproject_path)
+                    .ok()
+                    .and_then(|contents| PyProjectToml::from_string(contents).ok())
+                    .map(|pyproject_toml| pyproject_toml.is_package())
+                    .unwrap_or(true)
+            };
+
+            // If a project is not a package, treat it as a virtual dependency.
+            let r#virtual = !is_package;
+
+            Ok(RequirementSource::Directory {
+                install_path,
+                url,
+                editable,
+                r#virtual,
+            })
+        }
     } else {
         if editable {
             return Err(LoweringError::EditableFile(url.to_string()));
         }
         Ok(RequirementSource::Path {
-            install_path: absolute_path,
-            lock_path: relative_to_workspace,
-            ext: DistExtension::from_path(path)
+            ext: DistExtension::from_path(&install_path)
                 .map_err(|err| ParsedUrlError::MissingExtensionPath(path.to_path_buf(), err))?,
+            install_path,
             url,
         })
     }

@@ -56,6 +56,14 @@ impl BuildableSource<'_> {
             Self::Url(url) => url.is_editable(),
         }
     }
+
+    /// Return true if the source refers to a local source tree (i.e., a directory).
+    pub fn is_source_tree(&self) -> bool {
+        match self {
+            Self::Dist(dist) => matches!(dist, SourceDist::Directory(_)),
+            Self::Url(url) => matches!(url, SourceUrl::Directory(_)),
+        }
+    }
 }
 
 impl std::fmt::Display for BuildableSource<'_> {
@@ -93,6 +101,11 @@ impl<'a> SourceUrl<'a> {
             self,
             Self::Directory(DirectorySourceUrl { editable: true, .. })
         )
+    }
+
+    /// Return true if the source refers to a local file or directory.
+    pub fn is_local(&self) -> bool {
+        matches!(self, Self::Path(_) | Self::Directory(_))
     }
 }
 
@@ -172,7 +185,6 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
 pub struct DirectorySourceUrl<'a> {
     pub url: &'a Url,
     pub install_path: Cow<'a, Path>,
-    pub lock_path: Cow<'a, Path>,
     pub editable: bool,
 }
 
@@ -187,7 +199,6 @@ impl<'a> From<&'a DirectorySourceDist> for DirectorySourceUrl<'a> {
         Self {
             url: &dist.url,
             install_path: Cow::Borrowed(&dist.install_path),
-            lock_path: Cow::Borrowed(&dist.lock_path),
             editable: dist.editable,
         }
     }

@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM ubuntu as build
+FROM --platform=$BUILDPLATFORM ubuntu AS build
 ENV HOME="/root"
 WORKDIR $HOME
 

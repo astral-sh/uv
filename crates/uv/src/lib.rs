@@ -144,7 +144,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     // If the target is a PEP 723 script, parse it.
     let script = if let Commands::Project(command) = &*cli.command {
         if let ProjectCommand::Run(uv_cli::RunArgs { .. }) = &**command {
-            if let Some(RunCommand::PythonScript(script, _)) = run_command.as_ref() {
+            if let Some(
+                RunCommand::PythonScript(script, _) | RunCommand::PythonGuiScript(script, _),
+            ) = run_command.as_ref()
+            {
                 Pep723Script::read(&script).await?
             } else {
                 None
@@ -300,6 +303,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.environments,
                 args.settings.extras,
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,
@@ -321,6 +325,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
+                args.settings.allow_insecure_host,
                 args.settings.config_setting,
                 globals.connectivity,
                 args.settings.no_build_isolation,
@@ -387,6 +392,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
+                args.settings.allow_insecure_host,
                 args.settings.allow_empty_requirements,
                 globals.connectivity,
                 &args.settings.config_setting,
@@ -470,6 +476,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
+                args.settings.allow_insecure_host,
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
@@ -528,6 +535,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.native_tls,
                 args.settings.keyring_provider,
+                args.settings.allow_insecure_host,
                 printer,
             )
             .await
@@ -688,6 +696,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
+                args.settings.allow_insecure_host,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 globals.connectivity,
@@ -818,7 +827,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
-                &cache,
+                cache,
                 printer,
             )
             .await
@@ -1016,7 +1025,8 @@ async fn run_project(
             commands::init(
                 args.path,
                 args.name,
-                args.r#virtual,
+                args.package,
+                args.kind,
                 args.no_readme,
                 args.python,
                 args.no_workspace,
@@ -1103,9 +1113,7 @@ async fn run_project(
                 args.package,
                 args.extras,
                 args.dev,
-                args.no_install_project,
-                args.no_install_workspace,
-                args.no_install_package,
+                args.install_options,
                 args.modifications,
                 args.python,
                 globals.python_preference,
@@ -1244,6 +1252,33 @@ async fn run_project(
                 args.python_platform,
                 args.python,
                 args.resolver,
+                globals.python_preference,
+                globals.python_downloads,
+                globals.connectivity,
+                globals.concurrency,
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        ProjectCommand::Export(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ExportSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::export(
+                args.format,
+                args.package,
+                args.extras,
+                args.dev,
+                args.locked,
+                args.frozen,
+                args.python,
+                args.settings,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,

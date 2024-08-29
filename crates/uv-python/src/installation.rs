@@ -99,7 +99,7 @@ impl PythonInstallation {
             {
                 if let Some(request) = PythonDownloadRequest::from_request(&request) {
                     debug!("Requested Python not found, checking for available download...");
-                    match Self::fetch(request.fill(), client_builder, cache, reporter).await {
+                    match Self::fetch(request.fill()?, client_builder, cache, reporter).await {
                         Ok(installation) => Ok(installation),
                         Err(Error::Download(downloads::Error::NoDownloadFound(_))) => {
                             Err(Error::MissingPython(err))
@@ -124,7 +124,7 @@ impl PythonInstallation {
         let installations = ManagedPythonInstallations::from_settings()?.init()?;
         let installations_dir = installations.root();
         let cache_dir = installations.cache();
-        let _lock = installations.acquire_lock()?;
+        let _lock = installations.lock().await?;
 
         let download = ManagedPythonDownload::from_request(&request)?;
         let client = client_builder.build();

@@ -54,7 +54,7 @@ fn empty_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     warning: Requirements file requirements.txt does not contain any dependencies
-    Audited 0 packages in [TIME]
+    Audited in [TIME]
     "###
     );
 
@@ -4058,14 +4058,14 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
         .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
         .env("PATH", venv_bin_path(&context.venv)), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
     Request for public@pypi-proxy.fly.dev
-    error: Failed to download `anyio==4.3.0`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
     "###
     );
 }
@@ -4099,14 +4099,14 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
         .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
         .env("PATH", venv_bin_path(&context.venv)), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
     Request for public@pypi-proxy.fly.dev
-    error: Failed to download `anyio==4.3.0`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
     "###
     );
 }
@@ -6337,4 +6337,121 @@ fn no_extension() {
     ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###);
+}
+
+/// Regression test for: <https://github.com/astral-sh/uv/pull/6646>
+#[test]
+fn switch_platform() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig ; python_version == '3.12'")?;
+
+    // Install `iniconfig`.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    requirements_txt
+        .write_str("iniconfig ; python_version == '3.12'\nanyio ; python_version < '3.12'")?;
+
+    // Add `anyio`, though it's only installed because of `--python-version`.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--python-version")
+        .arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/pull/6714>
+#[test]
+fn stale_egg_info() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a project with dynamic metadata (version).
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+
+        dependencies = ["iniconfig"]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Ensure that `.egg-info` exists.
+    let egg_info = context.temp_dir.child("project.egg-info");
+    egg_info.assert(predicates::path::is_dir());
+
+    // Change the metadata.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+
+        dependencies = ["anyio"]
+        "#
+    })?;
+
+    // Reinstall. Ensure that the metadata is updated.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
 }

@@ -55,6 +55,7 @@ impl CachedWheel {
             url,
             path: self.entry.into_path_buf(),
             editable: false,
+            r#virtual: false,
             hashes: self.hashes,
         }
     }
@@ -66,6 +67,19 @@ impl CachedWheel {
             url,
             path: self.entry.into_path_buf(),
             editable: true,
+            r#virtual: false,
+            hashes: self.hashes,
+        }
+    }
+
+    /// Convert a [`CachedWheel`] into an editable [`CachedDirectUrlDist`].
+    pub fn into_virtual(self, url: VerbatimUrl) -> CachedDirectUrlDist {
+        CachedDirectUrlDist {
+            filename: self.filename,
+            url,
+            path: self.entry.into_path_buf(),
+            editable: false,
+            r#virtual: true,
             hashes: self.hashes,
         }
     }

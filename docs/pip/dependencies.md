@@ -45,7 +45,7 @@ dependencies.
 
 To define dependencies in a `requirements.in` file:
 
-```text title="requirements.in"
+```python title="requirements.in"
 httpx
 ruff>=0.3.0
 ```

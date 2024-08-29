@@ -7,6 +7,7 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
 use reqwest::{Client, Response, StatusCode};
+use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
@@ -21,11 +22,11 @@ use pep508_rs::MarkerEnvironment;
 use platform_tags::Platform;
 use pypi_types::{Metadata23, SimpleJson};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
-use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
+use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_normalize::PackageName;
 
-use crate::base_client::{BaseClient, BaseClientBuilder};
+use crate::base_client::BaseClientBuilder;
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
@@ -68,6 +69,14 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
         self.base_client_builder = self.base_client_builder.keyring(keyring_type);
+        self
+    }
+
+    #[must_use]
+    pub fn allow_insecure_host(mut self, allow_insecure_host: Vec<TrustedHost>) -> Self {
+        self.base_client_builder = self
+            .base_client_builder
+            .allow_insecure_host(allow_insecure_host);
         self
     }
 
@@ -171,8 +180,8 @@ impl RegistryClient {
     }
 
     /// Return the [`BaseClient`] used by this client.
-    pub fn uncached_client(&self) -> BaseClient {
-        self.client.uncached()
+    pub fn uncached_client(&self, url: &Url) -> &ClientWithMiddleware {
+        self.client.uncached().for_host(url)
     }
 
     /// Return the [`Connectivity`] mode used by this client.
@@ -298,7 +307,7 @@ impl RegistryClient {
         cache_control: CacheControl,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
         let simple_request = self
-            .uncached_client()
+            .uncached_client(url)
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
@@ -427,7 +436,6 @@ impl RegistryClient {
                             WheelLocation::Url(url)
                         }
                     }
-                    FileLocation::Path(path) => WheelLocation::Path(path.clone()),
                 };
 
                 match location {
@@ -513,7 +521,7 @@ impl RegistryClient {
                     })
             };
             let req = self
-                .uncached_client()
+                .uncached_client(&url)
                 .get(url.clone())
                 .build()
                 .map_err(ErrorKind::from)?;
@@ -552,7 +560,7 @@ impl RegistryClient {
         };
 
         let req = self
-            .uncached_client()
+            .uncached_client(url)
             .head(url.clone())
             .header(
                 "accept-encoding",
@@ -572,7 +580,7 @@ impl RegistryClient {
         let read_metadata_range_request = |response: Response| {
             async {
                 let mut reader = AsyncHttpRangeReader::from_head_response(
-                    self.uncached_client().client(),
+                    self.uncached_client(url).clone(),
                     response,
                     url.clone(),
                     headers,
@@ -620,7 +628,7 @@ impl RegistryClient {
 
         // Create a request to stream the file.
         let req = self
-            .uncached_client()
+            .uncached_client(url)
             .get(url.clone())
             .header(
                 // `reqwest` defaults to accepting compressed responses.

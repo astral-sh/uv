@@ -1,7 +1,7 @@
 use pep440_rs::{Version, VersionSpecifiers};
 use uv_python::{Interpreter, PythonVersion};
 
-use crate::{RequiresPython, RequiresPythonBound};
+use crate::{RequiresPython, RequiresPythonRange};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PythonRequirement {
@@ -49,7 +49,7 @@ impl PythonRequirement {
 
     /// Narrow the [`PythonRequirement`] to the given version, if it's stricter (i.e., greater)
     /// than the current `Requires-Python` minimum.
-    pub fn narrow(&self, target: &RequiresPythonBound) -> Option<Self> {
+    pub fn narrow(&self, target: &RequiresPythonRange) -> Option<Self> {
         let Some(PythonTarget::RequiresPython(requires_python)) = self.target.as_ref() else {
             return None;
         };

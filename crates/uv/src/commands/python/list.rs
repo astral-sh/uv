@@ -104,8 +104,16 @@ pub(crate) async fn list(
 
     let mut seen_minor = HashSet::new();
     let mut seen_patch = HashSet::new();
+    let mut seen_paths = HashSet::new();
     let mut include = Vec::new();
     for (version, os, key, kind, path) in output.iter().rev() {
+        // Do not show the same path more than once
+        if let Some(path) = path {
+            if !seen_paths.insert(path) {
+                continue;
+            }
+        }
+
         // Only show the latest patch version for each download unless all were requested
         if !matches!(kind, Kind::System) {
             if let [major, minor, ..] = version.release() {

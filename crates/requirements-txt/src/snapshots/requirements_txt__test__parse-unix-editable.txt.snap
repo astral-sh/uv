@@ -24,8 +24,8 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
-                                lock_path: "./editable",
                                 editable: true,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
@@ -81,8 +81,8 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
-                                lock_path: "./editable",
                                 editable: true,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
@@ -138,8 +138,8 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
-                                lock_path: "./editable",
                                 editable: true,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
@@ -195,8 +195,8 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
-                                lock_path: "./editable",
                                 editable: true,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
@@ -252,8 +252,8 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable",
-                                lock_path: "./editable",
                                 editable: true,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
@@ -302,8 +302,8 @@ RequirementsTxt {
                                     fragment: None,
                                 },
                                 install_path: "<REQUIREMENTS_DIR>/editable[d",
-                                lock_path: "./editable[d",
                                 editable: true,
+                                virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
