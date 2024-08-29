@@ -322,6 +322,10 @@ pub enum Commands {
     /// By default, creates a virtual environment named `.venv` in the working
     /// directory. An alternative path may be provided positionally.
     ///
+    /// If in a project, the default environment name can be changed with
+    /// the `UV_PROJECT_ENVIRONMENT` environment variable; this only applies
+    /// when run from the project root directory.
+    ///
     /// If a virtual environment exists at the target path, it will be removed
     /// and a new, empty virtual environment will be created.
     ///
@@ -1961,6 +1965,14 @@ pub struct VenvArgs {
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
 
+    /// Avoid discovering a project or workspace.
+    ///
+    /// By default, uv searches for projects in the current directory or any parent directory to
+    /// determine the default path of the virtual environment and check for Python version
+    /// constraints, if any.
+    #[arg(long, alias = "no-workspace")]
+    pub no_project: bool,
+
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment.
     ///
     /// Note `setuptools` and `wheel` are not included in Python 3.12+ environments.
@@ -1980,8 +1992,11 @@ pub struct VenvArgs {
     pub allow_existing: bool,
 
     /// The path to the virtual environment to create.
-    #[arg(default_value = ".venv")]
-    pub name: PathBuf,
+    ///
+    /// Default to `.venv` in the working directory.
+    ///
+    /// Relative paths are resolved relative to the working directory.
+    pub path: Option<PathBuf>,
 
     /// Provide an alternative prompt prefix for the virtual environment.
     ///

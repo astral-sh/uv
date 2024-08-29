@@ -5956,6 +5956,8 @@ Create a virtual environment.
 
 By default, creates a virtual environment named `.venv` in the working directory. An alternative path may be provided positionally.
 
+If in a project, the default environment name can be changed with the `UV_PROJECT_ENVIRONMENT` environment variable; this only applies when run from the project root directory.
+
 If a virtual environment exists at the target path, it will be removed and a new, empty virtual environment will be created.
 
 When using uv, the virtual environment does not need to be activated. uv will find a virtual environment (named `.venv`) in the working directory or any parent directories.
@@ -5963,12 +5965,16 @@ When using uv, the virtual environment does not need to be activated. uv will fi
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv venv [OPTIONS] [NAME]
+uv venv [OPTIONS] [PATH]
 ```
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>NAME</code></dt><dd><p>The path to the virtual environment to create</p>
+<dl class="cli-reference"><dt><code>PATH</code></dt><dd><p>The path to the virtual environment to create.</p>
+
+<p>Default to <code>.venv</code> in the working directory.</p>
+
+<p>Relative paths are resolved relative to the working directory.</p>
 
 </dd></dl>
 
@@ -6104,6 +6110,10 @@ uv venv [OPTIONS] [NAME]
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
+
+</dd><dt><code>--no-project</code></dt><dd><p>Avoid discovering a project or workspace.</p>
+
+<p>By default, uv searches for projects in the current directory or any parent directory to determine the default path of the virtual environment and check for Python version constraints, if any.</p>
 
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
