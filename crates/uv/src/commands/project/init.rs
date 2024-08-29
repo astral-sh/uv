@@ -169,7 +169,10 @@ async fn init_project(
                     warn!("Ignoring workspace discovery error due to `--no-workspace`: {err}");
                     None
                 } else {
-                    return Err(err.into());
+                    return Err(anyhow::Error::from(err).context(format!(
+                        "Failed to discover parent workspace; use `{}` to ignore",
+                        "uv init --no-workspace".green()
+                    )));
                 }
             }
         }

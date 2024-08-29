@@ -158,7 +158,7 @@ impl Workspace {
                 workspace
             } else if pyproject_toml.project.is_none() {
                 // Without a project, it can't be an implicit root
-                return Err(WorkspaceError::MissingProject(project_path));
+                return Err(WorkspaceError::MissingProject(pyproject_path));
             } else if let Some(workspace) = find_workspace(&project_path, options).await? {
                 // We have found an explicit root above.
                 workspace
@@ -610,7 +610,7 @@ impl Workspace {
                 };
 
                 let pyproject_toml = PyProjectToml::from_string(contents)
-                    .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
+                    .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
                 // Check if the current project is explicitly marked as unmanaged.
                 if pyproject_toml
@@ -629,7 +629,7 @@ impl Workspace {
 
                 // Extract the package name.
                 let Some(project) = pyproject_toml.project.clone() else {
-                    return Err(WorkspaceError::MissingProject(member_root));
+                    return Err(WorkspaceError::MissingProject(pyproject_path));
                 };
 
                 debug!(
@@ -825,7 +825,7 @@ impl ProjectWorkspace {
         let project = pyproject_toml
             .project
             .clone()
-            .ok_or_else(|| WorkspaceError::MissingProject(pyproject_path.clone()))?;
+            .ok_or_else(|| WorkspaceError::MissingProject(pyproject_path))?;
 
         Self::from_project(project_root, &project, &pyproject_toml, options).await
     }
