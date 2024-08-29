@@ -21,7 +21,9 @@ use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
 use crate::managed::ManagedPythonInstallations;
 #[cfg(windows)]
-use crate::py_launcher::registry_pythons;
+use crate::microsoft_store::find_microsoft_store_pythons;
+#[cfg(windows)]
+use crate::py_launcher::{registry_pythons, WindowsPython};
 use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable,
@@ -167,6 +169,8 @@ pub enum PythonSource {
     SearchPath,
     /// An executable was found in the Windows registry via PEP 514
     Registry,
+    /// An executable was found in the known Microsoft Store locations
+    MicrosoftStore,
     /// The Python installation was found in the uv managed Python directory
     Managed,
     /// The Python installation was found via the invoking interpreter i.e. via `python -m uv ...`
@@ -308,9 +312,22 @@ fn python_executables_from_installed<'a>(
     })
     .flatten();
 
-    let from_py_launcher = std::iter::once_with(move || {
+    let from_windows = std::iter::once_with(move || {
         #[cfg(windows)]
         {
+            // Skip interpreter probing if we already know the version doesn't match.
+            let version_filter = move |entry: &WindowsPython| {
+                if let Some(version_request) = version {
+                    if let Some(version) = &entry.version {
+                        version_request.matches_version(version)
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                }
+            };
+
             env::var_os("UV_TEST_PYTHON_PATH")
                 .is_none()
                 .then(|| {
@@ -318,20 +335,13 @@ fn python_executables_from_installed<'a>(
                         .map(|entries| {
                             entries
                                 .into_iter()
-                                .filter(move |entry| {
-                                    // Skip interpreter probing if we already know the version
-                                    // doesn't match.
-                                    if let Some(version_request) = version {
-                                        if let Some(version) = &entry.version {
-                                            version_request.matches_version(version)
-                                        } else {
-                                            true
-                                        }
-                                    } else {
-                                        true
-                                    }
-                                })
+                                .filter(version_filter)
                                 .map(|entry| (PythonSource::Registry, entry.path))
+                                .chain(
+                                    find_microsoft_store_pythons()
+                                        .filter(version_filter)
+                                        .map(|entry| (PythonSource::MicrosoftStore, entry.path)),
+                                )
                         })
                         .map_err(Error::from)
                 })
@@ -350,14 +360,14 @@ fn python_executables_from_installed<'a>(
         PythonPreference::Managed => Box::new(
             from_managed_installations
                 .chain(from_search_path)
-                .chain(from_py_launcher),
+                .chain(from_windows),
         ),
         PythonPreference::System => Box::new(
             from_search_path
-                .chain(from_py_launcher)
+                .chain(from_windows)
                 .chain(from_managed_installations),
         ),
-        PythonPreference::OnlySystem => Box::new(from_search_path.chain(from_py_launcher)),
+        PythonPreference::OnlySystem => Box::new(from_search_path.chain(from_windows)),
     }
 }
 
@@ -1633,6 +1643,7 @@ impl fmt::Display for PythonSource {
             Self::DiscoveredEnvironment => f.write_str("virtual environment"),
             Self::SearchPath => f.write_str("search path"),
             Self::Registry => f.write_str("registry"),
+            Self::MicrosoftStore => f.write_str("Microsoft Store"),
             Self::Managed => f.write_str("managed installations"),
             Self::ParentInterpreter => f.write_str("parent interpreter"),
         }
