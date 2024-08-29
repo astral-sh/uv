@@ -316,7 +316,10 @@ pub struct LockedFile(fs_err::File);
 impl LockedFile {
     /// Inner implementation for [`LockedFile::acquire_blocking`] and [`LockedFile::acquire`].
     fn lock_file_blocking(file: fs_err::File, resource: &str) -> Result<Self, std::io::Error> {
-        trace!("Checking lock for `{resource}`");
+        trace!(
+            "Checking lock for `{resource}` at `{}`",
+            file.path().user_display()
+        );
         match file.file().try_lock_exclusive() {
             Ok(()) => {
                 debug!("Acquired lock for `{resource}`");
@@ -324,19 +327,26 @@ impl LockedFile {
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures
-                debug!("Try lock error, waiting for exclusive lock: {:?}", err);
+                // TODO(zanieb): When `raw_os_error` stabilizes, use that to avoid displaying
+                // the error when it is `WouldBlock`, which is expected and noisy otherwise.
+                trace!("Try lock error, waiting for exclusive lock: {:?}", err);
                 warn_user!(
-                    "Waiting to acquire lock for {} (lockfile: {})",
-                    resource,
+                    "Waiting to acquire lock for `{resource}` at `{}`",
                     file.path().user_display(),
                 );
                 file.file().lock_exclusive().map_err(|err| {
                     // Not an fs_err method, we need to build our own path context
                     std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        format!("Could not lock {}: {}", file.path().user_display(), err),
+                        format!(
+                            "Could not acquire lock for `{resource}` at `{}`: {}",
+                            file.path().user_display(),
+                            err
+                        ),
                     )
                 })?;
+
+                debug!("Acquired lock for `{resource}`");
                 Ok(Self(file))
             }
         }
@@ -374,6 +384,8 @@ impl Drop for LockedFile {
                 self.0.path().display(),
                 err
             );
+        } else {
+            debug!("Released lock at `{}`", self.0.path().display());
         }
     }
 }
