@@ -29,6 +29,7 @@ pub mod managed;
 pub mod platform;
 mod pointer_size;
 mod prefix;
+#[cfg(windows)]
 mod py_launcher;
 mod python_version;
 mod target;
@@ -59,9 +60,6 @@ pub enum Error {
 
     #[error(transparent)]
     Discovery(#[from] discovery::Error),
-
-    #[error(transparent)]
-    PyLauncher(#[from] py_launcher::Error),
 
     #[error(transparent)]
     ManagedPython(#[from] managed::Error),

@@ -591,8 +591,8 @@ pub struct PipOptions {
     /// workflows.
     ///
     /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
+    /// - `3.10` looks for an installed Python 3.10 in the registry on Windows (see
+    ///   `py --list-paths`), or `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[option(
