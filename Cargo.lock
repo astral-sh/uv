@@ -5281,6 +5281,7 @@ dependencies = [
  "fs-err",
  "glob",
  "insta",
+ "itertools 0.13.0",
  "pep440_rs",
  "pep508_rs",
  "pypi-types",
