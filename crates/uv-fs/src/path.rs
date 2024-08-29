@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path, PathBuf, absolute};
 use std::sync::LazyLock;
 
 use either::Either;
@@ -30,6 +30,8 @@ pub trait Simplified {
     fn simplified_display(&self) -> impl std::fmt::Display;
 
     /// Canonicalize a path without a `\\?\` prefix on Windows.
+    /// For a path that can't be canonicalized (e.g. on network drive or RAM drive on Windows),
+    /// this will return the absolute path if it exists.
     fn simple_canonicalize(&self) -> std::io::Result<PathBuf>;
 
     /// Render a [`Path`] for user-facing display.
@@ -59,7 +61,21 @@ impl<T: AsRef<Path>> Simplified for T {
     }
 
     fn simple_canonicalize(&self) -> std::io::Result<PathBuf> {
-        dunce::canonicalize(self.as_ref())
+        match dunce::canonicalize(self.as_ref()) {
+            Ok(path) => Ok(path),
+            // On Windows, `dunce::canonicalize` can't canonicalize paths on network drives or RAM
+            // drives. In that case, fall back on `std::path::absolute`, but also verify that the
+            // path exists.
+            Err(e) if std::env::consts::OS != "windows" => Err(e),
+            _ => match absolute(self.as_ref()) {
+                Ok(path) if path.exists() => Ok(path),
+                Ok(_) => Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Path does not exist: {}", self.simplified_display()),
+                )),
+                Err(e) => Err(e),
+            },
+        }
     }
 
     fn user_display(&self) -> impl std::fmt::Display {
