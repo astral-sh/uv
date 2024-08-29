@@ -33,7 +33,9 @@ pub struct RequiresPython {
     specifiers: VersionSpecifiers,
     /// The lower bound from the `specifiers` field, i.e. greater or greater equal the lowest
     /// version allowed by `specifiers`.
-    bound: RequiresPythonBound,
+    lower_bound: RequiresPythonBound,
+    /// The upper bound from the `specifiers` field.
+    upper_bound: RequiresPythonBound,
 }
 
 impl RequiresPython {
@@ -44,22 +46,22 @@ impl RequiresPython {
             specifiers: VersionSpecifiers::from(VersionSpecifier::greater_than_equal_version(
                 version.clone(),
             )),
-            bound: RequiresPythonBound(Bound::Included(version)),
+            lower_bound: RequiresPythonBound(Bound::Included(version)),
+            upper_bound: RequiresPythonBound(Bound::Unbounded),
         }
     }
 
     /// Returns a [`RequiresPython`] from a version specifier.
     pub fn from_specifiers(specifiers: &VersionSpecifiers) -> Result<Self, RequiresPythonError> {
-        let bound = RequiresPythonBound(
-            crate::pubgrub::PubGrubSpecifier::from_release_specifiers(specifiers)?
-                .iter()
-                .next()
-                .map(|(lower, _)| lower.clone())
-                .unwrap_or(Bound::Unbounded),
-        );
+        let (lower_bound, upper_bound) =
+            crate::pubgrub::PubGrubSpecifier::from_release_specifiers(&specifiers)?
+                .bounding_range()
+                .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
+                .unwrap_or((Bound::Unbounded, Bound::Unbounded));
         Ok(Self {
             specifiers: specifiers.clone(),
-            bound,
+            lower_bound: RequiresPythonBound(lower_bound),
+            upper_bound: RequiresPythonBound(upper_bound),
         })
     }
 
@@ -85,14 +87,11 @@ impl RequiresPython {
             return Ok(None);
         };
 
-        // Extract the lower bound.
-        let bound = RequiresPythonBound(
-            range
-                .iter()
-                .next()
-                .map(|(lower, _)| lower.clone())
-                .unwrap_or(Bound::Unbounded),
-        );
+        // Extract the bounds.
+        let (lower_bound, upper_bound) = range
+            .bounding_range()
+            .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
+            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
 
         // Convert back to PEP 440 specifiers.
         let specifiers = range
@@ -100,16 +99,21 @@ impl RequiresPython {
             .flat_map(VersionSpecifier::from_release_only_bounds)
             .collect();
 
-        Ok(Some(Self { specifiers, bound }))
+        Ok(Some(Self {
+            specifiers,
+            lower_bound: RequiresPythonBound(lower_bound),
+            upper_bound: RequiresPythonBound(upper_bound),
+        }))
     }
 
     /// Narrow the [`RequiresPython`] to the given version, if it's stricter (i.e., greater) than
     /// the current target.
-    pub fn narrow(&self, target: &RequiresPythonBound) -> Option<Self> {
-        if target > &self.bound {
+    pub fn narrow(&self, range: &RequiresPythonRange) -> Option<Self> {
+        if range.0 >= self.lower_bound && range.1 <= self.upper_bound {
             Some(Self {
-                specifiers: VersionSpecifiers::from(VersionSpecifier::from_lower_bound(target)?),
-                bound: target.clone(),
+                specifiers: VersionSpecifiers::from(VersionSpecifier::from_lower_bound(&range.0)?),
+                lower_bound: range.0.clone(),
+                upper_bound: range.1.clone(),
             })
         } else {
             None
@@ -142,7 +146,7 @@ impl RequiresPython {
         // `>=3.7`.
         //
         // That is: `version_lower` should be less than or equal to `requires_python_lower`.
-        match (target, self.bound.as_ref()) {
+        match (target, self.lower_bound.as_ref()) {
             (Bound::Included(target_lower), Bound::Included(requires_python_lower)) => {
                 target_lower <= requires_python_lower
             }
@@ -170,17 +174,12 @@ impl RequiresPython {
 
     /// Returns `true` if the `Requires-Python` specifier is unbounded.
     pub fn is_unbounded(&self) -> bool {
-        self.bound.as_ref() == Bound::Unbounded
-    }
-
-    /// Returns the [`RequiresPythonBound`] for the `Requires-Python` specifier.
-    pub fn bound(&self) -> &RequiresPythonBound {
-        &self.bound
+        self.lower_bound.as_ref() == Bound::Unbounded
     }
 
     /// Returns the [`RequiresPythonBound`] truncated to the major and minor version.
     pub fn bound_major_minor(&self) -> RequiresPythonBound {
-        match self.bound.as_ref() {
+        match self.lower_bound.as_ref() {
             // Ex) `>=3.10.1` -> `>=3.10`
             Bound::Included(version) => RequiresPythonBound(Bound::Included(Version::new(
                 version.release().iter().take(2),
@@ -193,6 +192,21 @@ impl RequiresPython {
             ))),
             Bound::Unbounded => RequiresPythonBound(Bound::Unbounded),
         }
+    }
+
+    /// Returns the [`Range`] bounding the `Requires-Python` specifier.
+    pub fn range(&self) -> Range<Version> {
+        let lower_bound: Range<Version> = match &self.lower_bound.0 {
+            Bound::Included(version) => Range::higher_than(version.clone()),
+            Bound::Excluded(version) => Range::strictly_higher_than(version.clone()),
+            Bound::Unbounded => Range::full(),
+        };
+        let upper_bound: Range<Version> = match &self.upper_bound.0 {
+            Bound::Included(version) => Range::lower_than(version.clone()),
+            Bound::Excluded(version) => Range::strictly_lower_than(version.clone()),
+            Bound::Unbounded => Range::full(),
+        };
+        lower_bound.intersection(&upper_bound)
     }
 
     /// Returns `false` if the wheel's tags state it can't be used in the given Python version
@@ -279,15 +293,39 @@ impl serde::Serialize for RequiresPython {
 impl<'de> serde::Deserialize<'de> for RequiresPython {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let specifiers = VersionSpecifiers::deserialize(deserializer)?;
-        let bound = RequiresPythonBound(
+        let (lower_bound, upper_bound) =
             crate::pubgrub::PubGrubSpecifier::from_release_specifiers(&specifiers)
                 .map_err(serde::de::Error::custom)?
-                .iter()
-                .next()
-                .map(|(lower, _)| lower.clone())
-                .unwrap_or(Bound::Unbounded),
-        );
-        Ok(Self { specifiers, bound })
+                .bounding_range()
+                .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
+                .unwrap_or((Bound::Unbounded, Bound::Unbounded));
+        Ok(Self {
+            specifiers,
+            lower_bound: RequiresPythonBound(lower_bound),
+            upper_bound: RequiresPythonBound(upper_bound),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct RequiresPythonRange(RequiresPythonBound, RequiresPythonBound);
+
+impl RequiresPythonRange {
+    pub fn new(lower: RequiresPythonBound, upper: RequiresPythonBound) -> Self {
+        Self(lower, upper)
+    }
+
+    pub fn lower(&self) -> &RequiresPythonBound {
+        &self.0
+    }
+}
+
+impl Default for RequiresPythonRange {
+    fn default() -> Self {
+        Self(
+            RequiresPythonBound::default(),
+            RequiresPythonBound::default(),
+        )
     }
 }
 
@@ -307,16 +345,6 @@ impl RequiresPythonBound {
             Bound::Excluded(version) => Bound::Excluded(version.only_release()),
             Bound::Unbounded => Bound::Unbounded,
         })
-    }
-}
-
-impl From<RequiresPythonBound> for Range<Version> {
-    fn from(value: RequiresPythonBound) -> Self {
-        match value.0 {
-            Bound::Included(version) => Range::higher_than(version),
-            Bound::Excluded(version) => Range::strictly_higher_than(version),
-            Bound::Unbounded => Range::full(),
-        }
     }
 }
 

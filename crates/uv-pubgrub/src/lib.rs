@@ -17,8 +17,14 @@ pub enum PubGrubSpecifierError {
 pub struct PubGrubSpecifier(Range<Version>);
 
 impl PubGrubSpecifier {
+    /// Returns an iterator over the bounds of the [`PubGrubSpecifier`].
     pub fn iter(&self) -> impl Iterator<Item = (&Bound<Version>, &Bound<Version>)> {
         self.0.iter()
+    }
+
+    /// Return the bounding [`Range`] of the [`PubGrubSpecifier].
+    pub fn bounding_range(&self) -> Option<(Bound<&Version>, Bound<&Version>)> {
+        self.0.bounding_range()
     }
 }
 
