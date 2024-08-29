@@ -4,6 +4,12 @@ While uv uses the official Python Package Index (PyPI) by default, it also suppo
 package indexes. Most alternative indexes require various forms of authentication, which requires
 some initial setup.
 
+!!! important
+
+    Please read the dcocumentation on [using multiple indexes](../../pip/compatibility.md#packages-that-exist-on-multiple-indexes)
+    in uv — the default behavior is different from pip to prevent dependency confusion attacks, but
+    this means that uv may not find the versions of a package as you'd expect.
+
 ## Azure Artifacts
 
 uv can install packages from
