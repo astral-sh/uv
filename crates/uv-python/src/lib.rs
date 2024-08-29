@@ -26,6 +26,7 @@ mod installation;
 mod interpreter;
 mod libc;
 pub mod managed;
+mod microsoft_store;
 pub mod platform;
 mod pointer_size;
 mod prefix;

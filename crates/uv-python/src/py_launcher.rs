@@ -4,12 +4,13 @@ use std::str::FromStr;
 use tracing::debug;
 use windows_registry::{Key, Value, CURRENT_USER, LOCAL_MACHINE};
 
-/// A Python interpreter found in the Windows registry through PEP 514.
+/// A Python interpreter found in the Windows registry through PEP 514 or from a known Microsoft
+/// Store path.
 ///
 /// There are a lot more (optional) fields defined in PEP 514, but we only care about path and
 /// version here, for everything else we probe with a Python script.
 #[derive(Debug, Clone)]
-pub(crate) struct RegistryPython {
+pub(crate) struct WindowsPython {
     pub(crate) path: PathBuf,
     pub(crate) version: Option<PythonVersion>,
 }
@@ -24,7 +25,7 @@ fn value_to_string(value: Value) -> Option<String> {
 }
 
 /// Find all Pythons registered in the Windows registry following PEP 514.
-pub(crate) fn registry_pythons() -> Result<Vec<RegistryPython>, windows_result::Error> {
+pub(crate) fn registry_pythons() -> Result<Vec<WindowsPython>, windows_result::Error> {
     let mut registry_pythons = Vec::new();
     for root_key in [CURRENT_USER, LOCAL_MACHINE] {
         let Ok(key_python) = root_key.open(r"Software\Python") else {
@@ -67,7 +68,7 @@ pub(crate) fn registry_pythons() -> Result<Vec<RegistryPython>, windows_result::
     Ok(registry_pythons)
 }
 
-fn read_registry_entry(company: &str, tag: &str, tag_key: &Key) -> Option<RegistryPython> {
+fn read_registry_entry(company: &str, tag: &str, tag_key: &Key) -> Option<WindowsPython> {
     // `ExecutablePath` is mandatory for executable Pythons.
     let Some(executable_path) = tag_key
         .open("InstallPath")
@@ -101,7 +102,7 @@ fn read_registry_entry(company: &str, tag: &str, tag_key: &Key) -> Option<Regist
             }
         });
 
-    Some(RegistryPython {
+    Some(WindowsPython {
         path: PathBuf::from(executable_path),
         version,
     })
