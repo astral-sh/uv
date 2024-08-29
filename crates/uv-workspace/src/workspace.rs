@@ -435,8 +435,31 @@ impl Workspace {
     }
 
     /// The path to the workspace virtual environment.
+    ///
+    /// Uses `.venv` in the install path directory by default.
+    ///
+    /// If `UV_PROJECT_ENVIRONMENT` is set, it will take precedence. If a relative path is provided,
+    /// it is resolved relative to the install path.
     pub fn venv(&self) -> PathBuf {
-        self.install_path.join(".venv")
+        /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
+        fn from_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
+            let value = std::env::var_os("UV_PROJECT_ENVIRONMENT")?;
+
+            if value.is_empty() {
+                return None;
+            };
+
+            let path = PathBuf::from(value);
+            if path.is_absolute() {
+                return Some(path);
+            };
+
+            // Resolve the path relative to the install path.
+            Some(workspace.install_path.join(path))
+        }
+
+        // TODO(zanieb): Warn if `VIRTUAL_ENV` is set and does not match
+        from_environment_variable(self).unwrap_or_else(|| self.install_path.join(".venv"))
     }
 
     /// The members of the workspace.

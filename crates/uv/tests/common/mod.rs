@@ -165,23 +165,31 @@ impl TestContext {
         self
     }
 
-    /// Create a new test context with multiple Python versions.
+    /// Add extra standard filtering for a given path.
+    #[must_use]
+    pub fn with_filtered_path(mut self, path: &Path, name: &str) -> Self {
+        // Note this is sloppy, ideally we wouldn't push to the front of the `Vec` but we need
+        // this to come in front of other filters or we can transform the path (e.g., with `[TMP]`)
+        // before we reach this filter.
+        for pattern in Self::path_patterns(path)
+            .into_iter()
+            .map(|pattern| (pattern, format!("[{name}]/")))
+        {
+            self.filters.insert(0, pattern);
+        }
+        self
+    }
+    /// Discover the path to the XDG state directory. We use this, rather than the OS-specific
+    /// temporary directory, because on macOS (and Windows on GitHub Actions), they involve
+    /// symlinks. (On macOS, the temporary directory is, like `/var/...`, which resolves to
+    /// `/private/var/...`.)
     ///
-    /// Does not create a virtual environment by default, but the first Python version
-    /// can be used to create a virtual environment with [`TestContext::create_venv`].
-    ///
-    /// See [`TestContext::new`] if only a single version is desired.
-    pub fn new_with_versions(python_versions: &[&str]) -> Self {
-        // Discover the path to the XDG state directory. We use this, rather than the OS-specific
-        // temporary directory, because on macOS (and Windows on GitHub Actions), they involve
-        // symlinks. (On macOS, the temporary directory is, like `/var/...`, which resolves to
-        // `/private/var/...`.)
-        //
-        // It turns out that, at least on macOS, if we pass a symlink as `current_dir`, it gets
-        // _immediately_ resolved (such that if you call `current_dir` in the running `Command`, it
-        // returns resolved symlink). This is problematic, as we _don't_ want to resolve symlinks
-        // for user-provided paths.
-        let bucket = env::var("UV_INTERNAL__TEST_DIR")
+    /// It turns out that, at least on macOS, if we pass a symlink as `current_dir`, it gets
+    /// _immediately_ resolved (such that if you call `current_dir` in the running `Command`, it
+    /// returns resolved symlink). This is problematic, as we _don't_ want to resolve symlinks
+    /// for user-provided paths.
+    pub fn test_bucket_dir() -> PathBuf {
+        env::var("UV_INTERNAL__TEST_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
                 etcetera::base_strategy::choose_base_strategy()
@@ -189,7 +197,17 @@ impl TestContext {
                     .data_dir()
                     .join("uv")
                     .join("tests")
-            });
+            })
+    }
+
+    /// Create a new test context with multiple Python versions.
+    ///
+    /// Does not create a virtual environment by default, but the first Python version
+    /// can be used to create a virtual environment with [`TestContext::create_venv`].
+    ///
+    /// See [`TestContext::new`] if only a single version is desired.
+    pub fn new_with_versions(python_versions: &[&str]) -> Self {
+        let bucket = Self::test_bucket_dir();
         fs_err::create_dir_all(&bucket).expect("Failed to create test bucket");
 
         let root = tempfile::TempDir::new_in(bucket).expect("Failed to create test root directory");
