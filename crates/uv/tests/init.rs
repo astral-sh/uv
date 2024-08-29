@@ -1770,3 +1770,51 @@ fn init_hidden() {
     error: Not a valid package or extra name: ".foo". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "###);
 }
+
+/// Run `uv init` with an invalid `pyproject.toml` in a parent directory.
+#[test]
+fn init_failure() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an empty `pyproject.toml`.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.touch()?;
+
+    uv_snapshot!(context.filters(), context.init().arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to discover parent workspace; use `uv init --no-workspace` to ignore
+      Caused by: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    "###);
+
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-workspace"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("foo").join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
+
+    Ok(())
+}
