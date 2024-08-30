@@ -4,7 +4,7 @@
 
 ### Enhancements
 
-- Add `uv export --format requirements.txt` ([#6778](https://github.com/astral-sh/uv/pull/6778))
+- Add `uv export --format requirements-txt` ([#6778](https://github.com/astral-sh/uv/pull/6778))
 - Allow `@` references in `uv tool install --from` ([#6842](https://github.com/astral-sh/uv/pull/6842))
 - Normalize version specifiers by sorting ([#6333](https://github.com/astral-sh/uv/pull/6333))
 - Respect the user's upper-bound in `requires-python` ([#6824](https://github.com/astral-sh/uv/pull/6824))
