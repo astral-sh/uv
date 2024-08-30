@@ -241,7 +241,7 @@ jobs:
     name: "cargo test | windows"
     steps:
       - name: Create Dev Drive using ReFS
-        run: .github/workflows/setup-dev-drive.ps1
+        run: .\.github\workflows\setup-dev-drive.ps1
 
       - uses: actions/checkout@v4
 
@@ -497,7 +497,7 @@ jobs:
     name: "build binary | windows"
     steps:
       - name: Create Dev Drive using ReFS
-        run: .github/workflows/setup-dev-drive.ps1
+        run: .\.github\workflows\setup-dev-drive.ps1
 
       - uses: actions/checkout@v4
 
