@@ -33,7 +33,9 @@ readme = "README.md"
 
 [project.urls]
 Repository = "https://github.com/astral-sh/uv"
-Documentation = "https://github.com/astral-sh/uv"
+Documentation = "https://docs.astral.sh/uv"
+Changelog = "https://github.com/astral-sh/uv/blob/main/CHANGELOG.md"
+Releases = "https://github.com/astral-sh/uv/releases"
 
 [tool.maturin]
 bindings = "bin"
