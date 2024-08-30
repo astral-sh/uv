@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::path::{Component, Path, PathBuf, absolute};
+use std::path::{absolute, Component, Path, PathBuf};
 use std::sync::LazyLock;
 
 use either::Either;
