@@ -414,29 +414,10 @@ impl Default for RequiresPythonRange {
 
 impl From<RequiresPythonRange> for Range<Version> {
     fn from(value: RequiresPythonRange) -> Self {
-        match (value.0.as_ref(), value.1.as_ref()) {
-            (Bound::Included(lower), Bound::Included(upper)) => {
-                Range::from_range_bounds(lower.clone()..=upper.clone())
-            }
-            (Bound::Included(lower), Bound::Excluded(upper)) => {
-                Range::from_range_bounds(lower.clone()..upper.clone())
-            }
-            (Bound::Excluded(lower), Bound::Included(upper)) => {
-                Range::strictly_higher_than(lower.clone())
-                    .intersection(&Range::lower_than(upper.clone()))
-            }
-            (Bound::Excluded(lower), Bound::Excluded(upper)) => {
-                Range::strictly_higher_than(lower.clone())
-                    .intersection(&Range::strictly_lower_than(upper.clone()))
-            }
-            (Bound::Unbounded, Bound::Unbounded) => Range::full(),
-            (Bound::Unbounded, Bound::Included(upper)) => Range::lower_than(upper.clone()),
-            (Bound::Unbounded, Bound::Excluded(upper)) => Range::strictly_lower_than(upper.clone()),
-            (Bound::Included(lower), Bound::Unbounded) => Range::higher_than(lower.clone()),
-            (Bound::Excluded(lower), Bound::Unbounded) => {
-                Range::strictly_higher_than(lower.clone())
-            }
-        }
+        Range::from_range_bounds::<(Bound<Version>, Bound<Version>), _>((
+            value.0.into(),
+            value.1.into(),
+        ))
     }
 }
 
@@ -467,6 +448,12 @@ impl Deref for RequiresPythonBound {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl From<RequiresPythonBound> for Bound<Version> {
+    fn from(bound: RequiresPythonBound) -> Self {
+        bound.0
     }
 }
 
