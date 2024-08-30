@@ -204,7 +204,7 @@ async fn init_project(
                     .connectivity(connectivity)
                     .native_tls(native_tls);
                 let interpreter = PythonInstallation::find_or_download(
-                    Some(request),
+                    Some(&request),
                     EnvironmentPreference::Any,
                     python_preference,
                     python_downloads,
@@ -231,7 +231,7 @@ async fn init_project(
             .connectivity(connectivity)
             .native_tls(native_tls);
         let interpreter = PythonInstallation::find_or_download(
-            Some(request),
+            Some(&request),
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,

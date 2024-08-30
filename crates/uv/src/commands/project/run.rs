@@ -123,7 +123,7 @@ pub(crate) async fn run(
             .native_tls(native_tls);
 
         let interpreter = PythonInstallation::find_or_download(
-            python_request,
+            python_request.as_ref(),
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,
@@ -351,7 +351,7 @@ pub(crate) async fn run(
                     .await?;
 
                     PythonInstallation::find_or_download(
-                        python_request,
+                        python_request.as_ref(),
                         EnvironmentPreference::Any,
                         python_preference,
                         python_downloads,
@@ -464,7 +464,7 @@ pub(crate) async fn run(
                 };
 
                 let python = PythonInstallation::find_or_download(
-                    python_request,
+                    python_request.as_ref(),
                     // No opt-in is required for system environments, since we are not mutating it.
                     EnvironmentPreference::Any,
                     python_preference,
