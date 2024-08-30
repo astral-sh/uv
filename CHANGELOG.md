@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.4.1
+
+### Enhancements
+
+- Add `uv export --format requirements.txt` ([#6778](https://github.com/astral-sh/uv/pull/6778))
+- Allow `@` references in `uv tool install --from` ([#6842](https://github.com/astral-sh/uv/pull/6842))
+- Normalize version specifiers by sorting ([#6333](https://github.com/astral-sh/uv/pull/6333))
+- Respect the user's upper-bound in `requires-python` ([#6824](https://github.com/astral-sh/uv/pull/6824))
+- Use Windows registry to discover Python on Windows directly ([#6761](https://github.com/astral-sh/uv/pull/6761))
+- Hint at `--no-workspace` in `uv init` failures ([#6815](https://github.com/astral-sh/uv/pull/6815))
+- Update to last PyPy releases ([#6784](https://github.com/astral-sh/uv/pull/6784))
+
+### Bug fixes
+
+- Avoid deadlocks when multiple uv processes lock resources ([#6790](https://github.com/astral-sh/uv/pull/6790))
+- Expand tildes when matching against `PATH` ([#6829](https://github.com/astral-sh/uv/pull/6829))
+- Fix `uv init --no-project` alias ([#6837](https://github.com/astral-sh/uv/pull/6837))
+- Ignore pre-release segments when discovering via `requires-python` ([#6813](https://github.com/astral-sh/uv/pull/6813))
+- Support inline optional tables in `uv add` and `uv remove` ([#6787](https://github.com/astral-sh/uv/pull/6787))
+- Update default `hello.py` to pass `ruff format` ([#6811](https://github.com/astral-sh/uv/pull/6811))
+- Avoid stripping root for user path display ([#6865](https://github.com/astral-sh/uv/pull/6865))
+- Error when user-provided environments are disjoint with Python ([#6841](https://github.com/astral-sh/uv/pull/6841))
+- Retain alphabetical sorting for `pyproject.toml` in `uv add` operations ([#6388](https://github.com/astral-sh/uv/pull/6388))))
+
+### Documentation
+
+- Add a link to the multiple index docs in the alternative index guide ([#6826](https://github.com/astral-sh/uv/pull/6826))
+- Add docs for inline exclude newer in PEP 723 scripts ([#6831](https://github.com/astral-sh/uv/pull/6831))
+- Enumerate available Docker tags ([#6768](https://github.com/astral-sh/uv/pull/6768))
+- Omit `[pip]` section from configuration file docs ([#6814](https://github.com/astral-sh/uv/pull/6814))
+- Update `project.urls` in `pyproject.toml`  ([#6844](https://github.com/astral-sh/uv/pull/6844))
+- Add docs for AWS CodeArtifact usage ([#6816](https://github.com/astral-sh/uv/pull/6816))
+
+### Other changes
+
 ## 0.4.0
 
 This release adds first-class support for Python projects that are not designed as Python packages (e.g., web applications, data science projects, etc.).
@@ -11,12 +46,12 @@ Most users are not developing libraries that need to be packaged and published t
 In summary, the major changes are:
 
 - uv no longer attempts to package and install projects that do not define a `[build-system]`.
-    - While the project itself will not be installed into the virtual environment, its dependencies will still be included.
-    - The previous behavior can be recovered by setting `package = true` in the `[tool.uv]` section of your `pyproject.toml`.
+  - While the project itself will not be installed into the virtual environment, its dependencies will still be included.
+  - The previous behavior can be recovered by setting `package = true` in the `[tool.uv]` section of your `pyproject.toml`.
 - `uv init` no longer creates a `src/` directory or defines a `[build-system]` by default.
-    - The previous behavior can be recovered with `uv init --lib` or `uv init --app --package`.
+  - The previous behavior can be recovered with `uv init --lib` or `uv init --app --package`.
 - uv allows and recommends including `[project]` definitions in virtual workspace roots.
-    - Previously, the uv required the `[project]` section to be omitted.
+  - Previously, the uv required the `[project]` section to be omitted.
 - uv allows disabling packaging of projects, even if they define a `[build-system]`, by setting `package = false` in the `[tool.uv]` section of your `pyproject.toml`.
 
 See the latest documentation on [build systems in projects](http://docs.astral.sh/uv/concepts/projects/#build-systems) for more details.
