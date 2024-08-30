@@ -30,7 +30,7 @@ fn lock_wheel_registry() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -156,7 +156,7 @@ fn lock_sdist_registry() -> Result<()> {
         dependencies = ["source-distribution==0.0.1"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -242,7 +242,7 @@ fn lock_sdist_git() -> Result<()> {
         dependencies = ["uv-public-pypackage"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -336,7 +336,7 @@ fn lock_sdist_git() -> Result<()> {
         dependencies = ["uv-public-pypackage"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -396,7 +396,7 @@ fn lock_sdist_git() -> Result<()> {
         dependencies = ["uv-public-pypackage"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -456,7 +456,7 @@ fn lock_sdist_git() -> Result<()> {
         dependencies = ["uv-public-pypackage"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -524,7 +524,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
         dependencies = ["example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -612,7 +612,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@0.0.1"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -679,7 +679,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -736,7 +736,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -793,7 +793,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@0.0.2"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -858,7 +858,7 @@ fn lock_sdist_git_short_rev() -> Result<()> {
         dependencies = ["uv-public-pypackage"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -959,7 +959,7 @@ fn lock_wheel_url() -> Result<()> {
         dependencies = ["anyio @ https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -1106,7 +1106,7 @@ fn lock_sdist_url() -> Result<()> {
         dependencies = ["anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -1240,7 +1240,7 @@ fn lock_project_extra() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [project.optional-dependencies]
@@ -1386,7 +1386,7 @@ fn lock_project_with_overrides() -> Result<()> {
         dependencies = ["flask==3.0.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -1450,7 +1450,7 @@ fn lock_project_with_constraints() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -1510,7 +1510,7 @@ fn lock_dependency_extra() -> Result<()> {
         dependencies = ["flask[dotenv]"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -1710,7 +1710,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         dependencies = ["requests", "requests[socks] ; python_version < '3.10'"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -1996,7 +1996,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         dependencies = ["flask[foo]"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -2182,7 +2182,7 @@ fn lock_upgrade_log() -> Result<()> {
         dependencies = ["markupsafe<2", "iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -2263,7 +2263,7 @@ fn lock_upgrade_log() -> Result<()> {
         dependencies = ["markupsafe", "typing-extensions"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -2358,7 +2358,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         dependencies = ["markupsafe<2 ; sys_platform != 'win32'", "markupsafe==2.0.0 ; sys_platform == 'win32'"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -2445,7 +2445,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         dependencies = ["markupsafe"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -2524,7 +2524,7 @@ fn lock_preference() -> Result<()> {
         dependencies = ["iniconfig<2"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -2584,7 +2584,7 @@ fn lock_preference() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -2703,7 +2703,7 @@ fn lock_git_sha() -> Result<()> {
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@main"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -2746,7 +2746,7 @@ fn lock_git_sha() -> Result<()> {
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@main"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -2826,7 +2826,7 @@ fn lock_requires_python() -> Result<()> {
         dependencies = ["pygls>=1.1.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -2866,7 +2866,7 @@ fn lock_requires_python() -> Result<()> {
         dependencies = ["pygls"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -3021,7 +3021,7 @@ fn lock_requires_python() -> Result<()> {
         dependencies = ["pygls"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -3166,7 +3166,7 @@ fn lock_requires_python() -> Result<()> {
         dependencies = ["pygls"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -3311,7 +3311,7 @@ fn lock_requires_python_upper() -> Result<()> {
         dependencies = ["pydantic"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -3462,7 +3462,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         dependencies = ["frozenlist"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -3549,7 +3549,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         dependencies = ["frozenlist"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -3662,7 +3662,7 @@ fn lock_requires_python_star() -> Result<()> {
         dependencies = ["linehaul"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -3788,7 +3788,7 @@ fn lock_requires_python_pre() -> Result<()> {
         dependencies = ["linehaul"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -3912,7 +3912,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -4007,7 +4007,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -4121,7 +4121,7 @@ fn lock_dev() -> Result<()> {
         dev-dependencies = ["typing-extensions @ https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -4239,7 +4239,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         dependencies = ["iniconfig", "iniconfig ; python_version < '3.12'"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -4320,7 +4320,7 @@ fn lock_multiple_markers() -> Result<()> {
         dependencies = ["iniconfig ; implementation_name == 'cpython'", "iniconfig ; python_version < '3.12'"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -4404,7 +4404,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         c = {{ path = '{}' }}
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
         context.temp_dir.join("c").display()
@@ -4422,7 +4422,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         license = {text = "MIT"}
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
     "#})?;
@@ -4439,7 +4439,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         license = {text = "MIT"}
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
     "#})?;
@@ -4523,7 +4523,7 @@ fn lock_cycles() -> Result<()> {
         dependencies = ["testtools==2.3.0", "fixtures==3.0.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -4730,7 +4730,7 @@ fn lock_new_extras() -> Result<()> {
         dependencies = ["requests==2.31.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
     "#,
@@ -4858,7 +4858,7 @@ fn lock_new_extras() -> Result<()> {
         dependencies = ["requests[socks]==2.31.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
     "#,
@@ -5011,7 +5011,7 @@ fn lock_invalid_hash() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -5111,7 +5111,7 @@ fn lock_resolution_mode() -> Result<()> {
         dependencies = ["anyio>=3"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -5293,7 +5293,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
         dependencies = ["dearpygui==1.9.1"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -5329,7 +5329,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -5346,7 +5346,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         dependencies = ["anyio==3.0.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -5364,7 +5364,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
         Url::from_file_path(context.temp_dir.join("v1")).unwrap(),
@@ -5526,7 +5526,7 @@ fn lock_unsafe_lowest() -> Result<()> {
         all = ["project[dev]"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -5568,7 +5568,7 @@ fn lock_exclusion() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -5590,7 +5590,7 @@ fn lock_exclusion() -> Result<()> {
         dependencies = ["project"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -5675,7 +5675,7 @@ fn lock_dev_transitive() -> Result<()> {
         dev-dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -5693,7 +5693,7 @@ fn lock_dev_transitive() -> Result<()> {
         dependencies = ["foo", "baz", "iniconfig>1"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -5718,7 +5718,7 @@ fn lock_dev_transitive() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -5846,7 +5846,7 @@ fn lock_redact_https() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -5995,7 +5995,7 @@ fn lock_redact_https() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -6042,7 +6042,7 @@ fn lock_redact_git() -> Result<()> {
         dependencies = ["uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
         token = token,
@@ -6130,7 +6130,7 @@ fn lock_relative_index() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -6224,7 +6224,7 @@ fn lock_no_sources() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -6245,7 +6245,7 @@ fn lock_no_sources() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -6417,7 +6417,7 @@ fn lock_migrate() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -6563,7 +6563,7 @@ fn lock_upgrade_package() -> Result<()> {
         dependencies = ["anyio<=2", "idna<=3"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -6661,7 +6661,7 @@ fn lock_upgrade_package() -> Result<()> {
         dependencies = ["anyio", "idna"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -6893,7 +6893,7 @@ fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
         dependencies = ["pytest>8"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -6948,7 +6948,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
         dependencies = ["tqdm==1000.0.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -7066,7 +7066,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
         dependencies = ["tqdm==999.0.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -7161,7 +7161,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
         dependencies = ["packaging==23.2"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -7256,7 +7256,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
         dependencies = ["packaging==23.2"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -7386,7 +7386,7 @@ fn lock_local_index() -> Result<()> {
         dependencies = ["tqdm"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -7487,7 +7487,7 @@ fn lock_sources_url() -> Result<()> {
         dependencies = ["workspace @ https://github.com/user-attachments/files/16592193/workspace.zip"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -7626,7 +7626,7 @@ fn lock_sources_archive() -> Result<()> {
         dependencies = ["workspace @ {}"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
         Url::from_file_path(&workspace_archive).unwrap(),
@@ -7879,7 +7879,7 @@ fn lock_editable() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -7899,7 +7899,7 @@ fn lock_editable() -> Result<()> {
         dependencies = ["library"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -7916,7 +7916,7 @@ fn lock_editable() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     library.child("src/__init__.py").touch()?;
@@ -7998,7 +7998,7 @@ fn lock_editable() -> Result<()> {
         dependencies = ["library"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -8105,7 +8105,7 @@ fn lock_mixed_extras() -> Result<()> {
         dependencies = ["leaf1", "workspace2"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [project.optional-dependencies]
@@ -8132,7 +8132,7 @@ fn lock_mixed_extras() -> Result<()> {
         async = ["iniconfig>=2"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     leaf1.child("src/__init__.py").touch()?;
@@ -8147,7 +8147,7 @@ fn lock_mixed_extras() -> Result<()> {
         dependencies = ["leaf2"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -8170,7 +8170,7 @@ fn lock_mixed_extras() -> Result<()> {
         async = ["packaging>=24"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     leaf2.child("src/__init__.py").touch()?;
@@ -8341,7 +8341,7 @@ fn lock_transitive_extra() -> Result<()> {
         dependencies = ["leaf"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [project.optional-dependencies]
@@ -8368,7 +8368,7 @@ fn lock_transitive_extra() -> Result<()> {
         async = ["iniconfig>=2"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     leaf.child("src/__init__.py").touch()?;
@@ -8556,7 +8556,7 @@ fn lock_mismatched_versions() -> Result<()> {
         dependencies = ["uv-public-pypackage==0.0.2"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -8650,7 +8650,7 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -8683,7 +8683,7 @@ fn lock_change_index() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -8809,7 +8809,7 @@ fn lock_remove_member() -> Result<()> {
         dependencies = ["anyio>3"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -8824,7 +8824,7 @@ fn lock_remove_member() -> Result<()> {
         dependencies = ["leaf"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -9009,7 +9009,7 @@ fn lock_add_member() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -9068,7 +9068,7 @@ fn lock_add_member() -> Result<()> {
         dependencies = ["anyio>3"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -9083,7 +9083,7 @@ fn lock_add_member() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -9230,7 +9230,7 @@ fn lock_redundant_add_member() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -9325,7 +9325,7 @@ fn lock_redundant_add_member() -> Result<()> {
         dependencies = ["anyio", "idna"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -9436,7 +9436,7 @@ fn lock_new_constraints() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -9528,7 +9528,7 @@ fn lock_new_constraints() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -9638,7 +9638,7 @@ fn lock_remove_member_non_project() -> Result<()> {
         members = ["leaf"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -9654,7 +9654,7 @@ fn lock_remove_member_non_project() -> Result<()> {
         dependencies = ["anyio>3"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -9812,7 +9812,7 @@ fn lock_rename_project() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -9882,7 +9882,7 @@ fn lock_rename_project() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -9964,7 +9964,7 @@ fn lock_missing_metadata() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -10106,7 +10106,7 @@ fn lock_reorder() -> Result<()> {
         dependencies = ["anyio", "iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -10211,7 +10211,7 @@ fn lock_reorder() -> Result<()> {
         dependencies = ["iniconfig", "anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -10243,7 +10243,7 @@ fn lock_narrowed_python_version() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -10258,7 +10258,7 @@ fn lock_narrowed_python_version() -> Result<()> {
         dependencies = ["dependency ; python_version < '3.9'", "dependency ; python_version > '3.10'"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -10365,7 +10365,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
             "anyio ; python_version > '3.10'"
         ]
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -10472,7 +10472,7 @@ fn lock_constrained_environment() -> Result<()> {
         dependencies = ["black"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -10620,7 +10620,7 @@ fn lock_constrained_environment() -> Result<()> {
         dependencies = ["black"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -10649,7 +10649,7 @@ fn lock_constrained_environment() -> Result<()> {
         dependencies = ["black"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -10800,7 +10800,7 @@ fn lock_overlapping_environment() -> Result<()> {
         dependencies = ["black"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -11131,7 +11131,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -11249,7 +11249,7 @@ fn lock_trailing_slash() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -11378,7 +11378,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
         dependencies = ["black"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -11977,7 +11977,7 @@ fn lock_conflicting_environment() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
