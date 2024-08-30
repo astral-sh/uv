@@ -241,22 +241,14 @@ jobs:
     name: "cargo test | windows"
     steps:
       - name: Create Dev Drive using ReFS
-        run: |
-          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 20GB |
-                    Mount-VHD -Passthru |
-                    Initialize-Disk -Passthru |
-                    New-Partition -AssignDriveLetter -UseMaximumSize |
-                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
-          Write-Output $Volume
-          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
-          Write-Output "TEMP=$($Volume.DriveLetter):\uv-tmp" >> $env:GITHUB_ENV
+        run: .github/workflows/setup-dev-drive.ps1
 
       - uses: actions/checkout@v4
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
       # We do not test with Python patch versions on Windows
       # so we can use `setup-python` instead of our bootstrapping code
@@ -272,39 +264,25 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+          workspaces: ${{ env.UV_WORKSPACE }}
 
       - name: "Install Rust toolchain"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+        working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup show
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
 
       - name: "Cargo test"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+        working-directory: ${{ env.UV_WORKSPACE }}
         run: |
           cargo nextest run --no-default-features --features python,pypi --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
       - name: "Smoke test"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
+        working-directory: ${{ env.UV_WORKSPACE }}
         env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
           # Avoid debug build stack overflows.
           UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
         run: |
@@ -519,44 +497,28 @@ jobs:
     name: "build binary | windows"
     steps:
       - name: Create Dev Drive using ReFS
-        run: |
-          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
-                    Mount-VHD -Passthru |
-                    Initialize-Disk -Passthru |
-                    New-Partition -AssignDriveLetter -UseMaximumSize |
-                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
-          Write-Output $Volume
-          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
-          Write-Output "TEMP=$($Volume.DriveLetter):\uv-tmp" >> $env:GITHUB_ENV
+        run: .github/workflows/setup-dev-drive.ps1
 
       - uses: actions/checkout@v4
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
-
-      - uses: rui314/setup-mold@v1
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+          workspaces: ${{ env.UV_WORKSPACE }}
 
       - name: "Build"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+        working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo build
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-windows-${{ github.sha }}
-          path: ${{ env.DEV_DRIVE }}/uv/target/debug/uv.exe
+          path: ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
           retention-days: 1
 
   ecosystem-test:

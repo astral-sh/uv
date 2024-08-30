@@ -135,7 +135,7 @@ impl Cache {
 
     /// Create a temporary cache directory.
     pub fn temp() -> Result<Self, io::Error> {
-        let temp_dir = tempfile::tempdir()?
+        let temp_dir = tempfile::tempdir()?;
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None(Timestamp::now()),
