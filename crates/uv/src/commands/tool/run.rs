@@ -324,7 +324,7 @@ async fn get_or_create_environment(
 
     // Discover an interpreter.
     let interpreter = PythonInstallation::find_or_download(
-        python_request.clone(),
+        python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,

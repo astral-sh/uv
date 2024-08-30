@@ -78,7 +78,7 @@ impl PythonInstallation {
     ///
     /// Unlike [`PythonInstallation::find`], if the required Python is not installed it will be installed automatically.
     pub async fn find_or_download<'a>(
-        request: Option<PythonRequest>,
+        request: Option<&PythonRequest>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
         python_downloads: PythonDownloads,
@@ -86,10 +86,10 @@ impl PythonInstallation {
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, Error> {
-        let request = request.unwrap_or_default();
+        let request = request.unwrap_or_else(|| &PythonRequest::Any);
 
         // Search for the installation
-        match Self::find(&request, environments, preference, cache) {
+        match Self::find(request, environments, preference, cache) {
             Ok(venv) => Ok(venv),
             // If missing and allowed, perform a fetch
             Err(Error::MissingPython(err))
@@ -97,7 +97,7 @@ impl PythonInstallation {
                     && python_downloads.is_automatic()
                     && client_builder.connectivity.is_online() =>
             {
-                if let Some(request) = PythonDownloadRequest::from_request(&request) {
+                if let Some(request) = PythonDownloadRequest::from_request(request) {
                     debug!("Requested Python not found, checking for available download...");
                     match Self::fetch(request.fill()?, client_builder, cache, reporter).await {
                         Ok(installation) => Ok(installation),

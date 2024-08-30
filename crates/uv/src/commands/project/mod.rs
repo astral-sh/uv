@@ -261,7 +261,7 @@ impl FoundInterpreter {
 
         // Locate the Python interpreter to use in the environment
         let python = PythonInstallation::find_or_download(
-            python_request,
+            python_request.as_ref(),
             EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,

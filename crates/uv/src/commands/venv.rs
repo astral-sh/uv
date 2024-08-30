@@ -183,7 +183,7 @@ async fn venv_impl(
 
     // Locate the Python interpreter to use in the environment
     let python = PythonInstallation::find_or_download(
-        interpreter_request,
+        interpreter_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,

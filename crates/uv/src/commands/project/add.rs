@@ -138,7 +138,7 @@ pub(crate) async fn add(
             };
 
             let interpreter = PythonInstallation::find_or_download(
-                Some(python_request),
+                Some(&python_request),
                 EnvironmentPreference::Any,
                 python_preference,
                 python_downloads,
@@ -175,7 +175,7 @@ pub(crate) async fn add(
         };
 
         let interpreter = PythonInstallation::find_or_download(
-            python_request,
+            python_request.as_ref(),
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,
