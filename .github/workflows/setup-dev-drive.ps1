@@ -14,6 +14,7 @@ $Tmp = "$($Drive)/uv-tmp"
 
 Write-Output `
 	"DEV_DRIVE=$($Drive)" `
+	"TMP=$($Tmp)" `
 	"TEMP=$($Tmp)" `
 	"UV_INTERNAL__TEST_DIR=$($Tmp)" `
 	"RUSTUP_HOME=$($Drive)/.rustup" `
