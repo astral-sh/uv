@@ -889,7 +889,7 @@ impl TryFrom<&ExternalCommand> for RunCommand {
             Ok(Self::Python(args.to_vec()))
         } else if target_path
             .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyc"))
             && target_path.exists()
         {
             Ok(Self::PythonScript(target_path, args.to_vec()))
