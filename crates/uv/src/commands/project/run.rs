@@ -34,7 +34,7 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
-use crate::commands::project::{ProjectError, WorkspacePython};
+use crate::commands::project::{validate_requires_python, ProjectError, WorkspacePython};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -352,30 +352,35 @@ pub(crate) async fn run(
 
                 // If we're isolating the environment, use an ephemeral virtual environment as the
                 // base environment for the project.
-                let interpreter = {
-                    let client_builder = BaseClientBuilder::new()
-                        .connectivity(connectivity)
-                        .native_tls(native_tls);
+                let client_builder = BaseClientBuilder::new()
+                    .connectivity(connectivity)
+                    .native_tls(native_tls);
 
-                    // Resolve the Python request and requirement for the workspace.
-                    let WorkspacePython { python_request, .. } = WorkspacePython::from_request(
-                        python.as_deref().map(PythonRequest::parse),
-                        project.workspace(),
-                    )
-                    .await?;
+                // Resolve the Python request and requirement for the workspace.
+                let WorkspacePython {
+                    python_request,
+                    requires_python,
+                } = WorkspacePython::from_request(
+                    python.as_deref().map(PythonRequest::parse),
+                    project.workspace(),
+                )
+                .await?;
 
-                    PythonInstallation::find_or_download(
-                        python_request.as_ref(),
-                        EnvironmentPreference::Any,
-                        python_preference,
-                        python_downloads,
-                        &client_builder,
-                        cache,
-                        Some(&download_reporter),
-                    )
-                    .await?
-                    .into_interpreter()
-                };
+                let interpreter = PythonInstallation::find_or_download(
+                    python_request.as_ref(),
+                    EnvironmentPreference::Any,
+                    python_preference,
+                    python_downloads,
+                    &client_builder,
+                    cache,
+                    Some(&download_reporter),
+                )
+                .await?
+                .into_interpreter();
+
+                if let Some(requires_python) = requires_python.as_ref() {
+                    validate_requires_python(&interpreter, project.workspace(), requires_python)?;
+                }
 
                 // Create a virtual environment
                 temp_dir = cache.environment()?;

@@ -146,6 +146,46 @@ pub(crate) fn find_requires_python(
     }))
 }
 
+/// Returns an error if the [`Interpreter`] does not satisfy the [`Workspace`] `requires-python`.
+#[allow(clippy::result_large_err)]
+pub(crate) fn validate_requires_python(
+    interpreter: &Interpreter,
+    workspace: &Workspace,
+    requires_python: &RequiresPython,
+) -> Result<(), ProjectError> {
+    if !requires_python.contains(interpreter.python_version()) {
+        // If the Python version is compatible with one of the workspace _members_, raise
+        // a dedicated error. For example, if the workspace root requires Python >=3.12, but
+        // a library in the workspace is compatible with Python >=3.8, the user may attempt
+        // to sync on Python 3.8. This will fail, but we should provide a more helpful error
+        // message.
+        for (name, member) in workspace.packages() {
+            let Some(project) = member.pyproject_toml().project.as_ref() else {
+                continue;
+            };
+            let Some(specifiers) = project.requires_python.as_ref() else {
+                continue;
+            };
+            if specifiers.contains(interpreter.python_version()) {
+                return Err(ProjectError::RequestedMemberPythonIncompatibility(
+                    interpreter.python_version().clone(),
+                    requires_python.clone(),
+                    name.clone(),
+                    specifiers.clone(),
+                    member.root().clone(),
+                ));
+            }
+        }
+
+        return Err(ProjectError::RequestedPythonIncompatibility(
+            interpreter.python_version().clone(),
+            requires_python.clone(),
+        ));
+    }
+
+    Ok(())
+}
+
 /// Find the virtual environment for the current project.
 fn find_environment(
     workspace: &Workspace,
@@ -297,35 +337,7 @@ impl FoundInterpreter {
         }
 
         if let Some(requires_python) = requires_python.as_ref() {
-            if !requires_python.contains(interpreter.python_version()) {
-                // If the Python version is compatible with one of the workspace _members_, raise
-                // a dedicated error. For example, if the workspace root requires Python >=3.12, but
-                // a library in the workspace is compatible with Python >=3.8, the user may attempt
-                // to sync on Python 3.8. This will fail, but we should provide a more helpful error
-                // message.
-                for (name, member) in workspace.packages() {
-                    let Some(project) = member.pyproject_toml().project.as_ref() else {
-                        continue;
-                    };
-                    let Some(specifiers) = project.requires_python.as_ref() else {
-                        continue;
-                    };
-                    if specifiers.contains(interpreter.python_version()) {
-                        return Err(ProjectError::RequestedMemberPythonIncompatibility(
-                            interpreter.python_version().clone(),
-                            requires_python.clone(),
-                            name.clone(),
-                            specifiers.clone(),
-                            member.root().clone(),
-                        ));
-                    }
-                }
-
-                return Err(ProjectError::RequestedPythonIncompatibility(
-                    interpreter.python_version().clone(),
-                    requires_python.clone(),
-                ));
-            }
+            validate_requires_python(&interpreter, workspace, requires_python)?;
         }
 
         Ok(Self::Interpreter(interpreter))
