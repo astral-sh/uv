@@ -4,7 +4,7 @@
 
 uv offers images with shells, you can choose your preferred tag from the [ghcr.io](https://github.com/astral-sh/uv/pkgs/container/uv)
 
-```yaml
+```yaml title="gitlab-ci.yml
 variables:
   REPO: 
   UV_VERSION: 0.4
@@ -82,8 +82,8 @@ UV Install:
   variables:
     UV_CACHE_DIR: /tmp/.uv-cache
   - key:
-      files:
-        - uv.lock
+        files:
+          - uv.lock
       paths:
         - $UV_CACHE_DIR
   steps: >
@@ -105,33 +105,15 @@ If using the `uv pip` interface instead of the uv project interface, uv requires
 environment by default. To allow installing packages into the system environment, use the `--system`
 flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable.
 
-The `UV_SYSTEM_PYTHON` variable can be defined in at different scopes.
+The `UV_SYSTEM_PYTHON` variable can be defined in at different scopes. You can read more about how [variables and their precedence works in GitLab here](https://docs.gitlab.com/ee/ci/variables/)
 
 Opt-in for the entire workflow by defining it at the top level:
 
-```yaml title="example.yml"
+```yaml title="gitlab-ci.yml"
 variables:
   UV_SYSTEM_PYTHON: 1
-```
 
-Or, opt-in for a specific job in the workflow:
-
-```yaml title="example.yml"
-jobs:
-  install_job:
-    env:
-      UV_SYSTEM_PYTHON: 1
-    ...
-```
-
-Or, opt-in for a specific step in a job:
-
-```yaml title="example.yml"
-steps:
-  - name: Install requirements
-    run: uv pip install -r requirements.txt
-    env:
-      UV_SYSTEM_PYTHON: 1
+# [...]
 ```
 
 To opt-out again, the `--no-system` flag can be used in any uv invocation.
