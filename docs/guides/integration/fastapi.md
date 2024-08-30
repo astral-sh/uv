@@ -32,7 +32,7 @@ project
 To use uv with this application, inside the `project` directory run:
 
 ```console
-$ uv init -app
+$ uv init --app
 ```
 
 This creates an [Application project](../../concepts/projects.md#applications) with a
