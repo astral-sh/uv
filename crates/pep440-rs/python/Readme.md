@@ -18,8 +18,8 @@ assert not VersionSpecifier(">=1.1").contains(Version("1.1a1"))
 assert Version("2.0") in VersionSpecifier("==2")
 ```
 
-Unlike [pypa/packaging](https://github.com/pypa/packaging), this library always matches preleases.
-To only match final releases, filter with `.any_prelease()` beforehand.
+Unlike [pypa/packaging](https://github.com/pypa/packaging), this library always matches prereleases.
+To only match final releases, filter with `.any_prerelease()` beforehand.
 
 PEP 440 has a lot of unintuitive features, including:
 

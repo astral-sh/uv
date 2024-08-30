@@ -167,8 +167,8 @@ $ uv tool install black>=24
 ```
 
 Similarly, tool upgrades will retain the settings provided when installing the tool. For example,
-`uv tool install black --prelease allow` followed by `uv tool upgrade black` will retain the
-`--prelease allow` setting.
+`uv tool install black --prerelease allow` followed by `uv tool upgrade black` will retain the
+`--prerelease allow` setting.
 
 Tool upgrades will reinstall the tool executables, even if they have not changed.
 
