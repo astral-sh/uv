@@ -159,7 +159,7 @@ See the latest documentation on [build systems in projects](http://docs.astral.s
 - Ignore `.python-version` files in `uv venv` with `--no-config` ([#6513](https://github.com/astral-sh/uv/pull/6513))
 - Include virtual environment interpreters in `uv python find` ([#6521](https://github.com/astral-sh/uv/pull/6521))
 - Respect `-` as stdin channel for `uv run` ([#6481](https://github.com/astral-sh/uv/pull/6481))
-- Revert changes to pyproject.toml when sync fails duing `uv add` ([#6526](https://github.com/astral-sh/uv/pull/6526))
+- Revert changes to pyproject.toml when sync fails during `uv add` ([#6526](https://github.com/astral-sh/uv/pull/6526))
 
 ### Configuration
 
