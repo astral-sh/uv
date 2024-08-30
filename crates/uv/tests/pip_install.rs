@@ -672,7 +672,7 @@ fn reinstall_incomplete() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
-    warning: Failed to uninstall package at [SITE_PACKAGES]/anyio-3.7.0.dist-info due to missing RECORD file. Installation may result in an incomplete environment.
+    warning: Failed to uninstall package at [SITE_PACKAGES]/anyio-3.7.0.dist-info due to missing `RECORD` file. Installation may result in an incomplete environment.
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
@@ -6454,4 +6454,41 @@ fn stale_egg_info() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// `suds-community` has an incorrect layout whereby the wheel includes `suds_community.egg-info` at
+/// the top-level. We're then under the impression that `suds` is installed twice, but when we go to
+/// uninstall the second "version", we can't find the `egg-info` directory.
+#[test]
+fn missing_top_level() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("suds-community==0.8.5"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + suds-community==0.8.5
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("suds-community==0.8.5"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    warning: Failed to uninstall package at [SITE_PACKAGES]/suds_community.egg-info due to missing `top-level.txt` file. Installation may result in an incomplete environment.
+    Uninstalled 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     ~ suds-community==0.8.5
+    "###
+    );
 }
