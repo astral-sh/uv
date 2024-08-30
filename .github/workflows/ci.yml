@@ -249,6 +249,7 @@ jobs:
                     Format-Volume -FileSystem ReFS -Confirm:$false -Force
           Write-Output $Volume
           Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+          Write-Output "TEMP=$($Volume.DriveLetter):\uv-tmp" >> $env:GITHUB_ENV
 
       - uses: actions/checkout@v4
 
@@ -296,7 +297,6 @@ jobs:
         env:
           CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
           RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-          TEMP: ${{ env.DEV_DRIVE }}/tmp-uv
         run: |
           cargo nextest run --no-default-features --features python,pypi --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
@@ -527,6 +527,7 @@ jobs:
                     Format-Volume -FileSystem ReFS -Confirm:$false -Force
           Write-Output $Volume
           Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+          Write-Output "TEMP=$($Volume.DriveLetter):\uv-tmp" >> $env:GITHUB_ENV
 
       - uses: actions/checkout@v4
 
