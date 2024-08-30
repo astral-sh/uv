@@ -238,7 +238,7 @@ pub(crate) async fn pip_compile(
                 interpreter.python_version()
             },
         );
-        PythonRequirement::from_requires_python(&interpreter, &requires_python)
+        PythonRequirement::from_requires_python(&interpreter, requires_python)
     } else if let Some(python_version) = python_version.as_ref() {
         PythonRequirement::from_python_version(&interpreter, python_version)
     } else {

@@ -17,7 +17,7 @@ use crate::candidate_selector::CandidateSelector;
 use crate::error::ErrorTree;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
-use crate::python_requirement::{PythonRequirement, PythonTarget};
+use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
 use crate::{RequiresPython, ResolverMarkers};
 
@@ -52,25 +52,19 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     &**package,
                     PubGrubPackageInner::Python(PubGrubPython::Target)
                 ) {
-                    return if let Some(target) = self.python_requirement.target() {
-                        format!(
-                            "the requested {package} version ({target}) does not satisfy {}",
-                            self.compatible_range(package, set)
-                        )
-                    } else {
-                        format!(
-                            "the requested {package} version does not satisfy {}",
-                            self.compatible_range(package, set)
-                        )
-                    };
+                    let target = self.python_requirement.target();
+                    return format!(
+                        "the requested {package} version ({target}) does not satisfy {}",
+                        self.compatible_range(package, set)
+                    );
                 }
                 if matches!(
                     &**package,
                     PubGrubPackageInner::Python(PubGrubPython::Installed)
                 ) {
+                    let installed = self.python_requirement.exact();
                     return format!(
-                        "the current {package} version ({}) does not satisfy {}",
-                        self.python_requirement.installed(),
+                        "the current {package} version ({installed}) does not satisfy {}",
                         self.compatible_range(package, set)
                     );
                 }
@@ -554,16 +548,13 @@ impl PubGrubReportFormatter<'_> {
                     &**dependency,
                     PubGrubPackageInner::Python(PubGrubPython::Target)
                 ) {
-                    if let Some(PythonTarget::RequiresPython(requires_python)) =
-                        self.python_requirement.target()
-                    {
-                        hints.insert(PubGrubHint::RequiresPython {
-                            requires_python: requires_python.clone(),
-                            package: package.clone(),
-                            package_set: self.simplify_set(package_set, package).into_owned(),
-                            package_requires_python: dependency_set.clone(),
-                        });
-                    }
+                    hints.insert(PubGrubHint::RequiresPython {
+                        source: self.python_requirement.source(),
+                        requires_python: self.python_requirement.target().clone(),
+                        package: package.clone(),
+                        package_set: self.simplify_set(package_set, package).into_owned(),
+                        package_requires_python: dependency_set.clone(),
+                    });
                 }
             }
             DerivationTree::External(External::NotRoot(..)) => {}
@@ -798,6 +789,7 @@ pub(crate) enum PubGrubHint {
     },
     /// The `Requires-Python` requirement was not satisfied.
     RequiresPython {
+        source: PythonRequirementSource,
         requires_python: RequiresPython,
         #[derivative(PartialEq = "ignore", Hash = "ignore")]
         package: PubGrubPackage,
@@ -932,6 +924,7 @@ impl std::fmt::Display for PubGrubHint {
                 )
             }
             Self::RequiresPython {
+                source: PythonRequirementSource::RequiresPython,
                 requires_python,
                 package,
                 package_set,
@@ -945,6 +938,39 @@ impl std::fmt::Display for PubGrubHint {
                     requires_python.bold(),
                     PackageRange::compatibility(package, package_set, None).bold(),
                     package_requires_python.bold(),
+                    package_requires_python.bold(),
+                )
+            }
+            Self::RequiresPython {
+                source: PythonRequirementSource::PythonVersion,
+                requires_python,
+                package,
+                package_set,
+                package_requires_python,
+            } => {
+                write!(
+                    f,
+                    "{}{} The `--python-version` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a higher `--python-version` value.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    requires_python.bold(),
+                    PackageRange::compatibility(package, package_set, None).bold(),
+                    package_requires_python.bold(),
+                )
+            }
+            Self::RequiresPython {
+                source: PythonRequirementSource::Interpreter,
+                requires_python: _,
+                package,
+                package_set,
+                package_requires_python,
+            } => {
+                write!(
+                    f,
+                    "{}{} The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only supports {}). Consider passing a `--python-version` value to raise the minimum supported version.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    PackageRange::compatibility(package, package_set, None).bold(),
                     package_requires_python.bold(),
                 )
             }

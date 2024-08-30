@@ -3742,19 +3742,21 @@ fn python_less_than_current() {
     uv_snapshot!(filters, command(&context)
         .arg("python-less-than-current-a==1.0.0")
         , @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python<=3.8 and package-a==1.0.0 depends on Python<=3.8, we can conclude that package-a==1.0.0 cannot be used.
-          And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.0.0
     "###);
 
-    assert_not_installed(
+    assert_installed(
         &context.venv,
         "python_less_than_current_a",
+        "1.0.0",
         &context.temp_dir,
     );
 }

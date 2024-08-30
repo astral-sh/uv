@@ -167,13 +167,14 @@ pub(super) async fn do_sync(
     } = settings;
 
     // Validate that the Python version is supported by the lockfile.
-    if let Some(requires_python) = lock.requires_python() {
-        if !requires_python.contains(venv.interpreter().python_version()) {
-            return Err(ProjectError::LockedPythonIncompatibility(
-                venv.interpreter().python_version().clone(),
-                requires_python.clone(),
-            ));
-        }
+    if !lock
+        .requires_python()
+        .contains(venv.interpreter().python_version())
+    {
+        return Err(ProjectError::LockedPythonIncompatibility(
+            venv.interpreter().python_version().clone(),
+            lock.requires_python().clone(),
+        ));
     }
 
     // Determine the markers to use for resolution.
