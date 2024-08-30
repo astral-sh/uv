@@ -65,6 +65,11 @@ impl<T: AsRef<Path>> Simplified for T {
     fn user_display(&self) -> impl std::fmt::Display {
         let path = dunce::simplified(self.as_ref());
 
+        // If current working directory is root, display the path as-is.
+        if CWD.ancestors().nth(1).is_none() {
+            return path.display();
+        }
+
         // Attempt to strip the current working directory, then the canonicalized current working
         // directory, in case they differ.
         let path = path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
@@ -77,6 +82,11 @@ impl<T: AsRef<Path>> Simplified for T {
 
     fn user_display_from(&self, base: impl AsRef<Path>) -> impl std::fmt::Display {
         let path = dunce::simplified(self.as_ref());
+
+        // If current working directory is root, display the path as-is.
+        if CWD.ancestors().nth(1).is_none() {
+            return path.display();
+        }
 
         // Attempt to strip the base, then the current working directory, then the canonicalized
         // current working directory, in case they differ.
