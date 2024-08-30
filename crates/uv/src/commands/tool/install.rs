@@ -117,7 +117,7 @@ pub(crate) async fn install(
             .unwrap()
         }
         // Ex) `ruff@0.6.0`
-        Target::Version(name, ref version) => {
+        Target::Version(name, ref version) | Target::FromVersion(_, name, ref version) => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -136,7 +136,7 @@ pub(crate) async fn install(
             }
         }
         // Ex) `ruff@latest`
-        Target::Latest(name) => {
+        Target::Latest(name) | Target::FromLatest(_, name) => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -153,7 +153,7 @@ pub(crate) async fn install(
             }
         }
         // Ex) `ruff>=0.6.0`
-        Target::UserDefined(package, from) => {
+        Target::From(package, from) => {
             // Parse the positional name. If the user provided more than a package name, it's an error
             // (e.g., `uv install foo==1.0 --from foo`).
             let Ok(package) = PackageName::from_str(package) else {

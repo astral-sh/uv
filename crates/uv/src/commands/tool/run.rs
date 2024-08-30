@@ -352,7 +352,7 @@ async fn get_or_create_environment(
             origin: None,
         },
         // Ex) `ruff@0.6.0`
-        Target::Version(name, version) => Requirement {
+        Target::Version(name, version) | Target::FromVersion(_, name, version) => Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
             marker: MarkerTree::default(),
@@ -365,7 +365,7 @@ async fn get_or_create_environment(
             origin: None,
         },
         // Ex) `ruff@latest`
-        Target::Latest(name) => Requirement {
+        Target::Latest(name) | Target::FromLatest(_, name) => Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
             marker: MarkerTree::default(),
@@ -376,7 +376,7 @@ async fn get_or_create_environment(
             origin: None,
         },
         // Ex) `ruff>=0.6.0`
-        Target::UserDefined(_, from) => resolve_names(
+        Target::From(_, from) => resolve_names(
             vec![RequirementsSpecification::parse_package(from)?],
             &interpreter,
             settings,
