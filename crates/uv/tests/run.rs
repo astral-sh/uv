@@ -1617,3 +1617,57 @@ fn run_project_toml_error() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_isolated_incompatible_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.11"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+
+    let python_version = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    python_version.write_str("3.8")?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        import iniconfig
+
+        x: str | int = "hello"
+        print(x)
+       "#
+    })?;
+
+    // We should reject Python 3.8...
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.12`
+    "###);
+
+    // ...even if `--isolated` is provided.
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.12`
+    "###);
+
+    Ok(())
+}
