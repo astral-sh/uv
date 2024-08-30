@@ -1676,36 +1676,14 @@ fn run_isolated_incompatible_python() -> Result<()> {
 fn run_compiled_python_file() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
-        [project]
-        name = "foo"
-        version = "1.0.0"
-        requires-python = ">=3.8"
-        dependencies = ["anyio"]
-        "#
-    })?;
-
-    // If the script contains a PEP 723 tag, we should install its requirements.
-    let test_script = context.temp_dir.child("main.py");
-    test_script.write_str(indoc! { r#"
-        # /// script
-        # requires-python = ">=3.11"
-        # dependencies = [
-        #   "iniconfig",
-        # ]
-        # ///
-        import iniconfig
-       "#
-    })?;
-
+    // Write a non-PEP 723 script.
     let test_non_script = context.temp_dir.child("main.py");
     test_non_script.write_str(indoc! { r#"
-        import idna
         print("Hello, world!")
        "#
     })?;
 
+    // Run a non-PEP 723 script.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
     success: true
     exit_code: 0
@@ -1713,15 +1691,8 @@ fn run_compiled_python_file() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
     "###);
 
-    let compiled_non_script = context.temp_dir.child("__pycache__/main.cpython-312.pyc");
     let compile_output = context
         .run()
         .arg("python")
@@ -1735,6 +1706,8 @@ fn run_compiled_python_file() -> Result<()> {
         "Failed to compile the python script"
     );
 
+    // Run the compiled non-PEP 723 script.
+    let compiled_non_script = context.temp_dir.child("__pycache__/main.cpython-312.pyc");
     uv_snapshot!(context.filters(), context.run().arg(compiled_non_script.path()), @r###"
     success: true
     exit_code: 0
@@ -1742,8 +1715,60 @@ fn run_compiled_python_file() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Audited 3 packages in [TIME]
+    "###);
+
+    // If the script contains a PEP 723 tag, we should install its requirements.
+    let test_script = context.temp_dir.child("script.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from: script.py
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Compile the PEP 723 script.
+    let compile_output = context
+        .run()
+        .arg("python")
+        .arg("-m")
+        .arg("compileall")
+        .arg(test_script.path())
+        .output()?;
+
+    assert!(
+        compile_output.status.success(),
+        "Failed to compile the python script"
+    );
+
+    // Run the compiled PEP 723 script. This fails, since we can't read the script tag.
+    let compiled_script = context.temp_dir.child("__pycache__/script.cpython-312.pyc");
+    uv_snapshot!(context.filters(), context.run().arg(compiled_script.path()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/script.py", line 7, in <module>
+        import iniconfig
+    ModuleNotFoundError: No module named 'iniconfig'
     "###);
 
     Ok(())
