@@ -25,7 +25,7 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_scripts::Pep723Script;
-use uv_warnings::warn_user_once;
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::loggers::{
@@ -111,11 +111,15 @@ pub(crate) async fn run(
             .and_then(PythonVersionFile::into_version)
         {
             Some(request)
-            // (3) `Requires-Python` in `pyproject.toml`
+            // (3) `Requires-Python` in the script
         } else {
-            script.metadata.requires_python.map(|requires_python| {
-                PythonRequest::Version(VersionRequest::Range(requires_python))
-            })
+            script
+                .metadata
+                .requires_python
+                .as_ref()
+                .map(|requires_python| {
+                    PythonRequest::Version(VersionRequest::Range(requires_python.clone()))
+                })
         };
 
         let client_builder = BaseClientBuilder::new()
@@ -133,6 +137,16 @@ pub(crate) async fn run(
         )
         .await?
         .into_interpreter();
+
+        if let Some(requires_python) = script.metadata.requires_python.as_ref() {
+            if !requires_python.contains(interpreter.python_version()) {
+                warn_user!(
+                    "Python {} does not satisfy the script's `requires-python` specifier: `{}`",
+                    interpreter.python_version(),
+                    requires_python
+                );
+            }
+        }
 
         // Install the script requirements, if necessary. Otherwise, use an isolated environment.
         if let Some(dependencies) = script.metadata.dependencies {
@@ -224,28 +238,28 @@ pub(crate) async fn run(
             );
         }
         if !extras.is_empty() {
-            warn_user_once!("Extras are not supported for Python scripts with inline metadata");
+            warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
         if !dev {
-            warn_user_once!("`--no-dev` is not supported for Python scripts with inline metadata");
+            warn_user!("`--no-dev` is not supported for Python scripts with inline metadata");
         }
         if package.is_some() {
-            warn_user_once!(
+            warn_user!(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if locked {
-            warn_user_once!(
+            warn_user!(
                 "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if frozen {
-            warn_user_once!(
+            warn_user!(
                 "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if isolated {
-            warn_user_once!(
+            warn_user!(
                 "`--isolated` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
@@ -293,30 +307,30 @@ pub(crate) async fn run(
         if no_project {
             // If the user ran with `--no-project` and provided a project-only setting, warn.
             if !extras.is_empty() {
-                warn_user_once!("Extras have no effect when used alongside `--no-project`");
+                warn_user!("Extras have no effect when used alongside `--no-project`");
             }
             if !dev {
-                warn_user_once!("`--no-dev` has no effect when used alongside `--no-project`");
+                warn_user!("`--no-dev` has no effect when used alongside `--no-project`");
             }
             if locked {
-                warn_user_once!("`--locked` has no effect when used alongside `--no-project`");
+                warn_user!("`--locked` has no effect when used alongside `--no-project`");
             }
             if frozen {
-                warn_user_once!("`--frozen` has no effect when used alongside `--no-project`");
+                warn_user!("`--frozen` has no effect when used alongside `--no-project`");
             }
         } else if project.is_none() {
             // If we can't find a project and the user provided a project-only setting, warn.
             if !extras.is_empty() {
-                warn_user_once!("Extras have no effect when used outside of a project");
+                warn_user!("Extras have no effect when used outside of a project");
             }
             if !dev {
-                warn_user_once!("`--no-dev` has no effect when used outside of a project");
+                warn_user!("`--no-dev` has no effect when used outside of a project");
             }
             if locked {
-                warn_user_once!("`--locked` has no effect when used outside of a project");
+                warn_user!("`--locked` has no effect when used outside of a project");
             }
             if frozen {
-                warn_user_once!("`--frozen` has no effect when used outside of a project");
+                warn_user!("`--frozen` has no effect when used outside of a project");
             }
         }
 

@@ -386,6 +386,68 @@ fn run_pep723_script() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_pep723_script_requires_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.11"]);
+
+    // If we have a `.python-version` that's incompatible with the script, we should error.
+    let python_version = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    python_version.write_str("3.8")?;
+
+    // If the script contains a PEP 723 tag, we should install its requirements.
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import iniconfig
+
+        x: str | int = "hello"
+        print(x)
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from: main.py
+    warning: Python 3.8.[X] does not satisfy the script's `requires-python` specifier: `>=3.11`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    Traceback (most recent call last):
+      File "main.py", line 10, in <module>
+        x: str | int = "hello"
+    TypeError: unsupported operand type(s) for |: 'type' and 'type'
+    "###);
+
+    // Delete the `.python-version` file to allow the script to run.
+    fs_err::remove_file(&python_version)?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello
+
+    ----- stderr -----
+    Reading inline script metadata from: main.py
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
 /// Run a `.pyw` script. The script should be executed with `pythonw.exe`.
 #[test]
 #[cfg(windows)]
