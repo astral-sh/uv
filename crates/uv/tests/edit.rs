@@ -25,7 +25,7 @@ fn add_registry() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -60,7 +60,7 @@ fn add_registry() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -152,7 +152,7 @@ fn add_git() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -224,7 +224,7 @@ fn add_git() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -330,7 +330,7 @@ fn add_git_private_source() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -363,7 +363,7 @@ fn add_git_private_source() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -434,7 +434,7 @@ fn add_git_private_raw() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -472,7 +472,7 @@ fn add_git_private_raw() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -537,7 +537,7 @@ fn add_git_error() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -599,7 +599,7 @@ fn add_git_raw() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -658,7 +658,7 @@ fn add_git_raw() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -759,7 +759,7 @@ fn add_git_implicit() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -819,7 +819,7 @@ fn add_raw_error() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -855,7 +855,7 @@ fn add_unnamed() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -888,7 +888,7 @@ fn add_unnamed() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -956,7 +956,7 @@ fn add_remove_dev() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -989,7 +989,7 @@ fn add_remove_dev() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -1115,7 +1115,7 @@ fn add_remove_dev() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -1172,7 +1172,7 @@ fn add_remove_optional() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -1210,7 +1210,7 @@ fn add_remove_optional() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -1333,7 +1333,7 @@ fn add_remove_optional() -> Result<()> {
         io = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -1389,7 +1389,7 @@ fn add_remove_inline_optional() -> Result<()> {
         ] }
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -1422,7 +1422,7 @@ fn add_remove_inline_optional() -> Result<()> {
         ] }
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -1460,7 +1460,7 @@ fn add_remove_inline_optional() -> Result<()> {
         ], types = [] }
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -1489,7 +1489,7 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -1502,7 +1502,7 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -1560,7 +1560,7 @@ fn add_remove_workspace() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -1647,7 +1647,7 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -1720,7 +1720,7 @@ fn add_workspace_editable() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -1733,7 +1733,7 @@ fn add_workspace_editable() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -1770,7 +1770,7 @@ fn add_workspace_editable() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -1845,7 +1845,7 @@ fn add_path() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -1858,7 +1858,7 @@ fn add_path() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -1893,7 +1893,7 @@ fn add_path() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -1963,7 +1963,7 @@ fn update() -> Result<()> {
         dependencies = ["requests==2.31.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -2022,7 +2022,7 @@ fn update() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2061,7 +2061,7 @@ fn update() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2101,7 +2101,7 @@ fn update() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -2255,7 +2255,7 @@ fn add_update_marker() -> Result<()> {
         dependencies = ["requests>=2.30; python_version >= '3.11'"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -2315,7 +2315,7 @@ fn add_update_marker() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2353,7 +2353,7 @@ fn add_update_marker() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2396,7 +2396,7 @@ fn add_update_marker() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2437,7 +2437,7 @@ fn add_update_marker() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2477,7 +2477,7 @@ fn add_update_marker() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2502,7 +2502,7 @@ fn update_source_replace_url() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -2540,7 +2540,7 @@ fn update_source_replace_url() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -2566,7 +2566,7 @@ fn add_inexact() -> Result<()> {
         dependencies = ["anyio == 3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -2602,7 +2602,7 @@ fn add_inexact() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -2636,7 +2636,7 @@ fn add_inexact() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2718,7 +2718,7 @@ fn remove_registry() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -2775,7 +2775,7 @@ fn remove_registry() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2828,7 +2828,7 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -2868,7 +2868,7 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2889,7 +2889,7 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -2929,7 +2929,7 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2951,7 +2951,7 @@ fn add_frozen() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -2979,7 +2979,7 @@ fn add_frozen() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3004,7 +3004,7 @@ fn add_no_sync() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -3033,7 +3033,7 @@ fn add_no_sync() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3126,7 +3126,7 @@ fn add_error() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -3169,7 +3169,7 @@ fn add_lower_bound() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -3205,7 +3205,7 @@ fn add_lower_bound() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3228,7 +3228,7 @@ fn add_lower_bound_existing() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -3265,7 +3265,7 @@ fn add_lower_bound_existing() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3288,7 +3288,7 @@ fn add_lower_bound_raw() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -3324,7 +3324,7 @@ fn add_lower_bound_raw() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3347,7 +3347,7 @@ fn add_lower_bound_dev() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -3381,7 +3381,7 @@ fn add_lower_bound_dev() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -3409,7 +3409,7 @@ fn add_lower_bound_optional() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -3448,7 +3448,7 @@ fn add_lower_bound_optional() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3531,7 +3531,7 @@ fn add_lower_bound_local() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -3565,7 +3565,7 @@ fn add_lower_bound_local() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3716,7 +3716,7 @@ fn add_repeat() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -3751,7 +3751,7 @@ fn add_repeat() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3783,7 +3783,7 @@ fn add_repeat() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3806,7 +3806,7 @@ fn add_requirements_file() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -3853,7 +3853,7 @@ fn add_requirements_file() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -4351,7 +4351,7 @@ fn fail_to_add_revert_project() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -4402,7 +4402,7 @@ fn fail_to_add_revert_project() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );

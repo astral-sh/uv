@@ -152,7 +152,7 @@ fn compile_pyproject_toml() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "project"
@@ -193,7 +193,7 @@ fn compile_pyproject_toml_dynamic_version() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "project"
@@ -233,7 +233,7 @@ fn compile_pyproject_toml_with_line_annotation() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "project"
@@ -423,7 +423,7 @@ fn compile_pyproject_toml_extra() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "project"
@@ -466,7 +466,7 @@ fn compile_pyproject_toml_extra_name_normalization() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "project"
@@ -509,7 +509,7 @@ fn compile_pyproject_toml_extra_missing() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "project"
@@ -877,7 +877,7 @@ fn compile_pyproject_toml_invalid_name() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "!project"
@@ -914,7 +914,7 @@ fn compile_pyproject_toml_extras_missing() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "project"
@@ -976,7 +976,7 @@ fn invalid_extra_name() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "project"
@@ -2296,7 +2296,7 @@ fn compile_pyproject_toml_all_extras() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "project"
@@ -2352,7 +2352,7 @@ fn compile_pyproject_toml_all_extras_annotation_line() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "project"
@@ -2399,7 +2399,7 @@ fn compile_does_not_allow_both_extra_and_all_extras() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "project"
@@ -2442,7 +2442,7 @@ fn compile_unsolvable_requirements() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "my-project"
@@ -2474,7 +2474,7 @@ fn compile_unsolvable_requirements_version_not_available() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=42"]
 
 [project]
 name = "my-project"
