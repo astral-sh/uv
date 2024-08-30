@@ -53,6 +53,16 @@ fn init() -> Result<()> {
     Resolved 1 package in [TIME]
     "###);
 
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join("foo").join(".python-version"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            python_version, @"3.12.[X]"
+        );
+    });
+
     Ok(())
 }
 
@@ -1618,6 +1628,15 @@ fn init_requires_python_workspace() -> Result<()> {
         );
     });
 
+    let python_version = fs_err::read_to_string(child.join(".python-version"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            python_version, @">=3.10"
+        );
+    });
+
     Ok(())
 }
 
@@ -1664,6 +1683,15 @@ fn init_requires_python_version() -> Result<()> {
         requires-python = ">=3.8"
         dependencies = []
         "###
+        );
+    });
+
+    let python_version = fs_err::read_to_string(child.join(".python-version"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            python_version, @"3.8"
         );
     });
 
@@ -1714,6 +1742,15 @@ fn init_requires_python_specifiers() -> Result<()> {
         requires-python = "==3.8.*"
         dependencies = []
         "###
+        );
+    });
+
+    let python_version = fs_err::read_to_string(child.join(".python-version"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            python_version, @"==3.8.*"
         );
     });
 
