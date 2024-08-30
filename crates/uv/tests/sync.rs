@@ -1747,3 +1747,147 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
 
     Ok(())
 }
+
+// Test for warnings when `VIRTUAL_ENV` is set but will not be respected.
+#[test]
+fn sync_virtual_env_warning() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // We should not warn if it matches the project environment
+    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", context.temp_dir.join(".venv")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Including if it's a relative path that matches
+    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", ".venv"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Or, if it's a link that resolves to the same path
+    #[cfg(unix)]
+    {
+        use fs_err::os::unix::fs::symlink;
+
+        let link = context.temp_dir.join("link");
+        symlink(context.temp_dir.join(".venv"), &link)?;
+
+        uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", link), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        Audited 1 package in [TIME]
+        "###);
+    }
+
+    // But we should warn if it's a different path
+    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Including absolute paths
+    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", context.temp_dir.join("foo")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // We should not warn if the project environment has been customized and matches
+    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: foo
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // But we should warn if they don't match still
+    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `bar` and will be ignored
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: bar
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+
+    // And `VIRTUAL_ENV` is resolved relative to the project root so with relative paths we should
+    // warn from a child too
+    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // But, a matching absolute path shouldn't warn
+    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", context.temp_dir.join("foo")).env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}

@@ -10,9 +10,9 @@ use tracing::{debug, trace, warn};
 
 use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
 use pypi_types::{Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 
 use crate::pyproject::{Project, PyProjectToml, Source, ToolUvWorkspace};
 
@@ -442,7 +442,7 @@ impl Workspace {
     /// it is resolved relative to the install path.
     pub fn venv(&self) -> PathBuf {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
-        fn from_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
+        fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
             let value = std::env::var_os("UV_PROJECT_ENVIRONMENT")?;
 
             if value.is_empty() {
@@ -458,8 +458,65 @@ impl Workspace {
             Some(workspace.install_path.join(path))
         }
 
-        // TODO(zanieb): Warn if `VIRTUAL_ENV` is set and does not match
-        from_environment_variable(self).unwrap_or_else(|| self.install_path.join(".venv"))
+        // Resolve the `VIRTUAL_ENV` variable, if any.
+        fn from_virtual_env_variable() -> Option<PathBuf> {
+            let value = std::env::var_os("VIRTUAL_ENV")?;
+
+            if value.is_empty() {
+                return None;
+            };
+
+            let path = PathBuf::from(value);
+            if path.is_absolute() {
+                return Some(path);
+            };
+
+            // Resolve the path relative to current directory.
+            // Note this differs from `UV_PROJECT_ENVIRONMENT`
+            Some(CWD.join(path))
+        }
+
+        // Attempt to check if the two paths refer to the same directory.
+        fn is_same_dir(left: &Path, right: &Path) -> Option<bool> {
+            // First, attempt to check directly
+            if let Ok(value) = same_file::is_same_file(left, right) {
+                return Some(value);
+            };
+
+            // Often, one of the directories won't exist yet so perform the comparison up a level
+            if let (Some(left_parent), Some(right_parent), Some(left_name), Some(right_name)) = (
+                left.parent(),
+                right.parent(),
+                left.file_name(),
+                right.file_name(),
+            ) {
+                match same_file::is_same_file(left_parent, right_parent) {
+                    Ok(true) => return Some(left_name == right_name),
+                    Ok(false) => return Some(false),
+                    _ => (),
+                }
+            };
+
+            // We couldn't determine if they're the same
+            None
+        }
+
+        // Determine the default value
+        let project_env = from_project_environment_variable(self)
+            .unwrap_or_else(|| self.install_path.join(".venv"));
+
+        // Warn if it conflicts with `VIRTUAL_ENV`
+        if let Some(from_virtual_env) = from_virtual_env_variable() {
+            if !is_same_dir(&from_virtual_env, &project_env).unwrap_or(false) {
+                warn_user_once!(
+                    "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored",
+                    from_virtual_env.user_display(),
+                    project_env.user_display()
+                );
+            }
+        }
+
+        project_env
     }
 
     /// The members of the workspace.
