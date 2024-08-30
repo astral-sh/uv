@@ -110,6 +110,7 @@ nav:
       - guides/integration/index.md
       - Docker: guides/integration/docker.md
       - GitHub Actions: guides/integration/github.md
+      - GitLab CI/CD: guides/integration/gitlab.md
       - Pre-commit: guides/integration/pre-commit.md
       - FastAPI: guides/integration/fastapi.md
       - Alternative indexes: guides/integration/alternative-indexes.md
