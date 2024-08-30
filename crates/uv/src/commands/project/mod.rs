@@ -7,6 +7,7 @@ use tracing::debug;
 
 use distribution_types::{Resolution, UnresolvedRequirementSpecification};
 use pep440_rs::{Version, VersionSpecifiers};
+use pep508_rs::MarkerTreeContents;
 use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -76,6 +77,12 @@ pub(crate) enum ProjectError {
 
     #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
+
+    #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
+    DisjointEnvironment(MarkerTreeContents, VersionSpecifiers),
+
+    #[error("Environment marker is empty")]
+    EmptyEnvironment,
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),

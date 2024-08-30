@@ -325,6 +325,25 @@ async fn do_lock(
         default
     };
 
+    // If any of the forks are incompatible with the Python requirement, error.
+    for environment in environments
+        .map(SupportedEnvironments::as_markers)
+        .into_iter()
+        .flatten()
+    {
+        if requires_python.markers().is_disjoint(environment) {
+            return if let Some(contents) = environment.contents() {
+                Err(ProjectError::DisjointEnvironment(
+                    contents,
+                    requires_python.specifiers().clone(),
+                ))
+            } else {
+                Err(ProjectError::EmptyEnvironment)
+            };
+        }
+    }
+
+    // Determine the Python requirement.
     let python_requirement = PythonRequirement::from_requires_python(interpreter, &requires_python);
 
     // Add all authenticated sources to the cache.

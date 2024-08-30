@@ -7,6 +7,7 @@ use pubgrub::Range;
 
 use distribution_filename::WheelFilename;
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep508_rs::{MarkerExpression, MarkerTree, MarkerValueVersion};
 
 #[derive(thiserror::Error, Debug)]
 pub enum RequiresPythonError {
@@ -121,6 +122,85 @@ impl RequiresPython {
             })
         } else {
             None
+        }
+    }
+
+    /// Returns the [`RequiresPython`] as a [`MarkerTree`].
+    pub fn markers(&self) -> MarkerTree {
+        match (self.range.0.as_ref(), self.range.0.as_ref()) {
+            (Bound::Included(lower), Bound::Included(upper)) => {
+                let mut lower = MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::greater_than_equal_version(lower.clone()),
+                });
+                let upper = MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::less_than_equal_version(upper.clone()),
+                });
+                lower.and(upper);
+                lower
+            }
+            (Bound::Included(lower), Bound::Excluded(upper)) => {
+                let mut lower = MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::greater_than_equal_version(lower.clone()),
+                });
+                let upper = MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::less_than_version(upper.clone()),
+                });
+                lower.and(upper);
+                lower
+            }
+            (Bound::Excluded(lower), Bound::Included(upper)) => {
+                let mut lower = MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::greater_than_version(lower.clone()),
+                });
+                let upper = MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::less_than_equal_version(upper.clone()),
+                });
+                lower.and(upper);
+                lower
+            }
+            (Bound::Excluded(lower), Bound::Excluded(upper)) => {
+                let mut lower = MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::greater_than_version(lower.clone()),
+                });
+                let upper = MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::less_than_version(upper.clone()),
+                });
+                lower.and(upper);
+                lower
+            }
+            (Bound::Unbounded, Bound::Unbounded) => MarkerTree::TRUE,
+            (Bound::Unbounded, Bound::Included(upper)) => {
+                MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::less_than_equal_version(upper.clone()),
+                })
+            }
+            (Bound::Unbounded, Bound::Excluded(upper)) => {
+                MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::less_than_version(upper.clone()),
+                })
+            }
+            (Bound::Included(lower), Bound::Unbounded) => {
+                MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::greater_than_equal_version(lower.clone()),
+                })
+            }
+            (Bound::Excluded(lower), Bound::Unbounded) => {
+                MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonFullVersion,
+                    specifier: VersionSpecifier::greater_than_version(lower.clone()),
+                })
+            }
         }
     }
 
