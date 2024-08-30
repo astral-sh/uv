@@ -1671,3 +1671,80 @@ fn run_isolated_incompatible_python() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_compiled_python_file() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+        "#
+    })?;
+
+    // If the script contains a PEP 723 tag, we should install its requirements.
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+       "#
+    })?;
+
+    let test_non_script = context.temp_dir.child("main.py");
+    test_non_script.write_str(indoc! { r#"
+        import idna
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    let compiled_non_script = context.temp_dir.child("__pycache__/main.cpython-312.pyc");
+    let compile_output = context
+        .run()
+        .arg("python")
+        .arg("-m")
+        .arg("compileall")
+        .arg(test_non_script.path())
+        .output()?;
+
+    assert!(
+        compile_output.status.success(),
+        "Failed to compile the python script"
+    );
+
+    uv_snapshot!(context.filters(), context.run().arg(compiled_non_script.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 3 packages in [TIME]
+    "###);
+
+    Ok(())
+}
