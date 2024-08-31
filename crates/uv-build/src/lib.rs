@@ -13,16 +13,17 @@ use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{ExitStatus, Output};
+use std::process::ExitStatus;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::{env, iter};
 use tempfile::{tempdir_in, TempDir};
 use thiserror::Error;
+use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{debug, info_span, instrument, Instrument};
+use tracing::{debug, error, info_span, instrument, Instrument};
 
 use distribution_types::Resolution;
 use pep440_rs::Version;
@@ -89,7 +90,7 @@ pub enum Error {
     RequirementsInstall(&'static str, #[source] anyhow::Error),
     #[error("Failed to create temporary virtualenv")]
     Virtualenv(#[from] uv_virtualenv::Error),
-    #[error("Failed to run {0}")]
+    #[error("Failed to run `{0}`")]
     CommandFailed(PathBuf, #[source] io::Error),
     #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     BuildBackend {
@@ -159,14 +160,11 @@ impl Display for MissingHeaderCause {
 impl Error {
     fn from_command_output(
         message: String,
-        output: &Output,
+        output: &PythonRunnerOutput,
         version_id: impl Into<String>,
     ) -> Self {
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-
-        // In the cases i've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff
-        let missing_library = stderr.lines().rev().take(10).find_map(|line| {
+        // In the cases I've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff.
+        let missing_library = output.stderr.iter().rev().take(10).find_map(|line| {
             if let Some((_, [header])) = MISSING_HEADER_RE_GCC
                 .captures(line.trim())
                 .or(MISSING_HEADER_RE_CLANG.captures(line.trim()))
@@ -191,8 +189,8 @@ impl Error {
             return Self::MissingHeader {
                 message,
                 exit_code: output.status,
-                stdout,
-                stderr,
+                stdout: output.stdout.iter().join("\n"),
+                stderr: output.stderr.iter().join("\n"),
                 missing_header_cause: MissingHeaderCause {
                     missing_library,
                     version_id: version_id.into(),
@@ -203,8 +201,8 @@ impl Error {
         Self::BuildBackend {
             message,
             exit_code: output.status,
-            stdout,
-            stderr,
+            stdout: output.stdout.iter().join("\n"),
+            stderr: output.stderr.iter().join("\n"),
         }
     }
 }
@@ -454,7 +452,7 @@ impl SourceBuild {
                 .install(&resolved_requirements, &venv)
                 .await
                 .map_err(|err| {
-                    Error::RequirementsInstall("build-system.requires (install)", err)
+                    Error::RequirementsInstall("`build-system.requires` (install)", err)
                 })?;
         }
 
@@ -540,7 +538,7 @@ impl SourceBuild {
                         .resolve(&default_backend.requirements)
                         .await
                         .map_err(|err| {
-                            Error::RequirementsInstall("setup.py build (resolve)", err)
+                            Error::RequirementsInstall("`setup.py` build (resolve)", err)
                         })?;
                     *resolution = Some(resolved_requirements.clone());
                     resolved_requirements
@@ -550,7 +548,7 @@ impl SourceBuild {
                     .resolve(&pep517_backend.requirements)
                     .await
                     .map_err(|err| {
-                        Error::RequirementsInstall("build-system.requires (resolve)", err)
+                        Error::RequirementsInstall("`build-system.requires` (resolve)", err)
                     })?
             },
         )
@@ -682,8 +680,8 @@ impl SourceBuild {
         };
         let span = info_span!(
             "run_python_script",
-            script=format!("prepare_metadata_for_build_{}", self.build_kind),
-            python_version = %self.venv.interpreter().python_version()
+            version_id = &self.version_id,
+            script = format!("prepare_metadata_for_build_{}", self.build_kind),
         );
         let output = self
             .runner
@@ -971,12 +969,12 @@ async fn create_pep517_build_environment(
         let resolution = build_context
             .resolve(&requirements)
             .await
-            .map_err(|err| Error::RequirementsInstall("build-system.requires (resolve)", err))?;
+            .map_err(|err| Error::RequirementsInstall("`build-system.requires` (resolve)", err))?;
 
         build_context
             .install(&resolution, venv)
             .await
-            .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
+            .map_err(|err| Error::RequirementsInstall("`build-system.requires` (install)", err))?;
     }
 
     Ok(())
@@ -984,8 +982,16 @@ async fn create_pep517_build_environment(
 
 /// A runner that manages the execution of external python processes with a
 /// concurrency limit.
+#[derive(Debug)]
 struct PythonRunner {
     control: Semaphore,
+}
+
+#[derive(Debug)]
+struct PythonRunnerOutput {
+    stdout: Vec<String>,
+    stderr: Vec<String>,
+    status: ExitStatus,
 }
 
 impl PythonRunner {
@@ -1009,36 +1015,115 @@ impl PythonRunner {
         source_tree: &Path,
         environment_variables: &FxHashMap<OsString, OsString>,
         modified_path: &OsString,
-    ) -> Result<Output, Error> {
+    ) -> Result<PythonRunnerOutput, Error> {
         let _permit = self.control.acquire().await.unwrap();
 
-        Command::new(venv.python_executable())
+        let mut child = Command::new(venv.python_executable())
             .args(["-c", script])
             .current_dir(source_tree.simplified())
-            // Pass in remaining environment variables
             .envs(environment_variables)
-            // Set the modified PATH
             .env("PATH", modified_path)
-            // Activate the venv
             .env("VIRTUAL_ENV", venv.root())
             .env("CLICOLOR_FORCE", "1")
-            .output()
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))?;
+
+        // Create buffers to capture `stdout` and `stderr`.
+        let mut stdout_buf = Vec::new();
+        let mut stderr_buf = Vec::new();
+
+        // Create separate readers for `stdout` and `stderr`.
+        let stdout_reader = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
+        let stderr_reader = tokio::io::BufReader::new(child.stderr.take().unwrap()).lines();
+
+        // Asynchronously read from the in-memory pipes.
+        tokio::pin!(stdout_reader, stderr_reader);
+
+        loop {
+            tokio::select! {
+                line = stdout_reader.next_line() => {
+                    match line {
+                        Ok(Some(line)) => {
+                            debug!("{line}");
+                            stdout_buf.push(line);
+                        },
+                        Ok(None) => break,
+                        Err(err) => return Err(Error::CommandFailed(venv.python_executable().to_path_buf(), err)),
+                    }
+                },
+                line = stderr_reader.next_line() => {
+                    match line {
+                        Ok(Some(line)) => {
+                            debug!("{line}");
+                            stderr_buf.push(line);
+                        },
+                        Ok(None) => break,
+                        Err(err) => return Err(Error::CommandFailed(venv.python_executable().to_path_buf(), err)),
+                    }
+                },
+            }
+        }
+
+        // Continue reading until both streams are closed.
+        loop {
+            match stdout_reader.next_line().await {
+                Ok(Some(line)) => {
+                    debug!("{line}");
+                    stdout_buf.push(line);
+                }
+                Ok(None) => break,
+                Err(err) => {
+                    return Err(Error::CommandFailed(
+                        venv.python_executable().to_path_buf(),
+                        err,
+                    ))
+                }
+            }
+        }
+
+        loop {
+            match stderr_reader.next_line().await {
+                Ok(Some(line)) => {
+                    debug!("{line}");
+                    stderr_buf.push(line);
+                }
+                Ok(None) => break,
+                Err(err) => {
+                    return Err(Error::CommandFailed(
+                        venv.python_executable().to_path_buf(),
+                        err,
+                    ))
+                }
+            }
+        }
+
+        // Wait for the child process to finish.
+        let status = child
+            .wait()
             .await
-            .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))
+            .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))?;
+
+        Ok(PythonRunnerOutput {
+            stdout: stdout_buf,
+            stderr: stderr_buf,
+            status,
+        })
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::process::{ExitStatus, Output};
+    use std::process::ExitStatus;
 
     use indoc::indoc;
 
-    use crate::Error;
+    use crate::{Error, PythonRunnerOutput};
 
     #[test]
     fn missing_header() {
-        let output = Output {
+        let output = PythonRunnerOutput {
             status: ExitStatus::default(), // This is wrong but `from_raw` is platform-gated.
             stdout: indoc!(r"
                 running bdist_wheel
@@ -1047,7 +1132,7 @@ mod test {
                 creating build/temp.linux-x86_64-cpython-39/pygraphviz
                 gcc -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -DOPENSSL_NO_SSL3 -fPIC -DSWIG_PYTHON_STRICT_BYTE_CHAR -I/tmp/.tmpy6vVes/.venv/include -I/home/konsti/.pyenv/versions/3.9.18/include/python3.9 -c pygraphviz/graphviz_wrap.c -o build/temp.linux-x86_64-cpython-39/pygraphviz/graphviz_wrap.o
                 "
-            ).as_bytes().to_vec(),
+            ).lines().map(ToString::to_string).collect(),
             stderr: indoc!(r#"
                 warning: no files found matching '*.png' under directory 'doc'
                 warning: no files found matching '*.txt' under directory 'doc'
@@ -1059,7 +1144,7 @@ mod test {
                 compilation terminated.
                 error: command '/usr/bin/gcc' failed with exit code 1
                 "#
-            ).as_bytes().to_vec(),
+            ).lines().map(ToString::to_string).collect(),
         };
 
         let err = Error::from_command_output(
@@ -1098,20 +1183,20 @@ mod test {
 
     #[test]
     fn missing_linker_library() {
-        let output = Output {
+        let output = PythonRunnerOutput {
             status: ExitStatus::default(), // This is wrong but `from_raw` is platform-gated.
             stdout: Vec::new(),
             stderr: indoc!(
                 r"
-                1099 |     n = strlen(p);
-                     |         ^~~~~~~~~
+               1099 |     n = strlen(p);
+                    |         ^~~~~~~~~
                /usr/bin/ld: cannot find -lncurses: No such file or directory
                collect2: error: ld returned 1 exit status
-               error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
-                "
+               error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1"
             )
-            .as_bytes()
-            .to_vec(),
+            .lines()
+            .map(ToString::to_string)
+            .collect(),
         };
 
         let err = Error::from_command_output(
@@ -1128,7 +1213,7 @@ mod test {
 
         --- stderr:
         1099 |     n = strlen(p);
-              |         ^~~~~~~~~
+             |         ^~~~~~~~~
         /usr/bin/ld: cannot find -lncurses: No such file or directory
         collect2: error: ld returned 1 exit status
         error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
@@ -1142,7 +1227,7 @@ mod test {
 
     #[test]
     fn missing_wheel_package() {
-        let output = Output {
+        let output = PythonRunnerOutput {
             status: ExitStatus::default(), // This is wrong but `from_raw` is platform-gated.
             stdout: Vec::new(),
             stderr: indoc!(
@@ -1152,11 +1237,11 @@ mod test {
                or: setup.py --help-commands
                or: setup.py cmd --help
 
-            error: invalid command 'bdist_wheel'
-                "
+            error: invalid command 'bdist_wheel'"
             )
-            .as_bytes()
-            .to_vec(),
+            .lines()
+            .map(ToString::to_string)
+            .collect(),
         };
 
         let err = Error::from_command_output(

@@ -8,7 +8,7 @@ use std::path::Path;
 use fs_err as fs;
 use fs_err::File;
 use itertools::Itertools;
-use tracing::info;
+use tracing::debug;
 
 use pypi_types::Scheme;
 use uv_fs::{cachedir, Simplified, CWD};
@@ -92,16 +92,16 @@ pub(crate) fn create(
                 )));
             } else if metadata.is_dir() {
                 if allow_existing {
-                    info!("Allowing existing directory");
+                    debug!("Allowing existing directory");
                 } else if location.join("pyvenv.cfg").is_file() {
-                    info!("Removing existing directory");
+                    debug!("Removing existing directory");
                     fs::remove_dir_all(location)?;
                     fs::create_dir_all(location)?;
                 } else if location
                     .read_dir()
                     .is_ok_and(|mut dir| dir.next().is_none())
                 {
-                    info!("Ignoring empty directory");
+                    debug!("Ignoring empty directory");
                 } else {
                     return Err(Error::Io(io::Error::new(
                         io::ErrorKind::AlreadyExists,
