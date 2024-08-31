@@ -127,7 +127,7 @@ impl RequiresPython {
 
     /// Returns the [`RequiresPython`] as a [`MarkerTree`].
     pub fn markers(&self) -> MarkerTree {
-        match (self.range.0.as_ref(), self.range.0.as_ref()) {
+        match (self.range.0.as_ref(), self.range.1.as_ref()) {
             (Bound::Included(lower), Bound::Included(upper)) => {
                 let mut lower = MarkerTree::expression(MarkerExpression::Version {
                     key: MarkerValueVersion::PythonFullVersion,
