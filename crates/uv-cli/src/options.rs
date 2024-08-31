@@ -4,7 +4,8 @@ use uv_resolver::PrereleaseMode;
 use uv_settings::{PipOptions, ResolverInstallerOptions, ResolverOptions};
 
 use crate::{
-    BuildArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs, ResolverInstallerArgs,
+    BuildOptionsArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
+    ResolverInstallerArgs,
 };
 
 /// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
@@ -206,8 +207,11 @@ impl From<IndexArgs> for PipOptions {
     }
 }
 
-/// Construct the [`ResolverOptions`] from the [`ResolverArgs`] and [`BuildArgs`].
-pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> ResolverOptions {
+/// Construct the [`ResolverOptions`] from the [`ResolverArgs`] and [`BuildOptionsArgs`].
+pub fn resolver_options(
+    resolver_args: ResolverArgs,
+    build_args: BuildOptionsArgs,
+) -> ResolverOptions {
     let ResolverArgs {
         index_args,
         upgrade,
@@ -228,7 +232,7 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         no_sources,
     } = resolver_args;
 
-    let BuildArgs {
+    let BuildOptionsArgs {
         no_build,
         build,
         no_build_package,
@@ -281,10 +285,10 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
     }
 }
 
-/// Construct the [`ResolverInstallerOptions`] from the [`ResolverInstallerArgs`] and [`BuildArgs`].
+/// Construct the [`ResolverInstallerOptions`] from the [`ResolverInstallerArgs`] and [`BuildOptionsArgs`].
 pub fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
-    build_args: BuildArgs,
+    build_args: BuildOptionsArgs,
 ) -> ResolverInstallerOptions {
     let ResolverInstallerArgs {
         index_args,
@@ -311,7 +315,7 @@ pub fn resolver_installer_options(
         no_sources,
     } = resolver_installer_args;
 
-    let BuildArgs {
+    let BuildOptionsArgs {
         no_build,
         build,
         no_build_package,

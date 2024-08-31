@@ -80,7 +80,7 @@ static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` is present in the directory", _0.simplified_display())]
+    #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory", _0.simplified_display())]
     InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectToml(#[from] toml::de::Error),

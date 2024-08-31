@@ -11,7 +11,7 @@ use pypi_types::{Requirement, SupportedEnvironments};
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::{
     options::{flag, resolver_installer_options, resolver_options},
-    ExportArgs, ToolUpgradeArgs,
+    BuildArgs, ExportArgs, ToolUpgradeArgs,
 };
 use uv_cli::{
     AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
@@ -1611,7 +1611,46 @@ impl PipCheckSettings {
     }
 }
 
-/// The resolved settings to use for a `pip check` invocation.
+/// The resolved settings to use for a `build` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct BuildSettings {
+    pub(crate) src_dir: Option<PathBuf>,
+    pub(crate) out_dir: Option<PathBuf>,
+    pub(crate) sdist: bool,
+    pub(crate) wheel: bool,
+    pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverSettings,
+}
+
+impl BuildSettings {
+    /// Resolve the [`BuildSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: BuildArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let BuildArgs {
+            src_dir,
+            out_dir,
+            sdist,
+            wheel,
+            python,
+            build,
+            refresh,
+            resolver,
+        } = args;
+
+        Self {
+            src_dir,
+            out_dir,
+            sdist,
+            wheel,
+            python,
+            refresh: Refresh::from(refresh),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+        }
+    }
+}
+
+/// The resolved settings to use for a `venv` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct VenvSettings {

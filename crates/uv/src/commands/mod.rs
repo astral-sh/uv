@@ -4,6 +4,7 @@ use std::{fmt::Display, fmt::Write, process::ExitCode};
 use anyhow::Context;
 use owo_colors::OwoColorize;
 
+pub(crate) use build::build;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 pub(crate) use cache_prune::cache_prune;
@@ -65,6 +66,7 @@ mod python;
 pub(crate) mod reporters;
 mod tool;
 
+mod build;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod venv;
