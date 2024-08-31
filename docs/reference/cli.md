@@ -6190,19 +6190,23 @@ uv venv [OPTIONS] [PATH]
 
 Build Python packages into source distributions and wheels.
 
-By default, `uv build` will build a source distribution ("sdist") from the source directory, and a binary distribution ("wheel") from the source distribution.
+`uv build` accepts a path to a directory or source distribution, which defaults to the current working directory.
+
+By default, if passed a directory, `uv build` will build a source distribution ("sdist") from the source directory, and a binary distribution ("wheel") from  the source distribution.
 
 `uv build --sdist` can be used to build only the source distribution, `uv build --wheel` can be used to build only the binary distribution, and `uv build --sdist --wheel` can be used to build both distributions from source.
+
+If passed a source distribution, `uv build --wheel` will build a wheel from  the source distribution.
 
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv build [OPTIONS] [SRC_DIR]
+uv build [OPTIONS] [SRC]
 ```
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>SRC_DIR</code></dt><dd><p>The directory from which distributions should be built.</p>
+<dl class="cli-reference"><dt><code>SRC</code></dt><dd><p>The directory from which distributions should be built, or a source distribution archive to build into a wheel.</p>
 
 <p>Defaults to the current working directory.</p>
 
@@ -6368,7 +6372,7 @@ uv build [OPTIONS] [SRC_DIR]
 
 </dd><dt><code>--out-dir</code>, <code>-o</code> <i>out-dir</i></dt><dd><p>The output directory to which distributions should be written.</p>
 
-<p>Defaults to the <code>dist</code> subdirectory within the source directory.</p>
+<p>Defaults to the <code>dist</code> subdirectory within the source directory, or the directory containing the source distribution archive.</p>
 
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 

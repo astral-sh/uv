@@ -27,7 +27,7 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 /// Build source distributions and wheels.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn build(
-    src_dir: Option<PathBuf>,
+    src: Option<PathBuf>,
     output_dir: Option<PathBuf>,
     sdist: bool,
     wheel: bool,
@@ -43,7 +43,7 @@ pub(crate) async fn build(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let assets = build_impl(
-        src_dir.as_deref(),
+        src.as_deref(),
         output_dir.as_deref(),
         sdist,
         wheel,
@@ -81,7 +81,7 @@ pub(crate) async fn build(
 
 #[allow(clippy::fn_params_excessive_bools)]
 async fn build_impl(
-    src_dir: Option<&Path>,
+    src: Option<&Path>,
     output_dir: Option<&Path>,
     sdist: bool,
     wheel: bool,
@@ -118,16 +118,39 @@ async fn build_impl(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
-    let src_dir = if let Some(src_dir) = src_dir {
-        Cow::Owned(std::path::absolute(src_dir)?)
+    let src = if let Some(src) = src {
+        let src = std::path::absolute(src)?;
+        let metadata = match fs_err::tokio::metadata(&src).await {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Err(anyhow::anyhow!(
+                    "Source `{}` does not exist",
+                    src.user_display()
+                ));
+            }
+            Err(err) => return Err(err.into()),
+        };
+        if metadata.is_file() {
+            Source::File(Cow::Owned(src))
+        } else {
+            Source::Directory(Cow::Owned(src))
+        }
     } else {
-        Cow::Borrowed(&*CWD)
+        Source::Directory(Cow::Borrowed(&*CWD))
+    };
+
+    let src_dir = match src {
+        Source::Directory(ref src) => src,
+        Source::File(ref src) => src.parent().unwrap(),
     };
 
     let output_dir = if let Some(output_dir) = output_dir {
-        std::path::absolute(output_dir)?
+        Cow::Owned(std::path::absolute(output_dir)?)
     } else {
-        src_dir.join("dist")
+        match src {
+            Source::Directory(ref src) => Cow::Owned(src.join("dist")),
+            Source::File(ref src) => Cow::Borrowed(src.parent().unwrap()),
+        }
     };
 
     // (1) Explicit request from user
@@ -135,24 +158,23 @@ async fn build_impl(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(src_dir.as_ref(), no_config, false)
+        interpreter_request = PythonVersionFile::discover(&src_dir, no_config, false)
             .await?
             .and_then(PythonVersionFile::into_version);
     }
 
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
-        let project =
-            match VirtualProject::discover(src_dir.as_ref(), &DiscoveryOptions::default()).await {
-                Ok(project) => Some(project),
-                Err(WorkspaceError::MissingProject(_)) => None,
-                Err(WorkspaceError::MissingPyprojectToml) => None,
-                Err(WorkspaceError::NonWorkspace(_)) => None,
-                Err(err) => {
-                    warn_user_once!("{err}");
-                    None
-                }
-            };
+        let project = match VirtualProject::discover(src_dir, &DiscoveryOptions::default()).await {
+            Ok(project) => Some(project),
+            Err(WorkspaceError::MissingProject(_)) => None,
+            Err(WorkspaceError::MissingPyprojectToml) => None,
+            Err(WorkspaceError::NonWorkspace(_)) => None,
+            Err(err) => {
+                warn_user_once!("{err}");
+                None
+            }
+        };
 
         if let Some(project) = project {
             interpreter_request = find_requires_python(project.workspace())?
@@ -242,19 +264,41 @@ async fn build_impl(
         concurrency,
     );
 
+    // Create the output directory.
     fs_err::tokio::create_dir_all(&output_dir).await?;
 
-    // Determine the build plan from the command-line arguments.
-    let plan = match (sdist, wheel) {
-        (false, false) => BuildPlan::SdistToWheel,
-        (true, false) => BuildPlan::Sdist,
-        (false, true) => BuildPlan::Wheel,
-        (true, true) => BuildPlan::SdistAndWheel,
+    // Determine the build plan.
+    let plan = match &src {
+        Source::File(_) => {
+            // We're building from a file, which must be a source distribution.
+            match (sdist, wheel) {
+                (false, true) => BuildPlan::WheelFromSdist,
+                (false, false) => {
+                    return Err(anyhow::anyhow!(
+                        "Pass `--wheel` explicitly to build a wheel from a source distribution"
+                    ));
+                }
+                (true, _) => {
+                    return Err(anyhow::anyhow!(
+                        "Building an `--sdist` from a source distribution is not supported"
+                    ));
+                }
+            }
+        }
+        Source::Directory(_) => {
+            // We're building from a directory.
+            match (sdist, wheel) {
+                (false, false) => BuildPlan::SdistToWheel,
+                (false, true) => BuildPlan::Wheel,
+                (true, false) => BuildPlan::Sdist,
+                (true, true) => BuildPlan::SdistAndWheel,
+            }
+        }
     };
 
     // Prepare some common arguments for the build.
     let subdirectory = None;
-    let version_id = src_dir.file_name().unwrap().to_string_lossy();
+    let version_id = src.path().file_name().unwrap().to_string_lossy();
     let dist = None;
 
     let assets = match plan {
@@ -262,7 +306,7 @@ async fn build_impl(
             // Build the sdist.
             let builder = build_dispatch
                 .setup_build(
-                    src_dir.as_ref(),
+                    src.path(),
                     subdirectory,
                     &version_id,
                     dist,
@@ -274,7 +318,9 @@ async fn build_impl(
             // Extract the source distribution into a temporary directory.
             let path = output_dir.join(&sdist);
             let reader = fs_err::tokio::File::open(&path).await?;
-            let ext = SourceDistExtension::from_path(&path)?;
+            let ext = SourceDistExtension::from_path(path.as_path()).map_err(|err| {
+                anyhow::anyhow!("`{}` is not a valid source distribution, as it ends with an unsupported extension. Expected one of: {err}.", path.user_display())
+            })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
             uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
 
@@ -302,7 +348,7 @@ async fn build_impl(
         BuildPlan::Sdist => {
             let builder = build_dispatch
                 .setup_build(
-                    src_dir.as_ref(),
+                    src.path(),
                     subdirectory,
                     &version_id,
                     dist,
@@ -316,7 +362,7 @@ async fn build_impl(
         BuildPlan::Wheel => {
             let builder = build_dispatch
                 .setup_build(
-                    src_dir.as_ref(),
+                    src.path(),
                     subdirectory,
                     &version_id,
                     dist,
@@ -330,7 +376,7 @@ async fn build_impl(
         BuildPlan::SdistAndWheel => {
             let builder = build_dispatch
                 .setup_build(
-                    src_dir.as_ref(),
+                    src.path(),
                     subdirectory,
                     &version_id,
                     dist,
@@ -341,7 +387,7 @@ async fn build_impl(
 
             let builder = build_dispatch
                 .setup_build(
-                    src_dir.as_ref(),
+                    src.path(),
                     subdirectory,
                     &version_id,
                     dist,
@@ -352,12 +398,59 @@ async fn build_impl(
 
             BuiltDistributions::Both(output_dir.join(&sdist), output_dir.join(&wheel))
         }
+        BuildPlan::WheelFromSdist => {
+            // Extract the source distribution into a temporary directory.
+            let reader = fs_err::tokio::File::open(src.path()).await?;
+            let ext = SourceDistExtension::from_path(src.path()).map_err(|err| {
+                anyhow::anyhow!("`{}` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: {err}.", src.path().user_display())
+            })?;
+            let temp_dir = tempfile::tempdir_in(&output_dir)?;
+            uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
+
+            // Extract the top-level directory from the archive.
+            let extracted = match uv_extract::strip_component(temp_dir.path()) {
+                Ok(top_level) => top_level,
+                Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
+                Err(err) => return Err(err.into()),
+            };
+
+            // Build a wheel from the source distribution.
+            let builder = build_dispatch
+                .setup_build(
+                    &extracted,
+                    subdirectory,
+                    &version_id,
+                    dist,
+                    BuildKind::Wheel,
+                )
+                .await?;
+            let wheel = builder.build(&output_dir).await?;
+
+            BuiltDistributions::Wheel(output_dir.join(wheel))
+        }
     };
 
     Ok(assets)
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Source<'a> {
+    /// The input source is a file (i.e., a source distribution in a `.tar.gz` or `.zip` file).
+    File(Cow<'a, Path>),
+    /// The input source is a directory.
+    Directory(Cow<'a, Path>),
+}
+
+impl<'a> Source<'a> {
+    fn path(&self) -> &Path {
+        match self {
+            Source::File(path) => path.as_ref(),
+            Source::Directory(path) => path.as_ref(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum BuiltDistributions {
     /// A built wheel.
     Wheel(PathBuf),
@@ -380,4 +473,7 @@ enum BuildPlan {
 
     /// Build a source distribution and a wheel from source.
     SdistAndWheel,
+
+    /// Build a wheel from a source distribution.
+    WheelFromSdist,
 }

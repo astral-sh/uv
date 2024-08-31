@@ -341,14 +341,20 @@ pub enum Commands {
     Venv(VenvArgs),
     /// Build Python packages into source distributions and wheels.
     ///
-    /// By default, `uv build` will build a source distribution ("sdist")
-    /// from the source directory, and a binary distribution ("wheel") from
-    /// the source distribution.
+    /// `uv build` accepts a path to a directory or source distribution,
+    /// which defaults to the current working directory.
+    ///
+    /// By default, if passed a directory, `uv build` will build a source
+    /// distribution ("sdist") from the source directory, and a binary
+    /// distribution ("wheel") from  the source distribution.
     ///
     /// `uv build --sdist` can be used to build only the source distribution,
     /// `uv build --wheel` can be used to build only the binary distribution,
     /// and `uv build --sdist --wheel` can be used to build both distributions
     /// from source.
+    ///
+    /// If passed a source distribution, `uv build --wheel` will build a wheel
+    /// from  the source distribution.
     #[command(
         after_help = "Use `uv help build` for more details.",
         after_long_help = ""
@@ -1942,15 +1948,17 @@ pub struct PipTreeArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct BuildArgs {
-    /// The directory from which distributions should be built.
+    /// The directory from which distributions should be built, or a source
+    /// distribution archive to build into a wheel.
     ///
     /// Defaults to the current working directory.
     #[arg(value_parser = parse_file_path)]
-    pub src_dir: Option<PathBuf>,
+    pub src: Option<PathBuf>,
 
     /// The output directory to which distributions should be written.
     ///
-    /// Defaults to the `dist` subdirectory within the source directory.
+    /// Defaults to the `dist` subdirectory within the source directory, or the
+    /// directory containing the source distribution archive.
     #[arg(long, short, value_parser = parse_file_path)]
     pub out_dir: Option<PathBuf>,
 

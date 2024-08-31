@@ -1615,7 +1615,7 @@ impl PipCheckSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct BuildSettings {
-    pub(crate) src_dir: Option<PathBuf>,
+    pub(crate) src: Option<PathBuf>,
     pub(crate) out_dir: Option<PathBuf>,
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
@@ -1628,7 +1628,7 @@ impl BuildSettings {
     /// Resolve the [`BuildSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: BuildArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let BuildArgs {
-            src_dir,
+            src,
             out_dir,
             sdist,
             wheel,
@@ -1639,7 +1639,7 @@ impl BuildSettings {
         } = args;
 
         Self {
-            src_dir,
+            src,
             out_dir,
             sdist,
             wheel,
