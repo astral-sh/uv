@@ -7,7 +7,7 @@ in the nearest parent directory.
 
 !!! note
 
-    For `tool` commands, which operate the user level, local configuration
+    For `tool` commands, which operate at the user level, local configuration
     files will be ignored. Instead, uv will exclusively read from user-level configuration
     (e.g., `~/.config/uv/uv.toml`).
 
