@@ -167,7 +167,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 
 Use a specific Python version in the current directory:
 
-```
+```console
 $ uv python pin pypy@3.11
 Pinned `.python-version` to `pypy@3.11`
 ```
@@ -190,7 +190,7 @@ Updated `example.py`
 
 Then, run the script in an isolated virtual environment:
 
-```
+```console
 $ uv run example.py
 Reading inline script metadata from: example.py
 Installed 5 packages in 12ms

@@ -73,13 +73,13 @@ Once a tool is installed with `uv tool install`, `uvx` will use the installed ve
 
 For example, after installing an older version of Ruff:
 
-```
+```console
 $ uv tool install ruff==0.5.0
 ```
 
 The version of `ruff` and `uvx ruff` is the same:
 
-```
+```console
 $ ruff --version
 ruff 0.5.0
 $ uvx ruff --version
