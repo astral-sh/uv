@@ -438,9 +438,7 @@ uv init [OPTIONS] [PATH]
 
 </dd><dt><code>--no-readme</code></dt><dd><p>Do not create a <code>README.md</code> file</p>
 
-</dd><dt><code>--no-workspace</code></dt><dd><p>Avoid discovering a workspace.</p>
-
-<p>Instead, create a standalone project.</p>
+</dd><dt><code>--no-workspace</code></dt><dd><p>Avoid discovering a workspace and create a standalone project.</p>
 
 <p>By default, uv searches for workspaces in the current directory or any parent directory.</p>
 
