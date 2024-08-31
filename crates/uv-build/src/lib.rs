@@ -79,8 +79,8 @@ static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Invalid source distribution: {0}")]
-    InvalidSourceDist(String),
+    #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` is present in the directory", _0.simplified_display())]
+    InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectToml(#[from] toml::de::Error),
     #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
@@ -353,7 +353,7 @@ pub struct SourceBuildContext {
     default_resolution: Rc<Mutex<Option<Resolution>>>,
 }
 
-/// Holds the state through a series of PEP 517 frontend to backend calls or a single setup.py
+/// Holds the state through a series of PEP 517 frontend to backend calls or a single `setup.py`
 /// invocation.
 ///
 /// This keeps both the temp dir and the result of a potential `prepare_metadata_for_build_wheel`
@@ -595,8 +595,7 @@ impl SourceBuild {
                 // We require either a `pyproject.toml` or a `setup.py` file at the top level.
                 if !source_tree.join("setup.py").is_file() {
                     return Err(Box::new(Error::InvalidSourceDist(
-                        "The archive contains neither a `pyproject.toml` nor a `setup.py` file at the top level"
-                            .to_string(),
+                        source_tree.to_path_buf(),
                     )));
                 }
 
@@ -713,19 +712,19 @@ impl SourceBuild {
         Ok(self.metadata_directory.clone())
     }
 
-    /// Build a source distribution from an archive (`.zip` or `.tar.gz`), return the location of the
-    /// built wheel.
+    /// Build a distribution from an archive (`.zip` or `.tar.gz`) or source tree, and return the
+    /// location of the built distribution.
     ///
-    /// The location will be inside `temp_dir`, i.e. you must use the wheel before dropping the temp
-    /// dir.
+    /// The location will be inside `temp_dir`, i.e., you must use the distribution before dropping
+    /// the temporary directory.
     ///
     /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
     #[instrument(skip_all, fields(version_id = self.version_id))]
-    pub async fn build_wheel(&self, wheel_dir: &Path) -> Result<String, Error> {
+    pub async fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
-        let wheel_dir = fs::canonicalize(wheel_dir)?;
+        let wheel_dir = std::path::absolute(wheel_dir)?;
 
-        // Prevent clashes from two uv processes building wheels in parallel.
+        // Prevent clashes from two uv processes building distributions in parallel.
         let tmp_dir = tempdir_in(&wheel_dir)?;
         let filename = self
             .pep517_build(tmp_dir.path(), &self.pep517_backend)
@@ -737,47 +736,76 @@ impl SourceBuild {
         Ok(filename)
     }
 
+    /// Perform a PEP 517 build for a wheel or source distribution (sdist).
     async fn pep517_build(
         &self,
-        wheel_dir: &Path,
+        output_dir: &Path,
         pep517_backend: &Pep517Backend,
     ) -> Result<String, Error> {
-        let metadata_directory = self
-            .metadata_directory
-            .as_deref()
-            .map_or("None".to_string(), |path| {
-                format!(r#""{}""#, path.escape_for_python())
-            });
-
         // Write the hook output to a file so that we can read it back reliably.
         let outfile = self
             .temp_dir
             .path()
             .join(format!("build_{}.txt", self.build_kind));
 
-        debug!(
-            r#"Calling `{}.build_{}("{}", {}, {})`"#,
-            pep517_backend.backend,
-            self.build_kind,
-            wheel_dir.escape_for_python(),
-            self.config_settings.escape_for_python(),
-            metadata_directory,
-        );
-        let script = formatdoc! {
-            r#"
-            {}
+        // Construct the appropriate build script based on the build kind.
+        let script = match self.build_kind {
+            BuildKind::Sdist => {
+                debug!(
+                    r#"Calling `{}.build_{}("{}", {})`"#,
+                    pep517_backend.backend,
+                    self.build_kind,
+                    output_dir.escape_for_python(),
+                    self.config_settings.escape_for_python(),
+                );
+                formatdoc! {
+                    r#"
+                    {}
 
-            wheel_filename = backend.build_{}("{}", {}, {})
-            with open("{}", "w") as fp:
-                fp.write(wheel_filename)
-            "#,
-            pep517_backend.backend_import(),
-            self.build_kind,
-            wheel_dir.escape_for_python(),
-            self.config_settings.escape_for_python(),
-            metadata_directory,
-            outfile.escape_for_python()
+                    sdist_filename = backend.build_{}("{}", {})
+                    with open("{}", "w") as fp:
+                        fp.write(sdist_filename)
+                    "#,
+                    pep517_backend.backend_import(),
+                    self.build_kind,
+                    output_dir.escape_for_python(),
+                    self.config_settings.escape_for_python(),
+                    outfile.escape_for_python()
+                }
+            }
+            BuildKind::Wheel | BuildKind::Editable => {
+                let metadata_directory = self
+                    .metadata_directory
+                    .as_deref()
+                    .map_or("None".to_string(), |path| {
+                        format!(r#""{}""#, path.escape_for_python())
+                    });
+                debug!(
+                    r#"Calling `{}.build_{}("{}", {}, {})`"#,
+                    pep517_backend.backend,
+                    self.build_kind,
+                    output_dir.escape_for_python(),
+                    self.config_settings.escape_for_python(),
+                    metadata_directory,
+                );
+                formatdoc! {
+                    r#"
+                    {}
+
+                    wheel_filename = backend.build_{}("{}", {}, {})
+                    with open("{}", "w") as fp:
+                        fp.write(wheel_filename)
+                    "#,
+                    pep517_backend.backend_import(),
+                    self.build_kind,
+                    output_dir.escape_for_python(),
+                    self.config_settings.escape_for_python(),
+                    metadata_directory,
+                    outfile.escape_for_python()
+                }
+            }
         };
+
         let span = info_span!(
             "run_python_script",
             script=format!("build_{}", self.build_kind),
@@ -797,8 +825,8 @@ impl SourceBuild {
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to build wheel through `build_{}()`",
-                    self.build_kind
+                    "Build backend failed to build {} through `build_{}()`",
+                    self.build_kind, self.build_kind,
                 ),
                 &output,
                 &self.version_id,
@@ -806,11 +834,11 @@ impl SourceBuild {
         }
 
         let distribution_filename = fs::read_to_string(&outfile)?;
-        if !wheel_dir.join(&distribution_filename).is_file() {
+        if !output_dir.join(&distribution_filename).is_file() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to produce wheel through `build_{}()`: `{distribution_filename}` not found",
-                    self.build_kind
+                    "Build backend failed to produce {} through `build_{}()`: `{distribution_filename}` not found",
+                    self.build_kind, self.build_kind,
                 ),
                 &output,
                 &self.version_id,
@@ -826,7 +854,7 @@ impl SourceBuildTrait for SourceBuild {
     }
 
     async fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> anyhow::Result<String> {
-        Ok(self.build_wheel(wheel_dir).await?)
+        Ok(self.build(wheel_dir).await?)
     }
 }
 
