@@ -322,10 +322,62 @@ impl Cache {
     ///
     /// Returns the number of entries removed from the cache.
     pub fn remove(&self, name: &PackageName) -> Result<Removal, io::Error> {
+        // Collect the set of referenced archives.
+        let before = {
+            let mut references = FxHashSet::default();
+            for bucket in CacheBucket::iter() {
+                let bucket = self.bucket(bucket);
+                if bucket.is_dir() {
+                    for entry in walkdir::WalkDir::new(bucket) {
+                        let entry = entry?;
+                        if entry.file_type().is_symlink() {
+                            if let Ok(target) = fs_err::canonicalize(entry.path()) {
+                                references.insert(target);
+                            }
+                        }
+                    }
+                }
+            }
+            references
+        };
+
+        // Remove any entries for the package from the cache.
         let mut summary = Removal::default();
         for bucket in CacheBucket::iter() {
             summary += bucket.remove(self, name)?;
         }
+
+        // Collect the set of referenced archives after the removal.
+        let after = {
+            let mut references = FxHashSet::default();
+            for bucket in CacheBucket::iter() {
+                let bucket = self.bucket(bucket);
+                if bucket.is_dir() {
+                    for entry in walkdir::WalkDir::new(bucket) {
+                        let entry = entry?;
+                        if entry.file_type().is_symlink() {
+                            if let Ok(target) = fs_err::canonicalize(entry.path()) {
+                                references.insert(target);
+                            }
+                        }
+                    }
+                }
+            }
+            references
+        };
+
+        if before != after {
+            // Remove any archives that are no longer referenced.
+            for entry in fs::read_dir(self.bucket(CacheBucket::Archive))? {
+                let entry = entry?;
+                let path = fs_err::canonicalize(entry.path())?;
+                if !after.contains(&path) && before.contains(&path) {
+                    debug!("Removing dangling cache entry: {}", path.display());
+                    summary += rm_rf(path)?;
+                }
+            }
+        }
+
         Ok(summary)
     }
 

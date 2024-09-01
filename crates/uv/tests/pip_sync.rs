@@ -1396,7 +1396,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 13 files for source-distribution ([SIZE])
+    Removed 19 files for source-distribution ([SIZE])
     "###
     );
 
@@ -1591,7 +1591,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 14 files for source-distribution ([SIZE])
+    Removed 20 files for source-distribution ([SIZE])
     "###
     );
 
@@ -1687,7 +1687,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 13 files for source-distribution ([SIZE])
+    Removed 19 files for source-distribution ([SIZE])
     "###
     );
 
@@ -1788,7 +1788,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 2 files for tomli ([SIZE])
+    Removed 11 files for tomli ([SIZE])
     "###
     );
 
@@ -1876,7 +1876,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 3 files for tqdm ([SIZE])
+    Removed 43 files for tqdm ([SIZE])
     "###
     );
 
