@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.2
+
+### Enhancements
+
+- Adding support for `.pyc`  files in `uv run` ([#6886](https://github.com/astral-sh/uv/pull/6886))
+- Treat missing `top_level.txt` as non-fatal ([#6881](https://github.com/astral-sh/uv/pull/6881))
+
+### Bug fixes
+
+- Fix `is_disjoint` check for supported environments ([#6902](https://github.com/astral-sh/uv/pull/6902))
+- Remove dangling archives in `uv cache clean ${package}` ([#6915](https://github.com/astral-sh/uv/pull/6915))
+- Error when discovered Python is incompatible with `--isolated` workspace ([#6885](https://github.com/astral-sh/uv/pull/6885))
+- Warn when discovered Python is incompatible with PEP 723 script ([#6884](https://github.com/astral-sh/uv/pull/6884))
+
 ## 0.4.1
 
 ### Enhancements
