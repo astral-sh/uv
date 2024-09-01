@@ -86,7 +86,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     let range =
                         // Note that sometimes we do not have a range of available versions, e.g.,
                         // when a package is from a non-registry source. In that case, we cannot
-                        // perform further simplicifaction of the range.
+                        // perform further simplification of the range.
                         if let Some(available_versions) = package.name().and_then(|name| self.available_versions.get(name)) {
                             update_availability_range(&complement, available_versions)
                         } else {

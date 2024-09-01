@@ -595,7 +595,7 @@ fn report_dry_run(
         )?;
     }
 
-    // TDOO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
+    // TODO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
     for event in reinstalls
         .into_iter()
         .chain(extraneous.into_iter())

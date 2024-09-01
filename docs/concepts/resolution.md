@@ -61,7 +61,7 @@ Markers allow attaching an expression to requirements that indicate when the dep
 used. For example `bar; python_version<"3.9"` can be used to only require `bar` on Python 3.8 and
 older.
 
-Markers are used to adjust a package's dependencies dependending on the current environment or
+Markers are used to adjust a package's dependencies depending on the current environment or
 platform. For example, markers can be used to change dependencies based on the operating system, the
 CPU architecture, the Python version, the Python implementation, and more.
 

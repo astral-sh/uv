@@ -212,7 +212,7 @@ services:
     # ...
 
     develop:
-      # Create a `watch` configuration to update the appl
+      # Create a `watch` configuration to update the app
       #
       watch:
         # Sync the working directory with the `/app` directory in the container
