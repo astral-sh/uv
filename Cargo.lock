@@ -4561,6 +4561,7 @@ dependencies = [
 name = "uv-build"
 version = "0.0.1"
 dependencies = [
+ "anstream",
  "anyhow",
  "distribution-types",
  "fs-err",

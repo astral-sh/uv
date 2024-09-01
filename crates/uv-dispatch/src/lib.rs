@@ -16,10 +16,10 @@ use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_configuration::Concurrency;
 use uv_configuration::{
     BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall, SourceStrategy,
 };
+use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
@@ -299,6 +299,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         version_id: &'data str,
         dist: Option<&'data SourceDist>,
         build_kind: BuildKind,
+        build_output: BuildOutput,
     ) -> Result<SourceBuild> {
         let dist_name = dist.map(distribution_types::Name::name);
         // Note we can only prevent builds by name for packages with names
@@ -330,6 +331,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.build_isolation,
             build_kind,
             self.build_extra_env_vars.clone(),
+            build_output,
             self.concurrency.builds,
         )
         .boxed_local()
