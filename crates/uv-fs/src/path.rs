@@ -108,8 +108,7 @@ impl<T: AsRef<Path>> Simplified for T {
         // current working directory, in case they differ.
         let path = path.strip_prefix(base.as_ref()).unwrap_or_else(|_| {
             path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
-                path.strip_prefix(CANONICAL_CWD.simplified())
-                    .unwrap_or(path)
+                path
             })
         });
 
@@ -122,8 +121,7 @@ impl<T: AsRef<Path>> Simplified for T {
         // Attempt to strip the current working directory, then the canonicalized current working
         // directory, in case they differ.
         let path = path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
-            path.strip_prefix(CANONICAL_CWD.simplified())
-                .unwrap_or(path)
+            path
         });
 
         // Use a portable representation for relative paths.
