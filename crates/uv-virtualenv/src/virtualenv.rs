@@ -119,7 +119,7 @@ pub(crate) fn create(
         Err(err) => return Err(Error::Io(err)),
     }
 
-    let location = location.canonicalize()?;
+    let location = std::path::absolute(location)?;
 
     let bin_name = if cfg!(unix) {
         "bin"

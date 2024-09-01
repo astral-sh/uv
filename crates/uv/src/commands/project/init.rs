@@ -47,10 +47,7 @@ pub(crate) async fn init(
 
     // Make sure a project does not already exist in the given directory.
     if path.join("pyproject.toml").exists() {
-        let path = path
-            .simple_canonicalize()
-            .unwrap_or_else(|_| path.simplified().to_path_buf());
-
+        let path = std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
         anyhow::bail!(
             "Project is already initialized in `{}`",
             path.display().cyan()
@@ -102,10 +99,8 @@ pub(crate) async fn init(
         }
         // Initialized a project in the given directory.
         Some(path) => {
-            let path = path
-                .simple_canonicalize()
-                .unwrap_or_else(|_| path.simplified().to_path_buf());
-
+            let path =
+                std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
             writeln!(
                 printer.stderr(),
                 "Initialized project `{}` at `{}`",

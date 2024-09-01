@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::path::{absolute, Component, Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
 use either::Either;
@@ -8,14 +8,6 @@ use path_slash::PathExt;
 /// The current working directory.
 pub static CWD: LazyLock<PathBuf> =
     LazyLock::new(|| std::env::current_dir().expect("The current directory must exist"));
-
-/// The current working directory, canonicalized.
-pub static CANONICAL_CWD: LazyLock<PathBuf> = LazyLock::new(|| {
-    std::env::current_dir()
-        .expect("The current directory must exist")
-        .simple_canonicalize()
-        .expect("The current directory must be canonicalized")
-});
 
 pub trait Simplified {
     /// Simplify a [`Path`].
@@ -61,21 +53,7 @@ impl<T: AsRef<Path>> Simplified for T {
     }
 
     fn simple_canonicalize(&self) -> std::io::Result<PathBuf> {
-        match dunce::canonicalize(self.as_ref()) {
-            Ok(path) => Ok(path),
-            // On Windows, `dunce::canonicalize` can't canonicalize paths on network drives or RAM
-            // drives. In that case, fall back on `std::path::absolute`, but also verify that the
-            // path exists.
-            Err(e) if std::env::consts::OS != "windows" => Err(e),
-            _ => match absolute(self.as_ref()) {
-                Ok(path) if path.exists() => Ok(path),
-                Ok(_) => Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("Path does not exist: {}", self.simplified_display()),
-                )),
-                Err(e) => Err(e),
-            },
-        }
+        dunce::canonicalize(self.as_ref())
     }
 
     fn user_display(&self) -> impl std::fmt::Display {
@@ -88,10 +66,7 @@ impl<T: AsRef<Path>> Simplified for T {
 
         // Attempt to strip the current working directory, then the canonicalized current working
         // directory, in case they differ.
-        let path = path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
-            path.strip_prefix(CANONICAL_CWD.simplified())
-                .unwrap_or(path)
-        });
+        let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
 
         path.display()
     }
@@ -106,12 +81,9 @@ impl<T: AsRef<Path>> Simplified for T {
 
         // Attempt to strip the base, then the current working directory, then the canonicalized
         // current working directory, in case they differ.
-        let path = path.strip_prefix(base.as_ref()).unwrap_or_else(|_| {
-            path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
-                path.strip_prefix(CANONICAL_CWD.simplified())
-                    .unwrap_or(path)
-            })
-        });
+        let path = path
+            .strip_prefix(base.as_ref())
+            .unwrap_or_else(|_| path.strip_prefix(CWD.simplified()).unwrap_or(path));
 
         path.display()
     }
@@ -121,10 +93,7 @@ impl<T: AsRef<Path>> Simplified for T {
 
         // Attempt to strip the current working directory, then the canonicalized current working
         // directory, in case they differ.
-        let path = path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
-            path.strip_prefix(CANONICAL_CWD.simplified())
-                .unwrap_or(path)
-        });
+        let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
 
         // Use a portable representation for relative paths.
         path.to_slash()
