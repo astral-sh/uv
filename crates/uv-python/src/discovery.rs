@@ -897,7 +897,7 @@ pub fn find_best_python_installation(
 ) -> Result<FindPythonResult, Error> {
     debug!("Starting Python discovery for {}", request);
 
-    // First, check for an exact match (or the first available version if no Python versfion was provided)
+    // First, check for an exact match (or the first available version if no Python version was provided)
     debug!("Looking for exact match for request {request}");
     let result = find_python_installation(request, environments, preference, cache)?;
     if let Ok(ref installation) = result {

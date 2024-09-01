@@ -1628,7 +1628,7 @@ in `pip compile` ([#3804](https://github.com/astral-sh/uv/pull/3804))
 
 ### Bug fixes
 
-- Do not treat interpereters discovered via `CONDA_PREFIX` as system
+- Do not treat interpreters discovered via `CONDA_PREFIX` as system
 interpreters ([#3771](https://github.com/astral-sh/uv/pull/3771))
 
 ## 0.2.1
@@ -1969,7 +1969,7 @@ handling ([#3210](https://github.com/astral-sh/uv/pull/3210))
 
 ### Bug fixes
 
-- Avoid removing quites from requirements markers ([#3214](https://github.com/astral-sh/uv/pull/3214))
+- Avoid removing quotes from requirements markers ([#3214](https://github.com/astral-sh/uv/pull/3214))
 - Avoid adding extras when expanding constraints ([#3232](https://github.com/astral-sh/uv/pull/3232))
 - Reinstall package when editable label is removed ([#3219](https://github.com/astral-sh/uv/pull/3219))
 
@@ -1977,7 +1977,7 @@ handling ([#3210](https://github.com/astral-sh/uv/pull/3210))
 
 - Add `RAYON_NUM_THREADS` to environment variable docs ([#3223](https://github.com/astral-sh/uv/pull/3223))
 - Document support for HTTP proxy variables ([#3247](https://github.com/astral-sh/uv/pull/3247))
-- Fix documentation for `--python-platfor`m ([#3220](https://github.com/astral-sh/uv/pull/3220))
+- Fix documentation for `--python-platform` ([#3220](https://github.com/astral-sh/uv/pull/3220))
 
 ## 0.1.37
 
@@ -2204,7 +2204,7 @@ opt-in (`--index-strategy unsafe-any-match`) ([#2815](https://github.com/astral-
 - Detect Fish via `FISH_VERSION` ([#2781](https://github.com/astral-sh/uv/pull/2781))
 - Exclude installed distributions with multiple versions from consideration in the
 resolver ([#2779](https://github.com/astral-sh/uv/pull/2779))
-- Resolve non-determistic behavior in preferences due to site-packages
+- Resolve non-deterministic behavior in preferences due to site-packages
 ordering ([#2780](https://github.com/astral-sh/uv/pull/2780))
 - Use canonical URL to key redirect map ([#2764](https://github.com/astral-sh/uv/pull/2764))
 - Use distribution database and index for all pre-resolution phases ([#2766](https://github.com/astral-sh/uv/pull/2766))

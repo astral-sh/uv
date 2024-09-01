@@ -412,7 +412,7 @@ issues to convey your interest.
 ## Registry authentication
 
 uv does not support `pip`'s `auto` or `import` options for `--keyring-provider`. At present, only
-the `subproces` option is supported.
+the `subprocess` option is supported.
 
 Unlike `pip`, uv does not enable keyring authentication by default.
 

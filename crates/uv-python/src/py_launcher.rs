@@ -15,7 +15,7 @@ pub(crate) struct WindowsPython {
     pub(crate) version: Option<PythonVersion>,
 }
 
-/// Àdding `windows_registry::Value::into_string()`.
+/// Adding `windows_registry::Value::into_string()`.
 fn value_to_string(value: Value) -> Option<String> {
     match value {
         Value::String(string) => Some(string),
