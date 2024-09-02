@@ -4411,8 +4411,8 @@ fn fail_to_add_revert_project() -> Result<()> {
     Ok(())
 }
 
-/// Ensure that the added dependencies are sorted
-/// if the dependency list was already sorted prior to adding the new one.
+/// Ensure that the added dependencies are sorted if the dependency list was already sorted prior
+/// to the operation.
 #[test]
 fn sorted_dependencies() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -4426,19 +4426,31 @@ fn sorted_dependencies() -> Result<()> {
     requires-python = ">=3.12"
     dependencies = [
         "CacheControl[filecache]>=0.14,<0.15",
-        "mwparserfromhell",
-        "pywikibot",
-        "sentry-sdk",
-        "yarl",
+        "iniconfig",
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["pydantic"]).arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add(&["typing-extensions", "anyio"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 13 packages in [TIME]
+    Prepared 12 packages in [TIME]
+    Installed 12 packages in [TIME]
+     + anyio==4.3.0
+     + cachecontrol==0.14.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + filelock==3.13.1
+     + idna==3.6
+     + iniconfig==2.0.0
+     + msgpack==1.0.8
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -4455,11 +4467,9 @@ fn sorted_dependencies() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "CacheControl[filecache]>=0.14,<0.15",
-            "mwparserfromhell",
-            "pydantic",
-            "pywikibot",
-            "sentry-sdk",
-            "yarl",
+            "anyio>=4.3.0",
+            "iniconfig",
+            "typing-extensions>=4.10.0",
         ]
         "###
         );

@@ -48,6 +48,14 @@ pub enum ArrayEdit {
     Add(usize),
 }
 
+impl ArrayEdit {
+    pub fn index(&self) -> usize {
+        match self {
+            Self::Update(i) | Self::Add(i) => *i,
+        }
+    }
+}
+
 /// Specifies whether dependencies are added to a script file or a `pyproject.toml` file.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DependencyTarget {

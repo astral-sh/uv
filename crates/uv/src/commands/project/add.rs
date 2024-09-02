@@ -328,7 +328,7 @@ pub(crate) async fn add(
             DependencyTarget::PyProjectToml,
         ),
     }?;
-    let mut edits = Vec::with_capacity(requirements.len());
+    let mut edits = Vec::<DependencyEdit>::with_capacity(requirements.len());
     for mut requirement in requirements {
         // Add the specified extras.
         requirement.extras.extend(extras.iter().cloned());
@@ -407,6 +407,26 @@ pub(crate) async fn add(
         };
 
         // Keep track of the exact location of the edit.
+        let index = edit.index();
+
+        // If the edit was inserted before the end of the list, update the existing edits.
+        for edit in &mut edits {
+            if *edit.dependency_type == dependency_type {
+                match &mut edit.edit {
+                    ArrayEdit::Add(existing) => {
+                        if *existing >= index {
+                            *existing += 1;
+                        }
+                    }
+                    ArrayEdit::Update(existing) => {
+                        if *existing >= index {
+                            *existing += 1;
+                        }
+                    }
+                }
+            }
+        }
+
         edits.push(DependencyEdit {
             dependency_type: &dependency_type,
             requirement,
