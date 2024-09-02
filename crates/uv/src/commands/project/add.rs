@@ -30,7 +30,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError};
 use uv_workspace::pyproject_mut::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
@@ -668,7 +668,7 @@ pub(crate) async fn add(
     let install_options = InstallOptions::default();
 
     if let Err(err) = project::sync::do_sync(
-        &project,
+        &InstallTarget::from(project.clone()),
         &venv,
         &lock,
         &extras,

@@ -35,7 +35,7 @@ use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_types::BuildContext;
-use uv_workspace::{VirtualProject, Workspace};
+use uv_workspace::{InstallTarget, Workspace};
 
 pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::tree::TreeDisplay;
@@ -426,7 +426,7 @@ impl Lock {
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     pub fn to_resolution(
         &self,
-        project: &VirtualProject,
+        project: &InstallTarget,
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecification,

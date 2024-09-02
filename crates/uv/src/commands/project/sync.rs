@@ -14,7 +14,7 @@ use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
@@ -44,30 +44,35 @@ pub(crate) async fn sync(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // Identify the project.
-    let project = if let Some(package) = package {
-        VirtualProject::Project(
-            Workspace::discover(&CWD, &DiscoveryOptions::default())
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
-        )
-    } else if frozen {
-        VirtualProject::discover(
+    // Identify the target.
+    let target = if frozen {
+        let project = InstallTarget::discover(
             &CWD,
             &DiscoveryOptions {
                 members: MemberDiscovery::None,
                 ..DiscoveryOptions::default()
             },
         )
-        .await?
+        .await?;
+        if let Some(package) = package {
+            project.with_frozen_member(package)
+        } else {
+            project
+        }
+    } else if let Some(package) = package {
+        InstallTarget::Project(
+            Workspace::discover(&CWD, &DiscoveryOptions::default())
+                .await?
+                .with_current_project(package.clone())
+                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+        )
     } else {
-        VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+        InstallTarget::discover(&CWD, &DiscoveryOptions::default()).await?
     };
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
-        project.workspace(),
+        target.workspace(),
         python.as_deref().map(PythonRequest::parse),
         python_preference,
         python_downloads,
@@ -81,7 +86,7 @@ pub(crate) async fn sync(
     let lock = match do_safe_lock(
         locked,
         frozen,
-        project.workspace(),
+        target.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
         Box::new(DefaultResolveLogger),
@@ -109,7 +114,7 @@ pub(crate) async fn sync(
 
     // Perform the sync operation.
     do_sync(
-        &project,
+        &target,
         &venv,
         &lock,
         &extras,
@@ -133,7 +138,7 @@ pub(crate) async fn sync(
 /// Sync a lockfile with an environment.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_sync(
-    project: &VirtualProject,
+    target: &InstallTarget,
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: &ExtrasSpecification,
@@ -205,14 +210,14 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(project, &markers, tags, extras, &dev)?;
+    let resolution = lock.to_resolution(target, &markers, tags, extras, &dev)?;
 
     // Always skip virtual projects, which shouldn't be built or installed.
     let resolution = apply_no_virtual_project(resolution);
 
     // Filter resolution based on install-specific options.
     let resolution =
-        install_options.filter_resolution(resolution, project.project_name(), lock.members());
+        install_options.filter_resolution(resolution, target.project_name(), lock.members());
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
