@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.3
+
+### Enhancements
+
+- Show build backend output when `--verbose` is provided ([#6903](https://github.com/astral-sh/uv/pull/6903))
+- Allow `uv sync --frozen --package` without copying member `pyproject.toml` ([#6943](https://github.com/astral-sh/uv/pull/6943))
+
+### Bug fixes
+
+- Avoid panic with missing temporary directory ([#6929](https://github.com/astral-sh/uv/pull/6929))
+- Avoid updating incorrect dependencies for sorted `uv add` ([#6939](https://github.com/astral-sh/uv/pull/6939))
+- Use lower-bound semantics for all Python compatibility comparisons ([#6882](https://github.com/astral-sh/uv/pull/6882))
+
 ## 0.4.2
 
 ### Enhancements
