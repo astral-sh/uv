@@ -1219,7 +1219,7 @@ fn is_included_in_workspace(
     Ok(false)
 }
 
-/// A project that can be synced.
+/// A project that can be discovered.
 ///
 /// The project could be a package within a workspace, a real workspace root, or a (legacy)
 /// non-project workspace root, which can define its own dev dependencies.
@@ -1311,13 +1311,13 @@ impl VirtualProject {
     #[must_use]
     pub fn with_pyproject_toml(self, pyproject_toml: PyProjectToml) -> Option<Self> {
         match self {
-            VirtualProject::Project(project) => Some(VirtualProject::Project(
-                project.with_pyproject_toml(pyproject_toml)?,
-            )),
-            VirtualProject::NonProject(workspace) => {
+            Self::Project(project) => {
+                Some(Self::Project(project.with_pyproject_toml(pyproject_toml)?))
+            }
+            Self::NonProject(workspace) => {
                 // If this is a non-project workspace root, then by definition the root isn't a
                 // member, so we can just update the top-level `pyproject.toml`.
-                Some(VirtualProject::NonProject(Workspace {
+                Some(Self::NonProject(Workspace {
                     pyproject_toml,
                     ..workspace.clone()
                 }))
@@ -1328,38 +1328,77 @@ impl VirtualProject {
     /// Return the root of the project.
     pub fn root(&self) -> &Path {
         match self {
-            VirtualProject::Project(project) => project.project_root(),
-            VirtualProject::NonProject(workspace) => workspace.install_path(),
+            Self::Project(project) => project.project_root(),
+            Self::NonProject(workspace) => workspace.install_path(),
         }
     }
 
     /// Return the [`PyProjectToml`] of the project.
     pub fn pyproject_toml(&self) -> &PyProjectToml {
         match self {
-            VirtualProject::Project(project) => project.current_project().pyproject_toml(),
-            VirtualProject::NonProject(workspace) => &workspace.pyproject_toml,
+            Self::Project(project) => project.current_project().pyproject_toml(),
+            Self::NonProject(workspace) => &workspace.pyproject_toml,
         }
     }
 
     /// Return the [`Workspace`] of the project.
     pub fn workspace(&self) -> &Workspace {
         match self {
-            VirtualProject::Project(project) => project.workspace(),
-            VirtualProject::NonProject(workspace) => workspace,
+            Self::Project(project) => project.workspace(),
+            Self::NonProject(workspace) => workspace,
         }
     }
 
-    /// Return the [`PackageName`] of the project.
+    /// Return the [`PackageName`] of the project, if available.
+    pub fn project_name(&self) -> Option<&PackageName> {
+        match self {
+            VirtualProject::Project(project) => Some(project.project_name()),
+            VirtualProject::NonProject(_) => None,
+        }
+    }
+
+    /// Returns `true` if the project is a virtual workspace root.
+    pub fn is_non_project(&self) -> bool {
+        matches!(self, VirtualProject::NonProject(_))
+    }
+}
+
+/// A target that can be installed.
+#[derive(Debug, Clone, Copy)]
+pub enum InstallTarget<'env> {
+    /// A project (which could be a workspace root or member).
+    Project(&'env ProjectWorkspace),
+    /// A (legacy) non-project workspace root.
+    NonProject(&'env Workspace),
+    /// A frozen member within a [`Workspace`].
+    FrozenMember(&'env Workspace, &'env PackageName),
+}
+
+impl<'env> InstallTarget<'env> {
+    /// Create an [`InstallTarget`] for a frozen member within a workspace.
+    pub fn frozen_member(project: &'env VirtualProject, package_name: &'env PackageName) -> Self {
+        Self::FrozenMember(project.workspace(), package_name)
+    }
+
+    /// Return the [`Workspace`] of the target.
+    pub fn workspace(&self) -> &Workspace {
+        match self {
+            Self::Project(project) => project.workspace(),
+            Self::NonProject(workspace) => workspace,
+            Self::FrozenMember(workspace, _) => workspace,
+        }
+    }
+
+    /// Return the [`PackageName`] of the target.
     pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
         match self {
-            VirtualProject::Project(project) => {
-                Either::Left(std::iter::once(project.project_name()))
-            }
-            VirtualProject::NonProject(workspace) => Either::Right(workspace.packages().keys()),
+            Self::Project(project) => Either::Left(std::iter::once(project.project_name())),
+            Self::NonProject(workspace) => Either::Right(workspace.packages().keys()),
+            Self::FrozenMember(_, package_name) => Either::Left(std::iter::once(*package_name)),
         }
     }
 
-    /// Return the [`VirtualProject`] dependencies for the given group name.
+    /// Return the [`InstallTarget`] dependencies for the given group name.
     ///
     /// Returns dependencies that apply to the workspace root, but not any of its members. As such,
     /// only returns a non-empty iterator for virtual workspaces, which can include dev dependencies
@@ -1369,11 +1408,11 @@ impl VirtualProject {
         name: &GroupName,
     ) -> impl Iterator<Item = &pep508_rs::Requirement<VerbatimParsedUrl>> {
         match self {
-            VirtualProject::Project(_) => {
+            Self::Project(_) | Self::FrozenMember(..) => {
                 // For projects, dev dependencies are attached to the members.
                 Either::Left(std::iter::empty())
             }
-            VirtualProject::NonProject(workspace) => {
+            Self::NonProject(workspace) => {
                 // For non-projects, we might have dev dependencies that are attached to the
                 // workspace root (which isn't a member).
                 if name == &*DEV_DEPENDENCIES {
@@ -1395,17 +1434,22 @@ impl VirtualProject {
         }
     }
 
-    /// Return the [`PackageName`] of the project, if available.
+    /// Return the [`PackageName`] of the target, if available.
     pub fn project_name(&self) -> Option<&PackageName> {
         match self {
-            VirtualProject::Project(project) => Some(project.project_name()),
-            VirtualProject::NonProject(_) => None,
+            Self::Project(project) => Some(project.project_name()),
+            Self::NonProject(_) => None,
+            Self::FrozenMember(_, package_name) => Some(package_name),
         }
     }
+}
 
-    /// Returns `true` if the project is a virtual workspace root.
-    pub fn is_non_project(&self) -> bool {
-        matches!(self, VirtualProject::NonProject(_))
+impl<'env> From<&'env VirtualProject> for InstallTarget<'env> {
+    fn from(project: &'env VirtualProject) -> Self {
+        match project {
+            VirtualProject::Project(project) => Self::Project(project),
+            VirtualProject::NonProject(workspace) => Self::NonProject(workspace),
+        }
     }
 }
 

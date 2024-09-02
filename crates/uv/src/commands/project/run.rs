@@ -26,7 +26,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_scripts::Pep723Script;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
@@ -432,7 +432,7 @@ pub(crate) async fn run(
                     uv_resolver::ResolveError::NoSolution(err),
                 ))) => {
                     let report = miette::Report::msg(format!("{err}")).context(err.header());
-                    anstream::eprint!("{report:?}");
+                    eprint!("{report:?}");
                     return Ok(ExitStatus::Failure);
                 }
                 Err(err) => return Err(err.into()),
@@ -441,7 +441,7 @@ pub(crate) async fn run(
             let install_options = InstallOptions::default();
 
             project::sync::do_sync(
-                &project,
+                InstallTarget::from(&project),
                 &venv,
                 result.lock(),
                 &extras,
