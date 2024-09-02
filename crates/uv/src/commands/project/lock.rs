@@ -344,7 +344,8 @@ async fn do_lock(
     }
 
     // Determine the Python requirement.
-    let python_requirement = PythonRequirement::from_requires_python(interpreter, &requires_python);
+    let python_requirement =
+        PythonRequirement::from_requires_python(interpreter, requires_python.clone());
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -665,16 +666,14 @@ impl ValidatedLock {
         // If the Requires-Python bound in the lockfile is weaker or equivalent to the
         // Requires-Python bound in the workspace, we should have the necessary wheels to perform
         // a locked resolution.
-        if let Some(locked) = lock.requires_python() {
-            if locked.range() != requires_python.range() {
-                // On the other hand, if the bound in the lockfile is stricter, meaning the
-                // bound has since been weakened, we have to perform a clean resolution to ensure
-                // we fetch the necessary wheels.
-                debug!("Ignoring existing lockfile due to change in `requires-python`");
+        if lock.requires_python().range() != requires_python.range() {
+            // On the other hand, if the bound in the lockfile is stricter, meaning the
+            // bound has since been weakened, we have to perform a clean resolution to ensure
+            // we fetch the necessary wheels.
+            debug!("Ignoring existing lockfile due to change in `requires-python`");
 
-                // It's fine to prefer the existing versions, though.
-                return Ok(Self::Preferable(lock));
-            }
+            // It's fine to prefer the existing versions, though.
+            return Ok(Self::Preferable(lock));
         }
 
         // If the user provided at least one index URL (from the command line, or from a configuration

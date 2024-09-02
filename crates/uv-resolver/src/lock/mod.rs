@@ -58,7 +58,7 @@ pub struct Lock {
     /// The list of supported environments specified by the user.
     supported_environments: Vec<MarkerTree>,
     /// The range of supported Python versions.
-    requires_python: Option<RequiresPython>,
+    requires_python: RequiresPython,
     /// We discard the lockfile if these options don't match.
     options: ResolverOptions,
     /// The actual locked version and their metadata.
@@ -186,7 +186,7 @@ impl Lock {
     fn new(
         version: u32,
         mut packages: Vec<Package>,
-        requires_python: Option<RequiresPython>,
+        requires_python: RequiresPython,
         options: ResolverOptions,
         manifest: ResolverManifest,
         supported_environments: Vec<MarkerTree>,
@@ -241,11 +241,9 @@ impl Lock {
 
             // Remove wheels that don't match `requires-python` and can't be selected for
             // installation.
-            if let Some(requires_python) = &requires_python {
-                package
-                    .wheels
-                    .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
-            }
+            package
+                .wheels
+                .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
         }
         packages.sort_by(|dist1, dist2| dist1.id.cmp(&dist2.id));
 
@@ -390,8 +388,8 @@ impl Lock {
     }
 
     /// Returns the supported Python version range for the lockfile, if present.
-    pub fn requires_python(&self) -> Option<&RequiresPython> {
-        self.requires_python.as_ref()
+    pub fn requires_python(&self) -> &RequiresPython {
+        &self.requires_python
     }
 
     /// Returns the resolution mode used to generate this lock.
@@ -527,9 +525,7 @@ impl Lock {
         let mut doc = toml_edit::DocumentMut::new();
         doc.insert("version", value(i64::from(self.version)));
 
-        if let Some(ref requires_python) = self.requires_python {
-            doc.insert("requires-python", value(requires_python.to_string()));
-        }
+        doc.insert("requires-python", value(self.requires_python.to_string()));
 
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
@@ -1158,8 +1154,7 @@ impl ResolverManifest {
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
     version: u32,
-    #[serde(default)]
-    requires_python: Option<RequiresPython>,
+    requires_python: RequiresPython,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     #[serde(rename = "resolution-markers", default)]
@@ -3685,6 +3680,7 @@ mod tests {
     fn missing_dependency_source_unambiguous() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "a"
@@ -3710,6 +3706,7 @@ version = "0.1.0"
     fn missing_dependency_version_unambiguous() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "a"
@@ -3735,6 +3732,7 @@ source =  { registry = "https://pypi.org/simple" }
     fn missing_dependency_source_version_unambiguous() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "a"
@@ -3759,6 +3757,7 @@ name = "a"
     fn missing_dependency_source_ambiguous() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "a"
@@ -3790,6 +3789,7 @@ version = "0.1.0"
     fn missing_dependency_version_ambiguous() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "a"
@@ -3821,6 +3821,7 @@ source =  { registry = "https://pypi.org/simple" }
     fn missing_dependency_source_version_ambiguous() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "a"
@@ -3851,6 +3852,7 @@ name = "a"
     fn hash_optional_missing() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "anyio"
@@ -3866,6 +3868,7 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4
     fn hash_optional_present() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "anyio"
@@ -3881,6 +3884,7 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4
     fn hash_required_present() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "anyio"
@@ -3896,6 +3900,7 @@ wheels = [{ url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl", hash = "sha256
     fn source_direct_no_subdir() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "anyio"
@@ -3910,6 +3915,7 @@ source = { url = "https://burntsushi.net" }
     fn source_direct_has_subdir() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "anyio"
@@ -3924,6 +3930,7 @@ source = { url = "https://burntsushi.net", subdirectory = "wat/foo/bar" }
     fn source_directory() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "anyio"
@@ -3938,6 +3945,7 @@ source = { directory = "path/to/dir" }
     fn source_editable() {
         let data = r#"
 version = 1
+requires-python = ">=3.12"
 
 [[package]]
 name = "anyio"

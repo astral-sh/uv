@@ -147,12 +147,13 @@ impl BatchPrefetcher {
                     // Source distributions must meet both the _target_ Python version and the
                     // _installed_ Python version (to build successfully).
                     if let Some(requires_python) = sdist.file.requires_python.as_ref() {
-                        if let Some(target) = python_requirement.target() {
-                            if !target.is_compatible_with(requires_python) {
-                                continue;
-                            }
+                        if !python_requirement
+                            .installed()
+                            .is_contained_by(requires_python)
+                        {
+                            continue;
                         }
-                        if !requires_python.contains(python_requirement.installed()) {
+                        if !python_requirement.target().is_contained_by(requires_python) {
                             continue;
                         }
                     }
@@ -160,14 +161,8 @@ impl BatchPrefetcher {
                 CompatibleDist::CompatibleWheel { wheel, .. } => {
                     // Wheels must meet the _target_ Python version.
                     if let Some(requires_python) = wheel.file.requires_python.as_ref() {
-                        if let Some(target) = python_requirement.target() {
-                            if !target.is_compatible_with(requires_python) {
-                                continue;
-                            }
-                        } else {
-                            if !requires_python.contains(python_requirement.installed()) {
-                                continue;
-                            }
+                        if !python_requirement.target().is_contained_by(requires_python) {
+                            continue;
                         }
                     }
                 }

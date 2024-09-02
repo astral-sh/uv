@@ -19,7 +19,6 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
-use crate::python_requirement::PythonTarget;
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolution_mode::ResolutionStrategy;
@@ -33,12 +32,12 @@ pub(crate) type MarkersForDistribution = FxHashMap<(Version, Option<VerbatimUrl>
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
     pub(crate) petgraph: Graph<ResolutionGraphNode, MarkerTree, Directed>,
     /// The range of supported Python versions.
-    pub(crate) requires_python: Option<RequiresPython>,
+    pub(crate) requires_python: RequiresPython,
     /// If the resolution had non-identical forks, store the forks in the lockfile so we can
     /// recreate them in subsequent resolutions.
     pub(crate) fork_markers: Vec<MarkerTree>,
@@ -161,12 +160,7 @@ impl ResolutionGraph {
         }
 
         // Extract the `Requires-Python` range, if provided.
-        // TODO(charlie): Infer the supported Python range from the `Requires-Python` of the
-        // included packages.
-        let requires_python = python
-            .target()
-            .and_then(PythonTarget::as_requires_python)
-            .cloned();
+        let requires_python = python.target().clone();
 
         let fork_markers = if let [resolution] = resolutions {
             match resolution.markers {

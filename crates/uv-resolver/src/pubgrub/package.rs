@@ -173,7 +173,7 @@ impl PubGrubPackage {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub enum PubGrubPython {
     /// The Python version installed in the current environment.
     Installed,

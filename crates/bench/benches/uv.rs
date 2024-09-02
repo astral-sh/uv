@@ -164,7 +164,7 @@ mod resolver {
         let python_requirement = if universal {
             PythonRequirement::from_requires_python(
                 interpreter,
-                &RequiresPython::greater_than_equal_version(&Version::new([3, 11])),
+                RequiresPython::greater_than_equal_version(&Version::new([3, 11])),
             )
         } else {
             PythonRequirement::from_interpreter(interpreter)

@@ -3291,7 +3291,7 @@ version = "0.0.0"
 dependencies = [
   "anyio==4.0.0"
 ]
-requires-python = "<=3.8"
+requires-python = ">=3.13"
 "#,
     )?;
 
@@ -3304,7 +3304,7 @@ requires-python = "<=3.8"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
@@ -3805,7 +3805,7 @@ version = "0.0.0"
 dependencies = [
   "anyio==4.0.0"
 ]
-requires-python = "<=3.8"
+requires-python = ">=3.13"
 "#,
     )?;
 
@@ -3817,7 +3817,7 @@ requires-python = "<=3.8"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
