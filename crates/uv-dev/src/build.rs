@@ -110,5 +110,5 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         concurrency.builds,
     )
     .await?;
-    Ok(wheel_dir.join(builder.build_wheel(&wheel_dir).await?))
+    Ok(wheel_dir.join(builder.build(&wheel_dir).await?))
 }
