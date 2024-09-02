@@ -249,7 +249,8 @@ async fn venv_impl(
         }
 
         // Instantiate a client.
-        let client = RegistryClientBuilder::from(client_builder)
+        let client = RegistryClientBuilder::try_from(client_builder)
+            .into_diagnostic()?
             .cache(cache.clone())
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)

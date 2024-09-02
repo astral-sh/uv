@@ -257,7 +257,7 @@ pub(crate) async fn add(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::from(client_builder)
+    let client = RegistryClientBuilder::try_from(client_builder)?
         .index_urls(settings.index_locations.index_urls())
         .index_strategy(settings.index_strategy)
         .markers(&markers)
