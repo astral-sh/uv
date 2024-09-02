@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
+use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -145,14 +146,16 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 }
 
-impl<'a> From<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
-    fn from(value: BaseClientBuilder<'a>) -> Self {
-        Self {
+impl<'a> TryFrom<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
+    type Error = io::Error;
+
+    fn try_from(value: BaseClientBuilder<'a>) -> Result<Self, Self::Error> {
+        Ok(Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
-            cache: Cache::temp().unwrap(),
+            cache: Cache::temp()?,
             base_client_builder: value,
-        }
+        })
     }
 }
 

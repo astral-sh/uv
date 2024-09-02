@@ -277,7 +277,7 @@ pub(crate) async fn pip_compile(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::from(client_builder)
+    let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
