@@ -14,7 +14,7 @@ use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, Workspace};
+use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
@@ -44,30 +44,32 @@ pub(crate) async fn sync(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // Identify the target.
-    let target = if frozen {
-        let project = InstallTarget::discover(
+    // Identify the project.
+    let project = if frozen {
+        VirtualProject::discover(
             &CWD,
             &DiscoveryOptions {
                 members: MemberDiscovery::None,
                 ..DiscoveryOptions::default()
             },
         )
-        .await?;
-        if let Some(package) = package {
-            project.with_frozen_member(package)
-        } else {
-            project
-        }
-    } else if let Some(package) = package {
-        InstallTarget::Project(
+        .await?
+    } else if let Some(package) = package.as_ref() {
+        VirtualProject::Project(
             Workspace::discover(&CWD, &DiscoveryOptions::default())
                 .await?
                 .with_current_project(package.clone())
                 .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
     } else {
-        InstallTarget::discover(&CWD, &DiscoveryOptions::default()).await?
+        VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+    };
+
+    // Identify the target.
+    let target = if let Some(package) = package.as_ref().filter(|_| frozen) {
+        InstallTarget::frozen_member(&project, package)
+    } else {
+        InstallTarget::from(&project)
     };
 
     // Discover or create the virtual environment.
@@ -114,7 +116,7 @@ pub(crate) async fn sync(
 
     // Perform the sync operation.
     do_sync(
-        &target,
+        target,
         &venv,
         &lock,
         &extras,
@@ -138,7 +140,7 @@ pub(crate) async fn sync(
 /// Sync a lockfile with an environment.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_sync(
-    target: &InstallTarget,
+    target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: &ExtrasSpecification,

@@ -874,11 +874,6 @@ impl ProjectWorkspace {
         &self.workspace
     }
 
-    /// Convert the [`ProjectWorkspace`] into a [`Workspace`].
-    pub fn into_workspace(self) -> Workspace {
-        self.workspace
-    }
-
     /// Returns the current project as a [`WorkspaceMember`].
     pub fn current_project(&self) -> &WorkspaceMember {
         &self.workspace().packages[&self.project_name]
@@ -1369,39 +1364,20 @@ impl VirtualProject {
 }
 
 /// A target that can be installed.
-///
-/// The project could be a package within a workspace, a real workspace root, a frozen member within
-/// a workspace or a (legacy) non-project workspace root, which can define its own dev dependencies.
-#[derive(Debug, Clone)]
-pub enum InstallTarget {
+#[derive(Debug, Clone, Copy)]
+pub enum InstallTarget<'env> {
     /// A project (which could be a workspace root or member).
-    Project(ProjectWorkspace),
+    Project(&'env ProjectWorkspace),
     /// A (legacy) non-project workspace root.
-    NonProject(Workspace),
+    NonProject(&'env Workspace),
     /// A frozen member within a [`Workspace`].
-    FrozenMember(Workspace, PackageName),
+    FrozenMember(&'env Workspace, &'env PackageName),
 }
 
-impl InstallTarget {
-    /// Find the current [`InstallTarget`], given the current directory.
-    pub async fn discover(
-        path: &Path,
-        options: &DiscoveryOptions<'_>,
-    ) -> Result<Self, WorkspaceError> {
-        match VirtualProject::discover(path, options).await? {
-            VirtualProject::Project(project) => Ok(InstallTarget::Project(project)),
-            VirtualProject::NonProject(workspace) => Ok(InstallTarget::NonProject(workspace)),
-        }
-    }
-
-    /// Set the [`InstallTarget`] to a frozen member within the workspace.
-    #[must_use]
-    pub fn with_frozen_member(self, package_name: PackageName) -> Self {
-        match self {
-            Self::Project(project) => Self::FrozenMember(project.into_workspace(), package_name),
-            Self::NonProject(workspace) => Self::FrozenMember(workspace, package_name),
-            Self::FrozenMember(workspace, _) => Self::FrozenMember(workspace, package_name),
-        }
+impl<'env> InstallTarget<'env> {
+    /// Create an [`InstallTarget`] for a frozen member within a workspace.
+    pub fn frozen_member(project: &'env VirtualProject, package_name: &'env PackageName) -> Self {
+        Self::FrozenMember(project.workspace(), package_name)
     }
 
     /// Return the [`Workspace`] of the target.
@@ -1418,7 +1394,7 @@ impl InstallTarget {
         match self {
             Self::Project(project) => Either::Left(std::iter::once(project.project_name())),
             Self::NonProject(workspace) => Either::Right(workspace.packages().keys()),
-            Self::FrozenMember(_, package_name) => Either::Left(std::iter::once(package_name)),
+            Self::FrozenMember(_, package_name) => Either::Left(std::iter::once(*package_name)),
         }
     }
 
@@ -1468,8 +1444,8 @@ impl InstallTarget {
     }
 }
 
-impl From<VirtualProject> for InstallTarget {
-    fn from(project: VirtualProject) -> Self {
+impl<'env> From<&'env VirtualProject> for InstallTarget<'env> {
+    fn from(project: &'env VirtualProject) -> Self {
         match project {
             VirtualProject::Project(project) => Self::Project(project),
             VirtualProject::NonProject(workspace) => Self::NonProject(workspace),

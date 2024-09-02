@@ -196,7 +196,7 @@ pub(crate) async fn remove(
     let state = SharedState::default();
 
     project::sync::do_sync(
-        &InstallTarget::from(project.clone()),
+        InstallTarget::from(&project),
         &venv,
         &lock,
         &extras,

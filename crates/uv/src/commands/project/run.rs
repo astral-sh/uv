@@ -441,7 +441,7 @@ pub(crate) async fn run(
             let install_options = InstallOptions::default();
 
             project::sync::do_sync(
-                &InstallTarget::from(project.clone()),
+                InstallTarget::from(&project),
                 &venv,
                 result.lock(),
                 &extras,

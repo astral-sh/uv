@@ -1125,7 +1125,7 @@ fn no_install_workspace() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    // Unless `--package` is used.
+    // Even if `--package` is used.
     uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--no-install-workspace").arg("--frozen"), @r###"
     success: true
     exit_code: 0
@@ -1136,6 +1136,16 @@ fn no_install_workspace() -> Result<()> {
      - anyio==3.7.0
      - idna==3.6
      - sniffio==1.3.1
+    "###);
+
+    // Unless the package doesn't exist.
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("fake").arg("--no-install-workspace").arg("--frozen"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: could not find root package `fake`
     "###);
 
     // But we do require the root `pyproject.toml`.

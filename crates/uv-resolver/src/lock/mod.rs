@@ -426,7 +426,7 @@ impl Lock {
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     pub fn to_resolution(
         &self,
-        project: &InstallTarget,
+        project: InstallTarget<'_>,
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecification,
@@ -439,8 +439,12 @@ impl Lock {
         for root_name in project.packages() {
             let root = self
                 .find_by_name(root_name)
-                .expect("found too many packages matching root")
-                .expect("could not find root");
+                .map_err(|_| LockErrorKind::MultipleRootPackages {
+                    name: root_name.clone(),
+                })?
+                .ok_or_else(|| LockErrorKind::MissingRootPackage {
+                    name: root_name.clone(),
+                })?;
 
             // Add the base package.
             queue.push_back((root, None));
@@ -466,10 +470,15 @@ impl Lock {
         for group in dev {
             for dependency in project.group(group) {
                 if dependency.marker.evaluate(marker_env, &[]) {
+                    let root_name = &dependency.name;
                     let root = self
-                        .find_by_markers(&dependency.name, marker_env)
-                        .expect("found too many packages matching root")
-                        .expect("could not find root");
+                        .find_by_markers(root_name, marker_env)
+                        .map_err(|_| LockErrorKind::MultipleRootPackages {
+                            name: root_name.clone(),
+                        })?
+                        .ok_or_else(|| LockErrorKind::MissingRootPackage {
+                            name: root_name.clone(),
+                        })?;
 
                     // Add the base package.
                     queue.push_back((root, None));
@@ -3605,6 +3614,19 @@ enum LockErrorKind {
     /// An error that occurs when converting a URL to a path
     #[error("failed to convert URL to path")]
     UrlToPath,
+    /// An error that occurs when multiple packages with the same
+    /// name were found when identifying the root packages.
+    #[error("found multiple packages matching `{name}`")]
+    MultipleRootPackages {
+        /// The ID of the package.
+        name: PackageName,
+    },
+    /// An error that occurs when a root package can't be found.
+    #[error("could not find root package `{name}`")]
+    MissingRootPackage {
+        /// The ID of the package.
+        name: PackageName,
+    },
 }
 
 /// An error that occurs when a source string could not be parsed.
