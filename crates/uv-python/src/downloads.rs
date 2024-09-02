@@ -54,6 +54,8 @@ pub enum Error {
     },
     #[error("Invalid download URL")]
     InvalidUrl(#[from] url::ParseError),
+    #[error("Invalid path in file URL: `{0}`")]
+    InvalidFileUrl(String),
     #[error("Failed to create download directory")]
     DownloadDirError(#[source] io::Error),
     #[error("Failed to copy to: {0}", to.user_display())]
@@ -432,12 +434,32 @@ impl ManagedPythonDownload {
         let filename = url.path_segments().unwrap().last().unwrap();
         let ext = SourceDistExtension::from_path(filename)
             .map_err(|err| Error::MissingExtension(url.to_string(), err))?;
-        let response = client.client().get(url.clone()).send().await?;
 
-        // Ensure the request was successful.
-        response.error_for_status_ref()?;
+        let (reader, size) = if url.scheme() == "file" {
+            // Loads downloaded distribution from the given file:// URL
+            let path = url
+                .to_file_path()
+                .map_err(|()| Error::InvalidFileUrl(url.to_string()))?;
 
-        let size = response.content_length();
+            let size = fs_err::metadata(&path)?.len();
+            (
+                &mut fs_err::tokio::File::open(&path).await? as &mut (dyn AsyncRead + Unpin),
+                Some(size),
+            )
+        } else {
+            let response = client.client().get(url.clone()).send().await?;
+
+            // Ensure the request was successful.
+            response.error_for_status_ref()?;
+
+            let size = response.content_length();
+
+            let stream = response
+                .bytes_stream()
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                .into_async_read();
+            (&mut stream.compat() as &mut (dyn AsyncRead + Unpin), size)
+        };
         let progress = reporter
             .as_ref()
             .map(|reporter| (reporter, reporter.on_download_start(&self.key, size)));
@@ -450,17 +472,12 @@ impl ManagedPythonDownload {
             temp_dir.path().simplified().display()
         );
 
-        let stream = response
-            .bytes_stream()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
-            .into_async_read();
-
         let mut hashers = self
             .sha256
             .into_iter()
             .map(|_| Hasher::from(HashAlgorithm::Sha256))
             .collect::<Vec<_>>();
-        let mut hasher = uv_extract::hash::HashReader::new(stream.compat(), &mut hashers);
+        let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
         debug!("Extracting {filename}");
 
