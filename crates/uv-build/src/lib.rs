@@ -680,8 +680,8 @@ impl SourceBuild {
         };
         let span = info_span!(
             "run_python_script",
-            version_id = &self.version_id,
             script = format!("prepare_metadata_for_build_{}", self.build_kind),
+            version_id = self.version_id,
         );
         let output = self
             .runner
@@ -806,8 +806,8 @@ impl SourceBuild {
 
         let span = info_span!(
             "run_python_script",
-            script=format!("build_{}", self.build_kind),
-            python_version = %self.venv.interpreter().python_version()
+            script = format!("build_{}", self.build_kind),
+            version_id = self.version_id,
         );
         let output = self
             .runner
@@ -907,8 +907,8 @@ async fn create_pep517_build_environment(
     };
     let span = info_span!(
         "run_python_script",
-        script=format!("get_requires_for_build_{}", build_kind),
-        python_version = %venv.interpreter().python_version()
+        script = format!("get_requires_for_build_{}", build_kind),
+        version_id = version_id,
     );
     let output = runner
         .run_script(
@@ -1016,6 +1016,22 @@ impl PythonRunner {
         environment_variables: &FxHashMap<OsString, OsString>,
         modified_path: &OsString,
     ) -> Result<PythonRunnerOutput, Error> {
+        /// Read lines from a reader and store them in a buffer.
+        async fn read_from(
+            mut reader: tokio::io::Lines<tokio::io::BufReader<impl tokio::io::AsyncRead + Unpin>>,
+            buffer: &mut Vec<String>,
+        ) -> io::Result<()> {
+            loop {
+                match reader.next_line().await? {
+                    Some(line) => {
+                        debug!("{line}");
+                        buffer.push(line);
+                    }
+                    None => return Ok(()),
+                }
+            }
+        }
+
         let _permit = self.control.acquire().await.unwrap();
 
         let mut child = Command::new(venv.python_executable())
@@ -1031,71 +1047,25 @@ impl PythonRunner {
             .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))?;
 
         // Create buffers to capture `stdout` and `stderr`.
-        let mut stdout_buf = Vec::new();
-        let mut stderr_buf = Vec::new();
+        let mut stdout_buf = Vec::with_capacity(1024);
+        let mut stderr_buf = Vec::with_capacity(1024);
 
         // Create separate readers for `stdout` and `stderr`.
         let stdout_reader = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
         let stderr_reader = tokio::io::BufReader::new(child.stderr.take().unwrap()).lines();
 
         // Asynchronously read from the in-memory pipes.
-        tokio::pin!(stdout_reader, stderr_reader);
-
-        loop {
-            tokio::select! {
-                line = stdout_reader.next_line() => {
-                    match line {
-                        Ok(Some(line)) => {
-                            debug!("{line}");
-                            stdout_buf.push(line);
-                        },
-                        Ok(None) => break,
-                        Err(err) => return Err(Error::CommandFailed(venv.python_executable().to_path_buf(), err)),
-                    }
-                },
-                line = stderr_reader.next_line() => {
-                    match line {
-                        Ok(Some(line)) => {
-                            debug!("{line}");
-                            stderr_buf.push(line);
-                        },
-                        Ok(None) => break,
-                        Err(err) => return Err(Error::CommandFailed(venv.python_executable().to_path_buf(), err)),
-                    }
-                },
-            }
-        }
-
-        // Continue reading until both streams are closed.
-        loop {
-            match stdout_reader.next_line().await {
-                Ok(Some(line)) => {
-                    debug!("{line}");
-                    stdout_buf.push(line);
-                }
-                Ok(None) => break,
-                Err(err) => {
-                    return Err(Error::CommandFailed(
-                        venv.python_executable().to_path_buf(),
-                        err,
-                    ))
-                }
-            }
-        }
-
-        loop {
-            match stderr_reader.next_line().await {
-                Ok(Some(line)) => {
-                    debug!("{line}");
-                    stderr_buf.push(line);
-                }
-                Ok(None) => break,
-                Err(err) => {
-                    return Err(Error::CommandFailed(
-                        venv.python_executable().to_path_buf(),
-                        err,
-                    ))
-                }
+        let result = tokio::join!(
+            read_from(stdout_reader, &mut stdout_buf),
+            read_from(stderr_reader, &mut stderr_buf),
+        );
+        match result {
+            (Ok(()), Ok(())) => {}
+            (Err(err), _) | (_, Err(err)) => {
+                return Err(Error::CommandFailed(
+                    venv.python_executable().to_path_buf(),
+                    err,
+                ))
             }
         }
 
