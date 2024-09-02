@@ -45,13 +45,13 @@ Request a specific version by including it in the URL:
 === "macOS and Linux"
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.4.2/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.4.3/install.sh | sh
     ```
 
 === "Windows"
 
     ```console
-    $ powershell -c "irm https://astral.sh/uv/0.4.2/install.ps1 | iex"
+    $ powershell -c "irm https://astral.sh/uv/0.4.3/install.ps1 | iex"
     ```
 
 ### PyPI
