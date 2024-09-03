@@ -2,10 +2,12 @@
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
-use assert_fs::prelude::*;
+use assert_fs::{fixture::ChildPath, prelude::*};
 use insta::assert_snapshot;
 
 use common::{uv_snapshot, TestContext};
+use predicates::prelude::predicate;
+use tempfile::tempdir_in;
 
 mod common;
 
@@ -1480,6 +1482,268 @@ fn convert_to_package() -> Result<()> {
         "###
         );
     });
+
+    Ok(())
+}
+
+#[test]
+fn sync_custom_environment_path() -> Result<()> {
+    let mut context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running `uv sync` should create `.venv` by default
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    // Running `uv sync` should create `foo` in the project directory when customized
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: foo
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    // We don't delete `.venv`, though we arguably could
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    // An absolute path can be provided
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foobar/.venv"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: foobar/.venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("foobar")
+        .assert(predicate::path::is_dir());
+
+    context
+        .temp_dir
+        .child("foobar")
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    // An absolute path can be provided
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", context.temp_dir.join("bar")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: bar
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("bar")
+        .assert(predicate::path::is_dir());
+
+    // And, it can be outside the project
+    let tempdir = tempdir_in(TestContext::test_bucket_dir())?;
+    context = context.with_filtered_path(tempdir.path(), "OTHER_TEMPDIR");
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", tempdir.path().join(".venv")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: [OTHER_TEMPDIR]/.venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    ChildPath::new(tempdir.path())
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
+fn sync_workspace_custom_environment_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Create a workspace member
+    context.init().arg("child").assert().success();
+
+    // Running `uv sync` should create `.venv` in the workspace root
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    // Similarly, `uv sync` from the child project uses `.venv` in the workspace root
+    uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.join("child")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    context
+        .temp_dir
+        .child("child")
+        .child(".venv")
+        .assert(predicate::path::missing());
+
+    // Running `uv sync` should create `foo` in the workspace root when customized
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: foo
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    // We don't delete `.venv`, though we arguably could
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    // Similarly, `uv sync` from the child project uses `foo` relative to  the workspace root
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(context.temp_dir.join("child")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    context
+        .temp_dir
+        .child("child")
+        .child("foo")
+        .assert(predicate::path::missing());
+
+    // And, `uv sync --package child` uses `foo` relative to  the workspace root
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    context
+        .temp_dir
+        .child("child")
+        .child("foo")
+        .assert(predicate::path::missing());
 
     Ok(())
 }

@@ -52,6 +52,52 @@ fn create_venv() {
 }
 
 #[test]
+fn create_venv_uv_project_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // `uv venv` ignores UV_PROJECT_ENVIRONMENT
+    uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicates::path::missing());
+
+    context.temp_dir.child("pyproject.toml").touch()?;
+
+    // Even if there's a `pyproject.toml`
+    uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicates::path::missing());
+
+    Ok(())
+}
+
+#[test]
 fn create_venv_defaults_to_cwd() {
     let context = TestContext::new_with_versions(&["3.12"]);
     uv_snapshot!(context.filters(), context.venv()
