@@ -366,18 +366,18 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 # Change the working directory to the `app` directory
 WORKDIR /app
 
-# Copy the lockfile and `pyproject.toml` into the image
-ADD uv.lock /app/uv.lock
-ADD pyproject.toml /app/pyproject.toml
-
 # Install dependencies
-RUN uv sync --frozen --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project
 
 # Copy the project into the image
 ADD . /app
 
 # Sync the project
-RUN uv sync --frozen
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen
 ```
 
 Note that the `pyproject.toml` is required to identify the project root and name, but the project
