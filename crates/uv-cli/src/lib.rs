@@ -2802,6 +2802,14 @@ pub struct ExportArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
+    /// Include hashes for all dependencies.
+    #[arg(long, overrides_with("no_hashes"), hide = true)]
+    pub hashes: bool,
+
+    /// Omit hashes in the generated output.
+    #[arg(long, overrides_with("hashes"))]
+    pub no_hashes: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or

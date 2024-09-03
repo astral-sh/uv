@@ -1273,6 +1273,7 @@ async fn run_project(
             commands::export(
                 args.format,
                 args.package,
+                args.hashes,
                 args.extras,
                 args.dev,
                 args.locked,
