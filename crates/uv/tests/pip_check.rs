@@ -1,22 +1,12 @@
-use std::process::Command;
-
 use anyhow::Result;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 
 use common::uv_snapshot;
 
-use crate::common::{get_bin, TestContext};
+use crate::common::TestContext;
 
 mod common;
-
-/// Create a `pip check` command with options shared across scenarios.
-fn check_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command.arg("pip").arg("check");
-    context.add_shared_args(&mut command);
-    command
-}
 
 #[test]
 fn check_compatible_packages() -> Result<()> {
@@ -46,7 +36,7 @@ fn check_compatible_packages() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(check_command(&context), @r###"
+    uv_snapshot!(context.pip_check(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -113,7 +103,7 @@ fn check_incompatible_packages() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(check_command(&context), @r###"
+    uv_snapshot!(context.pip_check(), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -185,7 +175,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(check_command(&context), @r###"
+    uv_snapshot!(context.pip_check(), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
