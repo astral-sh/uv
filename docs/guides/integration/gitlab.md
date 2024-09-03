@@ -1,7 +1,5 @@
 # Using uv in GitHub Actions
 
-## Installation
-
 uv offers images with shells, you can choose your preferred tag from the [ghcr.io](https://github.com/astral-sh/uv/pkgs/container/uv)
 
 ```yaml title="gitlab-ci.yml
@@ -20,59 +18,9 @@ UV:
 ```
 
 
-<!-- 
-### Using a matrix
-
-If you need to support multiple platforms, you can use a matrix:
-
-```yaml title="example.yml"
-name: Example
-
-jobs:
-  uv-example-multiplatform:
-    name: python-${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
-          - macos-latest
-
-      fail-fast: false
-
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up uv
-        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' }}
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-
-      - name: Set up uv
-        if: ${{ matrix.os == 'windows-latest' }}
-        run: irm https://astral.sh/uv/install.ps1 | iex
-        shell: powershell
-``` -->
 
 
-## Syncing and running
 
-<!-- Once uv and Python are installed, the project can be installed with `uv sync` and commands can be
-run in the environment with `uv run`:
-
-```yaml title="example.yml"
-steps:
-  # ... setup up Python and uv ...
-
-  - name: Install the project
-    run: uv sync --all-extras --dev
-
-  - name: Run tests
-    # For example, using `pytest`
-    run: uv run pytest tests
-``` -->
 
 ## Caching
 You can speed up your pipeline by re-using cache files between runs. You can read more on [GitLab's caching here](https://docs.gitlab.com/ee/ci/caching/)
