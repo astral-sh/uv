@@ -24,7 +24,10 @@ type LockGraph<'lock> = Graph<Node<'lock>, Edge, Directed>;
 
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
 #[derive(Debug)]
-pub struct RequirementsTxtExport<'lock>(LockGraph<'lock>);
+pub struct RequirementsTxtExport<'lock> {
+    graph: LockGraph<'lock>,
+    hashes: bool,
+}
 
 impl<'lock> RequirementsTxtExport<'lock> {
     pub fn from_lock(
@@ -32,6 +35,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         root_name: &PackageName,
         extras: &ExtrasSpecification,
         dev: &[GroupName],
+        hashes: bool,
     ) -> Result<Self, LockError> {
         let size_guess = lock.packages.len();
         let mut petgraph = LockGraph::with_capacity(size_guess, size_guess);
@@ -114,7 +118,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
         let graph = propagate_markers(petgraph);
 
-        Ok(Self(graph))
+        Ok(Self { graph, hashes })
     }
 }
 
@@ -122,7 +126,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Collect all packages.
         let mut nodes = self
-            .0
+            .graph
             .raw_nodes()
             .iter()
             .map(|node| &node.weight)
@@ -197,12 +201,14 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                 write!(f, " ; {contents}")?;
             }
 
-            let hashes = package.hashes();
-            if !hashes.is_empty() {
-                for hash in &hashes {
-                    writeln!(f, " \\")?;
-                    write!(f, "    --hash=")?;
-                    write!(f, "{hash}")?;
+            if self.hashes {
+                let hashes = package.hashes();
+                if !hashes.is_empty() {
+                    for hash in &hashes {
+                        writeln!(f, " \\")?;
+                        write!(f, "    --hash=")?;
+                        write!(f, "{hash}")?;
+                    }
                 }
             }
 
