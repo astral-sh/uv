@@ -645,33 +645,17 @@ impl TestContext {
     }
 
     /// Create a `uv add` command for the given requirements.
-    pub fn add(&self, reqs: &[&str]) -> Command {
+    pub fn add(&self) -> Command {
         let mut command = Command::new(get_bin());
-        command.arg("add").args(reqs);
-        self.add_shared_args(&mut command, false);
-        command
-    }
-
-    /// Create a `uv add --no-sync` command for the given requirements.
-    pub fn add_no_sync(&self, reqs: &[&str]) -> Command {
-        let mut command = Command::new(get_bin());
-        command.arg("add").arg("--no-sync").args(reqs);
+        command.arg("add");
         self.add_shared_args(&mut command, false);
         command
     }
 
     /// Create a `uv remove` command for the given requirements.
-    pub fn remove(&self, reqs: &[&str]) -> Command {
+    pub fn remove(&self) -> Command {
         let mut command = Command::new(get_bin());
-        command.arg("remove").args(reqs);
-        self.add_shared_args(&mut command, false);
-        command
-    }
-
-    /// Create a `uv remove --no-sync` command for the given requirements.
-    pub fn remove_no_sync(&self, reqs: &[&str]) -> Command {
-        let mut command = Command::new(get_bin());
-        command.arg("remove").arg("--no-sync").args(reqs);
+        command.arg("remove");
         self.add_shared_args(&mut command, false);
         command
     }

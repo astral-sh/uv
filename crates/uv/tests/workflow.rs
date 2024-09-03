@@ -29,7 +29,11 @@ fn packse_add_remove_one_package() -> Result<()> {
         assert_snapshot!(lock);
     });
 
-    let diff = context.diff_lock(|context| context.add_no_sync(&["tzdata"]));
+    let diff = context.diff_lock(|context| {
+        let mut add_cmd = context.add();
+        add_cmd.arg("--no-sync").arg("tzdata");
+        add_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -113,7 +117,11 @@ fn packse_add_remove_one_package() -> Result<()> {
         "###);
     });
 
-    let diff = context.diff_lock(|context| context.remove_no_sync(&["tzdata"]));
+    let diff = context.diff_lock(|context| {
+        let mut remove_cmd = context.remove();
+        remove_cmd.arg("--no-sync").arg("tzdata");
+        remove_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -230,7 +238,11 @@ fn packse_add_remove_existing_package_noop() -> Result<()> {
         assert_snapshot!(lock);
     });
 
-    let diff = context.diff_lock(|context| context.add_no_sync(&["pyyaml"]));
+    let diff = context.diff_lock(|context| {
+        let mut add_cmd = context.add();
+        add_cmd.arg("--no-sync").arg("pyyaml");
+        add_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -263,7 +275,11 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
         assert_snapshot!(lock);
     });
 
-    let diff = context.diff_lock(|context| context.add_no_sync(&["sniffio"]));
+    let diff = context.diff_lock(|context| {
+        let mut add_cmd = context.add();
+        add_cmd.arg("--no-sync").arg("sniffio");
+        add_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -317,7 +333,11 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
         "###);
     });
 
-    let diff = context.diff_lock(|context| context.remove_no_sync(&["sniffio"]));
+    let diff = context.diff_lock(|context| {
+        let mut remove_cmd = context.remove();
+        remove_cmd.arg("--no-sync").arg("sniffio");
+        remove_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -414,7 +434,11 @@ fn jax_instability() -> Result<()> {
         assert_snapshot!(lock);
     });
 
-    let diff = context.diff_lock(|context| context.add_no_sync(&["tzdata"]));
+    let diff = context.diff_lock(|context| {
+        let mut add_cmd = context.add();
+        add_cmd.arg("--no-sync").arg("tzdata");
+        add_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -490,7 +514,11 @@ fn jax_instability() -> Result<()> {
         "###);
     });
 
-    let diff = context.diff_lock(|context| context.remove_no_sync(&["tzdata"]));
+    let diff = context.diff_lock(|context| {
+        let mut remove_cmd = context.remove();
+        remove_cmd.arg("--no-sync").arg("tzdata");
+        remove_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
