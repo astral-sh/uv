@@ -79,8 +79,8 @@ $ pip install uv
 
 ### Cargo
 
-uv is available via Cargo, but must be built from the Git source instead of installed from
-[crates.io](https://crates.io) because it depends on some unpublished crates.
+uv is available via Cargo, but must be built from Git rather than
+[crates.io](https://crates.io) due to its dependency on unpublished crates.
 
 ```console
 $ cargo install --git https://github.com/astral-sh/uv uv
