@@ -8,6 +8,9 @@ variables:
   PYTHON_VERSION: 3.12
   BASE_LAYER: alpine
 
+stages:
+  - analysis
+
 UV:
   stage: analysis
   image:
