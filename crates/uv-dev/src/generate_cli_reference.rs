@@ -273,7 +273,10 @@ fn emit_env_option(opt: &clap::Arg, output: &mut String) {
         return;
     }
     if let Some(env) = opt.get_env() {
-        output.push_str(&format!("\n[env: {}=]", env.to_string_lossy()));
+        output.push_str(&markdown::to_html(&format!(
+            "May also be set with the `{}` environment variable.",
+            env.to_string_lossy()
+        )));
     }
 }
 
