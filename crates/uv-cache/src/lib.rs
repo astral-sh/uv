@@ -6,7 +6,6 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use fs_err as fs;
 use rustc_hash::FxHashSet;
 use tracing::debug;
 
@@ -186,7 +185,7 @@ impl Cache {
 
     /// Create an ephemeral Python environment in the cache.
     pub fn environment(&self) -> io::Result<tempfile::TempDir> {
-        fs::create_dir_all(self.bucket(CacheBucket::Builds))?;
+        fs_err::create_dir_all(self.bucket(CacheBucket::Builds))?;
         tempfile::tempdir_in(self.bucket(CacheBucket::Builds))
     }
 
@@ -221,7 +220,7 @@ impl Cache {
             }
         };
 
-        match fs::metadata(entry.path()) {
+        match fs_err::metadata(entry.path()) {
             Ok(metadata) => {
                 if Timestamp::from_metadata(&metadata) >= *timestamp {
                     Ok(Freshness::Fresh)
@@ -266,13 +265,13 @@ impl Cache {
         let root = &self.root;
 
         // Create the cache directory, if it doesn't exist.
-        fs::create_dir_all(root)?;
+        fs_err::create_dir_all(root)?;
 
         // Add the CACHEDIR.TAG.
         cachedir::ensure_tag(root)?;
 
         // Add the .gitignore.
-        match fs::OpenOptions::new()
+        match fs_err::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(root.join(".gitignore"))
@@ -285,11 +284,14 @@ impl Cache {
         // Add an empty .gitignore to the build bucket, to ensure that the cache's own .gitignore
         // doesn't interfere with source distribution builds. Build backends (like hatchling) will
         // traverse upwards to look for .gitignore files.
-        fs::create_dir_all(root.join(CacheBucket::SourceDistributions.to_str()))?;
-        match fs::OpenOptions::new().write(true).create_new(true).open(
-            root.join(CacheBucket::SourceDistributions.to_str())
-                .join(".gitignore"),
-        ) {
+        fs_err::create_dir_all(root.join(CacheBucket::SourceDistributions.to_str()))?;
+        match fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(
+                root.join(CacheBucket::SourceDistributions.to_str())
+                    .join(".gitignore"),
+            ) {
             Ok(_) => {}
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
             Err(err) => return Err(err),
@@ -302,13 +304,13 @@ impl Cache {
         // We have to put this below the gitignore. Otherwise, if the build backend uses the rust
         // ignore crate it will walk up to the top level .gitignore and ignore its python source
         // files.
-        fs::OpenOptions::new().create(true).write(true).open(
+        fs_err::OpenOptions::new().create(true).write(true).open(
             root.join(CacheBucket::SourceDistributions.to_str())
                 .join(".git"),
         )?;
 
         Ok(Self {
-            root: fs::canonicalize(root)?,
+            root: std::path::absolute(root)?,
             ..self
         })
     }
@@ -368,7 +370,7 @@ impl Cache {
 
         if before != after {
             // Remove any archives that are no longer referenced.
-            for entry in fs::read_dir(self.bucket(CacheBucket::Archive))? {
+            for entry in fs_err::read_dir(self.bucket(CacheBucket::Archive))? {
                 let entry = entry?;
                 let path = fs_err::canonicalize(entry.path())?;
                 if !after.contains(&path) && before.contains(&path) {
@@ -387,7 +389,7 @@ impl Cache {
 
         // First, remove any top-level directories that are unused. These typically represent
         // outdated cache buckets (e.g., `wheels-v0`, when latest is `wheels-v1`).
-        for entry in fs::read_dir(&self.root)? {
+        for entry in fs_err::read_dir(&self.root)? {
             let entry = entry?;
             let metadata = entry.metadata()?;
 
@@ -415,7 +417,7 @@ impl Cache {
 
         // Second, remove any cached environments. These are never referenced by symlinks, so we can
         // remove them directly.
-        match fs::read_dir(self.bucket(CacheBucket::Environments)) {
+        match fs_err::read_dir(self.bucket(CacheBucket::Environments)) {
             Ok(entries) => {
                 for entry in entries {
                     let entry = entry?;
@@ -431,7 +433,7 @@ impl Cache {
         // Third, if enabled, remove all unzipped wheels, leaving only the wheel archives.
         if ci {
             // Remove the entire pre-built wheel cache, since every entry is an unzipped wheel.
-            match fs::read_dir(self.bucket(CacheBucket::Wheels)) {
+            match fs_err::read_dir(self.bucket(CacheBucket::Wheels)) {
                 Ok(entries) => {
                     for entry in entries {
                         let entry = entry?;
@@ -475,7 +477,7 @@ impl Cache {
             }
         }
 
-        match fs::read_dir(self.bucket(CacheBucket::Archive)) {
+        match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
             Ok(entries) => {
                 for entry in entries {
                     let entry = entry?;
