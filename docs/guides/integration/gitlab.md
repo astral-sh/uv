@@ -6,7 +6,6 @@ uv offers images with shells, you can choose your preferred tag from the [ghcr.i
 
 ```yaml title="gitlab-ci.yml
 variables:
-  REPO: 
   UV_VERSION: 0.4
   PYTHON_VERSION: 3.12
   BASE_LAYER: alpine
