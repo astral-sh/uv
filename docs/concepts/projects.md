@@ -277,6 +277,30 @@ use [`uvx`](../guides/tools.md) or
     managed = false
     ```
 
+### Custom project environment paths
+
+The `UV_PROJECT_ENVIRONMENT` environment variable can be used to configure the project virtual
+environment path (`.venv` by default).
+
+If a relative path is provided, it will be resolved relative to the workspace root. If an absolute
+path is provided, it will be used as-is, i.e. a child directory will not be created for the
+environment. If an environment is not present at the provided path, uv will create it.
+
+This option can be used to write to the system Python environment, though it is not recommended.
+`uv sync` will remove extraneous packages from the environment by default and, as such, may leave
+the system in a broken state.
+
+!!! important
+
+    If an absolute path is provided and the setting is used across multiple projects, the
+    environment will be overwritten by invocations in each project. This setting is only recommended
+    for use in CI or Docker images.
+
+!!! note
+
+    uv does not read the `VIRTUAL_ENV` environment variable during project operations. A warning
+    will be displayed if `VIRTUAL_ENV` is set to a different path than the project's environment.
+
 ## Project lockfile
 
 uv creates a `uv.lock` file next to the `pyproject.toml`.

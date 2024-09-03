@@ -229,6 +229,12 @@ steps:
     run: uv run pytest tests
 ```
 
+!!! tip
+
+    The
+    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects.md#custom-project-environment-paths) can
+    be used to install to the system Python environment instead of creating a virtual environment.
+
 ## Caching
 
 It may improve CI times to store uv's cache across workflow runs.
