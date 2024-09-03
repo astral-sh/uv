@@ -82,36 +82,41 @@ pub struct Lock {
 impl Lock {
     /// Initialize a [`Lock`] from a [`ResolutionGraph`].
     pub fn from_resolution_graph(graph: &ResolutionGraph, root: &Path) -> Result<Self, LockError> {
-        let mut locked_dists = BTreeMap::new();
+        let mut packages = BTreeMap::new();
+        let requires_python = graph.requires_python.clone();
 
         // Lock all base packages.
         for node_index in graph.petgraph.node_indices() {
             let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
                 continue;
             };
-            if dist.is_base() {
-                let fork_markers = graph
-                    .fork_markers(dist.name(), &dist.version, dist.dist.version_or_url().url())
-                    .cloned()
-                    .unwrap_or_default();
-                let mut locked_dist = Package::from_annotated_dist(dist, fork_markers, root)?;
+            if !dist.is_base() {
+                continue;
+            }
+            let fork_markers = graph
+                .fork_markers(dist.name(), &dist.version, dist.dist.version_or_url().url())
+                .cloned()
+                .unwrap_or_default();
+            let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
 
-                // Add all dependencies
-                for edge in graph.petgraph.edges(node_index) {
-                    let ResolutionGraphNode::Dist(dependency_dist) = &graph.petgraph[edge.target()]
-                    else {
-                        continue;
-                    };
-                    let marker = edge.weight().clone();
-                    locked_dist.add_dependency(dependency_dist, marker, root)?;
+            Self::remove_unreachable_wheels(&requires_python, &mut package);
+
+            // Add all dependencies
+            for edge in graph.petgraph.edges(node_index) {
+                let ResolutionGraphNode::Dist(dependency_dist) = &graph.petgraph[edge.target()]
+                else {
+                    continue;
+                };
+                let marker = edge.weight().clone();
+                package.add_dependency(dependency_dist, marker, root)?;
+            }
+
+            let id = package.id.clone();
+            if let Some(locked_dist) = packages.insert(id, package) {
+                return Err(LockErrorKind::DuplicatePackage {
+                    id: locked_dist.id.clone(),
                 }
-                let id = locked_dist.id.clone();
-                if let Some(locked_dist) = locked_dists.insert(id, locked_dist) {
-                    return Err(LockErrorKind::DuplicatePackage {
-                        id: locked_dist.id.clone(),
-                    }
-                    .into());
-                }
+                .into());
             }
         }
 
@@ -122,7 +127,7 @@ impl Lock {
             };
             if let Some(extra) = dist.extra.as_ref() {
                 let id = PackageId::from_annotated_dist(dist, root)?;
-                let Some(locked_dist) = locked_dists.get_mut(&id) else {
+                let Some(package) = packages.get_mut(&id) else {
                     return Err(LockErrorKind::MissingExtraBase {
                         id,
                         extra: extra.clone(),
@@ -135,7 +140,7 @@ impl Lock {
                         continue;
                     };
                     let marker = edge.weight().clone();
-                    locked_dist.add_optional_dependency(
+                    package.add_optional_dependency(
                         extra.clone(),
                         dependency_dist,
                         marker,
@@ -145,7 +150,7 @@ impl Lock {
             }
             if let Some(group) = dist.dev.as_ref() {
                 let id = PackageId::from_annotated_dist(dist, root)?;
-                let Some(locked_dist) = locked_dists.get_mut(&id) else {
+                let Some(package) = packages.get_mut(&id) else {
                     return Err(LockErrorKind::MissingDevBase {
                         id,
                         group: group.clone(),
@@ -158,13 +163,12 @@ impl Lock {
                         continue;
                     };
                     let marker = edge.weight().clone();
-                    locked_dist.add_dev_dependency(group.clone(), dependency_dist, marker, root)?;
+                    package.add_dev_dependency(group.clone(), dependency_dist, marker, root)?;
                 }
             }
         }
 
-        let packages = locked_dists.into_values().collect();
-        let requires_python = graph.requires_python.clone();
+        let packages = packages.into_values().collect();
         let options = ResolverOptions {
             resolution_mode: graph.options.resolution_mode,
             prerelease_mode: graph.options.prerelease_mode,
@@ -180,6 +184,15 @@ impl Lock {
             graph.fork_markers.clone(),
         )?;
         Ok(lock)
+    }
+
+    /// Remove wheels that can't be selected for installation due to environment markers.
+    fn remove_unreachable_wheels(requires_python: &RequiresPython, package: &mut Package) {
+        // Remove wheels that don't match `requires-python` and can't be selected for
+        // installation.
+        package
+            .wheels
+            .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -238,12 +251,6 @@ impl Lock {
                     }
                 }
             }
-
-            // Remove wheels that don't match `requires-python` and can't be selected for
-            // installation.
-            package
-                .wheels
-                .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
         }
         packages.sort_by(|dist1, dist2| dist1.id.cmp(&dist2.id));
 
