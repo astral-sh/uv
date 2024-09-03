@@ -8,6 +8,7 @@ use pep508_rs::PackageName;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
+use uv_configuration::TrustedHost;
 use uv_fs::{Simplified, CWD};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
@@ -35,6 +36,7 @@ pub(crate) async fn init(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
+    allow_insecure_host: Vec<TrustedHost>,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
@@ -78,6 +80,7 @@ pub(crate) async fn init(
         python_preference,
         python_downloads,
         connectivity,
+        allow_insecure_host,
         native_tls,
         cache,
         printer,
@@ -126,6 +129,7 @@ async fn init_project(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
+    allow_insecure_host: Vec<TrustedHost>,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
@@ -197,7 +201,8 @@ async fn init_project(
                 let reporter = PythonDownloadReporter::single(printer);
                 let client_builder = BaseClientBuilder::new()
                     .connectivity(connectivity)
-                    .native_tls(native_tls);
+                    .native_tls(native_tls)
+                    .allow_insecure_host(allow_insecure_host);
                 let interpreter = PythonInstallation::find_or_download(
                     Some(&request),
                     EnvironmentPreference::Any,
@@ -224,7 +229,8 @@ async fn init_project(
         let reporter = PythonDownloadReporter::single(printer);
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
-            .native_tls(native_tls);
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host);
         let interpreter = PythonInstallation::find_or_download(
             Some(&request),
             EnvironmentPreference::Any,

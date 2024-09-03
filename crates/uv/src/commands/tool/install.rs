@@ -52,7 +52,8 @@ pub(crate) async fn install(
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -74,10 +75,6 @@ pub(crate) async fn install(
 
     // Initialize any shared state.
     let state = SharedState::default();
-
-    let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls);
 
     // Parse the input requirement.
     let target = Target::parse(&package, from.as_deref());
