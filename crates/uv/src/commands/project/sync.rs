@@ -3,7 +3,8 @@ use itertools::Itertools;
 
 use distribution_types::{Dist, ResolvedDist, SourceDist};
 use pep508_rs::MarkerTree;
-use uv_auth::store_credentials_from_url;
+
+use uv_auth::{store_credentials_from_environment, store_credentials_from_url};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, HashCheckingMode, InstallOptions};
@@ -225,6 +226,7 @@ pub(super) async fn do_sync(
     for url in index_locations.urls() {
         store_credentials_from_url(url);
     }
+    store_credentials_from_environment();
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())

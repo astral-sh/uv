@@ -109,6 +109,14 @@ impl CredentialsCache {
         urls.insert(url, credentials);
     }
 
+    /// Update _only_ the URL cache with the given credentials.
+    ///
+    /// This will not allow realm-level matches.
+    pub fn insert_url(&self, url: &Url, credentials: Arc<Credentials>) {
+        let mut urls = self.urls.write().unwrap();
+        urls.insert(url, credentials);
+    }
+
     /// Private interface to update a realm cache entry.
     ///
     /// Returns replaced credentials, if any.

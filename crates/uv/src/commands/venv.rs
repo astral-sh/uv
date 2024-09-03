@@ -12,7 +12,7 @@ use thiserror::Error;
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use pypi_types::Requirement;
-use uv_auth::store_credentials_from_url;
+use uv_auth::{store_credentials_from_environment, store_credentials_from_url};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -201,6 +201,7 @@ async fn venv_impl(
     for url in index_locations.urls() {
         store_credentials_from_url(url);
     }
+    store_credentials_from_environment();
 
     if managed {
         writeln!(
@@ -247,6 +248,7 @@ async fn venv_impl(
         for url in index_locations.urls() {
             store_credentials_from_url(url);
         }
+        store_credentials_from_environment();
 
         // Instantiate a client.
         let client = RegistryClientBuilder::try_from(client_builder)

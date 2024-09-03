@@ -5985,6 +5985,20 @@ fn lock_redact_https() -> Result<()> {
      ~ iniconfig==2.0.0
     "###);
 
+    // Installing with credentials from with `UV_BASIC_AUTH_URLS` should succeed.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").env("UV_BASIC_AUTH_URLS", "public:heron@pypi-proxy.fly.dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ foo==0.1.0 (from file://[TEMP_DIR]/)
+     ~ iniconfig==2.0.0
+    "###);
+
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"

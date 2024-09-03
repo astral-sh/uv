@@ -11,7 +11,7 @@ use tracing::debug;
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
 use pypi_types::{Requirement, SupportedEnvironments};
-use uv_auth::store_credentials_from_url;
+use uv_auth::{store_credentials_from_environment, store_credentials_from_url};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, Reinstall, Upgrade};
@@ -351,6 +351,7 @@ async fn do_lock(
     for url in index_locations.urls() {
         store_credentials_from_url(url);
     }
+    store_credentials_from_environment();
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())

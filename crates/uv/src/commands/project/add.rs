@@ -10,7 +10,7 @@ use tracing::debug;
 use cache_key::RepositoryUrl;
 use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
 use pypi_types::redact_git_credentials;
-use uv_auth::{store_credentials_from_url, Credentials};
+use uv_auth::{store_credentials_from_environment, store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions, SourceStrategy};
@@ -255,6 +255,7 @@ pub(crate) async fn add(
     for url in settings.index_locations.urls() {
         store_credentials_from_url(url);
     }
+    store_credentials_from_environment();
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?

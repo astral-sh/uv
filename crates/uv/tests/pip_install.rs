@@ -3852,6 +3852,190 @@ fn install_package_basic_auth_from_url() {
     context.assert_command("import anyio").success();
 }
 
+/// Install a package from an index that requires authentication, provided via `UV_BASIC_AUTH_URLS`
+#[test]
+fn install_package_basic_auth_from_uv_basic_auth_urls() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--strict")
+        .env("UV_BASIC_AUTH_URLS", "public:heron@pypi-proxy.fly.dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Should work with `https://` prefix
+    uv_snapshot!(context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--strict")
+        .arg("--reinstall")
+        .arg("--no-cache")
+        .env("UV_BASIC_AUTH_URLS", "https://public:heron@pypi-proxy.fly.dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     ~ anyio==4.3.0
+     ~ idna==3.6
+     ~ sniffio==1.3.1
+    "###
+    );
+
+    // Should work with a URL prefix
+    uv_snapshot!(context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--strict")
+        .arg("--reinstall")
+        .arg("--no-cache")
+        .env("UV_BASIC_AUTH_URLS", "https://public:heron@pypi-proxy.fly.dev/basic-auth"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     ~ anyio==4.3.0
+     ~ idna==3.6
+     ~ sniffio==1.3.1
+    "###
+    );
+
+    // But not the full URL, because requests are made to `pypi-proxy.fly.dev/basic-auth/files`
+    uv_snapshot!(context.pip_install()
+    .arg("anyio")
+    .arg("--index-url")
+    .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+    .arg("--strict")
+    .arg("--reinstall")
+    .arg("--no-cache")
+    .env("UV_BASIC_AUTH_URLS", "https://public:heron@pypi-proxy.fly.dev/basic-auth"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     ~ anyio==4.3.0
+     ~ idna==3.6
+     ~ sniffio==1.3.1
+    "###
+    );
+
+    // Should fail with a a mismatched username
+    // TODO(zanieb): This succeeds because the request to
+    // `https://pypi-proxy.fly.dev/basic-auth/files` does not have a username attached so the
+    // stored credentials are allowed.
+    uv_snapshot!(context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://wrong@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--strict")
+        .arg("--reinstall")
+        .arg("--no-cache")
+        .env("UV_BASIC_AUTH_URLS", "public:heron@pypi-proxy.fly.dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     ~ anyio==4.3.0
+     ~ idna==3.6
+     ~ sniffio==1.3.1
+    "###
+    );
+
+    // Should fail with a different scheme
+    uv_snapshot!(context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--strict")
+        .arg("--reinstall")
+        .arg("--no-cache")
+        .env("UV_BASIC_AUTH_URLS", "http://public:heron@pypi-proxy.fly.dev"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download `anyio==4.3.0`
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+    "###
+    );
+
+    // Should fail with a different URL prefix
+    uv_snapshot!(context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--strict")
+        .arg("--reinstall")
+        .arg("--no-cache")
+        .env("UV_BASIC_AUTH_URLS", "public:heron@pypi-proxy.fly.dev/basic-auth-different/simple"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download `anyio==4.3.0`
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+    "###
+    );
+
+    // Should fail with a different host
+    uv_snapshot!(context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--strict")
+        .arg("--reinstall")
+        .arg("--no-cache")
+        .env("UV_BASIC_AUTH_URLS", "public:heron@pypi-proxy-different.fly.dev"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download `anyio==4.3.0`
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
+
 /// Install a package from an index that requires authentication
 #[test]
 fn install_package_basic_auth_from_netrc_default() -> Result<()> {

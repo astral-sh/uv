@@ -35,6 +35,7 @@ uv supports credentials over HTTP when querying package registries.
 Authentication can come from the following sources, in order of precedence:
 
 - The URL, e.g., `https://<user>:<password>@<hostname>/...`
+- A [`$UV_BASIC_AUTH_URLS`](#providing-credentials-with-UV_BASIC_AUTH_URLS) value.
 - A [`netrc`](https://everything.curl.dev/usingcurl/netrc) configuration file
 - A [keyring](https://github.com/jaraco/keyring) provider (requires opt-in)
 
@@ -54,6 +55,57 @@ Authentication may be used for hosts specified in the following contexts:
 
 See the [`pip` compatibility guide](../pip/compatibility.md#registry-authentication) for details on
 differences from `pip`.
+
+### Providing credentials with `UV_BASIC_AUTH_URLS`
+
+uv allows defining credentials for HTTP Basic Authentication in the `UV_BASIC_AUTH_URLS` environment
+variable. This option is helpful for cases where, e.g., you want to provide credentials for an index
+but you don't want to change the index URL semantics by setting `UV_INDEX_URL`.
+
+To provide a username and password for a hostname:
+
+```
+UV_BASIC_AUTH_URLS="username:password@hostname"
+```
+
+To only provide a username for a hostname, omit the password:
+
+```
+UV_BASIC_AUTH_URLS="username@hostname"
+```
+
+To provide credentials for multiple urls, separate them with whitespace:
+
+```
+UV_BASIC_AUTH_URLS="username:password@hostname username:password@other-hostname"
+```
+
+To provide credentials for a specific path at a host, provide the path:
+
+```
+UV_BASIC_AUTH_URLS="username:password@hostname/prefix"
+```
+
+The URL scheme is assumed to be `https` and only `https` is supported — URLs with different schemes
+will be ignored.
+
+uv will not use the credentials if no requests need to be made to the provided host. uv will only
+attach credentials to a request if a `UV_BASIC_AUTH_URLS` URL is a prefix of the URL in the request.
+For example, with `UV_BASIC_AUTH_URLS=username:password@example.com/foo/bar`, credentials **would
+not** be added to a request to:
+
+- `https://example.com/apple/berry` (different path)
+- `http://example.com/foo/bar` (different scheme)
+- `https://example.com/foo/baz` (different path)
+- `https://astral.sh/foo/bar` (different host)
+- `https://other-username@example.com/foo/bar` (different username)
+- `https://username:other-password@example.com/foo/bar` (already authenticated)
+
+Credentials **would** be added to:
+
+- `https://example.com/foo/bar` (exact match)
+- `https://example.com/foo/bar/baz` (prefix match)
+- `https://username@example.com/foo/bar` (url and username match)
 
 ## Custom CA certificates
 
