@@ -1,7 +1,6 @@
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
-use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anstream::eprintln;
@@ -680,7 +679,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
             // Since we use ".venv" as the default name, we use "." as the default prompt.
             let prompt = args.prompt.or_else(|| {
-                if args.name == PathBuf::from(".venv") {
+                if args.path.is_none() {
                     Some(".".to_string())
                 } else {
                     None
@@ -688,7 +687,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             });
 
             commands::venv(
-                &args.name,
+                args.path,
                 args.settings.python.as_deref(),
                 globals.python_preference,
                 globals.python_downloads,
@@ -706,6 +705,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.concurrency,
                 globals.native_tls,
                 cli.no_config,
+                args.no_project,
                 &cache,
                 printer,
                 args.relocatable,

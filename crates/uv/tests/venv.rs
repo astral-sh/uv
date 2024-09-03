@@ -52,10 +52,10 @@ fn create_venv() {
 }
 
 #[test]
-fn create_venv_uv_project_environment() -> Result<()> {
+fn create_venv_project_environment() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
 
-    // `uv venv` ignores UV_PROJECT_ENVIRONMENT
+    // `uv venv` ignores `UV_PROJECT_ENVIRONMENT` when it's not a project
     uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
     success: true
     exit_code: 0
@@ -74,10 +74,40 @@ fn create_venv_uv_project_environment() -> Result<()> {
         .child("foo")
         .assert(predicates::path::missing());
 
-    context.temp_dir.child("pyproject.toml").touch()?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["iniconfig"]
+            "#,
+    )?;
 
-    // Even if there's a `pyproject.toml`
+    // But, if we're in a project we'll respect it
     uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: foo
+    Activate with: source foo/bin/activate
+    "###
+    );
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicates::path::is_dir());
+
+    // Unless we're in a child directory
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(child.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -89,10 +119,52 @@ fn create_venv_uv_project_environment() -> Result<()> {
     "###
     );
 
+    // In which case, we'll use the default name of `.venv`
+    child.child("foo").assert(predicates::path::missing());
+    child.child(".venv").assert(predicates::path::is_dir());
+
+    // Or, if a name is provided
+    uv_snapshot!(context.filters(), context.venv().arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: bar
+    Activate with: source bar/bin/activate
+    "###
+    );
+
     context
         .temp_dir
-        .child("foo")
-        .assert(predicates::path::missing());
+        .child("bar")
+        .assert(predicates::path::is_dir());
+
+    // Or, of they opt-out with `--no-workspace` or `--no-project`
+    uv_snapshot!(context.filters(), context.venv().arg("--no-workspace"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.venv().arg("--no-project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
 
     Ok(())
 }
