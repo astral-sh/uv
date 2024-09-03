@@ -1,6 +1,7 @@
 # Using uv in GitHub Actions
 
-uv offers images with shells, you can choose your preferred tag from the [ghcr.io](https://github.com/astral-sh/uv/pkgs/container/uv)
+uv offers images with shells, you can choose your preferred tag from the
+[ghcr.io](https://github.com/astral-sh/uv/pkgs/container/uv)
 
 ```yaml title="gitlab-ci.yml
 variables:
@@ -20,13 +21,10 @@ UV:
     # your `uv` commands
 ```
 
-
-
-
-
-
 ## Caching
-You can speed up your pipeline by re-using cache files between runs. You can read more on [GitLab's caching here](https://docs.gitlab.com/ee/ci/caching/)
+You can speed up your pipeline by re-using cache files between runs. You can read more on
+[GitLab's caching here](https://docs.gitlab.com/ee/ci/caching/)
+
 ```yaml
 UV Install:
   variables:
@@ -45,9 +43,7 @@ Its effect on performance is dependent on the packages being installed.
 
 !!! tip
 
-    If using `uv pip`, use `requirements.txt` instead of `uv.lock` in the cache key. 
-
-
+    If using `uv pip`, use `requirements.txt` instead of `uv.lock` in the cache key.
 
 ## Using `uv pip`
 
@@ -55,7 +51,8 @@ If using the `uv pip` interface instead of the uv project interface, uv requires
 environment by default. To allow installing packages into the system environment, use the `--system`
 flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable.
 
-The `UV_SYSTEM_PYTHON` variable can be defined in at different scopes. You can read more about how [variables and their precedence works in GitLab here](https://docs.gitlab.com/ee/ci/variables/)
+The `UV_SYSTEM_PYTHON` variable can be defined in at different scopes. You can read more about
+how [variables and their precedence works in GitLab here](https://docs.gitlab.com/ee/ci/variables/)
 
 Opt-in for the entire workflow by defining it at the top level:
 
