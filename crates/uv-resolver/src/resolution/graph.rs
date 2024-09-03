@@ -1,17 +1,19 @@
-use indexmap::IndexSet;
-use petgraph::{
-    graph::{Graph, NodeIndex},
-    Directed, Direction,
-};
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-
 use distribution_types::{
     Dist, DistributionMetadata, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
     VersionOrUrlRef,
 };
+use indexmap::IndexSet;
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{MarkerEnvironment, MarkerTree, MarkerTreeKind, VerbatimUrl};
+use petgraph::prelude::EdgeRef;
+use petgraph::{
+    graph::{Graph, NodeIndex},
+    Directed, Direction,
+};
 use pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use std::collections::hash_map::Entry;
+use std::fmt::{Display, Formatter};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_git::GitResolver;
@@ -54,12 +56,23 @@ pub struct ResolutionGraph {
     /// If there are multiple options for a package, track which fork they belong to so we
     /// can write that to the lockfile and later get the correct preference per fork back.
     pub(crate) package_markers: FxHashMap<PackageName, MarkersForDistribution>,
+    /// The markers under which a package is reachable in the dependency tree.
+    pub(crate) reachability: FxHashMap<NodeIndex, MarkerTree>,
 }
 
 #[derive(Debug)]
 pub(crate) enum ResolutionGraphNode {
     Root,
     Dist(AnnotatedDist),
+}
+
+impl Display for ResolutionGraphNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResolutionGraphNode::Root => f.write_str("root"),
+            ResolutionGraphNode::Dist(dist) => Display::fmt(dist, f),
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Hash)]
@@ -197,6 +210,68 @@ impl ResolutionGraph {
                 .collect()
         };
 
+        // The markers under which a package is reachable in the dependency tree.
+        //
+        // Note that we build including the virtual packages due to how we propagate markers through
+        // the graph, even though we then only read the markers for base packages.
+        let mut reachability = FxHashMap::default();
+
+        // Collect the root nodes.
+        //
+        // Besides the actual virtual root node, virtual dev dependencies packages are also root
+        // nodes since the edges don't cover dev dependencies.
+        let mut queue: Vec<_> = petgraph
+            .node_indices()
+            .filter(|node_index| {
+                petgraph
+                    .edges_directed(*node_index, Direction::Incoming)
+                    .next()
+                    .is_none()
+            })
+            .collect();
+
+        // The root nodes are always applicable, unless the user has restricted resolver
+        // environments with `tool.uv.environments`.
+        let root_markers: MarkerTree = if fork_markers.is_empty() {
+            MarkerTree::TRUE
+        } else {
+            fork_markers
+                .iter()
+                .fold(MarkerTree::FALSE, |mut acc, marker| {
+                    acc.or(marker.clone());
+                    acc
+                })
+        };
+        for root_index in &queue {
+            reachability.insert(*root_index, root_markers.clone());
+        }
+
+        // Propagate all markers through the graph, so that the eventual marker for each node is the
+        // union of the markers of each path we can reach the node by.
+        while let Some(parent_index) = queue.pop() {
+            let marker = reachability[&parent_index].clone();
+            for child_edge in petgraph.edges_directed(parent_index, Direction::Outgoing) {
+                // The marker for all paths to the child through the parent.
+                let mut child_marker = child_edge.weight().clone();
+                child_marker.and(marker.clone());
+                match reachability.entry(child_edge.target()) {
+                    Entry::Occupied(mut existing) => {
+                        // If the marker is a subset of the existing marker (A ⊆ B exactly if
+                        // A ∪ B = A), updating the child wouldn't change child's marker.
+                        child_marker.or(existing.get().clone());
+                        if &child_marker != existing.get() {
+                            existing.insert(child_marker);
+                            queue.push(child_edge.target());
+                        }
+                    }
+                    Entry::Vacant(vacant) => {
+                        vacant.insert(child_marker.clone());
+                        queue.push(child_edge.target());
+                    }
+                }
+            }
+        }
+
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
             report_missing_lower_bounds(&petgraph, &mut diagnostics);
         }
@@ -211,6 +286,7 @@ impl ResolutionGraph {
             overrides: overrides.clone(),
             options,
             fork_markers,
+            reachability,
         })
     }
 
