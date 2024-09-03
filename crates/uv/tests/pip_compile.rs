@@ -12058,12 +12058,26 @@ exceptiongroup==1.0.0rc8
     ",
     )?;
 
-    uv_snapshot!(context
-        .pip_compile()
-        .arg("requirements.in")
-        .arg("-c").arg("constraints.txt")
-        .arg("--universal")
-        .arg("-p").arg("3.10"), @r###"
+    let filters: Vec<_> = [
+        // 3.10 may not be installed
+        (
+            "warning: The requested Python version 3.10 is not available; .* will be used to build dependencies instead.\n",
+            "",
+        ),
+    ]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    uv_snapshot!(
+        filters,
+        context
+            .pip_compile()
+            .arg("requirements.in")
+            .arg("-c").arg("constraints.txt")
+            .arg("--universal")
+            .arg("-p").arg("3.10"),
+        @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12173,9 +12187,25 @@ matplotlib
     ",
     )?;
 
-    uv_snapshot!(context
-        .pip_compile()
-        .arg("requirements.in").arg("--universal").arg("-p").arg("3.8"), @r###"
+    let filters: Vec<_> = [
+        // 3.8 may not be installed
+        (
+            "warning: The requested Python version 3.8 is not available; .* will be used to build dependencies instead.\n",
+            "",
+        ),
+    ]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    uv_snapshot!(
+        filters,
+        context
+            .pip_compile()
+            .arg("requirements.in")
+            .arg("--universal")
+            .arg("-p").arg("3.8"),
+        @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12245,9 +12275,25 @@ fn importlib_metadata_not_repeated() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("build")?;
 
-    uv_snapshot!(context
-        .pip_compile()
-        .arg("requirements.in").arg("--universal").arg("-p").arg("3.7"), @r###"
+    let filters: Vec<_> = [
+        // 3.7 may not be installed
+        (
+            "warning: The requested Python version 3.7 is not available; .* will be used to build dependencies instead.\n",
+            "",
+        ),
+    ]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    uv_snapshot!(
+        filters,
+        context
+            .pip_compile()
+            .arg("requirements.in")
+            .arg("--universal")
+            .arg("-p").arg("3.7"),
+        @r###"
     success: true
     exit_code: 0
     ----- stdout -----
