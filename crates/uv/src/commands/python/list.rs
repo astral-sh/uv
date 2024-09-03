@@ -1,9 +1,9 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
-
+use rustc_hash::FxHashSet;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
@@ -102,9 +102,9 @@ pub(crate) async fn list(
         ));
     }
 
-    let mut seen_minor = HashSet::new();
-    let mut seen_patch = HashSet::new();
-    let mut seen_paths = HashSet::new();
+    let mut seen_minor = FxHashSet::default();
+    let mut seen_patch = FxHashSet::default();
+    let mut seen_paths = FxHashSet::default();
     let mut include = Vec::new();
     for (version, os, key, kind, path) in output.iter().rev() {
         // Do not show the same path more than once
@@ -117,15 +117,29 @@ pub(crate) async fn list(
         // Only show the latest patch version for each download unless all were requested
         if !matches!(kind, Kind::System) {
             if let [major, minor, ..] = version.release() {
-                if !seen_minor.insert((os.clone(), *major, *minor, *key.arch(), *key.libc())) {
+                if !seen_minor.insert((
+                    os.clone(),
+                    *major,
+                    *minor,
+                    key.implementation(),
+                    *key.arch(),
+                    *key.libc(),
+                )) {
                     if matches!(kind, Kind::Download) && !all_versions {
                         continue;
                     }
                 }
             }
             if let [major, minor, patch] = version.release() {
-                if !seen_patch.insert((os.clone(), *major, *minor, *patch, *key.arch(), key.libc()))
-                {
+                if !seen_patch.insert((
+                    os.clone(),
+                    *major,
+                    *minor,
+                    *patch,
+                    key.implementation(),
+                    *key.arch(),
+                    key.libc(),
+                )) {
                     if matches!(kind, Kind::Download) {
                         continue;
                     }
