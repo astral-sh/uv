@@ -389,7 +389,7 @@ impl TestContext {
     /// Create a uv command for testing.
     pub fn command(&self) -> Command {
         let mut command = Command::new(get_bin());
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, true);
         command
     }
 
@@ -403,17 +403,20 @@ impl TestContext {
     /// * Hide other Python python with `UV_PYTHON_INSTALL_DIR` and installed interpreters with
     ///   `UV_TEST_PYTHON_PATH`.
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
-    pub fn add_shared_args(&self, command: &mut Command) {
+    pub fn add_shared_args(&self, command: &mut Command, activate_venv: bool) {
         command
             .arg("--cache-dir")
             .arg(self.cache_dir.path())
-            .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
             .env("HOME", self.home_dir.as_os_str())
             .env("UV_PYTHON_INSTALL_DIR", "")
             .env("UV_TEST_PYTHON_PATH", self.python_path())
             .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
             .current_dir(self.temp_dir.path());
+
+        if activate_venv {
+            command.env("VIRTUAL_ENV", self.venv.as_os_str());
+        }
 
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
@@ -426,7 +429,7 @@ impl TestContext {
     pub fn pip_compile(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("pip").arg("compile");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, true);
         command
     }
 
@@ -434,7 +437,37 @@ impl TestContext {
     pub fn pip_sync(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("pip").arg("sync");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, true);
+        command
+    }
+
+    pub fn pip_show(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("pip").arg("show");
+        self.add_shared_args(&mut command, true);
+        command
+    }
+
+    /// Create a `pip freeze` command with options shared across scenarios.
+    pub fn pip_freeze(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("pip").arg("freeze");
+        self.add_shared_args(&mut command, true);
+        command
+    }
+
+    /// Create a `pip check` command with options shared across scenarios.
+    pub fn pip_check(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("pip").arg("check");
+        self.add_shared_args(&mut command, true);
+        command
+    }
+
+    pub fn pip_list(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("pip").arg("list");
+        self.add_shared_args(&mut command, true);
         command
     }
 
@@ -442,8 +475,7 @@ impl TestContext {
     pub fn venv(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("venv");
-        self.add_shared_args(&mut command);
-        command.env_remove("VIRTUAL_ENV");
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -451,7 +483,7 @@ impl TestContext {
     pub fn pip_install(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("pip").arg("install");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, true);
         command
     }
 
@@ -459,7 +491,7 @@ impl TestContext {
     pub fn pip_uninstall(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("pip").arg("uninstall");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, true);
         command
     }
 
@@ -467,7 +499,7 @@ impl TestContext {
     pub fn pip_tree(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("pip").arg("tree");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, true);
         command
     }
 
@@ -490,7 +522,7 @@ impl TestContext {
     pub fn init(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("init");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -498,7 +530,7 @@ impl TestContext {
     pub fn sync(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("sync");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -506,7 +538,7 @@ impl TestContext {
     pub fn lock(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("lock");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -514,7 +546,7 @@ impl TestContext {
     pub fn export(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("export");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -527,7 +559,7 @@ impl TestContext {
             .env("UV_PREVIEW", "1")
             .env("UV_PYTHON_INSTALL_DIR", "")
             .current_dir(&self.temp_dir);
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, true);
         command
     }
 
@@ -540,7 +572,7 @@ impl TestContext {
             .env("UV_PREVIEW", "1")
             .env("UV_PYTHON_INSTALL_DIR", "")
             .current_dir(&self.temp_dir);
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, true);
         command
     }
 
@@ -548,7 +580,7 @@ impl TestContext {
     pub fn python_dir(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("python").arg("dir");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, true);
         command
     }
 
@@ -556,7 +588,7 @@ impl TestContext {
     pub fn run(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("run").env("UV_SHOW_RESOLUTION", "1");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, true);
         command
     }
 
@@ -567,7 +599,7 @@ impl TestContext {
             .arg("tool")
             .arg("run")
             .env("UV_SHOW_RESOLUTION", "1");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -575,7 +607,7 @@ impl TestContext {
     pub fn tool_upgrade(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("tool").arg("upgrade");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -583,7 +615,7 @@ impl TestContext {
     pub fn tool_install(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("tool").arg("install");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command.env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER);
         command
     }
@@ -592,7 +624,7 @@ impl TestContext {
     pub fn tool_list(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("tool").arg("list");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -600,7 +632,7 @@ impl TestContext {
     pub fn tool_dir(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("tool").arg("dir");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -608,7 +640,7 @@ impl TestContext {
     pub fn tool_uninstall(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("tool").arg("uninstall");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -616,7 +648,7 @@ impl TestContext {
     pub fn add(&self, reqs: &[&str]) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("add").args(reqs);
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -624,7 +656,7 @@ impl TestContext {
     pub fn add_no_sync(&self, reqs: &[&str]) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("add").arg("--no-sync").args(reqs);
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -632,7 +664,7 @@ impl TestContext {
     pub fn remove(&self, reqs: &[&str]) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("remove").args(reqs);
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -640,7 +672,7 @@ impl TestContext {
     pub fn remove_no_sync(&self, reqs: &[&str]) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("remove").arg("--no-sync").args(reqs);
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -648,7 +680,7 @@ impl TestContext {
     pub fn tree(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("tree");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -656,7 +688,7 @@ impl TestContext {
     pub fn clean(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("cache").arg("clean");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -664,7 +696,7 @@ impl TestContext {
     pub fn prune(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("cache").arg("prune");
-        self.add_shared_args(&mut command);
+        self.add_shared_args(&mut command, false);
         command
     }
 
