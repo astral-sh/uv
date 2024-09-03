@@ -12221,7 +12221,7 @@ matplotlib
         # via pandas
     six==1.16.0
         # via python-dateutil
-    tomli==2.0.1 ; python_full_version == '3.11'
+    tomli==2.0.1 ; python_full_version <= '3.11'
         # via coverage
     tzdata==2024.1
         # via pandas
