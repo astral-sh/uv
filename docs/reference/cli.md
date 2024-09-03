@@ -453,6 +453,10 @@ uv init [OPTIONS] [PATH]
 
 <p>This is the default behavior when using <code>--app</code>.</p>
 
+</dd><dt><code>--no-pin-python</code></dt><dd><p>Do not create a <code>.python-version</code> file for the project.</p>
+
+<p>By default, uv will create a <code>.python-version</code> file containing the minor version of the discovered Python interpreter, which will cause subsequent uv commands to use that version.</p>
+
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>

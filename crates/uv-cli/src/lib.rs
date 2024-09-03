@@ -2184,6 +2184,14 @@ pub struct InitArgs {
     #[arg(long)]
     pub no_readme: bool,
 
+    /// Do not create a `.python-version` file for the project.
+    ///
+    /// By default, uv will create a `.python-version` file containing the minor version of
+    /// the discovered Python interpreter, which will cause subsequent uv commands to use that
+    /// version.
+    #[arg(long)]
+    pub no_pin_python: bool,
+
     /// Avoid discovering a workspace and create a standalone project.
     ///
     /// By default, uv searches for workspaces in the current directory or any

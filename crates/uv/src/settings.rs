@@ -157,6 +157,7 @@ pub(crate) struct InitSettings {
     pub(crate) package: bool,
     pub(crate) kind: InitProjectKind,
     pub(crate) no_readme: bool,
+    pub(crate) no_pin_python: bool,
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
 }
@@ -174,6 +175,7 @@ impl InitSettings {
             app,
             lib,
             no_readme,
+            no_pin_python,
             no_workspace,
             python,
         } = args;
@@ -193,6 +195,7 @@ impl InitSettings {
             package,
             kind,
             no_readme,
+            no_pin_python,
             no_workspace,
             python,
         }
