@@ -29,7 +29,7 @@ fn add_registry() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -180,7 +180,7 @@ fn add_git() -> Result<()> {
     "###);
 
     // Adding with an ambiguous Git reference should treat it as a revision.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -194,7 +194,7 @@ fn add_git() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -334,7 +334,7 @@ fn add_git_private_source() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -438,7 +438,7 @@ fn add_git_private_raw() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]).arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg(&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")).arg("--raw-sources"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -562,7 +562,7 @@ fn add_git_error() -> Result<()> {
     "###);
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("flask").arg("--tag").arg("0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("flask").arg("--tag").arg("0.0.1"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -572,7 +572,7 @@ fn add_git_error() -> Result<()> {
     "###);
 
     // Provide a tag with a non-Git source.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -627,7 +627,7 @@ fn add_git_raw() -> Result<()> {
     "###);
 
     // Use an ambiguous tag reference, which would otherwise not resolve.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]).arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1").arg("--raw-sources"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -787,7 +787,7 @@ fn add_git_implicit() -> Result<()> {
     "###);
 
     // Omit the `git+` prefix.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -824,7 +824,7 @@ fn add_raw_error() -> Result<()> {
     "#})?;
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -859,7 +859,7 @@ fn add_unnamed() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -960,7 +960,7 @@ fn add_remove_dev() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1074,7 +1074,7 @@ fn add_remove_dev() -> Result<()> {
     "###);
 
     // This should fail without --dev.
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1085,7 +1085,7 @@ fn add_remove_dev() -> Result<()> {
     "###);
 
     // Remove the dependency.
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1176,7 +1176,7 @@ fn add_remove_optional() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--optional=io"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--optional=io"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1292,7 +1292,7 @@ fn add_remove_optional() -> Result<()> {
     "###);
 
     // This should fail without --optional.
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1303,7 +1303,7 @@ fn add_remove_optional() -> Result<()> {
     "###);
 
     // Remove the dependency.
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--optional=io"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional=io"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1393,7 +1393,7 @@ fn add_remove_inline_optional() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["typing-extensions"]).arg("--optional=types"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--optional=types"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1428,7 +1428,7 @@ fn add_remove_inline_optional() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove(&["typing-extensions"]).arg("--optional=types"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions").arg("--optional=types"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1507,9 +1507,9 @@ fn add_remove_workspace() -> Result<()> {
     "#})?;
 
     // Adding a workspace package with a mismatched source should error.
-    let mut add_cmd =
-        context.add(&["child2 @ git+https://github.com/astral-test/uv-public-pypackage"]);
+    let mut add_cmd = context.add();
     add_cmd
+        .arg("child2 @ git+https://github.com/astral-test/uv-public-pypackage")
         .arg("--package")
         .arg("child1")
         .current_dir(&context.temp_dir);
@@ -1525,8 +1525,9 @@ fn add_remove_workspace() -> Result<()> {
 
     // Workspace packages should be detected automatically.
     let child1 = context.temp_dir.join("child1");
-    let mut add_cmd = context.add(&["child2"]);
+    let mut add_cmd = context.add();
     add_cmd
+        .arg("child2")
         .arg("--package")
         .arg("child1")
         .current_dir(&context.temp_dir);
@@ -1619,7 +1620,7 @@ fn add_remove_workspace() -> Result<()> {
     "###);
 
     // Remove the dependency.
-    uv_snapshot!(context.filters(), context.remove(&["child2"]).current_dir(&child1), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("child2").current_dir(&child1), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1738,8 +1739,8 @@ fn add_workspace_editable() -> Result<()> {
     "#})?;
 
     let child1 = context.temp_dir.join("child1");
-    let mut add_cmd = context.add(&["child2"]);
-    add_cmd.arg("--editable").current_dir(&child1);
+    let mut add_cmd = context.add();
+    add_cmd.arg("child2").arg("--editable").current_dir(&child1);
 
     uv_snapshot!(context.filters(), add_cmd, @r###"
     success: true
@@ -1862,7 +1863,7 @@ fn add_path() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["./child"]).current_dir(workspace.path()), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("./child").current_dir(workspace.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1993,7 +1994,7 @@ fn update() -> Result<()> {
     "###);
 
     // Enable an extra (note the version specifier should be preserved).
-    uv_snapshot!(context.filters(), context.add(&["requests[security]"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests[security]"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2029,7 +2030,7 @@ fn update() -> Result<()> {
     });
 
     // Enable extras using the CLI flag and add a marker.
-    uv_snapshot!(context.filters(), context.add(&["requests; python_version > '3.7'"]).args(["--extra=use_chardet_on_py3", "--extra=socks"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests; python_version > '3.7'").args(["--extra=use_chardet_on_py3", "--extra=socks"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2069,7 +2070,7 @@ fn update() -> Result<()> {
 
     // Change the source by specifying a version (note the extras, markers, and version should be
     // preserved).
-    uv_snapshot!(context.filters(), context.add(&["requests @ git+https://github.com/psf/requests"]).arg("--tag=v2.32.3"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.3"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2284,7 +2285,7 @@ fn add_update_marker() -> Result<()> {
     "###);
 
     // Restrict the `requests` version for Python <3.11
-    uv_snapshot!(context.filters(), context.add(&["requests>=2.0,<2.29; python_version < '3.11'"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.0,<2.29; python_version < '3.11'"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2322,7 +2323,7 @@ fn add_update_marker() -> Result<()> {
     });
 
     // Change the restricted `requests` version for Python <3.11
-    uv_snapshot!(context.filters(), context.add(&["requests>=2.0,<2.20; python_version < '3.11'"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.0,<2.20; python_version < '3.11'"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2360,7 +2361,7 @@ fn add_update_marker() -> Result<()> {
     });
 
     // Restrict the `requests` version on Windows and Python >3.11
-    uv_snapshot!(context.filters(), context.add(&["requests>=2.31 ; sys_platform == 'win32' and python_version > '3.11'"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.31 ; sys_platform == 'win32' and python_version > '3.11'"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2403,7 +2404,7 @@ fn add_update_marker() -> Result<()> {
     });
 
     // Restrict the `requests` version on Windows
-    uv_snapshot!(context.filters(), context.add(&["requests>=2.10 ; sys_platform == 'win32'"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.10 ; sys_platform == 'win32'"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2444,7 +2445,7 @@ fn add_update_marker() -> Result<()> {
     });
 
     // Remove `requests`
-    uv_snapshot!(context.filters(), context.remove(&["requests"]), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("requests"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2507,7 +2508,7 @@ fn update_source_replace_url() -> Result<()> {
     "#})?;
 
     // Change the source. The existing URL should be removed.
-    uv_snapshot!(context.filters(), context.add(&["requests @ git+https://github.com/psf/requests"]).arg("--tag=v2.32.3"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.3"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2606,7 +2607,7 @@ fn add_inexact() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["iniconfig==2.0.0"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2745,7 +2746,7 @@ fn remove_registry() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2832,7 +2833,7 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["requests==2.31.0"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2893,7 +2894,7 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["requests==2.31.0"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2955,7 +2956,7 @@ fn add_frozen() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3008,7 +3009,7 @@ fn add_no_sync() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--no-sync"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--no-sync"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3050,7 +3051,7 @@ fn add_reject_multiple_git_ref_flags() {
 
     // --tag and --branch
     uv_snapshot!(context
-        .add(&[])
+        .add()
         .arg("foo")
         .arg("--tag")
         .arg("0.0.1")
@@ -3071,7 +3072,7 @@ fn add_reject_multiple_git_ref_flags() {
 
     // --tag and --rev
     uv_snapshot!(context
-        .add(&[])
+        .add()
         .arg("foo")
         .arg("--tag")
         .arg("0.0.1")
@@ -3092,7 +3093,7 @@ fn add_reject_multiple_git_ref_flags() {
 
     // --tag and --tag
     uv_snapshot!(context
-        .add(&[])
+        .add()
         .arg("foo")
         .arg("--tag")
         .arg("0.0.1")
@@ -3130,7 +3131,7 @@ fn add_error() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["xyz"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("xyz"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3141,7 +3142,7 @@ fn add_error() -> Result<()> {
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
     "###);
 
-    uv_snapshot!(context.filters(), context.add(&["xyz"]).arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3174,7 +3175,7 @@ fn add_lower_bound() -> Result<()> {
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3234,7 +3235,7 @@ fn add_lower_bound_existing() -> Result<()> {
 
     // Adding `anyio` should _not_ set a lower-bound, since it's already present (even if
     // unconstrained).
-    uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3293,7 +3294,7 @@ fn add_lower_bound_raw() -> Result<()> {
     "#})?;
 
     // Adding `anyio` should _not_ set a lower-bound when using `--raw-sources`.
-    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw-sources"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3352,7 +3353,7 @@ fn add_lower_bound_dev() -> Result<()> {
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3414,7 +3415,7 @@ fn add_lower_bound_optional() -> Result<()> {
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--optional=io"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--optional=io"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3536,7 +3537,7 @@ fn add_lower_bound_local() -> Result<()> {
     "#})?;
 
     // Adding `torch` should include a lower-bound, but no local segment.
-    uv_snapshot!(context.filters(), context.add(&["local-simple-a"]).arg("--extra-index-url").arg(packse_index_url()).env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("local-simple-a").arg("--extra-index-url").arg(packse_index_url()).env_remove("UV_EXCLUDE_NEWER"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3620,7 +3621,7 @@ fn add_non_project() -> Result<()> {
 
     // Adding `iniconfig` should fail, since virtual workspace roots don't support production
     // dependencies.
-    uv_snapshot!(context.filters(), context.add(&["iniconfig"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3631,7 +3632,7 @@ fn add_non_project() -> Result<()> {
 
     // Adding `iniconfig` as optional should fail, since virtual workspace roots don't support
     // optional dependencies.
-    uv_snapshot!(context.filters(), context.add(&["iniconfig"]).arg("--optional").arg("async"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--optional").arg("async"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3641,7 +3642,7 @@ fn add_non_project() -> Result<()> {
     "###);
 
     // Adding `iniconfig` as a dev dependency should succeed.
-    uv_snapshot!(context.filters(), context.add(&["iniconfig"]).arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3720,7 +3721,7 @@ fn add_repeat() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3757,7 +3758,7 @@ fn add_repeat() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3814,7 +3815,7 @@ fn add_requirements_file() -> Result<()> {
     requirements_txt
         .write_str("Flask==2.3.2\nanyio @ git+https://github.com/agronholm/anyio.git@4.4.0")?;
 
-    uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("requirements.txt"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3863,7 +3864,7 @@ fn add_requirements_file() -> Result<()> {
     });
 
     // Passing a `setup.py` should fail.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("setup.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("setup.py"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3873,7 +3874,7 @@ fn add_requirements_file() -> Result<()> {
     "###);
 
     // Passing nothing should fail.
-    uv_snapshot!(context.filters(), context.add(&[]), @r###"
+    uv_snapshot!(context.filters(), context.add(), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3913,7 +3914,7 @@ fn add_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3965,7 +3966,7 @@ fn add_script_without_metadata_table() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4016,7 +4017,7 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4072,7 +4073,7 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4124,7 +4125,7 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4184,7 +4185,7 @@ fn remove_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4242,7 +4243,7 @@ fn remove_last_dep_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove(&["rich"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("rich").arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4295,7 +4296,8 @@ fn add_git_to_script() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context
-        .add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"])
+        .add()
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .arg("--tag=0.0.1")
         .arg("--script")
         .arg("script.py"), @r###"
@@ -4359,7 +4361,7 @@ fn fail_to_add_revert_project() -> Result<()> {
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.add(&["pytorch==1.0.2"]), @r###"
+    uv_snapshot!(filters, context.add().arg("pytorch==1.0.2"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4430,7 +4432,7 @@ fn sorted_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["typing-extensions", "anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "anyio"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4499,7 +4501,7 @@ fn custom_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["pydantic"]).arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("pydantic").arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
