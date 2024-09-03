@@ -12071,7 +12071,7 @@ exceptiongroup==1.0.0rc8
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in -c constraints.txt --universal -p 3.10
     alembic==1.8.1
         # via -r requirements.in
-    astroid==2.13.5
+    astroid==2.13.5 ; python_full_version >= '3.11'
         # via pylint
     astroid==3.1.0 ; python_full_version < '3.11'
         # via pylint
@@ -12101,7 +12101,7 @@ exceptiongroup==1.0.0rc8
         # via pylint
     jedi==0.19.1
         # via ipython
-    lazy-object-proxy==1.10.0
+    lazy-object-proxy==1.10.0 ; python_full_version >= '3.11'
         # via astroid
     mako==1.3.2
         # via alembic
@@ -12125,7 +12125,7 @@ exceptiongroup==1.0.0rc8
         # via stack-data
     pygments==2.17.2
         # via ipython
-    pylint==2.15.8
+    pylint==2.15.8 ; python_full_version >= '3.11'
         # via -r requirements.in
     pylint==3.1.0 ; python_full_version < '3.11'
         # via -r requirements.in
@@ -12149,7 +12149,7 @@ exceptiongroup==1.0.0rc8
         #   sqlalchemy
     wcwidth==0.2.13
         # via prompt-toolkit
-    wrapt==1.16.0
+    wrapt==1.16.0 ; python_full_version >= '3.11'
         # via astroid
 
     ----- stderr -----
