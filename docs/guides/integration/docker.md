@@ -189,6 +189,13 @@ Or, you can use `uv run` for any commands that require the environment:
 RUN uv run some_script.py
 ```
 
+!!! tip
+
+    Alternatively, the
+    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects.md#custom-project-environment-paths) can
+    be set before syncing to install to the system Python environment and skip environment activation
+    entirely.
+
 ### Using installed tools
 
 To use installed tools, ensure the [tool bin directory](../../concepts/tools.md#the-bin-directory)
