@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+use std::ffi::OsString;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::PathBuf;
@@ -136,7 +138,7 @@ pub(crate) async fn run(
     let executable = target.executable();
 
     // Construct the command
-    let mut process = Command::new(executable);
+    let mut process = Command::new(&*executable);
     process.args(args);
 
     // Construct the `PATH` environment variable.
@@ -165,7 +167,7 @@ pub(crate) async fn run(
     // We check if the provided command is not part of the executables for the `from` package.
     // If the command is found in other packages, we warn the user about the correct package to use.
     warn_executable_not_provided_by_package(
-        executable,
+        &executable,
         &from.name,
         &site_packages,
         invocation_source,
@@ -292,6 +294,91 @@ fn warn_executable_not_provided_by_package(
                 );
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum Target<'a> {
+    /// e.g., `ruff`
+    Unspecified(&'a str),
+    /// e.g., `ruff@0.6.0`
+    Version(&'a str, Version),
+    /// e.g., `ruff@latest`
+    Latest(&'a str),
+    /// e.g., `--from ruff==0.6.0`
+    UserDefined(&'a str, &'a str),
+}
+
+impl<'a> Target<'a> {
+    /// Parse a target into a command name and a requirement.
+    fn parse(target: &'a OsString, from: Option<&'a str>) -> anyhow::Result<Self> {
+        let Some(target_str) = target.to_str() else {
+            return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+        };
+
+        if let Some(from) = from {
+            return Ok(Self::UserDefined(target_str, from));
+        }
+
+        // e.g. `ruff`, no special handling
+        let Some((name, version)) = target_str.split_once('@') else {
+            return Ok(Self::Unspecified(target_str));
+        };
+
+        // e.g. `ruff@`, warn and treat the whole thing as the command
+        if version.is_empty() {
+            debug!("Ignoring empty version request in command");
+            return Ok(Self::Unspecified(target_str));
+        }
+
+        // e.g., ignore `git+https://github.com/astral-sh/ruff.git@main`
+        if PackageName::from_str(name).is_err() {
+            debug!("Ignoring non-package name `{name}` in command");
+            return Ok(Self::Unspecified(target_str));
+        }
+
+        match version {
+            // e.g., `ruff@latest`
+            "latest" => return Ok(Self::Latest(name)),
+            // e.g., `ruff@0.6.0`
+            version => {
+                if let Ok(version) = Version::from_str(version) {
+                    return Ok(Self::Version(name, version));
+                }
+            }
+        };
+
+        // e.g. `ruff@invalid`, warn and treat the whole thing as the command
+        debug!("Ignoring invalid version request `{version}` in command");
+        Ok(Self::Unspecified(target_str))
+    }
+
+    /// Returns the name of the executable.
+    fn executable(&self) -> Cow<str> {
+        let name = match self {
+            Self::Unspecified(name) => name,
+            Self::Version(name, _) => name,
+            Self::Latest(name) => name,
+            Self::UserDefined(name, _) => name,
+        };
+
+        // On Unix, we don't need to deal with an extension
+        if !cfg!(windows) {
+            return Cow::Borrowed(name);
+        }
+
+        // On Windows, if we have an extension we won't also add `.exe`
+        if std::path::Path::new(name).extension().is_some() {
+            return Cow::Borrowed(name);
+        }
+
+        // Otherwise, we ensure `.exe` is present
+        Cow::Owned(format!("{name}.exe"))
+    }
+
+    /// Returns `true` if the target is `latest`.
+    fn is_latest(&self) -> bool {
+        matches!(self, Self::Latest(_))
     }
 }
 
