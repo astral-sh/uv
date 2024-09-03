@@ -1307,6 +1307,7 @@ fn run_from_directory() -> Result<()> {
     3.12.[X]
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 1 package in [TIME]

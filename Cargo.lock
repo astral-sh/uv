@@ -5250,6 +5250,7 @@ dependencies = [
  "pypi-types",
  "regex",
  "rustc-hash",
+ "same-file",
  "schemars",
  "serde",
  "thiserror",

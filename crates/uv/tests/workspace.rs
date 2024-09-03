@@ -377,6 +377,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON]
     Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
@@ -402,6 +403,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -435,6 +437,7 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
@@ -479,6 +482,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON]
     Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
@@ -504,6 +508,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -542,6 +547,7 @@ fn test_uv_run_isolate() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
@@ -572,6 +578,7 @@ fn test_uv_run_isolate() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Audited 5 packages in [TIME]
     "###
