@@ -2,7 +2,7 @@ site_name: uv
 theme:
   name: material
   logo: assets/logo-letter.svg
-  favicon: assets/favicon.svg
+  favicon: assets/favicon.ico
   features:
     - navigation.instant
     - navigation.instant.prefetch
