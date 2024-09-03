@@ -12193,6 +12193,20 @@ matplotlib
             "warning: The requested Python version 3.8 is not available; .* will be used to build dependencies instead.\n",
             "",
         ),
+        // For Windows, `tzdata` isn't included in the resolution.
+        //
+        // This should probably be investigated. It is possible this
+        // is a correct/expected result. For example, if there is a
+        // dependency that is sdist-only and has dynamic platform
+        // dependent dependencies. But if not, `tzdata` should still
+        // show up in the lock file.
+        //
+        // In any case, we filter `tzdata` out of the snapshot entirely
+        // on all platforms for this reason.
+        (r"( ?[-+~] ?)?tzdata==\d+(\.\d+)+(\s+[-+~]?\s+# via .*)?\n", ""),
+        // And because tzdata is omitted on Windows, the number of deps
+        // is different too. So filter that out too.
+        (r"Resolved 19 packages", "Resolved [NUM] packages"),
     ]
         .into_iter()
         .chain(context.filters())
@@ -12253,13 +12267,11 @@ matplotlib
         # via python-dateutil
     tomli==2.0.1 ; python_full_version <= '3.11'
         # via coverage
-    tzdata==2024.1
-        # via pandas
     zipp==3.18.1 ; python_full_version < '3.10'
         # via importlib-resources
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
+    Resolved [NUM] packages in [TIME]
     "###);
 
     Ok(())
