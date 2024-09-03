@@ -343,6 +343,19 @@ Entries in the `environments` setting must be disjoint (i.e., they must not over
 `sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the
 same time.
 
+### Optional dependencies
+
+uv requires that all optional dependencies ("extras") declared by the project are compatible with
+each other and resolves all optional dependencies together when creating the lockfile.
+
+If optional dependencies declared in one group are not compatible with those in another group, uv
+will fail to resolve the requirements of the project with an error.
+
+!!! note
+
+    There is currently no way to declare conflicting optional dependencies. See
+    [astral.sh/uv#6981](https://github.com/astral-sh/uv/issues/6981) to track support.
+
 ## Managing dependencies
 
 uv is capable of adding, updating, and removing dependencies using the CLI.
