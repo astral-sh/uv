@@ -513,6 +513,37 @@ dependencies listed.
 If working in a project composed of many packages, see the [workspaces](./workspaces.md)
 documentation.
 
+## Building projects
+
+To distribute your project to others (e.g., to upload it to an index like PyPI), you'll need to
+build it into a distributable format.
+
+Python projects are typically distributed as both source distributions (sdists) and binary
+distributions (wheels). The former is a `.tar.gz` file containing the project's source code along
+with some additional metadata, while the latter is a `.whl` file containing pre-built artifacts that
+can be installed directly.
+
+`uv build` can be used to build both source distributions and binary distributions for your project.
+By default, `uv build` will build the project in the current directory, and place the built
+artifacts in a `dist/` subdirectory:
+
+```console
+$ uv build
+$ ls dist/
+example-0.1.0-py3-none-any.whl
+example-0.1.0.tar.gz
+```
+
+You can build the project in a different directory by providing a path to `uv build`, e.g.,
+`uv build path/to/project`.
+
+`uv build` will first build a source distribution, and then build a binary distribution (wheel) from
+that source distribution.
+
+You can limit `uv build` to building a source distribution with `uv build --source`, a binary
+distribution with `uv build --binary`, or build both distributions from source with
+`uv build --source --binary`.
+
 ## Build isolation
 
 By default, uv builds all packages in isolated virtual environments, as per

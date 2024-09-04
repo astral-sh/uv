@@ -175,6 +175,24 @@ $ python example.py
 See the documentation on [running commands](../concepts/projects.md#running-commands) and
 [running scripts](../concepts/projects.md#running-scripts) in projects for more details.
 
+## Building distributions
+
+`uv build` can be used to build source distributions and binary distributions (wheel) for your
+project.
+
+By default, `uv build` will build the project in the current directory, and place the built
+artifacts in a `dist/` subdirectory:
+
+```console
+$ uv build
+$ ls dist/
+hello-world-0.1.0-py3-none-any.whl
+hello-world-0.1.0.tar.gz
+```
+
+See the documentation on [building projects](../concepts/projects.md#building-projects) for more
+details.
+
 ## Next steps
 
 To learn more about working on projects with uv, see the [Projects concept](../concepts/projects.md)
