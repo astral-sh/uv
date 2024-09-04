@@ -2838,7 +2838,7 @@ If a tool was installed with specific settings, they will be respected on upgrad
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv tool upgrade [OPTIONS] <NAME>
+uv tool upgrade [OPTIONS] <NAME>...
 ```
 
 <h3 class="cli-reference">Arguments</h3>
@@ -3156,7 +3156,7 @@ Uninstall a tool
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv tool uninstall [OPTIONS] <NAME>
+uv tool uninstall [OPTIONS] <NAME>...
 ```
 
 <h3 class="cli-reference">Arguments</h3>

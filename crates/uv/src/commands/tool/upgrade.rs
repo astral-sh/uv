@@ -21,7 +21,7 @@ use crate::settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
-    name: Option<PackageName>,
+    name: Vec<PackageName>,
     connectivity: Connectivity,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
@@ -34,16 +34,18 @@ pub(crate) async fn upgrade(
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
 
-    let names: BTreeSet<PackageName> =
-        name.map(|name| BTreeSet::from_iter([name]))
-            .unwrap_or_else(|| {
-                installed_tools
-                    .tools()
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|(name, _)| name)
-                    .collect()
-            });
+    let names: BTreeSet<PackageName> = {
+        if name.is_empty() {
+            installed_tools
+                .tools()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect()
+        } else {
+            name.into_iter().collect()
+        }
+    };
 
     if names.is_empty() {
         writeln!(printer.stderr(), "Nothing to upgrade")?;

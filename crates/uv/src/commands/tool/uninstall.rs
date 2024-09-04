@@ -13,13 +13,19 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Uninstall a tool.
-pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn uninstall(
+    name: Option<Vec<PackageName>>,
+    printer: Printer,
+) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
         Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-            if let Some(name) = name {
-                bail!("`{name}` is not installed");
+            if let Some(names) = name {
+                for name in names {
+                    writeln!(printer.stderr(), "`{name}` is not installed")?;
+                }
+                return Ok(ExitStatus::Success);
             }
             writeln!(printer.stderr(), "Nothing to uninstall")?;
             return Ok(ExitStatus::Success);
@@ -88,31 +94,35 @@ impl IgnoreCurrentlyBeingDeleted for Result<(), std::io::Error> {
 /// Perform the uninstallation.
 async fn do_uninstall(
     installed_tools: &InstalledTools,
-    name: Option<PackageName>,
+    names: Option<Vec<PackageName>>,
     printer: Printer,
 ) -> Result<()> {
     let mut dangling = false;
-    let mut entrypoints = if let Some(name) = name {
-        let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
-            // If the tool is not installed, attempt to remove the environment anyway.
-            match installed_tools.remove_environment(&name) {
-                Ok(()) => {
-                    writeln!(
-                        printer.stderr(),
-                        "Removed dangling environment for `{name}`"
-                    )?;
-                    return Ok(());
+    let mut entrypoints = if let Some(names) = names {
+        let mut entrypoints = vec![];
+        for name in names {
+            let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
+                // If the tool is not installed properly, attempt to remove the environment anyway.
+                match installed_tools.remove_environment(&name) {
+                    Ok(()) => {
+                        writeln!(
+                            printer.stderr(),
+                            "Removed dangling environment for `{name}`"
+                        )?;
+                        return Ok(());
+                    }
+                    Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                        bail!("`{name}` is not installed");
+                    }
+                    Err(err) => {
+                        return Err(err.into());
+                    }
                 }
-                Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                    bail!("`{name}` is not installed");
-                }
-                Err(err) => {
-                    return Err(err.into());
-                }
-            }
-        };
+            };
 
-        uninstall_tool(&name, &receipt, installed_tools).await?
+            entrypoints.extend(uninstall_tool(&name, &receipt, installed_tools).await?);
+        }
+        entrypoints
     } else {
         let mut entrypoints = vec![];
         for (name, receipt) in installed_tools.tools()? {

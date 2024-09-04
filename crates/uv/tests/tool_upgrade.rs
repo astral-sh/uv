@@ -57,6 +57,81 @@ fn test_tool_upgrade_name() {
 }
 
 #[test]
+fn test_tool_upgrade_multiple_names() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `python-dotenv` from Test PyPI, to get an outdated version.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("python-dotenv")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + python-dotenv==0.10.2.post2
+    Installed 1 executable: dotenv
+    "###);
+
+    // Install `babel` from Test PyPI, to get an outdated version.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    "###);
+
+    // Upgrade `babel` and `python-dotenv` from PyPI.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("python-dotenv")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple/")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated babel v2.6.0 -> v2.14.0
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
+    Installed 1 executable: pybabel
+    Updated python-dotenv v0.10.2.post2 -> v1.0.1
+     - python-dotenv==0.10.2.post2
+     + python-dotenv==1.0.1
+    Installed 1 executable: dotenv
+    "###);
+}
+
+#[test]
 fn test_tool_upgrade_all() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
