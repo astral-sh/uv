@@ -7,7 +7,7 @@ use distribution_types::{CachedDist, IndexLocations, InstalledDist, Resolution, 
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOptions, BuildOutput, SourceStrategy};
 use uv_git::GitResolver;
 use uv_python::PythonEnvironment;
 
@@ -97,6 +97,7 @@ pub trait BuildContext {
         version_id: &'a str,
         dist: Option<&'a SourceDist>,
         build_kind: BuildKind,
+        build_output: BuildOutput,
     ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + 'a;
 }
 

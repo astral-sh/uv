@@ -10,6 +10,7 @@ use rustc_hash::FxHashMap;
 use serde::de::{value, SeqAccess, Visitor};
 use serde::{de, Deserialize, Deserializer};
 use std::ffi::OsString;
+use std::fmt::Write;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -29,7 +30,7 @@ use distribution_types::Resolution;
 use pep440_rs::Version;
 use pep508_rs::PackageName;
 use pypi_types::{Requirement, VerbatimParsedUrl};
-use uv_configuration::{BuildKind, ConfigSettings};
+use uv_configuration::{BuildKind, BuildOutput, ConfigSettings};
 use uv_fs::{rename_with_retry, PythonExt, Simplified};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
@@ -93,7 +94,7 @@ pub enum Error {
     #[error("Failed to run `{0}`")]
     CommandFailed(PathBuf, #[source] io::Error),
     #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
-    BuildBackend {
+    BuildBackendOutput {
         message: String,
         exit_code: ExitStatus,
         stdout: String,
@@ -101,11 +102,23 @@ pub enum Error {
     },
     /// Nudge the user towards installing the missing dev library
     #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
-    MissingHeader {
+    MissingHeaderOutput {
         message: String,
         exit_code: ExitStatus,
         stdout: String,
         stderr: String,
+        #[source]
+        missing_header_cause: MissingHeaderCause,
+    },
+    #[error("{message} with {exit_code}")]
+    BuildBackend {
+        message: String,
+        exit_code: ExitStatus,
+    },
+    #[error("{message} with {exit_code}")]
+    MissingHeader {
+        message: String,
+        exit_code: ExitStatus,
         #[source]
         missing_header_cause: MissingHeaderCause,
     },
@@ -161,6 +174,7 @@ impl Error {
     fn from_command_output(
         message: String,
         output: &PythonRunnerOutput,
+        level: BuildOutput,
         version_id: impl Into<String>,
     ) -> Self {
         // In the cases I've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff.
@@ -186,24 +200,71 @@ impl Error {
         });
 
         if let Some(missing_library) = missing_library {
-            return Self::MissingHeader {
-                message,
-                exit_code: output.status,
-                stdout: output.stdout.iter().join("\n"),
-                stderr: output.stderr.iter().join("\n"),
-                missing_header_cause: MissingHeaderCause {
-                    missing_library,
-                    version_id: version_id.into(),
+            return match level {
+                BuildOutput::Stderr => Self::MissingHeader {
+                    message,
+                    exit_code: output.status,
+                    missing_header_cause: MissingHeaderCause {
+                        missing_library,
+                        version_id: version_id.into(),
+                    },
+                },
+                BuildOutput::Debug => Self::MissingHeaderOutput {
+                    message,
+                    exit_code: output.status,
+                    stdout: output.stdout.iter().join("\n"),
+                    stderr: output.stderr.iter().join("\n"),
+                    missing_header_cause: MissingHeaderCause {
+                        missing_library,
+                        version_id: version_id.into(),
+                    },
                 },
             };
         }
 
-        Self::BuildBackend {
-            message,
-            exit_code: output.status,
-            stdout: output.stdout.iter().join("\n"),
-            stderr: output.stderr.iter().join("\n"),
+        match level {
+            BuildOutput::Stderr => Self::BuildBackend {
+                message,
+                exit_code: output.status,
+            },
+            BuildOutput::Debug => Self::BuildBackendOutput {
+                message,
+                exit_code: output.status,
+                stdout: output.stdout.iter().join("\n"),
+                stderr: output.stderr.iter().join("\n"),
+            },
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Printer {
+    /// Send the build backend output to `stderr`.
+    Stderr,
+    /// Send the build backend output to `tracing`.
+    Debug,
+}
+
+impl From<BuildOutput> for Printer {
+    fn from(output: BuildOutput) -> Self {
+        match output {
+            BuildOutput::Stderr => Self::Stderr,
+            BuildOutput::Debug => Self::Debug,
+        }
+    }
+}
+
+impl Write for Printer {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        match self {
+            Self::Stderr => {
+                anstream::eprint!("{s}");
+            }
+            Self::Debug => {
+                debug!("{}", s);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -380,6 +441,8 @@ pub struct SourceBuild {
     version_id: String,
     /// Whether we do a regular PEP 517 build or an PEP 660 editable build
     build_kind: BuildKind,
+    /// Whether to send build output to `stderr` or `tracing`, etc.
+    level: BuildOutput,
     /// Modified PATH that contains the `venv_bin`, `user_path` and `system_path` variables in that order
     modified_path: OsString,
     /// Environment variables to be passed in during metadata or wheel building
@@ -405,6 +468,7 @@ impl SourceBuild {
         build_isolation: BuildIsolation<'_>,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
+        level: BuildOutput,
         concurrent_builds: usize,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().environment()?;
@@ -488,7 +552,7 @@ impl SourceBuild {
 
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
-        let runner = PythonRunner::new(concurrent_builds);
+        let runner = PythonRunner::new(concurrent_builds, level);
         if build_isolation.is_isolated(package_name) {
             create_pep517_build_environment(
                 &runner,
@@ -498,6 +562,7 @@ impl SourceBuild {
                 build_context,
                 &version_id,
                 build_kind,
+                level,
                 &config_settings,
                 &environment_variables,
                 &modified_path,
@@ -513,6 +578,7 @@ impl SourceBuild {
             project,
             venv,
             build_kind,
+            level,
             config_settings,
             metadata_directory: None,
             version_id,
@@ -698,6 +764,7 @@ impl SourceBuild {
             return Err(Error::from_command_output(
                 format!("Build backend failed to determine metadata through `prepare_metadata_for_build_{}`", self.build_kind),
                 &output,
+                self.level,
                 &self.version_id,
             ));
         }
@@ -827,6 +894,7 @@ impl SourceBuild {
                     self.build_kind, self.build_kind,
                 ),
                 &output,
+                self.level,
                 &self.version_id,
             ));
         }
@@ -839,6 +907,7 @@ impl SourceBuild {
                     self.build_kind, self.build_kind,
                 ),
                 &output,
+                self.level,
                 &self.version_id,
             ));
         }
@@ -871,6 +940,7 @@ async fn create_pep517_build_environment(
     build_context: &impl BuildContext,
     version_id: &str,
     build_kind: BuildKind,
+    level: BuildOutput,
     config_settings: &ConfigSettings,
     environment_variables: &FxHashMap<OsString, OsString>,
     modified_path: &OsString,
@@ -924,6 +994,7 @@ async fn create_pep517_build_environment(
         return Err(Error::from_command_output(
             format!("Build backend failed to determine extra requires with `build_{build_kind}()`"),
             &output,
+            level,
             version_id,
         ));
     }
@@ -935,6 +1006,7 @@ async fn create_pep517_build_environment(
                 "Build backend failed to read extra requires from `get_requires_for_build_{build_kind}`: {err}"
             ),
             &output,
+            level,
             version_id,
         )
     })?;
@@ -946,6 +1018,7 @@ async fn create_pep517_build_environment(
                 "Build backend failed to return extra requires with `get_requires_for_build_{build_kind}`: {err}"
             ),
             &output,
+            level,
             version_id,
         )
     })?;
@@ -985,6 +1058,7 @@ async fn create_pep517_build_environment(
 #[derive(Debug)]
 struct PythonRunner {
     control: Semaphore,
+    level: BuildOutput,
 }
 
 #[derive(Debug)]
@@ -995,10 +1069,11 @@ struct PythonRunnerOutput {
 }
 
 impl PythonRunner {
-    /// Create a `PythonRunner` with the provided concurrency limit.
-    fn new(concurrency: usize) -> PythonRunner {
-        PythonRunner {
+    /// Create a `PythonRunner` with the provided concurrency limit and output level.
+    fn new(concurrency: usize, level: BuildOutput) -> Self {
+        Self {
             control: Semaphore::new(concurrency),
+            level,
         }
     }
 
@@ -1019,12 +1094,13 @@ impl PythonRunner {
         /// Read lines from a reader and store them in a buffer.
         async fn read_from(
             mut reader: tokio::io::Lines<tokio::io::BufReader<impl tokio::io::AsyncRead + Unpin>>,
+            mut printer: Printer,
             buffer: &mut Vec<String>,
         ) -> io::Result<()> {
             loop {
                 match reader.next_line().await? {
                     Some(line) => {
-                        debug!("{line}");
+                        let _ = writeln!(printer, "{line}");
                         buffer.push(line);
                     }
                     None => return Ok(()),
@@ -1055,9 +1131,10 @@ impl PythonRunner {
         let stderr_reader = tokio::io::BufReader::new(child.stderr.take().unwrap()).lines();
 
         // Asynchronously read from the in-memory pipes.
+        let printer = Printer::from(self.level);
         let result = tokio::join!(
-            read_from(stdout_reader, &mut stdout_buf),
-            read_from(stderr_reader, &mut stderr_buf),
+            read_from(stdout_reader, printer, &mut stdout_buf),
+            read_from(stderr_reader, printer, &mut stderr_buf),
         );
         match result {
             (Ok(()), Ok(())) => {}
@@ -1087,9 +1164,9 @@ impl PythonRunner {
 mod test {
     use std::process::ExitStatus;
 
-    use indoc::indoc;
-
     use crate::{Error, PythonRunnerOutput};
+    use indoc::indoc;
+    use uv_configuration::BuildOutput;
 
     #[test]
     fn missing_header() {
@@ -1120,9 +1197,10 @@ mod test {
         let err = Error::from_command_output(
             "Failed building wheel through setup.py".to_string(),
             &output,
+            BuildOutput::Debug,
             "pygraphviz-1.11",
         );
-        assert!(matches!(err, Error::MissingHeader { .. }));
+        assert!(matches!(err, Error::MissingHeaderOutput { .. }));
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
         insta::assert_snapshot!(formatted, @r###"
@@ -1172,9 +1250,10 @@ mod test {
         let err = Error::from_command_output(
             "Failed building wheel through setup.py".to_string(),
             &output,
+            BuildOutput::Debug,
             "pygraphviz-1.11",
         );
-        assert!(matches!(err, Error::MissingHeader { .. }));
+        assert!(matches!(err, Error::MissingHeaderOutput { .. }));
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
         insta::assert_snapshot!(formatted, @r###"
@@ -1217,9 +1296,10 @@ mod test {
         let err = Error::from_command_output(
             "Failed building wheel through setup.py".to_string(),
             &output,
+            BuildOutput::Debug,
             "pygraphviz-1.11",
         );
-        assert!(matches!(err, Error::MissingHeader { .. }));
+        assert!(matches!(err, Error::MissingHeaderOutput { .. }));
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
         insta::assert_snapshot!(formatted, @r###"

@@ -25,6 +25,14 @@ impl Display for BuildKind {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum BuildOutput {
+    /// Send the build backend output to `stderr`.
+    Stderr,
+    /// Send the build backend output to `tracing`.
+    Debug,
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct BuildOptions {

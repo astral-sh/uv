@@ -27,7 +27,7 @@ use uv_cache::{
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::BuildKind;
+use uv_configuration::{BuildKind, BuildOutput};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
 use uv_types::{BuildContext, SourceBuildTrait};
@@ -1436,6 +1436,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 } else {
                     BuildKind::Wheel
                 },
+                BuildOutput::Debug,
             )
             .await
             .map_err(Error::Build)?
@@ -1477,6 +1478,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 } else {
                     BuildKind::Wheel
                 },
+                BuildOutput::Debug,
             )
             .await
             .map_err(Error::Build)?;
