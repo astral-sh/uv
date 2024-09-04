@@ -488,6 +488,25 @@ pub(crate) async fn add(
         .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
         .ok_or(ProjectError::TomlUpdate)?;
 
+    // Set the Ctrl-C handler to revert changes on exit.
+    let _ = ctrlc::set_handler({
+        let root = root.clone();
+        let existing = existing.clone();
+        move || {
+            // Revert the changes to the `pyproject.toml`, if necessary.
+            if modified {
+                let _ = fs_err::write(root.join("pyproject.toml"), &existing);
+            }
+
+            #[allow(clippy::exit, clippy::cast_possible_wrap)]
+            std::process::exit(if cfg!(windows) {
+                0xC000_013A_u32 as i32
+            } else {
+                130
+            });
+        }
+    });
+
     match lock_and_sync(
         project,
         &mut toml,
@@ -518,7 +537,7 @@ pub(crate) async fn add(
 
             // Revert the changes to the `pyproject.toml`, if necessary.
             if modified {
-                fs_err::write(root.join("pyproject.toml"), existing)?;
+                fs_err::write(root.join("pyproject.toml"), &existing)?;
             }
 
             Ok(ExitStatus::Failure)
@@ -526,7 +545,7 @@ pub(crate) async fn add(
         Err(err) => {
             // Revert the changes to the `pyproject.toml`, if necessary.
             if modified {
-                fs_err::write(root.join("pyproject.toml"), existing)?;
+                fs_err::write(root.join("pyproject.toml"), &existing)?;
             }
             Err(err.into())
         }

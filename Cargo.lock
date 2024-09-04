@@ -4463,6 +4463,7 @@ dependencies = [
  "byteorder",
  "cache-key",
  "clap",
+ "ctrlc",
  "distribution-types",
  "etcetera",
  "filetime",
