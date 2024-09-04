@@ -76,7 +76,7 @@ It is considered best practice to pin to a specific uv version, e.g., with:
 
           - name: Set up uv
             # Install a specific uv version using the installer
-            run: curl -LsSf https://astral.sh/uv/0.4.3/install.sh | sh
+            run: curl -LsSf https://astral.sh/uv/0.4.4/install.sh | sh
     ```
 
 === "macOS"
@@ -94,7 +94,7 @@ It is considered best practice to pin to a specific uv version, e.g., with:
 
           - name: Set up uv
             # Install a specific uv version using the installer
-            run: curl -LsSf https://astral.sh/uv/0.4.3/install.sh | sh
+            run: curl -LsSf https://astral.sh/uv/0.4.4/install.sh | sh
     ```
 
 === "Windows"
@@ -112,7 +112,7 @@ It is considered best practice to pin to a specific uv version, e.g., with:
 
           - name: Set up uv
             # Install a specific uv version using the installer
-            run: irm https://astral.sh/uv/0.4.3/install.ps1 | iex
+            run: irm https://astral.sh/uv/0.4.4/install.ps1 | iex
             shell: powershell
     ```
 

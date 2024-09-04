@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.4.4
+
+### Enhancements
+
+- Allow customizing the project environment path with `UV_PROJECT_ENVIRONMENT` ([#6834](https://github.com/astral-sh/uv/pull/6834))
+- Warn when `VIRTUAL_ENV` is set but will not be respected in project commands ([#6864](https://github.com/astral-sh/uv/pull/6864))
+- Add `--no-hashes` to `uv export` ([#6954](https://github.com/astral-sh/uv/pull/6954))
+- Make HTTP headers title case for backward compatibility ([#6887](https://github.com/astral-sh/uv/pull/6887))
+- Pin `.python-version` in `uv init` ([#6869](https://github.com/astral-sh/uv/pull/6869))
+- Support `file://` URLs for `UV_PYTHON_INSTALL_MIRROR` ([#6950](https://github.com/astral-sh/uv/pull/6950))
+- Introduce more docker tags for uv ([#6053](https://github.com/astral-sh/uv/pull/6053))
+
+### Bug fixes
+
+- Avoid canonicalizing the cache directory ([#6949](https://github.com/astral-sh/uv/pull/6949))
+- Show all PyPy versions in `uv python list --all-versions` ([#6917](https://github.com/astral-sh/uv/pull/6917))
+- Avoid incorrect `requires-python` marker simplifications ([#6268](https://github.com/astral-sh/uv/pull/6268))
+
+### Documentation
+
+- Add documentation for `UV_PROJECT_ENVIRONMENT` ([#6987](https://github.com/astral-sh/uv/pull/6987))
+- Add optional dependencies section to the lockfile document ([#6982](https://github.com/astral-sh/uv/pull/6982))
+- Document use of the `file://` scheme in Python installation mirrors ([#6984](https://github.com/astral-sh/uv/pull/6984))
+- Fix outdated references to the help menu documentation in the first steps page ([#6980](https://github.com/astral-sh/uv/pull/6980))
+- Show env option in CLI reference documentation ([#6863](https://github.com/astral-sh/uv/pull/6863))
+- Add bind mount example to `docker.md` ([#6921](https://github.com/astral-sh/uv/pull/6921))
+
 ## 0.4.3
 
 ### Enhancements
