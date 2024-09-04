@@ -10,7 +10,7 @@ use tracing::debug;
 
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
-use pypi_types::Requirement;
+use pypi_types::{Requirement, SupportedEnvironments};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -27,8 +27,8 @@ use uv_resolver::{
     ResolverMarkers, SatisfiesResult,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
-use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, SupportedEnvironments, Workspace};
+use uv_warnings::{warn_user, warn_user_once};
+use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
@@ -234,6 +234,7 @@ async fn do_lock(
         index_locations,
         index_strategy,
         keyring_provider,
+        allow_insecure_host,
         resolution,
         prerelease,
         config_setting,
@@ -247,7 +248,7 @@ async fn do_lock(
     } = settings;
 
     // Collect the requirements, etc.
-    let requirements = workspace.root_requirements().collect::<Vec<_>>();
+    let requirements = workspace.non_project_requirements().collect::<Vec<_>>();
     let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
     let constraints = workspace.constraints();
     let dev = vec![DEV_DEPENDENCIES.clone()];
@@ -261,7 +262,7 @@ async fn do_lock(
         // If this is a non-virtual project with a single member, we can omit it from the lockfile.
         // If any members are added or removed, it will inherently mismatch. If the member is
         // renamed, it will also mismatch.
-        if members.len() == 1 && !workspace.is_virtual() {
+        if members.len() == 1 && !workspace.is_non_project() {
             members.clear();
         }
 
@@ -312,23 +313,39 @@ async fn do_lock(
         if requires_python.is_unbounded() {
             let default =
                 RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-            warn_user!("The workspace `requires-python` value does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
+            warn_user_once!("The workspace `requires-python` value does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
         }
         requires_python
     } else {
         let default =
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-        if workspace.only_virtual() {
-            debug!("No `requires-python` in virtual-only workspace. Defaulting to `{default}`.");
-        } else {
-            warn_user!(
-                "No `requires-python` value found in the workspace. Defaulting to `{default}`."
-            );
-        }
+        warn_user_once!(
+            "No `requires-python` value found in the workspace. Defaulting to `{default}`."
+        );
         default
     };
 
-    let python_requirement = PythonRequirement::from_requires_python(interpreter, &requires_python);
+    // If any of the forks are incompatible with the Python requirement, error.
+    for environment in environments
+        .map(SupportedEnvironments::as_markers)
+        .into_iter()
+        .flatten()
+    {
+        if requires_python.to_marker_tree().is_disjoint(environment) {
+            return if let Some(contents) = environment.contents() {
+                Err(ProjectError::DisjointEnvironment(
+                    contents,
+                    requires_python.specifiers().clone(),
+                ))
+            } else {
+                Err(ProjectError::EmptyEnvironment)
+            };
+        }
+    }
+
+    // Determine the Python requirement.
+    let python_requirement =
+        PythonRequirement::from_requires_python(interpreter, requires_python.clone());
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -342,6 +359,7 @@ async fn do_lock(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
+        .allow_insecure_host(allow_insecure_host.to_vec())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -619,7 +637,7 @@ impl ValidatedLock {
         }
 
         // If the set of supported environments has changed, we have to perform a clean resolution.
-        if lock.supported_environments()
+        if lock.simplified_supported_environments()
             != environments
                 .map(SupportedEnvironments::as_markers)
                 .unwrap_or_default()
@@ -648,16 +666,14 @@ impl ValidatedLock {
         // If the Requires-Python bound in the lockfile is weaker or equivalent to the
         // Requires-Python bound in the workspace, we should have the necessary wheels to perform
         // a locked resolution.
-        if let Some(locked) = lock.requires_python() {
-            if locked.bound() != requires_python.bound() {
-                // On the other hand, if the bound in the lockfile is stricter, meaning the
-                // bound has since been weakened, we have to perform a clean resolution to ensure
-                // we fetch the necessary wheels.
-                debug!("Ignoring existing lockfile due to change in `requires-python`");
+        if lock.requires_python().range() != requires_python.range() {
+            // On the other hand, if the bound in the lockfile is stricter, meaning the
+            // bound has since been weakened, we have to perform a clean resolution to ensure
+            // we fetch the necessary wheels.
+            debug!("Ignoring existing lockfile due to change in `requires-python`");
 
-                // It's fine to prefer the existing versions, though.
-                return Ok(Self::Preferable(lock));
-            }
+            // It's fine to prefer the existing versions, though.
+            return Ok(Self::Preferable(lock));
         }
 
         // If the user provided at least one index URL (from the command line, or from a configuration
@@ -696,6 +712,18 @@ impl ValidatedLock {
                     "Ignoring existing lockfile due to mismatched members:\n  Expected: {:?}\n  Actual: {:?}",
                     expected, actual
                 );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedSources(name, expected) => {
+                if expected {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `virtual`)"
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                    );
+                }
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedRequirements(expected, actual) => {

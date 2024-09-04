@@ -94,7 +94,7 @@ impl PythonVersionFile {
 
     /// Create a new representation of a version file at the given path.
     ///
-    /// The file will not any versions; see [`PythonVersionFile::with_versions`].
+    /// The file will not any include versions; see [`PythonVersionFile::with_versions`].
     /// The file will not be created; see [`PythonVersionFile::write`].
     pub fn new(path: PathBuf) -> Self {
         Self {

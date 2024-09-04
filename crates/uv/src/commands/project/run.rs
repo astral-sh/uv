@@ -11,11 +11,10 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
-
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, ExtrasSpecification};
+use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions};
 use uv_distribution::LoweredRequirement;
 use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -26,8 +25,8 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_scripts::Pep723Script;
-use uv_warnings::warn_user_once;
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
+use uv_warnings::warn_user;
+use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
@@ -35,7 +34,7 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
-use crate::commands::project::{ProjectError, WorkspacePython};
+use crate::commands::project::{validate_requires_python, ProjectError, WorkspacePython};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -112,11 +111,15 @@ pub(crate) async fn run(
             .and_then(PythonVersionFile::into_version)
         {
             Some(request)
-            // (3) `Requires-Python` in `pyproject.toml`
+            // (3) `Requires-Python` in the script
         } else {
-            script.metadata.requires_python.map(|requires_python| {
-                PythonRequest::Version(VersionRequest::Range(requires_python))
-            })
+            script
+                .metadata
+                .requires_python
+                .as_ref()
+                .map(|requires_python| {
+                    PythonRequest::Version(VersionRequest::Range(requires_python.clone()))
+                })
         };
 
         let client_builder = BaseClientBuilder::new()
@@ -124,7 +127,7 @@ pub(crate) async fn run(
             .native_tls(native_tls);
 
         let interpreter = PythonInstallation::find_or_download(
-            python_request,
+            python_request.as_ref(),
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,
@@ -134,6 +137,16 @@ pub(crate) async fn run(
         )
         .await?
         .into_interpreter();
+
+        if let Some(requires_python) = script.metadata.requires_python.as_ref() {
+            if !requires_python.contains(interpreter.python_version()) {
+                warn_user!(
+                    "Python {} does not satisfy the script's `requires-python` specifier: `{}`",
+                    interpreter.python_version(),
+                    requires_python
+                );
+            }
+        }
 
         // Install the script requirements, if necessary. Otherwise, use an isolated environment.
         if let Some(dependencies) = script.metadata.dependencies {
@@ -225,28 +238,28 @@ pub(crate) async fn run(
             );
         }
         if !extras.is_empty() {
-            warn_user_once!("Extras are not supported for Python scripts with inline metadata");
+            warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
         if !dev {
-            warn_user_once!("`--no-dev` is not supported for Python scripts with inline metadata");
+            warn_user!("`--no-dev` is not supported for Python scripts with inline metadata");
         }
         if package.is_some() {
-            warn_user_once!(
+            warn_user!(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if locked {
-            warn_user_once!(
+            warn_user!(
                 "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if frozen {
-            warn_user_once!(
+            warn_user!(
                 "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if isolated {
-            warn_user_once!(
+            warn_user!(
                 "`--isolated` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
@@ -294,30 +307,30 @@ pub(crate) async fn run(
         if no_project {
             // If the user ran with `--no-project` and provided a project-only setting, warn.
             if !extras.is_empty() {
-                warn_user_once!("Extras have no effect when used alongside `--no-project`");
+                warn_user!("Extras have no effect when used alongside `--no-project`");
             }
             if !dev {
-                warn_user_once!("`--no-dev` has no effect when used alongside `--no-project`");
+                warn_user!("`--no-dev` has no effect when used alongside `--no-project`");
             }
             if locked {
-                warn_user_once!("`--locked` has no effect when used alongside `--no-project`");
+                warn_user!("`--locked` has no effect when used alongside `--no-project`");
             }
             if frozen {
-                warn_user_once!("`--frozen` has no effect when used alongside `--no-project`");
+                warn_user!("`--frozen` has no effect when used alongside `--no-project`");
             }
         } else if project.is_none() {
             // If we can't find a project and the user provided a project-only setting, warn.
             if !extras.is_empty() {
-                warn_user_once!("Extras have no effect when used outside of a project");
+                warn_user!("Extras have no effect when used outside of a project");
             }
             if !dev {
-                warn_user_once!("`--no-dev` has no effect when used outside of a project");
+                warn_user!("`--no-dev` has no effect when used outside of a project");
             }
             if locked {
-                warn_user_once!("`--locked` has no effect when used outside of a project");
+                warn_user!("`--locked` has no effect when used outside of a project");
             }
             if frozen {
-                warn_user_once!("`--frozen` has no effect when used outside of a project");
+                warn_user!("`--frozen` has no effect when used outside of a project");
             }
         }
 
@@ -339,30 +352,35 @@ pub(crate) async fn run(
 
                 // If we're isolating the environment, use an ephemeral virtual environment as the
                 // base environment for the project.
-                let interpreter = {
-                    let client_builder = BaseClientBuilder::new()
-                        .connectivity(connectivity)
-                        .native_tls(native_tls);
+                let client_builder = BaseClientBuilder::new()
+                    .connectivity(connectivity)
+                    .native_tls(native_tls);
 
-                    // Resolve the Python request and requirement for the workspace.
-                    let WorkspacePython { python_request, .. } = WorkspacePython::from_request(
-                        python.as_deref().map(PythonRequest::parse),
-                        project.workspace(),
-                    )
-                    .await?;
+                // Resolve the Python request and requirement for the workspace.
+                let WorkspacePython {
+                    python_request,
+                    requires_python,
+                } = WorkspacePython::from_request(
+                    python.as_deref().map(PythonRequest::parse),
+                    project.workspace(),
+                )
+                .await?;
 
-                    PythonInstallation::find_or_download(
-                        python_request,
-                        EnvironmentPreference::Any,
-                        python_preference,
-                        python_downloads,
-                        &client_builder,
-                        cache,
-                        Some(&download_reporter),
-                    )
-                    .await?
-                    .into_interpreter()
-                };
+                let interpreter = PythonInstallation::find_or_download(
+                    python_request.as_ref(),
+                    EnvironmentPreference::Any,
+                    python_preference,
+                    python_downloads,
+                    &client_builder,
+                    cache,
+                    Some(&download_reporter),
+                )
+                .await?
+                .into_interpreter();
+
+                if let Some(requires_python) = requires_python.as_ref() {
+                    validate_requires_python(&interpreter, project.workspace(), requires_python)?;
+                }
 
                 // Create a virtual environment
                 temp_dir = cache.environment()?;
@@ -414,25 +432,21 @@ pub(crate) async fn run(
                     uv_resolver::ResolveError::NoSolution(err),
                 ))) => {
                     let report = miette::Report::msg(format!("{err}")).context(err.header());
-                    anstream::eprint!("{report:?}");
+                    eprint!("{report:?}");
                     return Ok(ExitStatus::Failure);
                 }
                 Err(err) => return Err(err.into()),
             };
 
-            let no_install_root = false;
-            let no_install_workspace = false;
-            let no_install_package = vec![];
+            let install_options = InstallOptions::default();
 
             project::sync::do_sync(
-                &project,
+                InstallTarget::from(&project),
                 &venv,
                 result.lock(),
                 &extras,
                 dev,
-                no_install_root,
-                no_install_workspace,
-                no_install_package,
+                install_options,
                 Modifications::Sufficient,
                 settings.as_ref().into(),
                 &state,
@@ -469,7 +483,7 @@ pub(crate) async fn run(
                 };
 
                 let python = PythonInstallation::find_or_download(
-                    python_request,
+                    python_request.as_ref(),
                     // No opt-in is required for system environments, since we are not mutating it.
                     EnvironmentPreference::Any,
                     python_preference,
@@ -692,7 +706,11 @@ fn can_skip_ephemeral(
         return false;
     }
 
-    match site_packages.satisfies(&spec.requirements, &spec.constraints) {
+    match site_packages.satisfies(
+        &spec.requirements,
+        &spec.constraints,
+        &base_interpreter.resolver_markers(),
+    ) {
         // If the requirements are already satisfied, we're done.
         Ok(SatisfiesResult::Fresh {
             recursive_requirements,
@@ -871,7 +889,7 @@ impl TryFrom<&ExternalCommand> for RunCommand {
             Ok(Self::Python(args.to_vec()))
         } else if target_path
             .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyc"))
             && target_path.exists()
         {
             Ok(Self::PythonScript(target_path, args.to_vec()))

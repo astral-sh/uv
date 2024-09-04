@@ -1,22 +1,12 @@
-use std::process::Command;
-
 use anyhow::Result;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 
 use common::uv_snapshot;
 
-use crate::common::{get_bin, TestContext};
+use crate::common::TestContext;
 
 mod common;
-
-/// Create a `pip check` command with options shared across scenarios.
-fn check_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command.arg("pip").arg("check");
-    context.add_shared_args(&mut command);
-    command
-}
 
 #[test]
 fn check_compatible_packages() -> Result<()> {
@@ -46,7 +36,7 @@ fn check_compatible_packages() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(check_command(&context), @r###"
+    uv_snapshot!(context.pip_check(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -109,11 +99,11 @@ fn check_incompatible_packages() -> Result<()> {
     Installed 1 package in [TIME]
      - idna==3.6
      + idna==2.4
-    warning: The package `requests` requires `idna<4,>=2.5`, but `2.4` is installed
+    warning: The package `requests` requires `idna>=2.5,<4`, but `2.4` is installed
     "###
     );
 
-    uv_snapshot!(check_command(&context), @r###"
+    uv_snapshot!(context.pip_check(), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -121,7 +111,7 @@ fn check_incompatible_packages() -> Result<()> {
     ----- stderr -----
     Checked 5 packages in [TIME]
     Found 1 incompatibility
-    The package `requests` requires `idna<4,>=2.5`, but `2.4` is installed
+    The package `requests` requires `idna>=2.5,<4`, but `2.4` is installed
     "###
     );
 
@@ -180,12 +170,12 @@ fn check_multiple_incompatible_packages() -> Result<()> {
      + idna==2.4
      - urllib3==2.2.1
      + urllib3==1.20
-    warning: The package `requests` requires `idna<4,>=2.5`, but `2.4` is installed
-    warning: The package `requests` requires `urllib3<3,>=1.21.1`, but `1.20` is installed
+    warning: The package `requests` requires `idna>=2.5,<4`, but `2.4` is installed
+    warning: The package `requests` requires `urllib3>=1.21.1,<3`, but `1.20` is installed
     "###
     );
 
-    uv_snapshot!(check_command(&context), @r###"
+    uv_snapshot!(context.pip_check(), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -193,8 +183,8 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     ----- stderr -----
     Checked 5 packages in [TIME]
     Found 2 incompatibilities
-    The package `requests` requires `idna<4,>=2.5`, but `2.4` is installed
-    The package `requests` requires `urllib3<3,>=1.21.1`, but `1.20` is installed
+    The package `requests` requires `idna>=2.5,<4`, but `2.4` is installed
+    The package `requests` requires `urllib3>=1.21.1,<3`, but `1.20` is installed
     "###
     );
 

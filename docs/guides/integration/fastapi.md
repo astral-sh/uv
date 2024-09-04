@@ -8,49 +8,65 @@ environments, running FastAPI applications, and more.
 
     You can view the source code for this guide in the [uv-fastapi-example](https://github.com/astral-sh/uv-fastapi-example) repository.
 
+## Migrating an existing FastAPI project
+
 As an example, consider the sample application defined in the
 [FastAPI documentation](https://fastapi.tiangolo.com/tutorial/bigger-applications/), structured as
 follows:
 
 ```plaintext
-.
-├── app
-│   ├── __init__.py
-│   ├── main.py
-│   ├── dependencies.py
-│   └── routers
-│   │   ├── __init__.py
-│   │   ├── items.py
-│   │   └── users.py
-│   └── internal
-│       ├── __init__.py
-│       └── admin.py
+project
+└── app
+    ├── __init__.py
+    ├── main.py
+    ├── dependencies.py
+    ├── routers
+    │   ├── __init__.py
+    │   ├── items.py
+    │   └── users.py
+    └── internal
+        ├── __init__.py
+        └── admin.py
 ```
 
-To migrate this project to uv, add a `pyproject.toml` file to the root directory of the project, as
-a sibling to the `app` directory.
+To use uv with this application, inside the `project` directory run:
+
+```console
+$ uv init --app
+```
+
+This creates an [Application project](../../concepts/projects.md#applications) with a
+`pyproject.toml` file.
+
+Then, add a dependency on FastAPI:
+
+```console
+$ uv add fastapi --extra standard
+```
+
+You should now have the following structure:
 
 ```plaintext
-.
+project
 ├── pyproject.toml
-├── app
-│   ├── __init__.py
-│   ├── main.py
-│   ├── dependencies.py
-│   └── routers
-│   │   ├── __init__.py
-│   │   ├── items.py
-│   │   └── users.py
-│   └── internal
-│       ├── __init__.py
-│       └── admin.py
+└── app
+    ├── __init__.py
+    ├── main.py
+    ├── dependencies.py
+    ├── routers
+    │   ├── __init__.py
+    │   ├── items.py
+    │   └── users.py
+    └── internal
+        ├── __init__.py
+        └── admin.py
 ```
 
-The contents of the `pyproject.toml` file should look something like this:
+And the contents of the `pyproject.toml` file should look something like this:
 
 ```toml title="pyproject.toml"
 [project]
-name = "app"
+name = "uv-fastapi-example"
 version = "0.1.0"
 description = "FastAPI project"
 readme = "README.md"
@@ -58,59 +74,19 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]",
 ]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
 ```
 
 From there, you can run the FastAPI application with:
 
 ```console
-$ uv run fastapi dev app/main.py
+$ uv run fastapi dev
 ```
 
 `uv run` will automatically resolve and lock the project dependencies (i.e., create a `uv.lock`
 alongside the `pyproject.toml`), create a virtual environment, and run the command in that
 environment.
 
-## Initializing a FastAPI project
-
-We could reach a similar result to the above by creating a project from scratch with `uv init` and
-installing FastAPI with `uv add fastapi`, as in:
-
-```console
-$ uv init app
-$ cd app
-$ uv add fastapi --extra standard
-```
-
-By default, uv uses a `src` layout for newly-created projects, so the `app` directory will be nested
-within a `src` directory. If you copied over the source code from the FastAPI tutorial, the project
-structure would look like this:
-
-```plaintext
-.
-├── pyproject.toml
-└── src
-    └── app
-        ├── __init__.py
-        ├── main.py
-        ├── dependencies.py
-        └── routers
-        │   ├── __init__.py
-        │   ├── items.py
-        │   └── users.py
-        └── internal
-            ├── __init__.py
-            └── admin.py
-```
-
-In this case, you would run the FastAPI application with:
-
-```console
-$ uv run fastapi dev src/app/main.py
-```
+Test the app by opening http://127.0.0.1:8000/?token=jessica in a web browser.
 
 ## Deployment
 
@@ -130,7 +106,24 @@ WORKDIR /app
 RUN uv sync --frozen --no-cache
 
 # Run the application.
-CMD ["/app/.venv/bin/fastapi", "run", "app/main.py", "--port", "80"]
+CMD ["/app/.venv/bin/fastapi", "run", "app/main.py", "--port", "80", "--host", "0.0.0.0"]
 ```
 
-For more on using uv with Docker, see the [Docker guide](./docker.md).
+Build the Docker image with:
+
+```console
+$ docker build -t fastapi-app .
+```
+
+Run the Docker container locally with:
+
+```console
+$ docker run -p 8000:80 fastapi-app
+```
+
+Navigate to http://127.0.0.1:8000/?token=jessica in your browser to verify that the app is running
+correctly.
+
+!!! tip
+
+    For more on using uv with Docker, see the [Docker guide](./docker.md).

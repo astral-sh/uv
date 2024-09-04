@@ -13,16 +13,17 @@ use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{ExitStatus, Output};
+use std::process::ExitStatus;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::{env, iter};
 use tempfile::{tempdir_in, TempDir};
 use thiserror::Error;
+use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{debug, info_span, instrument, Instrument};
+use tracing::{debug, error, info_span, instrument, Instrument};
 
 use distribution_types::Resolution;
 use pep440_rs::Version;
@@ -79,8 +80,8 @@ static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Invalid source distribution: {0}")]
-    InvalidSourceDist(String),
+    #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` is present in the directory", _0.simplified_display())]
+    InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectToml(#[from] toml::de::Error),
     #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
@@ -89,7 +90,7 @@ pub enum Error {
     RequirementsInstall(&'static str, #[source] anyhow::Error),
     #[error("Failed to create temporary virtualenv")]
     Virtualenv(#[from] uv_virtualenv::Error),
-    #[error("Failed to run {0}")]
+    #[error("Failed to run `{0}`")]
     CommandFailed(PathBuf, #[source] io::Error),
     #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     BuildBackend {
@@ -159,14 +160,11 @@ impl Display for MissingHeaderCause {
 impl Error {
     fn from_command_output(
         message: String,
-        output: &Output,
+        output: &PythonRunnerOutput,
         version_id: impl Into<String>,
     ) -> Self {
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-
-        // In the cases i've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff
-        let missing_library = stderr.lines().rev().take(10).find_map(|line| {
+        // In the cases I've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff.
+        let missing_library = output.stderr.iter().rev().take(10).find_map(|line| {
             if let Some((_, [header])) = MISSING_HEADER_RE_GCC
                 .captures(line.trim())
                 .or(MISSING_HEADER_RE_CLANG.captures(line.trim()))
@@ -191,8 +189,8 @@ impl Error {
             return Self::MissingHeader {
                 message,
                 exit_code: output.status,
-                stdout,
-                stderr,
+                stdout: output.stdout.iter().join("\n"),
+                stderr: output.stderr.iter().join("\n"),
                 missing_header_cause: MissingHeaderCause {
                     missing_library,
                     version_id: version_id.into(),
@@ -203,8 +201,8 @@ impl Error {
         Self::BuildBackend {
             message,
             exit_code: output.status,
-            stdout,
-            stderr,
+            stdout: output.stdout.iter().join("\n"),
+            stderr: output.stderr.iter().join("\n"),
         }
     }
 }
@@ -353,7 +351,7 @@ pub struct SourceBuildContext {
     default_resolution: Rc<Mutex<Option<Resolution>>>,
 }
 
-/// Holds the state through a series of PEP 517 frontend to backend calls or a single setup.py
+/// Holds the state through a series of PEP 517 frontend to backend calls or a single `setup.py`
 /// invocation.
 ///
 /// This keeps both the temp dir and the result of a potential `prepare_metadata_for_build_wheel`
@@ -398,6 +396,7 @@ impl SourceBuild {
     pub async fn setup(
         source: &Path,
         subdirectory: Option<&Path>,
+        fallback_package_name: Option<&PackageName>,
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
@@ -422,10 +421,10 @@ impl SourceBuild {
         let (pep517_backend, project) =
             Self::extract_pep517_backend(&source_tree, &default_backend).map_err(|err| *err)?;
 
-        let package_name = project.clone().map(|p| p.name);
+        let package_name = project.as_ref().map(|p| &p.name).or(fallback_package_name);
 
         // Create a virtual environment, or install into the shared environment if requested.
-        let venv = if let Some(venv) = build_isolation.shared_environment(package_name.as_ref()) {
+        let venv = if let Some(venv) = build_isolation.shared_environment(package_name) {
             venv.clone()
         } else {
             uv_virtualenv::create_venv(
@@ -440,7 +439,7 @@ impl SourceBuild {
 
         // Setup the build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
-        if build_isolation.is_isolated(package_name.as_ref()) {
+        if build_isolation.is_isolated(package_name) {
             let resolved_requirements = Self::get_resolved_requirements(
                 build_context,
                 source_build_context,
@@ -453,7 +452,7 @@ impl SourceBuild {
                 .install(&resolved_requirements, &venv)
                 .await
                 .map_err(|err| {
-                    Error::RequirementsInstall("build-system.requires (install)", err)
+                    Error::RequirementsInstall("`build-system.requires` (install)", err)
                 })?;
         }
 
@@ -490,7 +489,7 @@ impl SourceBuild {
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
         let runner = PythonRunner::new(concurrent_builds);
-        if build_isolation.is_isolated(package_name.as_ref()) {
+        if build_isolation.is_isolated(package_name) {
             create_pep517_build_environment(
                 &runner,
                 &source_tree,
@@ -539,7 +538,7 @@ impl SourceBuild {
                         .resolve(&default_backend.requirements)
                         .await
                         .map_err(|err| {
-                            Error::RequirementsInstall("setup.py build (resolve)", err)
+                            Error::RequirementsInstall("`setup.py` build (resolve)", err)
                         })?;
                     *resolution = Some(resolved_requirements.clone());
                     resolved_requirements
@@ -549,7 +548,7 @@ impl SourceBuild {
                     .resolve(&pep517_backend.requirements)
                     .await
                     .map_err(|err| {
-                        Error::RequirementsInstall("build-system.requires (resolve)", err)
+                        Error::RequirementsInstall("`build-system.requires` (resolve)", err)
                     })?
             },
         )
@@ -594,8 +593,7 @@ impl SourceBuild {
                 // We require either a `pyproject.toml` or a `setup.py` file at the top level.
                 if !source_tree.join("setup.py").is_file() {
                     return Err(Box::new(Error::InvalidSourceDist(
-                        "The archive contains neither a `pyproject.toml` nor a `setup.py` file at the top level"
-                            .to_string(),
+                        source_tree.to_path_buf(),
                     )));
                 }
 
@@ -682,8 +680,8 @@ impl SourceBuild {
         };
         let span = info_span!(
             "run_python_script",
-            script=format!("prepare_metadata_for_build_{}", self.build_kind),
-            python_version = %self.venv.interpreter().python_version()
+            script = format!("prepare_metadata_for_build_{}", self.build_kind),
+            version_id = self.version_id,
         );
         let output = self
             .runner
@@ -712,19 +710,19 @@ impl SourceBuild {
         Ok(self.metadata_directory.clone())
     }
 
-    /// Build a source distribution from an archive (`.zip` or `.tar.gz`), return the location of the
-    /// built wheel.
+    /// Build a distribution from an archive (`.zip` or `.tar.gz`) or source tree, and return the
+    /// location of the built distribution.
     ///
-    /// The location will be inside `temp_dir`, i.e. you must use the wheel before dropping the temp
-    /// dir.
+    /// The location will be inside `temp_dir`, i.e., you must use the distribution before dropping
+    /// the temporary directory.
     ///
     /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
     #[instrument(skip_all, fields(version_id = self.version_id))]
-    pub async fn build_wheel(&self, wheel_dir: &Path) -> Result<String, Error> {
+    pub async fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
-        let wheel_dir = fs::canonicalize(wheel_dir)?;
+        let wheel_dir = std::path::absolute(wheel_dir)?;
 
-        // Prevent clashes from two uv processes building wheels in parallel.
+        // Prevent clashes from two uv processes building distributions in parallel.
         let tmp_dir = tempdir_in(&wheel_dir)?;
         let filename = self
             .pep517_build(tmp_dir.path(), &self.pep517_backend)
@@ -736,51 +734,80 @@ impl SourceBuild {
         Ok(filename)
     }
 
+    /// Perform a PEP 517 build for a wheel or source distribution (sdist).
     async fn pep517_build(
         &self,
-        wheel_dir: &Path,
+        output_dir: &Path,
         pep517_backend: &Pep517Backend,
     ) -> Result<String, Error> {
-        let metadata_directory = self
-            .metadata_directory
-            .as_deref()
-            .map_or("None".to_string(), |path| {
-                format!(r#""{}""#, path.escape_for_python())
-            });
-
         // Write the hook output to a file so that we can read it back reliably.
         let outfile = self
             .temp_dir
             .path()
             .join(format!("build_{}.txt", self.build_kind));
 
-        debug!(
-            r#"Calling `{}.build_{}("{}", {}, {})`"#,
-            pep517_backend.backend,
-            self.build_kind,
-            wheel_dir.escape_for_python(),
-            self.config_settings.escape_for_python(),
-            metadata_directory,
-        );
-        let script = formatdoc! {
-            r#"
-            {}
+        // Construct the appropriate build script based on the build kind.
+        let script = match self.build_kind {
+            BuildKind::Sdist => {
+                debug!(
+                    r#"Calling `{}.build_{}("{}", {})`"#,
+                    pep517_backend.backend,
+                    self.build_kind,
+                    output_dir.escape_for_python(),
+                    self.config_settings.escape_for_python(),
+                );
+                formatdoc! {
+                    r#"
+                    {}
 
-            wheel_filename = backend.build_{}("{}", {}, {})
-            with open("{}", "w") as fp:
-                fp.write(wheel_filename)
-            "#,
-            pep517_backend.backend_import(),
-            self.build_kind,
-            wheel_dir.escape_for_python(),
-            self.config_settings.escape_for_python(),
-            metadata_directory,
-            outfile.escape_for_python()
+                    sdist_filename = backend.build_{}("{}", {})
+                    with open("{}", "w") as fp:
+                        fp.write(sdist_filename)
+                    "#,
+                    pep517_backend.backend_import(),
+                    self.build_kind,
+                    output_dir.escape_for_python(),
+                    self.config_settings.escape_for_python(),
+                    outfile.escape_for_python()
+                }
+            }
+            BuildKind::Wheel | BuildKind::Editable => {
+                let metadata_directory = self
+                    .metadata_directory
+                    .as_deref()
+                    .map_or("None".to_string(), |path| {
+                        format!(r#""{}""#, path.escape_for_python())
+                    });
+                debug!(
+                    r#"Calling `{}.build_{}("{}", {}, {})`"#,
+                    pep517_backend.backend,
+                    self.build_kind,
+                    output_dir.escape_for_python(),
+                    self.config_settings.escape_for_python(),
+                    metadata_directory,
+                );
+                formatdoc! {
+                    r#"
+                    {}
+
+                    wheel_filename = backend.build_{}("{}", {}, {})
+                    with open("{}", "w") as fp:
+                        fp.write(wheel_filename)
+                    "#,
+                    pep517_backend.backend_import(),
+                    self.build_kind,
+                    output_dir.escape_for_python(),
+                    self.config_settings.escape_for_python(),
+                    metadata_directory,
+                    outfile.escape_for_python()
+                }
+            }
         };
+
         let span = info_span!(
             "run_python_script",
-            script=format!("build_{}", self.build_kind),
-            python_version = %self.venv.interpreter().python_version()
+            script = format!("build_{}", self.build_kind),
+            version_id = self.version_id,
         );
         let output = self
             .runner
@@ -796,8 +823,8 @@ impl SourceBuild {
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to build wheel through `build_{}()`",
-                    self.build_kind
+                    "Build backend failed to build {} through `build_{}()`",
+                    self.build_kind, self.build_kind,
                 ),
                 &output,
                 &self.version_id,
@@ -805,11 +832,11 @@ impl SourceBuild {
         }
 
         let distribution_filename = fs::read_to_string(&outfile)?;
-        if !wheel_dir.join(&distribution_filename).is_file() {
+        if !output_dir.join(&distribution_filename).is_file() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to produce wheel through `build_{}()`: `{distribution_filename}` not found",
-                    self.build_kind
+                    "Build backend failed to produce {} through `build_{}()`: `{distribution_filename}` not found",
+                    self.build_kind, self.build_kind,
                 ),
                 &output,
                 &self.version_id,
@@ -825,7 +852,7 @@ impl SourceBuildTrait for SourceBuild {
     }
 
     async fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> anyhow::Result<String> {
-        Ok(self.build_wheel(wheel_dir).await?)
+        Ok(self.build(wheel_dir).await?)
     }
 }
 
@@ -880,8 +907,8 @@ async fn create_pep517_build_environment(
     };
     let span = info_span!(
         "run_python_script",
-        script=format!("get_requires_for_build_{}", build_kind),
-        python_version = %venv.interpreter().python_version()
+        script = format!("get_requires_for_build_{}", build_kind),
+        version_id = version_id,
     );
     let output = runner
         .run_script(
@@ -942,12 +969,12 @@ async fn create_pep517_build_environment(
         let resolution = build_context
             .resolve(&requirements)
             .await
-            .map_err(|err| Error::RequirementsInstall("build-system.requires (resolve)", err))?;
+            .map_err(|err| Error::RequirementsInstall("`build-system.requires` (resolve)", err))?;
 
         build_context
             .install(&resolution, venv)
             .await
-            .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
+            .map_err(|err| Error::RequirementsInstall("`build-system.requires` (install)", err))?;
     }
 
     Ok(())
@@ -955,8 +982,16 @@ async fn create_pep517_build_environment(
 
 /// A runner that manages the execution of external python processes with a
 /// concurrency limit.
+#[derive(Debug)]
 struct PythonRunner {
     control: Semaphore,
+}
+
+#[derive(Debug)]
+struct PythonRunnerOutput {
+    stdout: Vec<String>,
+    stderr: Vec<String>,
+    status: ExitStatus,
 }
 
 impl PythonRunner {
@@ -980,36 +1015,85 @@ impl PythonRunner {
         source_tree: &Path,
         environment_variables: &FxHashMap<OsString, OsString>,
         modified_path: &OsString,
-    ) -> Result<Output, Error> {
+    ) -> Result<PythonRunnerOutput, Error> {
+        /// Read lines from a reader and store them in a buffer.
+        async fn read_from(
+            mut reader: tokio::io::Lines<tokio::io::BufReader<impl tokio::io::AsyncRead + Unpin>>,
+            buffer: &mut Vec<String>,
+        ) -> io::Result<()> {
+            loop {
+                match reader.next_line().await? {
+                    Some(line) => {
+                        debug!("{line}");
+                        buffer.push(line);
+                    }
+                    None => return Ok(()),
+                }
+            }
+        }
+
         let _permit = self.control.acquire().await.unwrap();
 
-        Command::new(venv.python_executable())
+        let mut child = Command::new(venv.python_executable())
             .args(["-c", script])
             .current_dir(source_tree.simplified())
-            // Pass in remaining environment variables
             .envs(environment_variables)
-            // Set the modified PATH
             .env("PATH", modified_path)
-            // Activate the venv
             .env("VIRTUAL_ENV", venv.root())
             .env("CLICOLOR_FORCE", "1")
-            .output()
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))?;
+
+        // Create buffers to capture `stdout` and `stderr`.
+        let mut stdout_buf = Vec::with_capacity(1024);
+        let mut stderr_buf = Vec::with_capacity(1024);
+
+        // Create separate readers for `stdout` and `stderr`.
+        let stdout_reader = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
+        let stderr_reader = tokio::io::BufReader::new(child.stderr.take().unwrap()).lines();
+
+        // Asynchronously read from the in-memory pipes.
+        let result = tokio::join!(
+            read_from(stdout_reader, &mut stdout_buf),
+            read_from(stderr_reader, &mut stderr_buf),
+        );
+        match result {
+            (Ok(()), Ok(())) => {}
+            (Err(err), _) | (_, Err(err)) => {
+                return Err(Error::CommandFailed(
+                    venv.python_executable().to_path_buf(),
+                    err,
+                ))
+            }
+        }
+
+        // Wait for the child process to finish.
+        let status = child
+            .wait()
             .await
-            .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))
+            .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))?;
+
+        Ok(PythonRunnerOutput {
+            stdout: stdout_buf,
+            stderr: stderr_buf,
+            status,
+        })
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::process::{ExitStatus, Output};
+    use std::process::ExitStatus;
 
     use indoc::indoc;
 
-    use crate::Error;
+    use crate::{Error, PythonRunnerOutput};
 
     #[test]
     fn missing_header() {
-        let output = Output {
+        let output = PythonRunnerOutput {
             status: ExitStatus::default(), // This is wrong but `from_raw` is platform-gated.
             stdout: indoc!(r"
                 running bdist_wheel
@@ -1018,7 +1102,7 @@ mod test {
                 creating build/temp.linux-x86_64-cpython-39/pygraphviz
                 gcc -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -DOPENSSL_NO_SSL3 -fPIC -DSWIG_PYTHON_STRICT_BYTE_CHAR -I/tmp/.tmpy6vVes/.venv/include -I/home/konsti/.pyenv/versions/3.9.18/include/python3.9 -c pygraphviz/graphviz_wrap.c -o build/temp.linux-x86_64-cpython-39/pygraphviz/graphviz_wrap.o
                 "
-            ).as_bytes().to_vec(),
+            ).lines().map(ToString::to_string).collect(),
             stderr: indoc!(r#"
                 warning: no files found matching '*.png' under directory 'doc'
                 warning: no files found matching '*.txt' under directory 'doc'
@@ -1030,7 +1114,7 @@ mod test {
                 compilation terminated.
                 error: command '/usr/bin/gcc' failed with exit code 1
                 "#
-            ).as_bytes().to_vec(),
+            ).lines().map(ToString::to_string).collect(),
         };
 
         let err = Error::from_command_output(
@@ -1069,20 +1153,20 @@ mod test {
 
     #[test]
     fn missing_linker_library() {
-        let output = Output {
+        let output = PythonRunnerOutput {
             status: ExitStatus::default(), // This is wrong but `from_raw` is platform-gated.
             stdout: Vec::new(),
             stderr: indoc!(
                 r"
-                1099 |     n = strlen(p);
-                     |         ^~~~~~~~~
+               1099 |     n = strlen(p);
+                    |         ^~~~~~~~~
                /usr/bin/ld: cannot find -lncurses: No such file or directory
                collect2: error: ld returned 1 exit status
-               error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
-                "
+               error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1"
             )
-            .as_bytes()
-            .to_vec(),
+            .lines()
+            .map(ToString::to_string)
+            .collect(),
         };
 
         let err = Error::from_command_output(
@@ -1099,7 +1183,7 @@ mod test {
 
         --- stderr:
         1099 |     n = strlen(p);
-              |         ^~~~~~~~~
+             |         ^~~~~~~~~
         /usr/bin/ld: cannot find -lncurses: No such file or directory
         collect2: error: ld returned 1 exit status
         error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
@@ -1113,7 +1197,7 @@ mod test {
 
     #[test]
     fn missing_wheel_package() {
-        let output = Output {
+        let output = PythonRunnerOutput {
             status: ExitStatus::default(), // This is wrong but `from_raw` is platform-gated.
             stdout: Vec::new(),
             stderr: indoc!(
@@ -1123,11 +1207,11 @@ mod test {
                or: setup.py --help-commands
                or: setup.py cmd --help
 
-            error: invalid command 'bdist_wheel'
-                "
+            error: invalid command 'bdist_wheel'"
             )
-            .as_bytes()
-            .to_vec(),
+            .lines()
+            .map(ToString::to_string)
+            .collect(),
         };
 
         let err = Error::from_command_output(

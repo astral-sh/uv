@@ -7,8 +7,9 @@ use distribution_types::{
     DistributionMetadata, HashPolicy, Name, Resolution, UnresolvedRequirement, VersionId,
 };
 use pep440_rs::Version;
-use pep508_rs::MarkerEnvironment;
-use pypi_types::{HashDigest, HashError, Requirement, RequirementSource};
+use pypi_types::{
+    HashDigest, HashError, Hashes, Requirement, RequirementSource, ResolverMarkerEnvironment,
+};
 use uv_configuration::HashCheckingMode;
 use uv_normalize::PackageName;
 
@@ -125,7 +126,7 @@ impl HashStrategy {
     /// to "only evaluate marker expressions that reference an extra name.")
     pub fn from_requirements<'a>(
         requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
-        markers: Option<&MarkerEnvironment>,
+        marker_env: Option<&ResolverMarkerEnvironment>,
         mode: HashCheckingMode,
     ) -> Result<Self, HashStrategyError> {
         let mut hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
@@ -133,7 +134,9 @@ impl HashStrategy {
         // For each requirement, map from name to allowed hashes. We use the last entry for each
         // package.
         for (requirement, digests) in requirements {
-            if !requirement.evaluate_markers(markers, &[]) {
+            if !requirement
+                .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
+            {
                 continue;
             }
 
@@ -150,6 +153,21 @@ impl HashStrategy {
                 }
             };
 
+            let digests = if digests.is_empty() {
+                // If there are no hashes, and the distribution is URL-based, attempt to extract
+                // it from the fragment.
+                requirement
+                    .hashes()
+                    .map(Hashes::into_digests)
+                    .unwrap_or_default()
+            } else {
+                // Parse the hashes.
+                digests
+                    .iter()
+                    .map(|digest| HashDigest::from_str(digest))
+                    .collect::<Result<Vec<_>, _>>()?
+            };
+
             if digests.is_empty() {
                 // Under `--require-hashes`, every requirement must include a hash.
                 if mode.is_require() {
@@ -160,12 +178,6 @@ impl HashStrategy {
                 }
                 continue;
             }
-
-            // Parse the hashes.
-            let digests = digests
-                .iter()
-                .map(|digest| HashDigest::from_str(digest))
-                .collect::<Result<Vec<_>, _>>()?;
 
             hashes.insert(id, digests);
         }

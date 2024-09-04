@@ -222,6 +222,7 @@ impl std::fmt::Display for NoSolutionError {
 
         // Transform the error tree for reporting
         let mut tree = self.error.clone();
+        simplify_derivation_tree_markers(&self.python_requirement, &mut tree);
         let should_display_tree = std::env::var_os("UV_INTERNAL__SHOW_DERIVATION_TREE").is_some()
             || tracing::enabled!(tracing::Level::TRACE);
 
@@ -466,6 +467,52 @@ fn collapse_redundant_depends_on_no_versions_inner(
                     collapse_redundant_depends_on_no_versions(Arc::make_mut(&mut derived.cause2));
                 }
             }
+        }
+    }
+}
+
+/// Simplifies the markers on pubgrub packages in the given derivation tree
+/// according to the given Python requirement.
+///
+/// For example, when there's a dependency like `foo ; python_version >=
+/// '3.11'` and `requires-python = '>=3.11'`, this simplification will remove
+/// the `python_version >= '3.11'` marker since it's implied to be true by
+/// the `requires-python` setting. This simplifies error messages by reducing
+/// noise.
+fn simplify_derivation_tree_markers(
+    python_requirement: &PythonRequirement,
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) {
+    match tree {
+        DerivationTree::External(External::NotRoot(ref mut pkg, _)) => {
+            pkg.simplify_markers(python_requirement);
+        }
+        DerivationTree::External(External::NoVersions(ref mut pkg, _)) => {
+            pkg.simplify_markers(python_requirement);
+        }
+        DerivationTree::External(External::FromDependencyOf(ref mut pkg1, _, ref mut pkg2, _)) => {
+            pkg1.simplify_markers(python_requirement);
+            pkg2.simplify_markers(python_requirement);
+        }
+        DerivationTree::External(External::Custom(ref mut pkg, _, _)) => {
+            pkg.simplify_markers(python_requirement);
+        }
+        DerivationTree::Derived(derived) => {
+            derived.terms = std::mem::take(&mut derived.terms)
+                .into_iter()
+                .map(|(mut pkg, term)| {
+                    pkg.simplify_markers(python_requirement);
+                    (pkg, term)
+                })
+                .collect();
+            simplify_derivation_tree_markers(
+                python_requirement,
+                Arc::make_mut(&mut derived.cause1),
+            );
+            simplify_derivation_tree_markers(
+                python_requirement,
+                Arc::make_mut(&mut derived.cause2),
+            );
         }
     }
 }

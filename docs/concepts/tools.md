@@ -73,13 +73,13 @@ Once a tool is installed with `uv tool install`, `uvx` will use the installed ve
 
 For example, after installing an older version of Ruff:
 
-```
+```console
 $ uv tool install ruff==0.5.0
 ```
 
 The version of `ruff` and `uvx ruff` is the same:
 
-```
+```console
 $ ruff --version
 ruff 0.5.0
 $ uvx ruff --version
@@ -99,6 +99,14 @@ version:
 ```console
 $ uvx --isolated ruff --version
 0.6.2
+```
+
+`uv tool install` will also respect the `{package}@{version}` and `{package}@latest` specifiers, as
+in:
+
+```console
+$ uv tool install ruff@latest
+$ uv tool install ruff@0.6.0
 ```
 
 ### Tools directory
@@ -159,8 +167,8 @@ $ uv tool install black>=24
 ```
 
 Similarly, tool upgrades will retain the settings provided when installing the tool. For example,
-`uv tool install black --prelease allow` followed by `uv tool upgrade black` will retain the
-`--prelease allow` setting.
+`uv tool install black --prerelease allow` followed by `uv tool upgrade black` will retain the
+`--prerelease allow` setting.
 
 Tool upgrades will reinstall the tool executables, even if they have not changed.
 

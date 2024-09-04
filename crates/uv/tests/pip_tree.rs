@@ -1534,9 +1534,9 @@ fn show_version_specifiers_simple() {
     exit_code: 0
     ----- stdout -----
     requests v2.31.0
-    ├── charset-normalizer v3.3.2 [required: <4, >=2]
-    ├── idna v3.6 [required: <4, >=2.5]
-    ├── urllib3 v2.2.1 [required: <3, >=1.21.1]
+    ├── charset-normalizer v3.3.2 [required: >=2, <4]
+    ├── idna v3.6 [required: >=2.5, <4]
+    ├── urllib3 v2.2.1 [required: >=1.21.1, <3]
     └── certifi v2024.2.2 [required: >=2017.4.17]
 
     ----- stderr -----
@@ -1620,12 +1620,12 @@ fn show_version_specifiers_complex() {
         │   ├── docutils v0.20.1 [required: >=0.13.1]
         │   └── pygments v2.17.2 [required: >=2.5.1]
         ├── requests v2.31.0 [required: >=2.20]
-        │   ├── charset-normalizer v3.3.2 [required: <4, >=2]
-        │   ├── idna v3.6 [required: <4, >=2.5]
-        │   ├── urllib3 v2.2.1 [required: <3, >=1.21.1]
+        │   ├── charset-normalizer v3.3.2 [required: >=2, <4]
+        │   ├── idna v3.6 [required: >=2.5, <4]
+        │   ├── urllib3 v2.2.1 [required: >=1.21.1, <3]
         │   └── certifi v2024.2.2 [required: >=2017.4.17]
-        ├── requests-toolbelt v1.0.0 [required: !=0.9.0, >=0.8.0]
-        │   └── requests v2.31.0 [required: <3.0.0, >=2.0.1] (*)
+        ├── requests-toolbelt v1.0.0 [required: >=0.8.0, !=0.9.0]
+        │   └── requests v2.31.0 [required: >=2.0.1, <3.0.0] (*)
         ├── urllib3 v2.2.1 [required: >=1.26.0]
         ├── importlib-metadata v7.1.0 [required: >=3.6]
         │   └── zipp v3.18.1 [required: >=0.5]
@@ -1688,8 +1688,8 @@ fn show_version_specifiers_with_invert() {
     joblib v1.3.2
     └── scikit-learn v1.4.1.post1 [requires: joblib >=1.2.0]
     numpy v1.26.4
-    ├── scikit-learn v1.4.1.post1 [requires: numpy <2.0, >=1.19.5]
-    └── scipy v1.12.0 [requires: numpy <1.29.0, >=1.22.4]
+    ├── scikit-learn v1.4.1.post1 [requires: numpy >=1.19.5, <2.0]
+    └── scipy v1.12.0 [requires: numpy >=1.22.4, <1.29.0]
         └── scikit-learn v1.4.1.post1 [requires: scipy >=1.6.0]
     threadpoolctl v3.4.0
     └── scikit-learn v1.4.1.post1 [requires: threadpoolctl >=2.0.0]
@@ -1739,7 +1739,7 @@ fn show_version_specifiers_with_package() {
     exit_code: 0
     ----- stdout -----
     scipy v1.12.0
-    └── numpy v1.26.4 [required: <1.29.0, >=1.22.4]
+    └── numpy v1.26.4 [required: >=1.22.4, <1.29.0]
 
     ----- stderr -----
     "###

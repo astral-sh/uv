@@ -32,6 +32,7 @@ clap = { workspace = true, optional = true }
 configparser = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+goblin = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 regex = { workspace = true }
@@ -57,6 +58,8 @@ rustix = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true }
 winsafe = { workspace = true }
+windows-registry = { workspace = true }
+windows-result = { workspace = true }
 
 [dev-dependencies]
 anyhow = { version = "1.0.80" }

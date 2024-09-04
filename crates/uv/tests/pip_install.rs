@@ -54,7 +54,7 @@ fn empty_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     warning: Requirements file requirements.txt does not contain any dependencies
-    Audited 0 packages in [TIME]
+    Audited in [TIME]
     "###
     );
 
@@ -672,7 +672,7 @@ fn reinstall_incomplete() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
-    warning: Failed to uninstall package at [SITE_PACKAGES]/anyio-3.7.0.dist-info due to missing RECORD file. Installation may result in an incomplete environment.
+    warning: Failed to uninstall package at [SITE_PACKAGES]/anyio-3.7.0.dist-info due to missing `RECORD` file. Installation may result in an incomplete environment.
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
@@ -3291,7 +3291,7 @@ version = "0.0.0"
 dependencies = [
   "anyio==4.0.0"
 ]
-requires-python = "<=3.8"
+requires-python = ">=3.13"
 "#,
     )?;
 
@@ -3304,7 +3304,7 @@ requires-python = "<=3.8"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
@@ -3805,7 +3805,7 @@ version = "0.0.0"
 dependencies = [
   "anyio==4.0.0"
 ]
-requires-python = "<=3.8"
+requires-python = ">=3.13"
 "#,
     )?;
 
@@ -3817,7 +3817,7 @@ requires-python = "<=3.8"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
@@ -6171,7 +6171,7 @@ fn incompatible_build_constraint() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build `requests==1.2.0`
-      Caused by: Failed to install requirements from setup.py build (resolve)
+      Caused by: Failed to install requirements from `setup.py` build (resolve)
       Caused by: No solution found when resolving: setuptools>=40.8.0
       Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###
@@ -6337,4 +6337,158 @@ fn no_extension() {
     ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###);
+}
+
+/// Regression test for: <https://github.com/astral-sh/uv/pull/6646>
+#[test]
+fn switch_platform() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig ; python_version == '3.12'")?;
+
+    // Install `iniconfig`.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    requirements_txt
+        .write_str("iniconfig ; python_version == '3.12'\nanyio ; python_version < '3.12'")?;
+
+    // Add `anyio`, though it's only installed because of `--python-version`.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--python-version")
+        .arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/pull/6714>
+#[test]
+fn stale_egg_info() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a project with dynamic metadata (version).
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+
+        dependencies = ["iniconfig"]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Ensure that `.egg-info` exists.
+    let egg_info = context.temp_dir.child("project.egg-info");
+    egg_info.assert(predicates::path::is_dir());
+
+    // Change the metadata.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+
+        dependencies = ["anyio"]
+        "#
+    })?;
+
+    // Reinstall. Ensure that the metadata is updated.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// `suds-community` has an incorrect layout whereby the wheel includes `suds_community.egg-info` at
+/// the top-level. We're then under the impression that `suds` is installed twice, but when we go to
+/// uninstall the second "version", we can't find the `egg-info` directory.
+#[test]
+fn missing_top_level() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("suds-community==0.8.5"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + suds-community==0.8.5
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("suds-community==0.8.5"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    warning: Failed to uninstall package at [SITE_PACKAGES]/suds_community.egg-info due to missing `top-level.txt` file. Installation may result in an incomplete environment.
+    Uninstalled 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     ~ suds-community==0.8.5
+    "###
+    );
 }

@@ -52,8 +52,12 @@ pub(crate) fn pip_check(
         .dimmed()
     )?;
 
+    // Determine the markers to use for resolution.
+    let markers = environment.interpreter().resolver_markers();
+
+    // Run the diagnostics.
     let diagnostics: Vec<SitePackagesDiagnostic> =
-        site_packages.diagnostics()?.into_iter().collect();
+        site_packages.diagnostics(&markers)?.into_iter().collect();
 
     if diagnostics.is_empty() {
         writeln!(

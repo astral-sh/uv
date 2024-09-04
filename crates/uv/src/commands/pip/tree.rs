@@ -7,8 +7,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::debug;
 
 use distribution_types::{Diagnostic, Name};
-use pep508_rs::MarkerEnvironment;
-use pypi_types::RequirementSource;
+use pypi_types::{RequirementSource, ResolverMarkerEnvironment};
 use uv_cache::Cache;
 use uv_distribution::Metadata;
 use uv_fs::Simplified;
@@ -60,6 +59,9 @@ pub(crate) fn pip_tree(
             .push(metadata);
     }
 
+    // Determine the markers to use for the resolution.
+    let markers = environment.interpreter().resolver_markers();
+
     // Render the tree.
     let rendered_tree = DisplayDependencyGraph::new(
         depth.into(),
@@ -68,7 +70,7 @@ pub(crate) fn pip_tree(
         no_dedupe,
         invert,
         show_version_specifiers,
-        environment.interpreter().markers(),
+        &markers,
         packages,
     )
     .render()
@@ -87,7 +89,7 @@ pub(crate) fn pip_tree(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics()? {
+        for diagnostic in site_packages.diagnostics(&markers)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",
@@ -129,7 +131,7 @@ impl DisplayDependencyGraph {
         no_dedupe: bool,
         invert: bool,
         show_version_specifiers: bool,
-        markers: &MarkerEnvironment,
+        markers: &ResolverMarkerEnvironment,
         packages: IndexMap<PackageName, Vec<Metadata>>,
     ) -> Self {
         let mut requirements: FxHashMap<_, Vec<_>> = FxHashMap::default();

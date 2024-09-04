@@ -1,5 +1,5 @@
 [alias]
-dev = "run --package uv-dev"
+dev = "run --package uv-dev --features dev"
 
 # statically link the C runtime so the executable does not depend on
 # that shared/dynamic library.

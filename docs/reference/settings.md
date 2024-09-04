@@ -1,4 +1,36 @@
 ## Global
+#### [`allow-insecure-host`](#allow-insecure-host) {: #allow-insecure-host }
+
+Allow insecure connections to host.
+
+Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+`localhost:8080`), or a URL (e.g., `https://localhost`).
+
+WARNING: Hosts included in this list will not be verified against the system's certificate
+store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+bypasses SSL verification and could expose you to MITM attacks.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    allow-insecure-host = ["localhost:8080"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    allow-insecure-host = ["localhost:8080"]
+    ```
+
+---
+
 #### [`cache-dir`](#cache-dir) {: #cache-dir }
 
 Path to the cache directory.
@@ -168,6 +200,47 @@ specified as `KEY=VALUE` pairs.
 
 ---
 
+#### [`constraint-dependencies`](#constraint-dependencies) {: #constraint-dependencies }
+
+Constraints to apply when resolving the project's dependencies.
+
+Constraints are used to restrict the versions of dependencies that are selected during
+resolution.
+
+Including a package as a constraint will _not_ trigger installation of the package on its
+own; instead, the package must be requested elsewhere in the project's first-party or
+transitive dependencies.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `constraint-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    # Ensure that the grpcio version is always less than 1.65, if it's requested by a
+    # transitive dependency.
+    constraint-dependencies = ["grpcio<1.65"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    # Ensure that the grpcio version is always less than 1.65, if it's requested by a
+    # transitive dependency.
+    constraint-dependencies = ["grpcio<1.65"]
+    ```
+
+---
+
 #### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
 
 The project's development dependencies. Development dependencies will be installed by
@@ -201,6 +274,9 @@ A list of supported environments against which to resolve dependencies.
 By default, uv will resolve for all possible environments during a `uv lock` operation.
 However, you can restrict the set of supported environments to improve performance and avoid
 unsatisfiable branches in the solution space.
+
+These environments will also respected when `uv pip compile` is invoked with the
+`--universal` flag.
 
 **Default value**: `[]`
 
@@ -772,6 +848,82 @@ Disable network access, relying only on locally cached data and locally availabl
 
 ---
 
+#### [`override-dependencies`](#override-dependencies) {: #override-dependencies }
+
+Overrides to apply when resolving the project's dependencies.
+
+Overrides are used to force selection of a specific version of a package, regardless of the
+version requested by any other package, and regardless of whether choosing that version
+would typically constitute an invalid resolution.
+
+While constraints are _additive_, in that they're combined with the requirements of the
+constituent packages, overrides are _absolute_, in that they completely replace the
+requirements of any constituent packages.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
+    # a different version.
+    override-dependencies = ["werkzeug==2.3.0"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
+    # a different version.
+    override-dependencies = ["werkzeug==2.3.0"]
+    ```
+
+---
+
+#### [`package`](#package) {: #package }
+
+Whether the project should be considered a Python package, or a non-package ("virtual")
+project.
+
+Packages are built and installed into the virtual environment in editable mode and thus
+require a build backend, while virtual projects are _not_ built or installed; instead, only
+their dependencies are included in the virtual environment.
+
+Creating a package requires that a `build-system` is present in the `pyproject.toml`, and
+that the project adheres to a structure that adheres to the build backend's expectations
+(e.g., a `src` layout).
+
+**Default value**: `true`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    package = false
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    package = false
+    ```
+
+---
+
 #### [`prerelease`](#prerelease) {: #prerelease }
 
 The strategy to use when considering pre-release versions.
@@ -1086,6 +1238,39 @@ packages.
     ```toml
     [pip]
     allow-empty-requirements = true
+    ```
+
+---
+
+#### [`allow-insecure-host`](#pip_allow-insecure-host) {: #pip_allow-insecure-host }
+<span id="allow-insecure-host"></span>
+
+Allow insecure connections to host.
+
+Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+`localhost:8080`), or a URL (e.g., `https://localhost`).
+
+WARNING: Hosts included in this list will not be verified against the system's certificate
+store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+bypasses SSL verification and could expose you to MITM attacks.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    allow-insecure-host = ["localhost:8080"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    allow-insecure-host = ["localhost:8080"]
     ```
 
 ---
@@ -2143,8 +2328,8 @@ which is intended for use in continuous integration (CI) environments or other a
 workflows.
 
 Supported formats:
-- `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-  `python3.10` on Linux and macOS.
+- `3.10` looks for an installed Python 3.10 in the registry on Windows (see
+  `py --list-paths`), or `python3.10` on Linux and macOS.
 - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
 - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
 

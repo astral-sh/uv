@@ -4,10 +4,10 @@
 
 uv installation differs depending on the platform:
 
-=== "Unix"
+=== "Linux"
 
     ```yaml title="example.yml"
-    name: Example on Unix
+    name: Example on Linux
 
     jobs:
       uv-example-linux:
@@ -61,10 +61,10 @@ uv installation differs depending on the platform:
 
 It is considered best practice to pin to a specific uv version, e.g., with:
 
-=== "Unix"
+=== "Linux"
 
     ```yaml title="example.yml"
-    name: Example on Unix
+    name: Example on Linux
 
     jobs:
       uv-example-linux:
@@ -76,7 +76,7 @@ It is considered best practice to pin to a specific uv version, e.g., with:
 
           - name: Set up uv
             # Install a specific uv version using the installer
-            run: curl -LsSf https://astral.sh/uv/0.3.3/install.sh | sh
+            run: curl -LsSf https://astral.sh/uv/0.4.4/install.sh | sh
     ```
 
 === "macOS"
@@ -94,7 +94,7 @@ It is considered best practice to pin to a specific uv version, e.g., with:
 
           - name: Set up uv
             # Install a specific uv version using the installer
-            run: curl -LsSf https://astral.sh/uv/0.3.3/install.sh | sh
+            run: curl -LsSf https://astral.sh/uv/0.4.4/install.sh | sh
     ```
 
 === "Windows"
@@ -112,7 +112,7 @@ It is considered best practice to pin to a specific uv version, e.g., with:
 
           - name: Set up uv
             # Install a specific uv version using the installer
-            run: irm https://astral.sh/uv/0.3.3/install.ps1 | iex
+            run: irm https://astral.sh/uv/0.4.4/install.ps1 | iex
             shell: powershell
     ```
 
@@ -228,6 +228,12 @@ steps:
     # For example, using `pytest`
     run: uv run pytest tests
 ```
+
+!!! tip
+
+    The
+    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects.md#custom-project-environment-paths) can
+    be used to install to the system Python environment instead of creating a virtual environment.
 
 ## Caching
 

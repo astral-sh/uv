@@ -11,13 +11,13 @@ use tracing::debug;
 
 use distribution_types::{IndexLocations, UnresolvedRequirementSpecification, Verbatim};
 use install_wheel_rs::linker::LinkMode;
-use pypi_types::Requirement;
+use pypi_types::{Requirement, SupportedEnvironments};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary,
-    NoBuild, Reinstall, SourceStrategy, Upgrade,
+    NoBuild, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -53,6 +53,7 @@ pub(crate) async fn pip_compile(
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    environments: SupportedEnvironments,
     extras: ExtrasSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
@@ -74,6 +75,7 @@ pub(crate) async fn pip_compile(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    allow_insecure_host: Vec<TrustedHost>,
     config_settings: ConfigSettings,
     connectivity: Connectivity,
     no_build_isolation: bool,
@@ -106,7 +108,8 @@ pub(crate) async fn pip_compile(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .keyring(keyring_provider)
+        .allow_insecure_host(allow_insecure_host);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -171,10 +174,10 @@ pub(crate) async fn pip_compile(
     }
 
     // Find an interpreter to use for building distributions
-    let environments = EnvironmentPreference::from_system_flag(system, false);
+    let environment_preference = EnvironmentPreference::from_system_flag(system, false);
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
-        PythonInstallation::find(&request, environments, python_preference, &cache)
+        PythonInstallation::find(&request, environment_preference, python_preference, &cache)
     } else {
         // TODO(zanieb): The split here hints at a problem with the abstraction; we should be able to use
         // `PythonInstallation::find(...)` here.
@@ -184,7 +187,7 @@ pub(crate) async fn pip_compile(
         } else {
             PythonRequest::default()
         };
-        PythonInstallation::find_best(&request, environments, python_preference, &cache)
+        PythonInstallation::find_best(&request, environment_preference, python_preference, &cache)
     }?
     .into_interpreter();
 
@@ -235,7 +238,7 @@ pub(crate) async fn pip_compile(
                 interpreter.python_version()
             },
         );
-        PythonRequirement::from_requires_python(&interpreter, &requires_python)
+        PythonRequirement::from_requires_python(&interpreter, requires_python)
     } else if let Some(python_version) = python_version.as_ref() {
         PythonRequirement::from_python_version(&interpreter, python_version)
     } else {
@@ -244,14 +247,14 @@ pub(crate) async fn pip_compile(
 
     // Determine the environment for the resolution.
     let (tags, markers) = if universal {
-        (None, ResolverMarkers::universal(vec![]))
+        (
+            None,
+            ResolverMarkers::universal(environments.into_markers()),
+        )
     } else {
         let (tags, markers) =
             resolution_environment(python_version, python_platform, &interpreter)?;
-        (
-            Some(tags),
-            ResolverMarkers::specific_environment((*markers).clone()),
-        )
+        (Some(tags), ResolverMarkers::specific_environment(markers))
     };
 
     // Generate, but don't enforce hashes for the requirements.
@@ -274,7 +277,7 @@ pub(crate) async fn pip_compile(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::from(client_builder)
+    let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)

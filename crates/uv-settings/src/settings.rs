@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
-use pypi_types::VerbatimParsedUrl;
+use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
+    TrustedHost,
 };
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
@@ -40,15 +41,17 @@ pub struct Options {
     pub top_level: ResolverInstallerOptions,
     #[option_group]
     pub pip: Option<PipOptions>,
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "PEP 508 style requirements, e.g. `ruff==0.5.0`, or `ruff @ https://...`."
-        )
-    )]
+
+    // NOTE(charlie): These fields are shared with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`.
@@ -66,11 +69,11 @@ pub struct Options {
 
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    environments: serde::de::IgnoredAny,
+    managed: serde::de::IgnoredAny,
 
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    managed: serde::de::IgnoredAny,
+    r#package: serde::de::IgnoredAny,
 }
 
 impl Options {
@@ -215,6 +218,7 @@ pub struct InstallerOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
@@ -241,6 +245,7 @@ pub struct ResolverOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub config_settings: Option<ConfigSettings>,
@@ -352,6 +357,22 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+    /// Allow insecure connections to host.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            allow-insecure-host = ["localhost:8080"]
+        "#
+    )]
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
@@ -570,8 +591,8 @@ pub struct PipOptions {
     /// workflows.
     ///
     /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
+    /// - `3.10` looks for an installed Python 3.10 in the registry on Windows (see
+    ///   `py --list-paths`), or `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[option(
@@ -723,6 +744,22 @@ pub struct PipOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+    /// Allow insecure connections to host.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            allow-insecure-host = ["localhost:8080"]
+        "#
+    )]
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -1210,6 +1247,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             config_settings: value.config_settings,
@@ -1237,6 +1275,7 @@ impl From<ResolverInstallerOptions> for InstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            allow_insecure_host: value.allow_insecure_host,
             config_settings: value.config_settings,
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode,
@@ -1269,6 +1308,7 @@ pub struct ToolOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub config_settings: Option<ConfigSettings>,
@@ -1293,6 +1333,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             config_settings: value.config_settings,
@@ -1319,6 +1360,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             config_settings: value.config_settings,

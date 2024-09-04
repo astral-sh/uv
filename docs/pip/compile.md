@@ -113,7 +113,7 @@ dependencies of the current project.
 
 To define a constraint, define a bound for a package:
 
-```text title="constraints.txt"
+```python title="constraints.txt"
 pydantic<2.0
 ```
 
@@ -135,13 +135,13 @@ While constraints are _additive_, in that they're combined with the requirements
 packages, overrides are _absolute_, in that they completely replace the requirements of the
 constituent packages.
 
-Overrides are most often used to remove upper bounds from a transtive dependency. For example, if
+Overrides are most often used to remove upper bounds from a transitive dependency. For example, if
 `a` requires `c>=1.0,<2.0` and `b` requires `c>=2.0` and the current project requires `a` and `b`
 then the dependencies cannot be resolved.
 
 To define an override, define the new requirement for the problematic package:
 
-```text title="overrides.txt"
+```python title="overrides.txt"
 c>=2.0
 ```
 

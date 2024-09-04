@@ -154,14 +154,8 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             database,
             flat_index,
             tags,
-            python_requirement
-                .target()
-                .and_then(|target| target.as_requires_python()),
-            AllowedYanks::from_manifest(
-                &manifest,
-                markers.marker_environment(),
-                options.dependency_mode,
-            ),
+            python_requirement.target(),
+            AllowedYanks::from_manifest(&manifest, &markers, options.dependency_mode),
             hasher,
             options.exclude_newer,
             build_context.build_options(),
@@ -199,24 +193,11 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
-            selector: CandidateSelector::for_resolution(
-                options,
-                &manifest,
-                markers.marker_environment(),
-            ),
+            selector: CandidateSelector::for_resolution(options, &manifest, &markers),
             dependency_mode: options.dependency_mode,
-            urls: Urls::from_manifest(
-                &manifest,
-                markers.marker_environment(),
-                git,
-                options.dependency_mode,
-            )?,
-            locals: Locals::from_manifest(
-                &manifest,
-                markers.marker_environment(),
-                options.dependency_mode,
-            ),
-            groups: Groups::from_manifest(&manifest, markers.marker_environment()),
+            urls: Urls::from_manifest(&manifest, &markers, git, options.dependency_mode)?,
+            locals: Locals::from_manifest(&manifest, &markers, options.dependency_mode),
+            groups: Groups::from_manifest(&manifest, &markers),
             project: manifest.project,
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
@@ -297,11 +278,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Result<ResolutionGraph, ResolveError> {
         debug!(
             "Solving with installed Python version: {}",
-            self.python_requirement.installed()
+            self.python_requirement.exact()
         );
-        if let Some(target) = self.python_requirement.target() {
-            debug!("Solving with target Python version: {}", target);
-        }
+        debug!(
+            "Solving with target Python version: {}",
+            self.python_requirement.target()
+        );
 
         let mut visited = FxHashSet::default();
 
@@ -332,18 +314,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         'FORK: while let Some(mut state) = forked_states.pop() {
             if let ResolverMarkers::Fork(markers) = &state.markers {
-                if let Some(requires_python) = state
-                    .python_requirement
-                    .target()
-                    .and_then(|target| target.as_requires_python())
-                {
-                    debug!(
-                        "Solving split {:?} (requires-python: {:?})",
-                        markers, requires_python
-                    );
-                } else {
-                    debug!("Solving split {:?}", markers);
-                }
+                let requires_python = state.python_requirement.target();
+                debug!("Solving split {markers:?} (requires-python: {requires_python:?})");
             }
             let start = Instant::now();
             loop {
@@ -394,7 +366,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         );
                     }
 
-                    Self::trace_resolution(&resolution);
                     resolutions.push(resolution);
                     continue 'FORK;
                 };
@@ -592,6 +563,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
             }
         }
+        for resolution in &resolutions {
+            Self::trace_resolution(resolution);
+        }
         ResolutionGraph::from_state(
             &resolutions,
             &self.requirements,
@@ -607,7 +581,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 
     /// When trace level logging is enabled, we dump the final
-    /// unioned resolution, including markers, to help with
+    /// set of resolutions, including markers, to help with
     /// debugging. Namely, this tells use precisely the state
     /// emitted by the resolver before going off to construct a
     /// resolution graph.
@@ -615,9 +589,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if !tracing::enabled!(Level::TRACE) {
             return;
         }
+        if let Some(markers) = combined.markers.fork_markers() {
+            trace!("Resolution: {:?}", markers);
+        } else {
+            trace!("Resolution: <matches all marker environments>");
+        }
         for edge in &combined.edges {
             trace!(
-                "Resolution: {} -> {}",
+                "Resolution edge: {} -> {}",
                 edge.from
                     .as_ref()
                     .map(PackageName::as_str)
@@ -647,7 +626,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if let Some(marker) = edge.marker.contents() {
                 write!(msg, " ; {marker}").unwrap();
             }
-            trace!("Resolution:     {msg}");
+            trace!("Resolution edge:     {msg}");
         }
     }
 
@@ -931,26 +910,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // The version is incompatible due to its Python requirement.
         if let Some(requires_python) = metadata.requires_python.as_ref() {
-            if let Some(target) = python_requirement.target() {
-                if !target.is_compatible_with(requires_python) {
-                    return Ok(Some(ResolverVersion::Unavailable(
-                        version.clone(),
-                        UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
-                            IncompatibleSource::RequiresPython(
-                                requires_python.clone(),
-                                PythonRequirementKind::Target,
-                            ),
-                        )),
-                    )));
-                }
-            }
-            if !requires_python.contains(python_requirement.installed()) {
+            if !python_requirement
+                .installed()
+                .is_contained_by(requires_python)
+            {
                 return Ok(Some(ResolverVersion::Unavailable(
                     version.clone(),
                     UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
                         IncompatibleSource::RequiresPython(
                             requires_python.clone(),
                             PythonRequirementKind::Installed,
+                        ),
+                    )),
+                )));
+            }
+            if !python_requirement.target().is_contained_by(requires_python) {
+                return Ok(Some(ResolverVersion::Unavailable(
+                    version.clone(),
+                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
+                        IncompatibleSource::RequiresPython(
+                            requires_python.clone(),
+                            PythonRequirementKind::Target,
                         ),
                     )),
                 )));
@@ -1039,21 +1019,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .requires_python
                     .as_ref()
                     .and_then(|requires_python| {
-                        if let Some(target) = python_requirement.target() {
-                            if !target.is_compatible_with(requires_python) {
-                                return Some(IncompatibleDist::Source(
-                                    IncompatibleSource::RequiresPython(
-                                        requires_python.clone(),
-                                        PythonRequirementKind::Target,
-                                    ),
-                                ));
-                            }
-                        }
-                        if !requires_python.contains(python_requirement.installed()) {
+                        if !python_requirement
+                            .installed()
+                            .is_contained_by(requires_python)
+                        {
                             return Some(IncompatibleDist::Source(
                                 IncompatibleSource::RequiresPython(
                                     requires_python.clone(),
                                     PythonRequirementKind::Installed,
+                                ),
+                            ));
+                        }
+                        if !python_requirement.target().is_contained_by(requires_python) {
+                            return Some(IncompatibleDist::Source(
+                                IncompatibleSource::RequiresPython(
+                                    requires_python.clone(),
+                                    PythonRequirementKind::Target,
                                 ),
                             ));
                         }
@@ -1067,21 +1048,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .requires_python
                     .as_ref()
                     .and_then(|requires_python| {
-                        if let Some(target) = python_requirement.target() {
-                            if !target.is_compatible_with(requires_python) {
-                                return Some(IncompatibleDist::Wheel(
-                                    IncompatibleWheel::RequiresPython(
-                                        requires_python.clone(),
-                                        PythonRequirementKind::Target,
-                                    ),
-                                ));
-                            }
-                        } else {
-                            if !requires_python.contains(python_requirement.installed()) {
+                        if python_requirement.installed() == python_requirement.target() {
+                            if !python_requirement
+                                .installed()
+                                .is_contained_by(requires_python)
+                            {
                                 return Some(IncompatibleDist::Wheel(
                                     IncompatibleWheel::RequiresPython(
                                         requires_python.clone(),
                                         PythonRequirementKind::Installed,
+                                    ),
+                                ));
+                            }
+                        } else {
+                            if !python_requirement.target().is_contained_by(requires_python) {
+                                return Some(IncompatibleDist::Wheel(
+                                    IncompatibleWheel::RequiresPython(
+                                        requires_python.clone(),
+                                        PythonRequirementKind::Target,
                                     ),
                                 ));
                             }
@@ -1347,7 +1331,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 name: name.clone(),
                                 extra: None,
                                 dev: None,
-                                marker: marker.cloned(),
+                                marker: marker.and_then(MarkerTree::contents),
                             }),
                             version: Range::singleton(version.clone()),
                             specifier: None,
@@ -1499,32 +1483,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         self.overrides
             .apply(dependencies)
             .filter_map(move |requirement| {
+                let python_marker = python_requirement.to_marker_tree();
                 // If the requirement would not be selected with any Python version
                 // supported by the root, skip it.
-                let requirement = if let Some(requires_python) = python_requirement.target().and_then(|target| target.as_requires_python()).filter(|_| !requirement.marker.is_true()) {
-                    let marker = requirement.marker.clone().simplify_python_versions(
-                        Range::from(requires_python.bound().clone()),
+                if python_marker.is_disjoint(&requirement.marker) {
+                    trace!(
+                        "skipping {requirement} because of Requires-Python: {requires_python}",
+                        requires_python = python_requirement.target(),
                     );
-
-                    if marker.is_false() {
-                        trace!("skipping {requirement} because of Requires-Python: {requires_python}");
-                        return None;
-                    }
-
-                    if marker == requirement.marker {
-                        requirement
-                    } else {
-                        Cow::Owned(Requirement {
-                            name: requirement.name.clone(),
-                            extras: requirement.extras.clone(),
-                            source: requirement.source.clone(),
-                            origin: requirement.origin.clone(),
-                            marker
-                        })
-                    }
-                } else {
-                    requirement
-                };
+                    return None;
+                }
 
                 // If we're in a fork in universal mode, ignore any dependency that isn't part of
                 // this fork (but will be part of another fork).
@@ -1567,32 +1535,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .filter_map(move |constraint| {
                             // If the requirement would not be selected with any Python version
                             // supported by the root, skip it.
-                            let constraint = if let Some(requires_python) = python_requirement.target().and_then(|target| target.as_requires_python()).filter(|_| !constraint.marker.is_true()) {
-                                let mut marker = constraint.marker.clone().simplify_python_versions(
-                                    Range::from(requires_python.bound().clone()),
-                                );
-                                marker.and(requirement.marker.clone());
-
-                                // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
-                                // and the constraint is `requests ; python_version == '3.6'`, the
-                                // constraint should only apply when _both_ markers are true.
-                                if marker.is_false() {
-                                    trace!("skipping {constraint} because of Requires-Python: {requires_python}");
-                                    return None;
-                                }
-
-                                if marker == constraint.marker {
-                                    Cow::Borrowed(constraint)
-                                } else {
-                                    Cow::Owned(Requirement {
-                                        name: constraint.name.clone(),
-                                        extras: constraint.extras.clone(),
-                                        source: constraint.source.clone(),
-                                        origin: constraint.origin.clone(),
-                                        marker
-                                    })
-                                }
-                            } else {
+                            let constraint = if constraint.marker.is_true() {
                                 // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
                                 // and the constraint is `requests ; python_version == '3.6'`, the
                                 // constraint should only apply when _both_ markers are true.
@@ -1602,6 +1545,40 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     let mut marker = constraint.marker.clone();
                                     marker.and(requirement.marker.clone());
 
+                                    Cow::Owned(Requirement {
+                                        name: constraint.name.clone(),
+                                        extras: constraint.extras.clone(),
+                                        source: constraint.source.clone(),
+                                        origin: constraint.origin.clone(),
+                                        marker
+                                    })
+                                }
+
+                            } else {
+                                let requires_python = python_requirement.target();
+                                let python_marker = python_requirement.to_marker_tree();
+
+                                let mut marker = constraint.marker.clone();
+                                marker.and(requirement.marker.clone());
+
+                                // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
+                                // and the constraint is `requests ; python_version == '3.6'`, the
+                                // constraint should only apply when _both_ markers are true.
+                                if marker.is_false() {
+                                    trace!("skipping {constraint} because of Requires-Python: {requires_python}");
+                                    return None;
+                                }
+                                if python_marker.is_disjoint(&marker) {
+                                    trace!(
+                                        "skipping constraint {requirement} because of Requires-Python: {requires_python}",
+                                        requires_python = python_requirement.target(),
+                                    );
+                                    return None;
+                                }
+
+                                if marker == constraint.marker {
+                                    Cow::Borrowed(constraint)
+                                } else {
                                     Cow::Owned(Requirement {
                                         name: constraint.name.clone(),
                                         extras: constraint.extras.clone(),
@@ -1846,12 +1823,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         // Source distributions must meet both the _target_ Python version and the
                         // _installed_ Python version (to build successfully).
                         if let Some(requires_python) = sdist.file.requires_python.as_ref() {
-                            if let Some(target) = python_requirement.target() {
-                                if !target.is_compatible_with(requires_python) {
-                                    return Ok(None);
-                                }
+                            if !python_requirement
+                                .installed()
+                                .is_contained_by(requires_python)
+                            {
+                                return Ok(None);
                             }
-                            if !requires_python.contains(python_requirement.installed()) {
+                            if !python_requirement.target().is_contained_by(requires_python) {
                                 return Ok(None);
                             }
                         }
@@ -1859,14 +1837,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     CompatibleDist::CompatibleWheel { wheel, .. } => {
                         // Wheels must meet the _target_ Python version.
                         if let Some(requires_python) = wheel.file.requires_python.as_ref() {
-                            if let Some(target) = python_requirement.target() {
-                                if !target.is_compatible_with(requires_python) {
-                                    return Ok(None);
-                                }
-                            } else {
-                                if !requires_python.contains(python_requirement.installed()) {
-                                    return Ok(None);
-                                }
+                            if !python_requirement.target().is_contained_by(requires_python) {
+                                return Ok(None);
                             }
                         }
                     }
@@ -2264,9 +2236,10 @@ impl ForkState {
         let python_requirement = marker::requires_python(&combined_markers)
             .and_then(|marker| self.python_requirement.narrow(&marker));
         if let Some(python_requirement) = python_requirement {
-            if let Some(target) = python_requirement.target() {
-                debug!("Narrowed `requires-python` bound to: {target}");
-            }
+            debug!(
+                "Narrowed `requires-python` bound to: {}",
+                python_requirement.target()
+            );
             self.python_requirement = python_requirement;
         }
 
@@ -2362,7 +2335,7 @@ impl ForkState {
                             to_url: to_url.cloned(),
                             to_extra: None,
                             to_dev: None,
-                            marker: MarkerTree::from(dependency_marker.clone()),
+                            marker: dependency_marker.clone(),
                         };
                         edges.insert(edge);
                     }
@@ -2702,6 +2675,8 @@ impl Forks {
         name_to_deps: BTreeMap<PackageName, Vec<PubGrubDependency>>,
         python_requirement: &PythonRequirement,
     ) -> Forks {
+        let python_marker = python_requirement.to_marker_tree();
+
         let mut forks = vec![Fork {
             dependencies: vec![],
             markers: MarkerTree::TRUE,
@@ -2730,7 +2705,6 @@ impl Forks {
                 continue;
             }
             for dep in deps {
-                // We assume that the marker has already been Python-simplified.
                 let mut markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
                 if markers.is_false() {
                     // If the markers can never be satisfied, then we
@@ -2757,17 +2731,25 @@ impl Forks {
                         continue;
                     }
 
-                    let not_markers = simplify_python(markers.negate(), python_requirement);
+                    let not_markers = markers.negate();
                     let mut new_markers = markers.clone();
-                    new_markers.and(simplify_python(fork.markers.negate(), python_requirement));
+                    new_markers.and(fork.markers.negate());
                     if !fork.markers.is_disjoint(&not_markers) {
                         let mut new_fork = fork.clone();
                         new_fork.intersect(not_markers);
-                        new.push(new_fork);
+                        // Filter out any forks we created that are disjoint with our
+                        // Python requirement.
+                        if !new_fork.markers.is_disjoint(&python_marker) {
+                            new.push(new_fork);
+                        }
                     }
                     fork.dependencies.push(dep.clone());
                     fork.intersect(markers);
-                    new.push(fork);
+                    // Filter out any forks we created that are disjoint with our
+                    // Python requirement.
+                    if !fork.markers.is_disjoint(&python_marker) {
+                        new.push(fork);
+                    }
                     markers = new_markers;
                 }
                 forks = new;
@@ -2830,7 +2812,7 @@ impl Ord for Fork {
         let self_bound = marker::requires_python(&self.markers).unwrap_or_default();
         let other_bound = marker::requires_python(&other.markers).unwrap_or_default();
 
-        other_bound.cmp(&self_bound).then_with(|| {
+        other_bound.lower().cmp(self_bound.lower()).then_with(|| {
             // If there's no difference, prioritize forks with upper bounds. We'd prefer to solve
             // `numpy <= 2` before solving `numpy >= 1`, since the resolution produced by the former
             // might work for the latter, but the inverse is unlikely to be true due to maximum
@@ -2863,17 +2845,5 @@ impl Ord for Fork {
 impl PartialOrd for Fork {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
-    }
-}
-
-/// Simplify a [`MarkerTree`] based on a [`PythonRequirement`].
-fn simplify_python(marker: MarkerTree, python_requirement: &PythonRequirement) -> MarkerTree {
-    if let Some(requires_python) = python_requirement
-        .target()
-        .and_then(|target| target.as_requires_python())
-    {
-        marker.simplify_python_versions(Range::from(requires_python.bound().clone()))
-    } else {
-        marker
     }
 }

@@ -4,6 +4,16 @@ uv does not yet have dedicated commands for building and publishing a package. I
 the PyPA tools [`build`](https://github.com/pypa/build) and
 [`twine`](https://github.com/pypa/twine), both of which can be invoked via `uvx`.
 
+## Preparing your project for packaging
+
+Before attempting to publish your project, you'll want to make sure it's ready to be packaged for
+distribution.
+
+If your project does not include a `[build-system]` definition in the `pyproject.toml`, uv will not
+build it by default. This means that your project may not be ready for distribution. Read more about
+the effect of declaring a build system in the
+[project concept](../concepts/projects.md#build-systems) documentation.
+
 ## Building your package
 
 Build your package with the official `build` frontend:

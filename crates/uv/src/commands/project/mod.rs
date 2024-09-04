@@ -7,6 +7,7 @@ use tracing::debug;
 
 use distribution_types::{Resolution, UnresolvedRequirementSpecification};
 use pep440_rs::{Version, VersionSpecifiers};
+use pep508_rs::MarkerTreeContents;
 use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -38,6 +39,7 @@ use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverS
 
 pub(crate) mod add;
 pub(crate) mod environment;
+pub(crate) mod export;
 pub(crate) mod init;
 pub(crate) mod lock;
 pub(crate) mod remove;
@@ -75,6 +77,12 @@ pub(crate) enum ProjectError {
 
     #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
+
+    #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
+    DisjointEnvironment(MarkerTreeContents, VersionSpecifiers),
+
+    #[error("Environment marker is empty")]
+    EmptyEnvironment,
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),
@@ -136,6 +144,46 @@ pub(crate) fn find_requires_python(
             .as_ref()
             .and_then(|project| project.requires_python.as_ref())
     }))
+}
+
+/// Returns an error if the [`Interpreter`] does not satisfy the [`Workspace`] `requires-python`.
+#[allow(clippy::result_large_err)]
+pub(crate) fn validate_requires_python(
+    interpreter: &Interpreter,
+    workspace: &Workspace,
+    requires_python: &RequiresPython,
+) -> Result<(), ProjectError> {
+    if !requires_python.contains(interpreter.python_version()) {
+        // If the Python version is compatible with one of the workspace _members_, raise
+        // a dedicated error. For example, if the workspace root requires Python >=3.12, but
+        // a library in the workspace is compatible with Python >=3.8, the user may attempt
+        // to sync on Python 3.8. This will fail, but we should provide a more helpful error
+        // message.
+        for (name, member) in workspace.packages() {
+            let Some(project) = member.pyproject_toml().project.as_ref() else {
+                continue;
+            };
+            let Some(specifiers) = project.requires_python.as_ref() else {
+                continue;
+            };
+            if specifiers.contains(interpreter.python_version()) {
+                return Err(ProjectError::RequestedMemberPythonIncompatibility(
+                    interpreter.python_version().clone(),
+                    requires_python.clone(),
+                    name.clone(),
+                    specifiers.clone(),
+                    member.root().clone(),
+                ));
+            }
+        }
+
+        return Err(ProjectError::RequestedPythonIncompatibility(
+            interpreter.python_version().clone(),
+            requires_python.clone(),
+        ));
+    }
+
+    Ok(())
 }
 
 /// Find the virtual environment for the current project.
@@ -260,7 +308,7 @@ impl FoundInterpreter {
 
         // Locate the Python interpreter to use in the environment
         let python = PythonInstallation::find_or_download(
-            python_request,
+            python_request.as_ref(),
             EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
@@ -289,35 +337,7 @@ impl FoundInterpreter {
         }
 
         if let Some(requires_python) = requires_python.as_ref() {
-            if !requires_python.contains(interpreter.python_version()) {
-                // If the Python version is compatible with one of the workspace _members_, raise
-                // a dedicated error. For example, if the workspace root requires Python >=3.12, but
-                // a library in the workspace is compatible with Python >=3.8, the user may attempt
-                // to sync on Python 3.8. This will fail, but we should provide a more helpful error
-                // message.
-                for (name, member) in workspace.packages() {
-                    let Some(project) = member.pyproject_toml().project.as_ref() else {
-                        continue;
-                    };
-                    let Some(specifiers) = project.requires_python.as_ref() else {
-                        continue;
-                    };
-                    if specifiers.contains(interpreter.python_version()) {
-                        return Err(ProjectError::RequestedMemberPythonIncompatibility(
-                            interpreter.python_version().clone(),
-                            requires_python.clone(),
-                            name.clone(),
-                            specifiers.clone(),
-                            member.root().clone(),
-                        ));
-                    }
-                }
-
-                return Err(ProjectError::RequestedPythonIncompatibility(
-                    interpreter.python_version().clone(),
-                    requires_python.clone(),
-                ));
-            }
+            validate_requires_python(&interpreter, workspace, requires_python)?;
         }
 
         Ok(Self::Interpreter(interpreter))
@@ -410,6 +430,7 @@ pub(crate) async fn resolve_names(
         index_locations,
         index_strategy,
         keyring_provider,
+        allow_insecure_host,
         resolution: _,
         prerelease: _,
         config_setting,
@@ -436,6 +457,7 @@ pub(crate) async fn resolve_names(
         .index_urls(index_locations.index_urls())
         .index_strategy(*index_strategy)
         .keyring(*keyring_provider)
+        .allow_insecure_host(allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -510,6 +532,7 @@ pub(crate) async fn resolve_environment<'a>(
         index_locations,
         index_strategy,
         keyring_provider,
+        allow_insecure_host,
         resolution,
         prerelease,
         config_setting,
@@ -534,7 +557,7 @@ pub(crate) async fn resolve_environment<'a>(
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = interpreter.tags()?;
-    let markers = interpreter.markers();
+    let markers = interpreter.resolver_markers();
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Add all authenticated sources to the cache.
@@ -549,7 +572,8 @@ pub(crate) async fn resolve_environment<'a>(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .markers(markers)
+        .allow_insecure_host(allow_insecure_host.to_vec())
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -629,7 +653,7 @@ pub(crate) async fn resolve_environment<'a>(
         &reinstall,
         &upgrade,
         Some(tags),
-        ResolverMarkers::specific_environment(markers.clone()),
+        ResolverMarkers::specific_environment(markers),
         python_requirement,
         &client,
         &flat_index,
@@ -660,6 +684,7 @@ pub(crate) async fn sync_environment(
         index_locations,
         index_strategy,
         keyring_provider,
+        allow_insecure_host,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -673,10 +698,10 @@ pub(crate) async fn sync_environment(
 
     let site_packages = SitePackages::from_environment(&venv)?;
 
-    // Determine the tags, markers, and interpreter to use for resolution.
+    // Determine the markers tags to use for resolution.
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
-    let markers = venv.interpreter().markers();
+    let markers = interpreter.resolver_markers();
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -690,7 +715,8 @@ pub(crate) async fn sync_environment(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .markers(markers)
+        .allow_insecure_host(allow_insecure_host.to_vec())
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -748,6 +774,7 @@ pub(crate) async fn sync_environment(
         compile_bytecode,
         index_locations,
         &hasher,
+        &markers,
         tags,
         &client,
         &state.in_flight,
@@ -803,6 +830,7 @@ pub(crate) async fn update_environment(
         index_locations,
         index_strategy,
         keyring_provider,
+        allow_insecure_host,
         resolution,
         prerelease,
         config_setting,
@@ -827,10 +855,14 @@ pub(crate) async fn update_environment(
         ..
     } = spec;
 
+    // Determine markers to use for resolution.
+    let interpreter = venv.interpreter();
+    let markers = venv.interpreter().resolver_markers();
+
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
     if source_trees.is_empty() && reinstall.is_none() && upgrade.is_none() && overrides.is_empty() {
-        match site_packages.satisfies(&requirements, &constraints)? {
+        match site_packages.satisfies(&requirements, &constraints, &markers)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -854,12 +886,6 @@ pub(crate) async fn update_environment(
         }
     }
 
-    // Determine the tags, markers, and interpreter to use for resolution.
-    let interpreter = venv.interpreter();
-    let tags = venv.interpreter().tags()?;
-    let markers = venv.interpreter().markers();
-    let python_requirement = PythonRequirement::from_interpreter(interpreter);
-
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
         store_credentials_from_url(url);
@@ -872,7 +898,8 @@ pub(crate) async fn update_environment(
         .index_urls(index_locations.index_urls())
         .index_strategy(*index_strategy)
         .keyring(*keyring_provider)
-        .markers(markers)
+        .allow_insecure_host(allow_insecure_host.clone())
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -900,6 +927,10 @@ pub(crate) async fn update_environment(
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
+
+    // Determine the tags to use for resolution.
+    let tags = venv.interpreter().tags()?;
+    let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -973,6 +1004,7 @@ pub(crate) async fn update_environment(
         *compile_bytecode,
         index_locations,
         &hasher,
+        &markers,
         tags,
         &client,
         &state.in_flight,

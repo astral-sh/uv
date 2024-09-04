@@ -31,11 +31,8 @@ pub(crate) async fn upgrade(
 
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // Initialize any shared state.
-    let state = SharedState::default();
-
     let installed_tools = InstalledTools::from_settings()?.init()?;
-    let _lock = installed_tools.acquire_lock()?;
+    let _lock = installed_tools.lock().await?;
 
     let names: BTreeSet<PackageName> =
         name.map(|name| BTreeSet::from_iter([name]))
@@ -118,6 +115,9 @@ pub(crate) async fn upgrade(
         // Resolve the requirements.
         let requirements = existing_tool_receipt.requirements();
         let spec = RequirementsSpecification::from_requirements(requirements.to_vec());
+
+        // Initialize any shared state.
+        let state = SharedState::default();
 
         // TODO(zanieb): Build the environment in the cache directory then copy into the tool
         // directory.

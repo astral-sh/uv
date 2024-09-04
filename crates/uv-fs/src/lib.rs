@@ -314,9 +314,12 @@ pub fn is_temporary(path: impl AsRef<Path>) -> bool {
 pub struct LockedFile(fs_err::File);
 
 impl LockedFile {
-    pub fn acquire(path: impl AsRef<Path>, resource: impl Display) -> Result<Self, std::io::Error> {
-        let file = fs_err::File::create(path.as_ref())?;
-        trace!("Checking lock for `{resource}`");
+    /// Inner implementation for [`LockedFile::acquire_blocking`] and [`LockedFile::acquire`].
+    fn lock_file_blocking(file: fs_err::File, resource: &str) -> Result<Self, std::io::Error> {
+        trace!(
+            "Checking lock for `{resource}` at `{}`",
+            file.path().user_display()
+        );
         match file.file().try_lock_exclusive() {
             Ok(()) => {
                 debug!("Acquired lock for `{resource}`");
@@ -324,22 +327,52 @@ impl LockedFile {
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures
-                debug!("Try lock error, waiting for exclusive lock: {:?}", err);
+                // TODO(zanieb): When `raw_os_error` stabilizes, use that to avoid displaying
+                // the error when it is `WouldBlock`, which is expected and noisy otherwise.
+                trace!("Try lock error, waiting for exclusive lock: {:?}", err);
                 warn_user!(
-                    "Waiting to acquire lock for {} (lockfile: {})",
-                    resource,
-                    path.user_display(),
+                    "Waiting to acquire lock for `{resource}` at `{}`",
+                    file.path().user_display(),
                 );
                 file.file().lock_exclusive().map_err(|err| {
                     // Not an fs_err method, we need to build our own path context
                     std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        format!("Could not lock {}: {}", path.as_ref().user_display(), err),
+                        format!(
+                            "Could not acquire lock for `{resource}` at `{}`: {}",
+                            file.path().user_display(),
+                            err
+                        ),
                     )
                 })?;
+
+                debug!("Acquired lock for `{resource}`");
                 Ok(Self(file))
             }
         }
+    }
+
+    /// The same as [`LockedFile::acquire`], but for synchronous contexts. Do not use from an async
+    /// context, as this can block the runtime while waiting for another process to release the
+    /// lock.
+    pub fn acquire_blocking(
+        path: impl AsRef<Path>,
+        resource: impl Display,
+    ) -> Result<Self, std::io::Error> {
+        let file = fs_err::File::create(path.as_ref())?;
+        let resource = resource.to_string();
+        Self::lock_file_blocking(file, &resource)
+    }
+
+    /// Acquire a cross-process lock for a resource using a file at the provided path.
+    #[cfg(feature = "tokio")]
+    pub async fn acquire(
+        path: impl AsRef<Path>,
+        resource: impl Display,
+    ) -> Result<Self, std::io::Error> {
+        let file = fs_err::File::create(path.as_ref())?;
+        let resource = resource.to_string();
+        tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource)).await?
     }
 }
 
@@ -351,6 +384,8 @@ impl Drop for LockedFile {
                 self.0.path().display(),
                 err
             );
+        } else {
+            debug!("Released lock at `{}`", self.0.path().display());
         }
     }
 }

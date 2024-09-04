@@ -29,14 +29,18 @@ fn packse_add_remove_one_package() -> Result<()> {
         assert_snapshot!(lock);
     });
 
-    let diff = context.diff_lock(|context| context.add_no_sync(&["tzdata"]));
+    let diff = context.diff_lock(|context| {
+        let mut add_cmd = context.add();
+        add_cmd.arg("--no-sync").arg("tzdata");
+        add_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -317,20 +317,21 @@
+        @@ -306,20 +306,21 @@
          name = "packse"
          version = "0.0.0"
          source = { editable = "." }
@@ -58,7 +62,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "pypiserver" },
              { name = "watchfiles" },
          ]
-        @@ -345,20 +346,21 @@
+        @@ -334,20 +335,21 @@
          [package.metadata]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
@@ -69,7 +73,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "pyyaml", specifier = ">=6.0.1" },
              { name = "setuptools", specifier = ">=69.1.1" },
              { name = "twine", specifier = ">=4.0.2" },
-        +    { name = "tzdata" },
+        +    { name = "tzdata", specifier = ">=2024.1" },
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
 
@@ -80,7 +84,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
 
-        @@ -612,20 +614,29 @@
+        @@ -601,20 +603,29 @@
              { name = "rfc3986" },
              { name = "rich" },
              { name = "urllib3" },
@@ -113,14 +117,18 @@ fn packse_add_remove_one_package() -> Result<()> {
         "###);
     });
 
-    let diff = context.diff_lock(|context| context.remove_no_sync(&["tzdata"]));
+    let diff = context.diff_lock(|context| {
+        let mut remove_cmd = context.remove();
+        remove_cmd.arg("--no-sync").arg("tzdata");
+        remove_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -317,21 +317,20 @@
+        @@ -306,21 +306,20 @@
          name = "packse"
          version = "0.0.0"
          source = { editable = "." }
@@ -142,7 +150,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "pypiserver" },
              { name = "watchfiles" },
          ]
-        @@ -346,21 +345,20 @@
+        @@ -335,21 +334,20 @@
          [package.metadata]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
@@ -153,7 +161,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "pyyaml", specifier = ">=6.0.1" },
              { name = "setuptools", specifier = ">=69.1.1" },
              { name = "twine", specifier = ">=4.0.2" },
-        -    { name = "tzdata" },
+        -    { name = "tzdata", specifier = ">=2024.1" },
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
 
@@ -164,7 +172,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
 
-        @@ -611,29 +609,20 @@
+        @@ -600,29 +598,20 @@
              { name = "readme-renderer" },
              { name = "requests" },
              { name = "requests-toolbelt" },
@@ -230,7 +238,11 @@ fn packse_add_remove_existing_package_noop() -> Result<()> {
         assert_snapshot!(lock);
     });
 
-    let diff = context.diff_lock(|context| context.add_no_sync(&["pyyaml"]));
+    let diff = context.diff_lock(|context| {
+        let mut add_cmd = context.add();
+        add_cmd.arg("--no-sync").arg("pyyaml");
+        add_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -263,14 +275,18 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
         assert_snapshot!(lock);
     });
 
-    let diff = context.diff_lock(|context| context.add_no_sync(&["sniffio"]));
+    let diff = context.diff_lock(|context| {
+        let mut add_cmd = context.add();
+        add_cmd.arg("--no-sync").arg("sniffio");
+        add_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -316,20 +316,21 @@
+        @@ -305,20 +305,21 @@
          [[package]]
          name = "packse"
          version = "0.0.0"
@@ -292,7 +308,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
          serve = [
              { name = "pypiserver" },
              { name = "watchfiles" },
-        @@ -344,20 +345,21 @@
+        @@ -333,20 +334,21 @@
 
          [package.metadata]
          requires-dist = [
@@ -303,7 +319,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
              { name = "pypiserver", marker = "extra == 'index'", specifier = ">=2.0.1" },
              { name = "pyyaml", specifier = ">=6.0.1" },
              { name = "setuptools", specifier = ">=69.1.1" },
-        +    { name = "sniffio" },
+        +    { name = "sniffio", specifier = ">=1.3.1" },
              { name = "twine", specifier = ">=4.0.2" },
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
@@ -317,14 +333,18 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
         "###);
     });
 
-    let diff = context.diff_lock(|context| context.remove_no_sync(&["sniffio"]));
+    let diff = context.diff_lock(|context| {
+        let mut remove_cmd = context.remove();
+        remove_cmd.arg("--no-sync").arg("sniffio");
+        remove_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -316,21 +316,20 @@
+        @@ -305,21 +305,20 @@
          [[package]]
          name = "packse"
          version = "0.0.0"
@@ -346,7 +366,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
          serve = [
              { name = "pypiserver" },
              { name = "watchfiles" },
-        @@ -345,21 +344,20 @@
+        @@ -334,21 +333,20 @@
 
          [package.metadata]
          requires-dist = [
@@ -357,7 +377,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
              { name = "pypiserver", marker = "extra == 'index'", specifier = ">=2.0.1" },
              { name = "pyyaml", specifier = ">=6.0.1" },
              { name = "setuptools", specifier = ">=69.1.1" },
-        -    { name = "sniffio" },
+        -    { name = "sniffio", specifier = ">=1.3.1" },
              { name = "twine", specifier = ">=4.0.2" },
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
@@ -414,7 +434,11 @@ fn jax_instability() -> Result<()> {
         assert_snapshot!(lock);
     });
 
-    let diff = context.diff_lock(|context| context.add_no_sync(&["tzdata"]));
+    let diff = context.diff_lock(|context| {
+        let mut add_cmd = context.add();
+        add_cmd.arg("--no-sync").arg("tzdata");
+        add_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -466,7 +490,7 @@ fn jax_instability() -> Result<()> {
         +[[package]]
          name = "uv-lock-instability"
          version = "0.1.0"
-         source = { editable = "." }
+         source = { virtual = "." }
          dependencies = [
              { name = "jax" },
         +    { name = "tzdata" },
@@ -476,7 +500,7 @@ fn jax_instability() -> Result<()> {
         -requires-dist = [{ name = "jax", specifier = "==0.4.17" }]
         +requires-dist = [
         +    { name = "jax", specifier = "==0.4.17" },
-        +    { name = "tzdata" },
+        +    { name = "tzdata", specifier = ">=2024.1" },
         +]
 
          [[package]]
@@ -490,7 +514,11 @@ fn jax_instability() -> Result<()> {
         "###);
     });
 
-    let diff = context.diff_lock(|context| context.remove_no_sync(&["tzdata"]));
+    let diff = context.diff_lock(|context| {
+        let mut remove_cmd = context.remove();
+        remove_cmd.arg("--no-sync").arg("tzdata");
+        remove_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -519,7 +547,7 @@ fn jax_instability() -> Result<()> {
         -[[package]]
          name = "uv-lock-instability"
          version = "0.1.0"
-         source = { editable = "." }
+         source = { virtual = "." }
          dependencies = [
              { name = "jax" },
         -    { name = "tzdata" },
@@ -528,7 +556,7 @@ fn jax_instability() -> Result<()> {
          [package.metadata]
         -requires-dist = [
         -    { name = "jax", specifier = "==0.4.17" },
-        -    { name = "tzdata" },
+        -    { name = "tzdata", specifier = ">=2024.1" },
         -]
         +requires-dist = [{ name = "jax", specifier = "==0.4.17" }]
 

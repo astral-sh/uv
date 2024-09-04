@@ -43,7 +43,7 @@ impl VersionMap {
         package_name: &PackageName,
         index: &IndexUrl,
         tags: Option<&Tags>,
-        requires_python: Option<&RequiresPython>,
+        requires_python: &RequiresPython,
         allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
         exclude_newer: Option<&ExcludeNewer>,
@@ -102,7 +102,7 @@ impl VersionMap {
                 tags: tags.cloned(),
                 allowed_yanks: allowed_yanks.clone(),
                 hasher: hasher.clone(),
-                requires_python: requires_python.cloned(),
+                requires_python: requires_python.clone(),
                 exclude_newer: exclude_newer.copied(),
             }),
         }
@@ -285,7 +285,7 @@ struct VersionMapLazy {
     /// The hashes of allowed distributions.
     hasher: HashStrategy,
     /// The `requires-python` constraint for the resolution.
-    requires_python: Option<RequiresPython>,
+    requires_python: RequiresPython,
 }
 
 impl VersionMapLazy {
@@ -510,12 +510,8 @@ impl VersionMapLazy {
 
         // Check if the wheel is compatible with the `requires-python` (i.e., the Python ABI tag
         // is not less than the `requires-python` minimum version).
-        if let Some(requires_python) = self.requires_python.as_ref() {
-            if !requires_python.matches_wheel_tag(filename) {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
-                    IncompatibleTag::Abi,
-                ));
-            }
+        if !self.requires_python.matches_wheel_tag(filename) {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(IncompatibleTag::Abi));
         }
 
         // Break ties with the build tag.

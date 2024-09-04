@@ -9,12 +9,11 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, trace, warn};
 
 use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
-use pypi_types::{Requirement, RequirementSource};
-use uv_fs::Simplified;
+use pypi_types::{Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
+use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 
-use crate::environments::SupportedEnvironments;
 use crate::pyproject::{Project, PyProjectToml, Source, ToolUvWorkspace};
 
 #[derive(thiserror::Error, Debug)]
@@ -46,11 +45,22 @@ pub enum WorkspaceError {
 }
 
 #[derive(Debug, Default, Clone)]
+pub enum MemberDiscovery<'a> {
+    /// Discover all workspace members.
+    #[default]
+    All,
+    /// Don't discover any workspace members.
+    None,
+    /// Discover workspace members, but ignore the given paths.
+    Ignore(FxHashSet<&'a Path>),
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct DiscoveryOptions<'a> {
     /// The path to stop discovery at.
     pub stop_discovery_at: Option<&'a Path>,
-    /// The set of member paths to ignore.
-    pub ignore: FxHashSet<&'a Path>,
+    /// The strategy to use when discovering workspace members.
+    pub members: MemberDiscovery<'a>,
 }
 
 /// A workspace, consisting of a root directory and members. See [`ProjectWorkspace`].
@@ -76,7 +86,7 @@ impl Workspace {
     /// Find the workspace containing the given path.
     ///
     /// Unlike the [`ProjectWorkspace`] discovery, this does not require a current project. It also
-    /// always uses absolute path, i.e. this method only supports discovering the main workspace.
+    /// always uses absolute path, i.e., this method only supports discovering the main workspace.
     ///
     /// Steps of workspace discovery: Start by looking at the closest `pyproject.toml`:
     /// * If it's an explicit workspace root: Collect workspace from this root, we're done.
@@ -84,6 +94,16 @@ impl Workspace {
     /// * Otherwise, try to find an explicit workspace root above:
     ///   * If an explicit workspace root exists: Collect workspace from this root, we're done.
     ///   * If there is no explicit workspace: We have a single project workspace, we're done.
+    ///
+    /// Note that there are two kinds of workspace roots: projects, and (legacy) non-project roots.
+    /// The non-project roots lack a `[project]` table, and so are not themselves projects, as in:
+    /// ```toml
+    /// [tool.uv.workspace]
+    /// members = ["packages/*"]
+    ///
+    /// [tool.uv]
+    /// dev-dependencies = ["ruff"]
+    /// ```
     pub async fn discover(
         path: &Path,
         options: &DiscoveryOptions<'_>,
@@ -138,7 +158,7 @@ impl Workspace {
                 workspace
             } else if pyproject_toml.project.is_none() {
                 // Without a project, it can't be an implicit root
-                return Err(WorkspaceError::MissingProject(project_path));
+                return Err(WorkspaceError::MissingProject(pyproject_path));
             } else if let Some(workspace) = find_workspace(&project_path, options).await? {
                 // We have found an explicit root above.
                 workspace
@@ -158,7 +178,7 @@ impl Workspace {
 
         check_nested_workspaces(&workspace_root, options);
 
-        // Unlike in `ProjectWorkspace` discovery, we might be in a virtual workspace root without
+        // Unlike in `ProjectWorkspace` discovery, we might be in a legacy non-project root without
         // being in any specific project.
         let current_project = pyproject_toml
             .project
@@ -233,17 +253,12 @@ impl Workspace {
         }
     }
 
-    /// Returns `true` if the workspace has a virtual root.
-    pub fn is_virtual(&self) -> bool {
+    /// Returns `true` if the workspace has a (legacy) non-project root.
+    pub fn is_non_project(&self) -> bool {
         !self
             .packages
             .values()
             .any(|member| *member.root() == self.install_path)
-    }
-
-    /// Returns `true` if the workspace consists solely of a virtual root.
-    pub fn only_virtual(&self) -> bool {
-        self.packages.is_empty()
     }
 
     /// Returns the set of requirements that include all packages in the workspace.
@@ -277,10 +292,20 @@ impl Workspace {
                 name: project.name.clone(),
                 extras,
                 marker: MarkerTree::TRUE,
-                source: RequirementSource::Directory {
-                    install_path: member.root.clone(),
-                    editable: true,
-                    url,
+                source: if member.pyproject_toml.is_package() {
+                    RequirementSource::Directory {
+                        install_path: member.root.clone(),
+                        editable: true,
+                        r#virtual: false,
+                        url,
+                    }
+                } else {
+                    RequirementSource::Directory {
+                        install_path: member.root.clone(),
+                        editable: false,
+                        r#virtual: true,
+                        url,
+                    }
                 },
                 origin: None,
             })
@@ -290,21 +315,21 @@ impl Workspace {
     /// Returns any requirements that are exclusive to the workspace root, i.e., not included in
     /// any of the workspace members.
     ///
-    /// For virtual workspaces, returns the dev dependencies in the workspace root, which are
-    /// the only dependencies that are not part of the workspace members.
+    /// For workspaces with non-project roots, returns the dev dependencies in the corresponding
+    /// `pyproject.toml`.
     ///
-    /// For non-virtual workspaces, returns an empty list.
-    pub fn root_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
+    /// Otherwise, returns an empty list.
+    pub fn non_project_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         if self
             .packages
             .values()
             .any(|member| *member.root() == self.install_path)
         {
-            // If the workspace is non-virtual, the root is a member, so we don't need to include
-            // any root-only requirements.
+            // If the workspace has an explicit root, the root is a member, so we don't need to
+            // include any root-only requirements.
             Either::Left(std::iter::empty())
         } else {
-            // Otherwise, return the dev dependencies in the workspace root.
+            // Otherwise, return the dev dependencies in the non-project workspace root.
             Either::Right(
                 self.pyproject_toml
                     .tool
@@ -410,8 +435,88 @@ impl Workspace {
     }
 
     /// The path to the workspace virtual environment.
+    ///
+    /// Uses `.venv` in the install path directory by default.
+    ///
+    /// If `UV_PROJECT_ENVIRONMENT` is set, it will take precedence. If a relative path is provided,
+    /// it is resolved relative to the install path.
     pub fn venv(&self) -> PathBuf {
-        self.install_path.join(".venv")
+        /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
+        fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
+            let value = std::env::var_os("UV_PROJECT_ENVIRONMENT")?;
+
+            if value.is_empty() {
+                return None;
+            };
+
+            let path = PathBuf::from(value);
+            if path.is_absolute() {
+                return Some(path);
+            };
+
+            // Resolve the path relative to the install path.
+            Some(workspace.install_path.join(path))
+        }
+
+        // Resolve the `VIRTUAL_ENV` variable, if any.
+        fn from_virtual_env_variable() -> Option<PathBuf> {
+            let value = std::env::var_os("VIRTUAL_ENV")?;
+
+            if value.is_empty() {
+                return None;
+            };
+
+            let path = PathBuf::from(value);
+            if path.is_absolute() {
+                return Some(path);
+            };
+
+            // Resolve the path relative to current directory.
+            // Note this differs from `UV_PROJECT_ENVIRONMENT`
+            Some(CWD.join(path))
+        }
+
+        // Attempt to check if the two paths refer to the same directory.
+        fn is_same_dir(left: &Path, right: &Path) -> Option<bool> {
+            // First, attempt to check directly
+            if let Ok(value) = same_file::is_same_file(left, right) {
+                return Some(value);
+            };
+
+            // Often, one of the directories won't exist yet so perform the comparison up a level
+            if let (Some(left_parent), Some(right_parent), Some(left_name), Some(right_name)) = (
+                left.parent(),
+                right.parent(),
+                left.file_name(),
+                right.file_name(),
+            ) {
+                match same_file::is_same_file(left_parent, right_parent) {
+                    Ok(true) => return Some(left_name == right_name),
+                    Ok(false) => return Some(false),
+                    _ => (),
+                }
+            };
+
+            // We couldn't determine if they're the same
+            None
+        }
+
+        // Determine the default value
+        let project_env = from_project_environment_variable(self)
+            .unwrap_or_else(|| self.install_path.join(".venv"));
+
+        // Warn if it conflicts with `VIRTUAL_ENV`
+        if let Some(from_virtual_env) = from_virtual_env_variable() {
+            if !is_same_dir(&from_virtual_env, &project_env).unwrap_or(false) {
+                warn_user_once!(
+                    "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored",
+                    from_virtual_env.user_display(),
+                    project_env.user_display()
+                );
+            }
+        }
+
+        project_env
     }
 
     /// The members of the workspace.
@@ -532,7 +637,12 @@ impl Workspace {
                     .clone();
 
                 // If the directory is explicitly ignored, skip it.
-                if options.ignore.contains(member_root.as_path()) {
+                let skip = match &options.members {
+                    MemberDiscovery::All => false,
+                    MemberDiscovery::None => true,
+                    MemberDiscovery::Ignore(ignore) => ignore.contains(member_root.as_path()),
+                };
+                if skip {
                     debug!(
                         "Ignoring workspace member: `{}`",
                         member_root.simplified_display()
@@ -580,7 +690,7 @@ impl Workspace {
                 };
 
                 let pyproject_toml = PyProjectToml::from_string(contents)
-                    .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
+                    .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
                 // Check if the current project is explicitly marked as unmanaged.
                 if pyproject_toml
@@ -599,7 +709,7 @@ impl Workspace {
 
                 // Extract the package name.
                 let Some(project) = pyproject_toml.project.clone() else {
-                    return Err(WorkspaceError::MissingProject(member_root));
+                    return Err(WorkspaceError::MissingProject(pyproject_path));
                 };
 
                 debug!(
@@ -795,7 +905,7 @@ impl ProjectWorkspace {
         let project = pyproject_toml
             .project
             .clone()
-            .ok_or_else(|| WorkspaceError::MissingProject(pyproject_path.clone()))?;
+            .ok_or_else(|| WorkspaceError::MissingProject(pyproject_path))?;
 
         Self::from_project(project_root, &project, &pyproject_toml, options).await
     }
@@ -992,6 +1102,14 @@ async fn find_workspace(
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.workspace.as_ref())
         {
+            if !is_included_in_workspace(project_root, workspace_root, workspace)? {
+                debug!(
+                    "Found workspace root `{}`, but project is not included",
+                    workspace_root.simplified_display()
+                );
+                return Ok(None);
+            }
+
             if is_excluded_from_workspace(project_root, workspace_root, workspace)? {
                 debug!(
                     "Found workspace root `{}`, but project is excluded",
@@ -1087,6 +1205,21 @@ pub fn check_nested_workspaces(inner_workspace_root: &Path, options: &DiscoveryO
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.workspace.as_ref())
         {
+            let is_included = match is_included_in_workspace(
+                inner_workspace_root,
+                outer_workspace_root,
+                workspace,
+            ) {
+                Ok(contents) => contents,
+                Err(err) => {
+                    warn!(
+                        "Invalid pyproject.toml `{}`: {err}",
+                        pyproject_toml_path.simplified_display()
+                    );
+                    return;
+                }
+            };
+
             let is_excluded = match is_excluded_from_workspace(
                 inner_workspace_root,
                 outer_workspace_root,
@@ -1101,7 +1234,8 @@ pub fn check_nested_workspaces(inner_workspace_root: &Path, options: &DiscoveryO
                     return;
                 }
             };
-            if !is_excluded {
+
+            if is_included && !is_excluded {
                 warn_user!(
                     "Nested workspaces are not supported, but outer workspace (`{}`) includes `{}`",
                     outer_workspace_root.simplified_display().cyan(),
@@ -1165,16 +1299,16 @@ fn is_included_in_workspace(
     Ok(false)
 }
 
-/// A project that can be synced.
+/// A project that can be discovered.
 ///
-/// The project could be a package within a workspace, a real workspace root, or even a virtual
-/// workspace root.
+/// The project could be a package within a workspace, a real workspace root, or a (legacy)
+/// non-project workspace root, which can define its own dev dependencies.
 #[derive(Debug, Clone)]
 pub enum VirtualProject {
-    /// A project (which could be within a workspace, or an implicit workspace root).
+    /// A project (which could be a workspace root or member).
     Project(ProjectWorkspace),
-    /// A virtual workspace root.
-    Virtual(Workspace),
+    /// A (legacy) non-project workspace root.
+    NonProject(Workspace),
 }
 
 impl VirtualProject {
@@ -1228,7 +1362,8 @@ impl VirtualProject {
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.workspace.as_ref())
         {
-            // Otherwise, if it contains a `tool.uv.workspace` table, it's a virtual workspace.
+            // Otherwise, if it contains a `tool.uv.workspace` table, it's a non-project workspace
+            // root.
             let project_path = std::path::absolute(project_root)
                 .map_err(WorkspaceError::Normalize)?
                 .clone();
@@ -1244,7 +1379,7 @@ impl VirtualProject {
             )
             .await?;
 
-            Ok(Self::Virtual(workspace))
+            Ok(Self::NonProject(workspace))
         } else {
             Err(WorkspaceError::MissingProject(pyproject_path))
         }
@@ -1256,13 +1391,13 @@ impl VirtualProject {
     #[must_use]
     pub fn with_pyproject_toml(self, pyproject_toml: PyProjectToml) -> Option<Self> {
         match self {
-            VirtualProject::Project(project) => Some(VirtualProject::Project(
-                project.with_pyproject_toml(pyproject_toml)?,
-            )),
-            VirtualProject::Virtual(workspace) => {
-                // If the project is virtual, the root isn't a member, so we can just update the
-                // top-level `pyproject.toml`.
-                Some(VirtualProject::Virtual(Workspace {
+            Self::Project(project) => {
+                Some(Self::Project(project.with_pyproject_toml(pyproject_toml)?))
+            }
+            Self::NonProject(workspace) => {
+                // If this is a non-project workspace root, then by definition the root isn't a
+                // member, so we can just update the top-level `pyproject.toml`.
+                Some(Self::NonProject(Workspace {
                     pyproject_toml,
                     ..workspace.clone()
                 }))
@@ -1273,50 +1408,92 @@ impl VirtualProject {
     /// Return the root of the project.
     pub fn root(&self) -> &Path {
         match self {
-            VirtualProject::Project(project) => project.project_root(),
-            VirtualProject::Virtual(workspace) => workspace.install_path(),
+            Self::Project(project) => project.project_root(),
+            Self::NonProject(workspace) => workspace.install_path(),
         }
     }
 
     /// Return the [`PyProjectToml`] of the project.
     pub fn pyproject_toml(&self) -> &PyProjectToml {
         match self {
-            VirtualProject::Project(project) => project.current_project().pyproject_toml(),
-            VirtualProject::Virtual(workspace) => &workspace.pyproject_toml,
+            Self::Project(project) => project.current_project().pyproject_toml(),
+            Self::NonProject(workspace) => &workspace.pyproject_toml,
         }
     }
 
     /// Return the [`Workspace`] of the project.
     pub fn workspace(&self) -> &Workspace {
         match self {
-            VirtualProject::Project(project) => project.workspace(),
-            VirtualProject::Virtual(workspace) => workspace,
+            Self::Project(project) => project.workspace(),
+            Self::NonProject(workspace) => workspace,
         }
     }
 
-    /// Return the [`PackageName`] of the project.
+    /// Return the [`PackageName`] of the project, if available.
+    pub fn project_name(&self) -> Option<&PackageName> {
+        match self {
+            VirtualProject::Project(project) => Some(project.project_name()),
+            VirtualProject::NonProject(_) => None,
+        }
+    }
+
+    /// Returns `true` if the project is a virtual workspace root.
+    pub fn is_non_project(&self) -> bool {
+        matches!(self, VirtualProject::NonProject(_))
+    }
+}
+
+/// A target that can be installed.
+#[derive(Debug, Clone, Copy)]
+pub enum InstallTarget<'env> {
+    /// A project (which could be a workspace root or member).
+    Project(&'env ProjectWorkspace),
+    /// A (legacy) non-project workspace root.
+    NonProject(&'env Workspace),
+    /// A frozen member within a [`Workspace`].
+    FrozenMember(&'env Workspace, &'env PackageName),
+}
+
+impl<'env> InstallTarget<'env> {
+    /// Create an [`InstallTarget`] for a frozen member within a workspace.
+    pub fn frozen_member(project: &'env VirtualProject, package_name: &'env PackageName) -> Self {
+        Self::FrozenMember(project.workspace(), package_name)
+    }
+
+    /// Return the [`Workspace`] of the target.
+    pub fn workspace(&self) -> &Workspace {
+        match self {
+            Self::Project(project) => project.workspace(),
+            Self::NonProject(workspace) => workspace,
+            Self::FrozenMember(workspace, _) => workspace,
+        }
+    }
+
+    /// Return the [`PackageName`] of the target.
     pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
         match self {
-            VirtualProject::Project(project) => {
-                Either::Left(std::iter::once(project.project_name()))
-            }
-            VirtualProject::Virtual(workspace) => Either::Right(workspace.packages().keys()),
+            Self::Project(project) => Either::Left(std::iter::once(project.project_name())),
+            Self::NonProject(workspace) => Either::Right(workspace.packages().keys()),
+            Self::FrozenMember(_, package_name) => Either::Left(std::iter::once(*package_name)),
         }
     }
 
-    /// Return the [`VirtualProject`] dependencies for the given group name.
+    /// Return the [`InstallTarget`] dependencies for the given group name.
     ///
     /// Returns dependencies that apply to the workspace root, but not any of its members. As such,
     /// only returns a non-empty iterator for virtual workspaces, which can include dev dependencies
     /// on the virtual root.
-    pub fn group(&self, name: &GroupName) -> impl Iterator<Item = &PackageName> {
+    pub fn group(
+        &self,
+        name: &GroupName,
+    ) -> impl Iterator<Item = &pep508_rs::Requirement<VerbatimParsedUrl>> {
         match self {
-            VirtualProject::Project(_) => {
-                // For non-virtual projects, dev dependencies are attached to the members.
+            Self::Project(_) | Self::FrozenMember(..) => {
+                // For projects, dev dependencies are attached to the members.
                 Either::Left(std::iter::empty())
             }
-            VirtualProject::Virtual(workspace) => {
-                // For virtual projects, we might have dev dependencies that are attached to the
+            Self::NonProject(workspace) => {
+                // For non-projects, we might have dev dependencies that are attached to the
                 // workspace root (which isn't a member).
                 if name == &*DEV_DEPENDENCIES {
                     Either::Right(
@@ -1326,7 +1503,7 @@ impl VirtualProject {
                             .as_ref()
                             .and_then(|tool| tool.uv.as_ref())
                             .and_then(|uv| uv.dev_dependencies.as_ref())
-                            .map(|dev| dev.iter().map(|req| &req.name))
+                            .map(|dev| dev.iter())
                             .into_iter()
                             .flatten(),
                     )
@@ -1337,17 +1514,22 @@ impl VirtualProject {
         }
     }
 
-    /// Return the [`PackageName`] of the project, if it's not a virtual workspace.
+    /// Return the [`PackageName`] of the target, if available.
     pub fn project_name(&self) -> Option<&PackageName> {
         match self {
-            VirtualProject::Project(project) => Some(project.project_name()),
-            VirtualProject::Virtual(_) => None,
+            Self::Project(project) => Some(project.project_name()),
+            Self::NonProject(_) => None,
+            Self::FrozenMember(_, package_name) => Some(package_name),
         }
     }
+}
 
-    /// Returns `true` if the project is a virtual workspace.
-    pub fn is_virtual(&self) -> bool {
-        matches!(self, VirtualProject::Virtual(_))
+impl<'env> From<&'env VirtualProject> for InstallTarget<'env> {
+    fn from(project: &'env VirtualProject) -> Self {
+        match project {
+            VirtualProject::Project(project) => Self::Project(project),
+            VirtualProject::NonProject(workspace) => Self::NonProject(workspace),
+        }
     }
 }
 
@@ -1533,6 +1715,7 @@ mod tests {
                         "exclude": null
                       },
                       "managed": null,
+                      "package": null,
                       "dev-dependencies": null,
                       "environments": null,
                       "override-dependencies": null,
@@ -1605,6 +1788,7 @@ mod tests {
                         "exclude": null
                       },
                       "managed": null,
+                      "package": null,
                       "dev-dependencies": null,
                       "environments": null,
                       "override-dependencies": null,

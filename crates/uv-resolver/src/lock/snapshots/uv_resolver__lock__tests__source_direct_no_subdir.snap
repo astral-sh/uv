@@ -1,5 +1,5 @@
 ---
-source: crates/uv-resolver/src/lock.rs
+source: crates/uv-resolver/src/lock/mod.rs
 expression: result
 ---
 Ok(
@@ -7,7 +7,26 @@ Ok(
         version: 1,
         fork_markers: [],
         supported_environments: [],
-        requires_python: None,
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                RequiresPythonBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                RequiresPythonBound(
+                    Unbounded,
+                ),
+            ),
+        },
         options: ResolverOptions {
             resolution_mode: Highest,
             prerelease_mode: IfNecessaryOrExplicit,
@@ -20,8 +39,13 @@ Ok(
                         "anyio",
                     ),
                     version: "4.3.0",
-                    source: Editable(
-                        "path/to/dir",
+                    source: Direct(
+                        UrlString(
+                            "https://burntsushi.net",
+                        ),
+                        DirectSource {
+                            subdirectory: None,
+                        },
                     ),
                 },
                 sdist: None,
@@ -42,8 +66,13 @@ Ok(
                     "anyio",
                 ),
                 version: "4.3.0",
-                source: Editable(
-                    "path/to/dir",
+                source: Direct(
+                    UrlString(
+                        "https://burntsushi.net",
+                    ),
+                    DirectSource {
+                        subdirectory: None,
+                    },
                 ),
             }: 0,
         },

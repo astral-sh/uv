@@ -30,7 +30,7 @@ An extremely fast Python package and project manager, written in Rust.
 - ❇️ [Runs single-file scripts](#script-support), with support for
   [inline dependency metadata](https://docs.astral.sh/uv/guides/scripts#declaring-script-dependencies).
 - 🗂️ Provides [comprehensive project management](#project-management), with a
-  [universal lockfile](https://docs.astral.sh/uv/concepts/projects#lockfile).
+  [universal lockfile](https://docs.astral.sh/uv/concepts/projects#project-lockfile).
 - 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
   familiar CLI.
 - 🏢 Supports Cargo-style [workspaces](https://docs.astral.sh/uv/concepts/workspaces) for scalable
@@ -167,7 +167,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 
 Use a specific Python version in the current directory:
 
-```
+```console
 $ uv python pin pypy@3.11
 Pinned `.python-version` to `pypy@3.11`
 ```
@@ -190,7 +190,7 @@ Updated `example.py`
 
 Then, run the script in an isolated virtual environment:
 
-```
+```console
 $ uv run example.py
 Reading inline script metadata from: example.py
 Installed 5 packages in 12ms

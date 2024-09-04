@@ -90,6 +90,7 @@ impl InstalledDist {
 
             let name = PackageName::from_str(name)?;
             let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
+
             return if let Some(direct_url) = Self::direct_url(path)? {
                 match Url::try_from(&direct_url) {
                     Ok(url) => Ok(Some(Self::Url(InstalledDirectUrlDist {

@@ -1,8 +1,7 @@
 use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
-use petgraph::algo::greedy_feedback_arc_set;
-use petgraph::visit::{EdgeRef, Topo};
+use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
@@ -10,6 +9,7 @@ use distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnn
 use pep508_rs::MarkerTree;
 use uv_normalize::PackageName;
 
+use crate::graph_ops::{propagate_markers, Markers};
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolutionGraph, ResolverMarkers};
 
@@ -47,6 +47,14 @@ pub struct DisplayResolutionGraph<'a> {
 enum DisplayResolutionGraphNode {
     Root,
     Dist(RequirementsTxtDist),
+}
+
+impl Markers for DisplayResolutionGraphNode {
+    fn set_markers(&mut self, markers: MarkerTree) {
+        if let DisplayResolutionGraphNode::Dist(node) = self {
+            node.markers = markers;
+        }
+    }
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
@@ -179,7 +187,11 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         for (index, node) in nodes {
             // Display the node itself.
             let mut line = node
-                .to_requirements_txt(self.include_extras, self.include_markers)
+                .to_requirements_txt(
+                    &self.resolution.requires_python,
+                    self.include_extras,
+                    self.include_markers,
+                )
                 .to_string();
 
             // Display the distribution hashes, if any.
@@ -346,77 +358,6 @@ fn to_requirements_txt_graph(graph: &ResolutionPetGraph) -> IntermediatePetGraph
     }
 
     next
-}
-
-/// Propagate the [`MarkerTree`] qualifiers across the graph.
-///
-/// The graph is directed, so if any edge contains a marker, we need to propagate it to all
-/// downstream nodes.
-fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
-    // Remove any cycles. By absorption, it should be fine to ignore cycles.
-    //
-    // Imagine a graph: `A -> B -> C -> A`. Assume that `A` has weight `1`, `B` has weight `2`,
-    // and `C` has weight `3`. The weights are the marker trees.
-    //
-    // When propagating, we'd return to `A` when we hit the cycle, to create `1 or (1 and 2 and 3)`,
-    // which resolves to `1`.
-    //
-    // TODO(charlie): The above reasoning could be incorrect. Consider using a graph algorithm that
-    // can handle weight propagation with cycles.
-    let edges = {
-        let mut fas = greedy_feedback_arc_set(&graph)
-            .map(|edge| edge.id())
-            .collect::<Vec<_>>();
-        fas.sort_unstable();
-        let mut edges = Vec::with_capacity(fas.len());
-        for edge_id in fas.into_iter().rev() {
-            edges.push(graph.edge_endpoints(edge_id).unwrap());
-            graph.remove_edge(edge_id);
-        }
-        edges
-    };
-
-    let mut topo = Topo::new(&graph);
-    while let Some(index) = topo.next(&graph) {
-        let marker_tree: Option<MarkerTree> = {
-            // Fold over the edges to combine the marker trees. If any edge is `None`, then
-            // the combined marker tree is `None`.
-            let mut edges = graph.edges_directed(index, Direction::Incoming);
-            edges
-                .next()
-                .and_then(|edge| graph.edge_weight(edge.id()).cloned())
-                .and_then(|initial| {
-                    edges.try_fold(initial, |mut acc, edge| {
-                        acc.or(graph.edge_weight(edge.id())?.clone());
-                        Some(acc)
-                    })
-                })
-        };
-
-        // Propagate the marker tree to all downstream nodes.
-        if let Some(marker_tree) = marker_tree.as_ref() {
-            let mut walker = graph
-                .neighbors_directed(index, Direction::Outgoing)
-                .detach();
-            while let Some((outgoing, _)) = walker.next(&graph) {
-                if let Some(weight) = graph.edge_weight_mut(outgoing) {
-                    weight.and(marker_tree.clone());
-                }
-            }
-        }
-
-        if let DisplayResolutionGraphNode::Dist(node) = &mut graph[index] {
-            node.markers = marker_tree;
-        };
-    }
-
-    // Re-add the removed edges. We no longer care about the edge _weights_, but we do want the
-    // edges to be present, to power the `# via` annotations.
-    for (source, target) in edges {
-        graph.add_edge(source, target, MarkerTree::TRUE);
-    }
-
-    graph
 }
 
 /// Reduce the graph, such that all nodes for a single package are combined, regardless of

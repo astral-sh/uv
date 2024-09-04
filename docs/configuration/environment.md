@@ -76,6 +76,10 @@ In addition, uv respects the following environment variables:
   packages.
 - `UV_TOOL_DIR`: Used to specify the directory where uv will store managed tools.
 - `UV_TOOL_BIN_DIR`: Used to specify the "bin" directory where uv will install tool executables.
+- `UV_PROJECT_ENVIRONMENT`: Use to specify the path to the directory to use for a project virtual
+  environment. See the
+  [project documentation](../concepts/projects.md#custom-project-environment-paths) for more
+  details.
 - `UV_PYTHON_INSTALL_DIR`: Used to specify the directory where uv will store managed Python
   installations.
 - `UV_PYTHON_INSTALL_MIRROR`: Managed Python installations are downloaded from
@@ -83,11 +87,13 @@ In addition, uv respects the following environment variables:
   can be set to a mirror URL to use a different source for Python installations. The provided URL
   will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g.,
   `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+  Distributions can be read from a local directory by using the `file://` URL scheme.
 - `UV_PYPY_INSTALL_MIRROR`: Managed PyPy installations are downloaded from
   [python.org](https://downloads.python.org/). This variable can be set to a mirror URL to use a
   different source for PyPy installations. The provided URL will replace
   `https://downloads.python.org/pypy` in, e.g.,
-  `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+  `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`. Distributions can be read from a
+  local directory by using the `file://` URL scheme.
 - `XDG_CONFIG_HOME`: Used to specify the path to uv user-level configuration directory on Unix
   systems.
 - `XDG_CACHE_HOME`: Used to specify the directory where uv stores cache files on Unix systems.

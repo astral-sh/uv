@@ -6,7 +6,7 @@ use tracing::{debug, trace};
 use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, MarkerTree};
+use pep508_rs::MarkerTree;
 use uv_configuration::IndexStrategy;
 use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
@@ -30,7 +30,7 @@ impl CandidateSelector {
     pub(crate) fn for_resolution(
         options: Options,
         manifest: &Manifest,
-        markers: Option<&MarkerEnvironment>,
+        markers: &ResolverMarkers,
     ) -> Self {
         Self {
             resolution_strategy: ResolutionStrategy::from_mode(

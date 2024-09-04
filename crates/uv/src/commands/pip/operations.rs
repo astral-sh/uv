@@ -17,7 +17,7 @@ use distribution_types::{
 };
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
-use pypi_types::Requirement;
+use pypi_types::{Requirement, ResolverMarkerEnvironment};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
@@ -199,7 +199,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
-    let preferences = Preferences::from_iter(preferences, markers.marker_environment());
+    let preferences = Preferences::from_iter(preferences, &markers);
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -349,6 +349,7 @@ pub(crate) async fn install(
     compile: bool,
     index_urls: &IndexLocations,
     hasher: &HashStrategy,
+    markers: &ResolverMarkerEnvironment,
     tags: &Tags,
     client: &RegistryClient,
     in_flight: &InFlight,
@@ -376,6 +377,7 @@ pub(crate) async fn install(
             index_urls,
             cache,
             venv,
+            markers,
             tags,
         )
         .context("Failed to determine installation plan")?;
@@ -461,7 +463,15 @@ pub(crate) async fn install(
                     install_wheel_rs::Error::MissingRecord(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing RECORD file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
+                        dist_info.path().user_display().cyan(),
+                    );
+                }
+                Err(uv_installer::UninstallError::Uninstall(
+                    install_wheel_rs::Error::MissingTopLevel(_),
+                )) => {
+                    warn_user!(
+                        "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
                         dist_info.path().user_display().cyan(),
                     );
                 }
@@ -585,7 +595,7 @@ fn report_dry_run(
         )?;
     }
 
-    // TDOO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
+    // TODO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
     for event in reinstalls
         .into_iter()
         .chain(extraneous.into_iter())
@@ -661,10 +671,11 @@ pub(crate) fn diagnose_resolution(
 pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,
+    markers: &ResolverMarkerEnvironment,
     printer: Printer,
 ) -> Result<(), Error> {
     let site_packages = SitePackages::from_environment(venv)?;
-    for diagnostic in site_packages.diagnostics()? {
+    for diagnostic in site_packages.diagnostics(markers)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
             .packages()

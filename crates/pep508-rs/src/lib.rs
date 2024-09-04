@@ -1173,7 +1173,7 @@ mod tests {
 
     #[test]
     fn basic_examples() {
-        let input = r"requests[security,tests]>=2.8.1,==2.8.* ; python_full_version < '2.7'";
+        let input = r"requests[security,tests]==2.8.*,>=2.8.1 ; python_full_version < '2.7'";
         let requests = Requirement::<Url>::from_str(input).unwrap();
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
@@ -1185,13 +1185,13 @@ mod tests {
             version_or_url: Some(VersionOrUrl::VersionSpecifier(
                 [
                     VersionSpecifier::from_pattern(
-                        Operator::GreaterThanEqual,
-                        VersionPattern::verbatim(Version::new([2, 8, 1])),
+                        Operator::Equal,
+                        VersionPattern::wildcard(Version::new([2, 8])),
                     )
                     .unwrap(),
                     VersionSpecifier::from_pattern(
-                        Operator::Equal,
-                        VersionPattern::wildcard(Version::new([2, 8])),
+                        Operator::GreaterThanEqual,
+                        VersionPattern::verbatim(Version::new([2, 8, 1])),
                     )
                     .unwrap(),
                 ]
