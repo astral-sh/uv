@@ -23,6 +23,7 @@ uv will create the following files:
 
 ```text
 .
+├── .python-version
 ├── README.md
 ├── hello.py
 └── pyproject.toml
@@ -50,6 +51,7 @@ A complete listing would look like:
 │   ├── bin
 │   ├── lib
 │   └── pyvenv.cfg
+├── .python-version
 ├── README.md
 ├── hello.py
 ├── pyproject.toml
@@ -80,6 +82,11 @@ description or license. You can edit this file manually, or use commands like `u
 
 You'll also use this file to specify uv [configuration options](../configuration/files.md) in a
 [`[tool.uv]`](../reference/settings.md) section.
+
+### `.python-version`
+
+The `.python-version` file contains the project's default Python version. This file tells uv which
+Python version to use when creating the project's virtual environment.
 
 ### `.venv`
 
