@@ -35,9 +35,9 @@ index-url = "https://test.pypi.org/simple"
 
 !!! note
 
-    `uv.toml` files take precedence over `pyproject.toml` ones, so if both `uv.toml` and
-    `pyproject.toml` files are used in a directory, configuration will be read from `uv.toml`, and
-    `[tool.uv]` section in `pyproject.toml` will be ignored.
+    `uv.toml` files take precedence over `pyproject.toml` files, so if both `uv.toml` and
+    `pyproject.toml` files are present in a directory, configuration will be read from `uv.toml`, and
+    `[tool.uv]` section in the accompanying `pyproject.toml` will be ignored.
 
 uv will also discover user-level configuration at `~/.config/uv/uv.toml` (or
 `$XDG_CONFIG_HOME/uv/uv.toml`) on macOS and Linux, or `%APPDATA%\uv\uv.toml` on Windows. User-level
