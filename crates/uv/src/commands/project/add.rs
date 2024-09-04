@@ -41,7 +41,7 @@ use crate::commands::project::ProjectError;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -479,22 +479,27 @@ pub(crate) async fn add(
         return Ok(ExitStatus::Success);
     }
 
-    let existing = project.pyproject_toml();
+    // Store the content prior to any modifications.
+    let existing = project.pyproject_toml().as_ref().to_vec();
+    let root = project.root().to_path_buf();
 
     // Update the `pypackage.toml` in-memory.
-    let mut project = project
-        .clone()
-        .with_pyproject_toml(toml::from_str(&content)?)
-        .context("Failed to update `pyproject.toml`")?;
+    let project = project
+        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
+        .ok_or(ProjectError::TomlUpdate)?;
 
-    // Lock and sync the environment, if necessary.
-    let mut lock = match project::lock::do_safe_lock(
+    match lock_and_sync(
+        project,
+        &mut toml,
+        &edits,
+        &venv,
+        state,
         locked,
         frozen,
-        project.workspace(),
-        venv.interpreter(),
-        settings.as_ref().into(),
-        Box::new(DefaultResolveLogger),
+        no_sync,
+        &dependency_type,
+        raw_sources,
+        settings.as_ref(),
         connectivity,
         concurrency,
         native_tls,
@@ -503,7 +508,7 @@ pub(crate) async fn add(
     )
     .await
     {
-        Ok(result) => result.into_lock(),
+        Ok(()) => Ok(ExitStatus::Success),
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
@@ -513,13 +518,56 @@ pub(crate) async fn add(
 
             // Revert the changes to the `pyproject.toml`, if necessary.
             if modified {
-                fs_err::write(project.root().join("pyproject.toml"), existing)?;
+                fs_err::write(root.join("pyproject.toml"), existing)?;
             }
 
-            return Ok(ExitStatus::Failure);
+            Ok(ExitStatus::Failure)
         }
-        Err(err) => return Err(err.into()),
-    };
+        Err(err) => {
+            // Revert the changes to the `pyproject.toml`, if necessary.
+            if modified {
+                fs_err::write(root.join("pyproject.toml"), existing)?;
+            }
+            Err(err.into())
+        }
+    }
+}
+
+/// Re-lock and re-sync the project after a series of edits.
+#[allow(clippy::fn_params_excessive_bools)]
+async fn lock_and_sync(
+    mut project: VirtualProject,
+    toml: &mut PyProjectTomlMut,
+    edits: &[DependencyEdit<'_>],
+    venv: &PythonEnvironment,
+    state: SharedState,
+    locked: bool,
+    frozen: bool,
+    no_sync: bool,
+    dependency_type: &DependencyType,
+    raw_sources: bool,
+    settings: ResolverInstallerSettingsRef<'_>,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<(), ProjectError> {
+    let mut lock = project::lock::do_safe_lock(
+        locked,
+        frozen,
+        project.workspace(),
+        venv.interpreter(),
+        settings.into(),
+        Box::new(DefaultResolveLogger),
+        connectivity,
+        concurrency,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await?
+    .into_lock();
 
     // Avoid modifying the user request further if `--raw-sources` is set.
     if !raw_sources {
@@ -543,7 +591,7 @@ pub(crate) async fn add(
 
         // If any of the requirements were added without version specifiers, add a lower bound.
         let mut modified = false;
-        for edit in &edits {
+        for edit in edits {
             // Only set a minimum version for newly-added dependencies (as opposed to updates).
             let ArrayEdit::Add(index) = &edit.edit else {
                 continue;
@@ -599,18 +647,17 @@ pub(crate) async fn add(
 
             // Update the `pypackage.toml` in-memory.
             project = project
-                .clone()
-                .with_pyproject_toml(toml::from_str(&content)?)
-                .context("Failed to update `pyproject.toml`")?;
+                .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
+                .ok_or(ProjectError::TomlUpdate)?;
 
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
-            lock = match project::lock::do_safe_lock(
+            lock = project::lock::do_safe_lock(
                 locked,
                 frozen,
                 project.workspace(),
                 venv.interpreter(),
-                settings.as_ref().into(),
+                settings.into(),
                 Box::new(SummaryResolveLogger),
                 connectivity,
                 concurrency,
@@ -618,30 +665,13 @@ pub(crate) async fn add(
                 cache,
                 printer,
             )
-            .await
-            {
-                Ok(result) => result.into_lock(),
-                Err(ProjectError::Operation(pip::operations::Error::Resolve(
-                    uv_resolver::ResolveError::NoSolution(err),
-                ))) => {
-                    let header = err.header();
-                    let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If this is intentional, run `uv add --frozen` to skip the lock and sync steps.") });
-                    anstream::eprint!("{report:?}");
-
-                    // Revert the changes to the `pyproject.toml`, if necessary.
-                    if modified {
-                        fs_err::write(project.root().join("pyproject.toml"), existing)?;
-                    }
-
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(err) => return Err(err.into()),
-            };
+            .await?
+            .into_lock();
         }
     }
 
     if no_sync {
-        return Ok(ExitStatus::Success);
+        return Ok(());
     }
 
     // Sync the environment.
@@ -663,19 +693,15 @@ pub(crate) async fn add(
         }
     };
 
-    // Initialize any shared state.
-    let state = SharedState::default();
-    let install_options = InstallOptions::default();
-
-    if let Err(err) = project::sync::do_sync(
+    project::sync::do_sync(
         InstallTarget::from(&project),
-        &venv,
+        venv,
         &lock,
         &extras,
         dev,
-        install_options,
+        InstallOptions::default(),
         Modifications::Sufficient,
-        settings.as_ref().into(),
+        settings.into(),
         &state,
         Box::new(DefaultInstallLogger),
         connectivity,
@@ -684,16 +710,9 @@ pub(crate) async fn add(
         cache,
         printer,
     )
-    .await
-    {
-        // Revert the changes to the `pyproject.toml`, if necessary.
-        if modified {
-            fs_err::write(project.root().join("pyproject.toml"), existing)?;
-        }
-        return Err(err.into());
-    }
+    .await?;
 
-    Ok(ExitStatus::Success)
+    Ok(())
 }
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.

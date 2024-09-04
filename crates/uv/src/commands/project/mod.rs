@@ -84,6 +84,12 @@ pub(crate) enum ProjectError {
     #[error("Environment marker is empty")]
     EmptyEnvironment,
 
+    #[error("Failed to parse `pyproject.toml`")]
+    TomlParse(#[source] toml::de::Error),
+
+    #[error("Failed to update `pyproject.toml`")]
+    TomlUpdate,
+
     #[error(transparent)]
     Python(#[from] uv_python::Error),
 
@@ -119,6 +125,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     NamedRequirements(#[from] uv_requirements::NamedRequirementsError),
+
+    #[error(transparent)]
+    PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
 
     #[error(transparent)]
     Fmt(#[from] std::fmt::Error),
