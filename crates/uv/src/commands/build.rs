@@ -15,19 +15,20 @@ use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient
 use uv_configuration::{BuildKind, BuildOutput, Concurrency};
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
+use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_resolver::{FlatIndex, RequiresPython};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
-use uv_warnings::warn_user_once;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, Workspace};
 
 /// Build source distributions and wheels.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn build(
     src: Option<PathBuf>,
+    package: Option<PackageName>,
     output_dir: Option<PathBuf>,
     sdist: bool,
     wheel: bool,
@@ -44,6 +45,7 @@ pub(crate) async fn build(
 ) -> Result<ExitStatus> {
     let assets = build_impl(
         src.as_deref(),
+        package.as_ref(),
         output_dir.as_deref(),
         sdist,
         wheel,
@@ -82,6 +84,7 @@ pub(crate) async fn build(
 #[allow(clippy::fn_params_excessive_bools)]
 async fn build_impl(
     src: Option<&Path>,
+    package: Option<&PackageName>,
     output_dir: Option<&Path>,
     sdist: bool,
     wheel: bool,
@@ -118,6 +121,7 @@ async fn build_impl(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
+    // Determine the source to build.
     let src = if let Some(src) = src {
         let src = std::path::absolute(src)?;
         let metadata = match fs_err::tokio::metadata(&src).await {
@@ -139,9 +143,37 @@ async fn build_impl(
         Source::Directory(Cow::Borrowed(&*CWD))
     };
 
-    let src_dir = match src {
-        Source::Directory(ref src) => src,
-        Source::File(ref src) => src.parent().unwrap(),
+    // Attempt to discover the workspace; on failure, save the error for later.
+    let workspace = Workspace::discover(src.directory(), &DiscoveryOptions::default()).await;
+
+    // If a `--package` was provided, adjust the source directory.
+    let src = if let Some(package) = package {
+        if matches!(src, Source::File(_)) {
+            return Err(anyhow::anyhow!(
+                "Cannot specify a `--package` when building from a file"
+            ));
+        }
+
+        let workspace = match workspace {
+            Ok(ref workspace) => workspace,
+            Err(err) => {
+                return Err(
+                    anyhow::anyhow!("`--package` was provided, but no workspace was found")
+                        .context(err),
+                )
+            }
+        };
+
+        let project = workspace
+            .packages()
+            .get(package)
+            .ok_or_else(|| anyhow::anyhow!("Package `{}` not found in workspace", package))?
+            .root()
+            .clone();
+
+        Source::Directory(Cow::Owned(project))
+    } else {
+        src
     };
 
     let output_dir = if let Some(output_dir) = output_dir {
@@ -158,26 +190,15 @@ async fn build_impl(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(&src_dir, no_config, false)
+        interpreter_request = PythonVersionFile::discover(src.directory(), no_config, false)
             .await?
             .and_then(PythonVersionFile::into_version);
     }
 
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
-        let project = match VirtualProject::discover(src_dir, &DiscoveryOptions::default()).await {
-            Ok(project) => Some(project),
-            Err(WorkspaceError::MissingProject(_)) => None,
-            Err(WorkspaceError::MissingPyprojectToml) => None,
-            Err(WorkspaceError::NonWorkspace(_)) => None,
-            Err(err) => {
-                warn_user_once!("{err}");
-                None
-            }
-        };
-
-        if let Some(project) = project {
-            interpreter_request = find_requires_python(project.workspace())?
+        if let Ok(ref workspace) = workspace {
+            interpreter_request = find_requires_python(workspace)?
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
@@ -463,8 +484,15 @@ enum Source<'a> {
 impl<'a> Source<'a> {
     fn path(&self) -> &Path {
         match self {
-            Source::File(path) => path.as_ref(),
-            Source::Directory(path) => path.as_ref(),
+            Self::File(path) => path.as_ref(),
+            Self::Directory(path) => path.as_ref(),
+        }
+    }
+
+    fn directory(&self) -> &Path {
+        match self {
+            Self::File(path) => path.parent().unwrap(),
+            Self::Directory(path) => path,
         }
     }
 }

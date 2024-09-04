@@ -893,3 +893,256 @@ fn fail() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
+            (r"\\\.", ""),
+        ])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    project.child("src").child("__init__.py").touch()?;
+    project.child("README").touch()?;
+
+    let member = project.child("packages").child("member");
+    fs_err::create_dir_all(member.path())?;
+
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    member.child("src").child("__init__.py").touch()?;
+    member.child("README").touch()?;
+
+    // Build the member.
+    uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    running egg_info
+    creating src/member.egg-info
+    writing src/member.egg-info/PKG-INFO
+    writing dependency_links to src/member.egg-info/dependency_links.txt
+    writing requirements to src/member.egg-info/requires.txt
+    writing top-level names to src/member.egg-info/top_level.txt
+    writing manifest file 'src/member.egg-info/SOURCES.txt'
+    reading manifest file 'src/member.egg-info/SOURCES.txt'
+    writing manifest file 'src/member.egg-info/SOURCES.txt'
+    running sdist
+    running egg_info
+    writing src/member.egg-info/PKG-INFO
+    writing dependency_links to src/member.egg-info/dependency_links.txt
+    writing requirements to src/member.egg-info/requires.txt
+    writing top-level names to src/member.egg-info/top_level.txt
+    reading manifest file 'src/member.egg-info/SOURCES.txt'
+    writing manifest file 'src/member.egg-info/SOURCES.txt'
+    running check
+    creating member-0.1.0
+    creating member-0.1.0/src
+    creating member-0.1.0/src/member.egg-info
+    copying files to member-0.1.0...
+    copying README -> member-0.1.0
+    copying pyproject.toml -> member-0.1.0
+    copying src/__init__.py -> member-0.1.0/src
+    copying src/member.egg-info/PKG-INFO -> member-0.1.0/src/member.egg-info
+    copying src/member.egg-info/SOURCES.txt -> member-0.1.0/src/member.egg-info
+    copying src/member.egg-info/dependency_links.txt -> member-0.1.0/src/member.egg-info
+    copying src/member.egg-info/requires.txt -> member-0.1.0/src/member.egg-info
+    copying src/member.egg-info/top_level.txt -> member-0.1.0/src/member.egg-info
+    copying src/member.egg-info/SOURCES.txt -> member-0.1.0/src/member.egg-info
+    Writing member-0.1.0/setup.cfg
+    Creating tar archive
+    removing 'member-0.1.0' (and everything under it)
+    Building wheel from source distribution...
+    running egg_info
+    writing src/member.egg-info/PKG-INFO
+    writing dependency_links to src/member.egg-info/dependency_links.txt
+    writing requirements to src/member.egg-info/requires.txt
+    writing top-level names to src/member.egg-info/top_level.txt
+    reading manifest file 'src/member.egg-info/SOURCES.txt'
+    writing manifest file 'src/member.egg-info/SOURCES.txt'
+    running bdist_wheel
+    running build
+    running build_py
+    creating build
+    creating build/lib
+    copying src/__init__.py -> build/lib
+    running egg_info
+    writing src/member.egg-info/PKG-INFO
+    writing dependency_links to src/member.egg-info/dependency_links.txt
+    writing requirements to src/member.egg-info/requires.txt
+    writing top-level names to src/member.egg-info/top_level.txt
+    reading manifest file 'src/member.egg-info/SOURCES.txt'
+    writing manifest file 'src/member.egg-info/SOURCES.txt'
+    installing to build/bdist.linux-x86_64/wheel
+    running install
+    running install_lib
+    creating build/bdist.linux-x86_64
+    creating build/bdist.linux-x86_64/wheel
+    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
+    running install_egg_info
+    Copying src/member.egg-info to build/bdist.linux-x86_64/wheel/member-0.1.0-py3.12.egg-info
+    running install_scripts
+    creating build/bdist.linux-x86_64/wheel/member-0.1.0.dist-info/WHEEL
+    creating '[TEMP_DIR]/project/packages/member/dist/[TMP]/wheel' to it
+    adding '__init__.py'
+    adding 'member-0.1.0.dist-info/METADATA'
+    adding 'member-0.1.0.dist-info/WHEEL'
+    adding 'member-0.1.0.dist-info/top_level.txt'
+    adding 'member-0.1.0.dist-info/RECORD'
+    removing build/bdist.linux-x86_64/wheel
+    Successfully built packages/member/dist/member-0.1.0.tar.gz and packages/member/dist/member-0.1.0-py3-none-any.whl
+    "###);
+
+    member
+        .child("dist")
+        .child("member-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    member
+        .child("dist")
+        .child("member-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    // If a source is provided, discover the workspace from the source.
+    uv_snapshot!(&filters, context.build().arg("./project").arg("--package").arg("member"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    running egg_info
+    writing src/member.egg-info/PKG-INFO
+    writing dependency_links to src/member.egg-info/dependency_links.txt
+    writing requirements to src/member.egg-info/requires.txt
+    writing top-level names to src/member.egg-info/top_level.txt
+    reading manifest file 'src/member.egg-info/SOURCES.txt'
+    writing manifest file 'src/member.egg-info/SOURCES.txt'
+    running sdist
+    running egg_info
+    writing src/member.egg-info/PKG-INFO
+    writing dependency_links to src/member.egg-info/dependency_links.txt
+    writing requirements to src/member.egg-info/requires.txt
+    writing top-level names to src/member.egg-info/top_level.txt
+    reading manifest file 'src/member.egg-info/SOURCES.txt'
+    writing manifest file 'src/member.egg-info/SOURCES.txt'
+    running check
+    creating member-0.1.0
+    creating member-0.1.0/src
+    creating member-0.1.0/src/member.egg-info
+    copying files to member-0.1.0...
+    copying README -> member-0.1.0
+    copying pyproject.toml -> member-0.1.0
+    copying src/__init__.py -> member-0.1.0/src
+    copying src/member.egg-info/PKG-INFO -> member-0.1.0/src/member.egg-info
+    copying src/member.egg-info/SOURCES.txt -> member-0.1.0/src/member.egg-info
+    copying src/member.egg-info/dependency_links.txt -> member-0.1.0/src/member.egg-info
+    copying src/member.egg-info/requires.txt -> member-0.1.0/src/member.egg-info
+    copying src/member.egg-info/top_level.txt -> member-0.1.0/src/member.egg-info
+    copying src/member.egg-info/SOURCES.txt -> member-0.1.0/src/member.egg-info
+    Writing member-0.1.0/setup.cfg
+    Creating tar archive
+    removing 'member-0.1.0' (and everything under it)
+    Building wheel from source distribution...
+    running egg_info
+    writing src/member.egg-info/PKG-INFO
+    writing dependency_links to src/member.egg-info/dependency_links.txt
+    writing requirements to src/member.egg-info/requires.txt
+    writing top-level names to src/member.egg-info/top_level.txt
+    reading manifest file 'src/member.egg-info/SOURCES.txt'
+    writing manifest file 'src/member.egg-info/SOURCES.txt'
+    running bdist_wheel
+    running build
+    running build_py
+    creating build
+    creating build/lib
+    copying src/__init__.py -> build/lib
+    running egg_info
+    writing src/member.egg-info/PKG-INFO
+    writing dependency_links to src/member.egg-info/dependency_links.txt
+    writing requirements to src/member.egg-info/requires.txt
+    writing top-level names to src/member.egg-info/top_level.txt
+    reading manifest file 'src/member.egg-info/SOURCES.txt'
+    writing manifest file 'src/member.egg-info/SOURCES.txt'
+    installing to build/bdist.linux-x86_64/wheel
+    running install
+    running install_lib
+    creating build/bdist.linux-x86_64
+    creating build/bdist.linux-x86_64/wheel
+    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
+    running install_egg_info
+    Copying src/member.egg-info to build/bdist.linux-x86_64/wheel/member-0.1.0-py3.12.egg-info
+    running install_scripts
+    creating build/bdist.linux-x86_64/wheel/member-0.1.0.dist-info/WHEEL
+    creating '[TEMP_DIR]/project/packages/member/dist/[TMP]/wheel' to it
+    adding '__init__.py'
+    adding 'member-0.1.0.dist-info/METADATA'
+    adding 'member-0.1.0.dist-info/WHEEL'
+    adding 'member-0.1.0.dist-info/top_level.txt'
+    adding 'member-0.1.0.dist-info/RECORD'
+    removing build/bdist.linux-x86_64/wheel
+    Successfully built project/packages/member/dist/member-0.1.0.tar.gz and project/packages/member/dist/member-0.1.0-py3-none-any.whl
+    "###);
+
+    // Fail when `--package` is provided without a workspace.
+    uv_snapshot!(&filters, context.build().arg("--package").arg("member"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `pyproject.toml` found in current directory or any parent directory
+      Caused by: `--package` was provided, but no workspace was found
+    "###);
+
+    // Fail when `--package` is a non-existent member without a workspace.
+    uv_snapshot!(&filters, context.build().arg("--package").arg("fail").current_dir(&project), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `fail` not found in workspace
+    "###);
+
+    Ok(())
+}

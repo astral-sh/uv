@@ -1955,6 +1955,15 @@ pub struct BuildArgs {
     #[arg(value_parser = parse_file_path)]
     pub src: Option<PathBuf>,
 
+    /// Build a specific package in the workspace.
+    ///
+    /// The workspace will be discovered from the provided source directory, or the current
+    /// directory if no source directory is provided.
+    ///
+    /// If the workspace member does not exist, uv will exit with an error.
+    #[arg(long)]
+    pub package: Option<PackageName>,
+
     /// The output directory to which distributions should be written.
     ///
     /// Defaults to the `dist` subdirectory within the source directory, or the

@@ -6374,6 +6374,12 @@ uv build [OPTIONS] [SRC]
 
 <p>Defaults to the <code>dist</code> subdirectory within the source directory, or the directory containing the source distribution archive.</p>
 
+</dd><dt><code>--package</code> <i>package</i></dt><dd><p>Build a specific package in the workspace.</p>
+
+<p>The workspace will be discovered from the provided source directory, or the current directory if no source directory is provided.</p>
+
+<p>If the workspace member does not exist, uv will exit with an error.</p>
+
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
