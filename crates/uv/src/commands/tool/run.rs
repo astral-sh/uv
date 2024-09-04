@@ -221,10 +221,20 @@ pub(crate) async fn run(
     let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command
-    // TODO(zanieb): Do we want to exit with the code of the child process? Probably.
-    if status.success() {
-        Ok(ExitStatus::Success)
+    if let Some(code) = status.code() {
+        debug!("Command exited with code: {code}");
+        if let Ok(code) = u8::try_from(code) {
+            Ok(ExitStatus::External(code))
+        } else {
+            #[allow(clippy::exit)]
+            std::process::exit(code);
+        }
     } else {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            debug!("Command exited with signal: {:?}", status.signal());
+        }
         Ok(ExitStatus::Failure)
     }
 }

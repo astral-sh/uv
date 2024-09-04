@@ -80,6 +80,9 @@ pub(crate) enum ExitStatus {
 
     /// The command failed with an unexpected error.
     Error,
+
+    /// The command's exit status is propagated from an external command.
+    External(u8),
 }
 
 impl From<ExitStatus> for ExitCode {
@@ -88,6 +91,7 @@ impl From<ExitStatus> for ExitCode {
             ExitStatus::Success => Self::from(0),
             ExitStatus::Failure => Self::from(1),
             ExitStatus::Error => Self::from(2),
+            ExitStatus::External(code) => Self::from(code),
         }
     }
 }

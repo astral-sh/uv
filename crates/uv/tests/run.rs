@@ -1774,3 +1774,22 @@ fn run_compiled_python_file() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_exit_code() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # ///
+
+        exit(42)
+       "#
+    })?;
+
+    context.run().arg("script.py").assert().code(42);
+
+    Ok(())
+}
