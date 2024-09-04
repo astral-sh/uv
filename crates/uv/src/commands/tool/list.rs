@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use anyhow::Result;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
@@ -55,16 +56,18 @@ pub(crate) async fn list(
             }
         };
 
-        let mut version_specifier = String::new();
-        if show_version_specifiers {
-            if let Some(source) = tool.requirements().iter().find_map(|req| {
-                (req.name == name)
-                    .then_some(req.source.to_string())
-                    .filter(|s| !s.is_empty())
-            }) {
-                version_specifier.push_str(&format!(r#" (specifier: "{source}")"#));
-            }
-        }
+        let version_specifier = if show_version_specifiers {
+            let specifiers = tool
+                .requirements()
+                .iter()
+                .filter(|req| req.name == name)
+                .map(|req| req.source.to_string())
+                .filter(|s| !s.is_empty())
+                .join(", ");
+            format!(" [required: {specifiers}]")
+        } else {
+            String::new()
+        };
 
         if show_paths {
             writeln!(

@@ -3164,12 +3164,15 @@ pub struct ToolListArgs {
     /// Whether to display the path to each tool environment and installed executable.
     #[arg(long)]
     pub show_paths: bool,
+
+    /// Whether to display the version specifier(s) used to install each tool.
     #[arg(long)]
     pub show_version_specifiers: bool,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]
     pub python_preference: Option<PythonPreference>,
+
     #[arg(long, hide = true)]
     pub no_python_downloads: bool,
 }

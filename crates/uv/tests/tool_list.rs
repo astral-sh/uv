@@ -274,7 +274,7 @@ fn tool_list_show_version_specifiers() {
     success: true
     exit_code: 0
     ----- stdout -----
-    black v24.2.0 (specifier: "<24.3.0")
+    black v24.2.0 [required: <24.3.0]
     - black
     - blackd
 
@@ -288,7 +288,7 @@ fn tool_list_show_version_specifiers() {
     success: true
     exit_code: 0
     ----- stdout -----
-    black v24.2.0 (specifier: "<24.3.0") ([TEMP_DIR]/tools/black)
+    black v24.2.0 [required: <24.3.0] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
 

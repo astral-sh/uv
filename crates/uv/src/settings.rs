@@ -467,7 +467,8 @@ impl ToolListSettings {
         let ToolListArgs {
             show_paths,
             show_version_specifiers,
-            ..
+            python_preference: _,
+            no_python_downloads: _,
         } = args;
 
         Self {
