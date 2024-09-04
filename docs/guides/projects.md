@@ -85,8 +85,8 @@ You'll also use this file to specify uv [configuration options](../configuration
 
 ### `.python-version`
 
-The `.python-version` file contains the default Python version that the project should use.
-This file tells uv which Python version to use when creating the project's virtual environment.
+The `.python-version` file contains the project's default Python version. This file tells uv which
+Python version to use when creating the project's virtual environment.
 
 ### `.venv`
 

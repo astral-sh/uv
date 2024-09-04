@@ -96,8 +96,8 @@ are used for requesting local interpreters such as a file path.
 By default `uv python install` will verify that a managed Python version is installed or install the
 latest version.
 
-However, when a project contains a `.python-version` file, which specifies the default Python
-version to be used, uv will install the Python version listed in the file.
+However, a project may include a `.python-version` file specifying a default Python version. If
+present, uv will install the Python version listed in the file.
 
 Alternatively, a project that requires multiple Python versions may also define a `.python-versions`
 file. If present, uv will install all of the Python versions listed in the file. This file takes
