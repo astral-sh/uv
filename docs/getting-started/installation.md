@@ -77,6 +77,15 @@ $ pip install uv
     [contributing setup guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md#setup)
     for details on building uv from source.
 
+### Cargo
+
+uv is available via Cargo, but must be built from Git rather than [crates.io](https://crates.io) due
+to its dependency on unpublished crates.
+
+```console
+$ cargo install --git https://github.com/astral-sh/uv uv
+```
+
 ### Homebrew
 
 uv is available in the core Homebrew packages.
