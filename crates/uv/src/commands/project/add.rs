@@ -411,7 +411,7 @@ pub(crate) async fn add(
 
         // If the edit was inserted before the end of the list, update the existing edits.
         for edit in &mut edits {
-            if *edit.dependency_type == dependency_type {
+            if edit.dependency_type == dependency_type {
                 match &mut edit.edit {
                     ArrayEdit::Add(existing) => {
                         if *existing >= index {
@@ -428,7 +428,7 @@ pub(crate) async fn add(
         }
 
         edits.push(DependencyEdit {
-            dependency_type: &dependency_type,
+            dependency_type: dependency_type.clone(),
             requirement,
             source,
             edit,
@@ -478,13 +478,74 @@ pub(crate) async fn add(
     if frozen {
         return Ok(ExitStatus::Success);
     }
+    let (extras, dev) = match dependency_type {
+        DependencyType::Production => {
+            let extras = ExtrasSpecification::None;
+            let dev = false;
+            (extras, dev)
+        }
+        DependencyType::Dev => {
+            let extras = ExtrasSpecification::None;
+            let dev = true;
+            (extras, dev)
+        }
+        DependencyType::Optional(ref group_name) => {
+            let extras = ExtrasSpecification::Some(vec![group_name.clone()]);
+            let dev = false;
+            (extras, dev)
+        }
+    };
+    process_project_and_sync(
+        &project,
+        &mut toml,
+        &content,
+        locked,
+        frozen,
+        raw_sources,
+        &edits,
+        extras,
+        dev,
+        &venv,
+        &settings,
+        connectivity,
+        concurrency,
+        native_tls,
+        cache,
+        printer,
+        no_sync,
+        modified,
+    )
+    .await
+}
 
+/// Saves the `pyproject.toml`, locks dependencies, and syncs the environment.
+#[allow(clippy::fn_params_excessive_bools)]
+pub(crate) async fn process_project_and_sync(
+    project: &VirtualProject,
+    toml: &mut PyProjectTomlMut,
+    content: &str,
+    locked: bool,
+    frozen: bool,
+    raw_sources: bool,
+    edits: &[DependencyEdit],
+    extras: ExtrasSpecification,
+    dev: bool,
+    venv: &PythonEnvironment,
+    settings: &ResolverInstallerSettings,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
+    cache: &Cache,
+    printer: Printer,
+    no_sync: bool,
+    modified: bool,
+) -> Result<ExitStatus> {
     let existing = project.pyproject_toml();
 
     // Update the `pypackage.toml` in-memory.
     let mut project = project
         .clone()
-        .with_pyproject_toml(toml::from_str(&content)?)
+        .with_pyproject_toml(toml::from_str(content)?)
         .context("Failed to update `pyproject.toml`")?;
 
     // Lock and sync the environment, if necessary.
@@ -543,7 +604,7 @@ pub(crate) async fn add(
 
         // If any of the requirements were added without version specifiers, add a lower bound.
         let mut modified = false;
-        for edit in &edits {
+        for edit in edits {
             // Only set a minimum version for newly-added dependencies (as opposed to updates).
             let ArrayEdit::Add(index) = &edit.edit else {
                 continue;
@@ -644,32 +705,13 @@ pub(crate) async fn add(
         return Ok(ExitStatus::Success);
     }
 
-    // Sync the environment.
-    let (extras, dev) = match dependency_type {
-        DependencyType::Production => {
-            let extras = ExtrasSpecification::None;
-            let dev = false;
-            (extras, dev)
-        }
-        DependencyType::Dev => {
-            let extras = ExtrasSpecification::None;
-            let dev = true;
-            (extras, dev)
-        }
-        DependencyType::Optional(ref group_name) => {
-            let extras = ExtrasSpecification::Some(vec![group_name.clone()]);
-            let dev = false;
-            (extras, dev)
-        }
-    };
-
     // Initialize any shared state.
     let state = SharedState::default();
     let install_options = InstallOptions::default();
 
     if let Err(err) = project::sync::do_sync(
         InstallTarget::from(&project),
-        &venv,
+        venv,
         &lock,
         &extras,
         dev,
@@ -697,7 +739,7 @@ pub(crate) async fn add(
 }
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.
-fn resolve_requirement(
+pub(crate) fn resolve_requirement(
     requirement: pypi_types::Requirement,
     workspace: bool,
     editable: Option<bool>,
@@ -755,11 +797,27 @@ impl Target {
 }
 
 #[derive(Debug, Clone)]
-struct DependencyEdit<'a> {
-    dependency_type: &'a DependencyType,
+pub(crate) struct DependencyEdit {
+    dependency_type: DependencyType,
     requirement: Requirement,
     source: Option<Source>,
     edit: ArrayEdit,
+}
+
+impl DependencyEdit {
+    pub(crate) fn new(
+        dependency_type: DependencyType,
+        requirement: Requirement,
+        source: Option<Source>,
+        edit: ArrayEdit,
+    ) -> Self {
+        Self {
+            dependency_type,
+            requirement,
+            source,
+            edit,
+        }
+    }
 }
 
 /// Render a [`uv_resolver::NoSolutionError`] with a help message.

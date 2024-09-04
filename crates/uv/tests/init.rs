@@ -407,7 +407,7 @@ fn init_library_no_package() -> Result<()> {
     ----- stderr -----
     error: the argument '--lib' cannot be used with '--no-package'
 
-    Usage: uv init --cache-dir [CACHE_DIR] --lib [PATH]
+    Usage: uv init --cache-dir [CACHE_DIR] --lib --exclude-newer <EXCLUDE_NEWER> [PATH]
 
     For more information, try '--help'.
     "###);
@@ -1222,6 +1222,376 @@ fn init_no_workspace_warning() -> Result<()> {
     Ok(())
 }
 
+/// Test init --from-project
+#[test]
+fn init_from_project() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "a"
+        version = "0.0.0"
+        dependencies = [
+            "idna"
+        ]
+        requires-python = ">3.8"
+
+        [project.optional-dependencies]
+        foo = [
+            "flask",
+        ]
+        bar = [
+            "black",
+            "aiohttp; sys_platform != 'win32' or implementation_name != 'pypy'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.init()
+        .current_dir(&context.temp_dir)
+        .arg("--from-project")
+        .arg(pyproject_toml.to_path_buf())
+        .arg("--name")
+        .arg("project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + aiohttp==3.9.3
+     + aiosignal==1.3.1
+     + attrs==23.2.0
+     + black==24.3.0
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + frozenlist==1.4.1
+     + idna==3.6
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + multidict==6.0.5
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + werkzeug==3.0.1
+     + yarl==1.9.4
+    Initialized project `project`
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = [
+            "idna>=3.6",
+        ]
+
+        [project.optional-dependencies]
+        foo = [
+            "flask>=3.0.2",
+        ]
+        bar = [
+            "aiohttp>=3.9.3 ; implementation_name != 'pypy' or sys_platform != 'win32'",
+            "black",
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Test init --from-project --no-sync
+#[test]
+fn init_from_project_no_sync() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "a"
+        version = "0.0.0"
+        dependencies = [
+            "idna"
+        ]
+        requires-python = ">3.8"
+
+        [project.optional-dependencies]
+        foo = [
+            "flask",
+        ]
+        bar = [
+            "black",
+            "aiohttp; sys_platform != 'win32' or implementation_name != 'pypy'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.init()
+        .current_dir(&context.temp_dir)
+        .arg("--from-project")
+        .arg(pyproject_toml.to_path_buf())
+        .arg("--no-sync")
+        .arg("--name")
+        .arg("project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Initialized project `project`
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = [
+            "idna>=3.6",
+        ]
+
+        [project.optional-dependencies]
+        foo = [
+            "flask>=3.0.2",
+        ]
+        bar = [
+            "aiohttp>=3.9.3 ; implementation_name != 'pypy' or sys_platform != 'win32'",
+            "black",
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+/// Test init --from-project with --raw-sources avoids setting a lower bound
+#[test]
+fn init_from_project_raw_sources() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "a"
+        version = "0.0.0"
+        dependencies = [
+            "idna"
+        ]
+        requires-python = ">3.8"
+
+        [project.optional-dependencies]
+        foo = [
+            "flask",
+            "black"
+        ]
+        bar = [
+            "black",
+            "aiohttp; sys_platform != 'win32' or implementation_name != 'pypy'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.init()
+        .current_dir(&context.temp_dir)
+        .arg("--from-project")
+        .arg(pyproject_toml.to_path_buf())
+        .arg("--raw-sources")
+        .arg("--name")
+        .arg("project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + aiohttp==3.9.3
+     + aiosignal==1.3.1
+     + attrs==23.2.0
+     + black==24.3.0
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + frozenlist==1.4.1
+     + idna==3.6
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + multidict==6.0.5
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + werkzeug==3.0.1
+     + yarl==1.9.4
+    Initialized project `project`
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = [
+            "idna",
+        ]
+
+        [project.optional-dependencies]
+        foo = [
+            "black",
+            "flask",
+        ]
+        bar = [
+            "aiohttp ; implementation_name != 'pypy' or sys_platform != 'win32'",
+            "black",
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Test init --from-project for poetry project
+#[test]
+fn init_from_project_poetry() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.poetry]
+        name = "packse"
+        version = "0.0.0"
+        description = ""
+        authors = ["Zanie <contact@zanie.dev>"]
+        keywords = ["uv", "packse", "requirements", "packaging", "testing"]
+
+        [tool.poetry.scripts]
+        packse = "packse.cli:entrypoint"
+
+        [tool.poetry.dependencies]
+        python = "^3.12"
+        msgspec = "^0.18.4"
+        pypiserver = { version = "^2.0.1", optional = true }
+        watchfiles = { version = "^0.21.0", optional = true }
+        pyyaml = { version = "^6.0.1", optional = true }
+
+        [tool.poetry.extras]
+        two = ["pypiserver", "pyyaml"]
+        bar = ["pyyaml"]
+        serve = ["pypiserver", "watchfiles", "pyyaml"]
+
+        [tool.poetry.group.dev.dependencies]
+        psutil = "^5.9.7"
+
+        [build-system]
+        requires = ["poetry-core"]
+        build-backend = "poetry.core.masonry.api"
+
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.init()
+        .current_dir(&context.temp_dir)
+        .arg("--from-project")
+        .arg(pyproject_toml.to_path_buf())
+        .arg("--raw-sources")
+        .arg("--name")
+        .arg("project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + msgspec==0.18.6
+     + pip==24.0
+     + pypiserver==2.0.1
+     + pyyaml==6.0.1
+     + sniffio==1.3.1
+     + watchfiles==0.21.0
+    Initialized project `project`
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = [
+            "msgspec>=0.18.4,<0.19.0",
+        ]
+
+        [project.optional-dependencies]
+        serve = [
+            "pypiserver>=2.0.1,<3.0.0",
+            "pyyaml>=6.0.1,<7.0.0",
+            "watchfiles>=0.21.0,<0.22.0",
+        ]
+        two = [
+            "pypiserver>=2.0.1,<3.0.0",
+            "pyyaml>=6.0.1,<7.0.0",
+        ]
+        bar = [
+            "pyyaml>=6.0.1,<7.0.0",
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
 #[test]
 fn init_project_inside_project() -> Result<()> {
     let context = TestContext::new("3.12");

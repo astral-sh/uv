@@ -392,7 +392,16 @@ uv init [OPTIONS] [PATH]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--app</code></dt><dd><p>Create a project for an application.</p>
+<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
+</dd><dt><code>--app</code></dt><dd><p>Create a project for an application.</p>
 
 <p>This is the default behavior if <code>--lib</code> is not requested.</p>
 
@@ -417,17 +426,97 @@ uv init [OPTIONS] [PATH]
 
 <li><code>never</code>:  Disables colored output</li>
 </ul>
+</dd><dt><code>--compile-bytecode</code></dt><dd><p>Compile Python files to bytecode after installation.</p>
+
+<p>By default, uv does not compile Python (<code>.py</code>) files to bytecode (<code>__pycache__/*.pyc</code>); instead, compilation is performed lazily the first time a module is imported. For use-cases in which start time is critical, such as CLI applications and Docker containers, this option can be enabled to trade longer installation times for faster start times.</p>
+
+<p>When enabled, uv will process the entire site-packages directory (including packages that are not being modified by the current operation) for consistency. Like pip, it will also ignore errors.</p>
+
+<p>May also be set with the <code>UV_COMPILE_BYTECODE</code> environment variable.</p>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+
+</dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+
+<p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
+
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--index-url</code> (which defaults to PyPI). When multiple <code>--extra-index-url</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
+</dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
+
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+
+<p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
+
+</dd><dt><code>--from-project</code> <i>from-project</i></dt><dd><p>Add all packages listed in the given <code>pyproject.toml</code> file</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
+
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+
+<p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--extra-index-url</code> flag.</p>
+
+<p>May also be set with the <code>UV_INDEX_URL</code> environment variable.</p>
+</dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
+
+<p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
+
+<p>Defaults to <code>disabled</code>.</p>
+
+<p>May also be set with the <code>UV_KEYRING_PROVIDER</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--lib</code></dt><dd><p>Create a project for a library.</p>
 
 <p>A library is a project that is intended to be built and distributed as a Python package.</p>
 
+</dd><dt><code>--link-mode</code> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
+
+<p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+
+<p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--name</code> <i>name</i></dt><dd><p>The name of the project.</p>
 
 <p>Defaults to the name of the directory.</p>
@@ -439,6 +528,27 @@ uv init [OPTIONS] [PATH]
 <p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
 
 <p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
+</dd><dt><code>--no-binary</code></dt><dd><p>Don&#8217;t install pre-built wheels.</p>
+
+<p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
+
+</dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
+
+</dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
+
+<p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
+
+</dd><dt><code>--no-build-isolation</code></dt><dd><p>Disable isolation when building source distributions.</p>
+
+<p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
+
+<p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
+</dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
+
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+
+</dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
+
 </dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
@@ -447,6 +557,8 @@ uv init [OPTIONS] [PATH]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
+
 </dd><dt><code>--no-package</code></dt><dd><p>Do not set up the project to be built as a Python package.</p>
 
 <p>Does not include a <code>[build-system]</code> for the project.</p>
@@ -465,6 +577,12 @@ uv init [OPTIONS] [PATH]
 
 </dd><dt><code>--no-readme</code></dt><dd><p>Do not create a <code>README.md</code> file</p>
 
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+
+</dd><dt><code>--no-sync</code></dt><dd><p>Skips syncing the virtual environment after re-locking the project.</p>
+
+<p>This option is only applicable when the <code>from-project</code> option is used.</p>
+
 </dd><dt><code>--no-workspace</code></dt><dd><p>Avoid discovering a workspace and create a standalone project.</p>
 
 <p>By default, uv searches for workspaces in the current directory or any parent directory.</p>
@@ -481,6 +599,24 @@ uv init [OPTIONS] [PATH]
 
 <p>When using <code>--app</code>, this will include a <code>[project.scripts]</code> entrypoint and use a <code>src/</code> project structure.</p>
 
+</dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
+
+<p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
+
+<p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>disallow</code>:  Disallow all pre-release versions</li>
+
+<li><code>allow</code>:  Allow all pre-release versions</li>
+
+<li><code>if-necessary</code>:  Allow pre-release versions if all versions of a package are pre-release</li>
+
+<li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
+
+<li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
+</ul>
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to determine the minimum supported Python version.</p>
 
 <p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
@@ -503,6 +639,32 @@ uv init [OPTIONS] [PATH]
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+
+</dd><dt><code>--raw-sources</code></dt><dd><p>Adds source requirements to <code>project.dependencies</code> instead of <code>tool.uv.sources</code>.</p>
+
+<p>By default, uv records source information for Git, local, editable, and direct URL requirements under <code>tool.uv.sources</code>. This option is only applicable when the <code>from-project</code> option is used.</p>
+
+</dd><dt><code>--reinstall</code></dt><dd><p>Reinstall all packages, regardless of whether they&#8217;re already installed. Implies <code>--refresh</code></p>
+
+</dd><dt><code>--reinstall-package</code> <i>reinstall-package</i></dt><dd><p>Reinstall a specific package, regardless of whether it&#8217;s already installed. Implies <code>--refresh-package</code></p>
+
+</dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
+
+<p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
+
+<p>May also be set with the <code>UV_RESOLUTION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+</ul>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
+
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 

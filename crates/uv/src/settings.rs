@@ -154,21 +154,26 @@ impl CacheSettings {
 pub(crate) struct InitSettings {
     pub(crate) path: Option<String>,
     pub(crate) name: Option<PackageName>,
+    pub(crate) from_project: Option<PathBuf>,
     pub(crate) package: bool,
     pub(crate) kind: InitProjectKind,
     pub(crate) no_readme: bool,
     pub(crate) no_pin_python: bool,
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
+    pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) no_sync: bool,
+    pub(crate) raw_sources: bool,
 }
 
 impl InitSettings {
     /// Resolve the [`InitSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: InitArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: InitArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let InitArgs {
             path,
             name,
+            from_project,
             r#virtual,
             package,
             no_package,
@@ -178,6 +183,10 @@ impl InitSettings {
             no_pin_python,
             no_workspace,
             python,
+            installer,
+            build,
+            no_sync,
+            raw_sources,
         } = args;
 
         let kind = match (app, lib) {
@@ -192,12 +201,19 @@ impl InitSettings {
         Self {
             path,
             name,
+            from_project,
             package,
             kind,
             no_readme,
             no_pin_python,
             no_workspace,
             python,
+            no_sync,
+            raw_sources,
+            settings: ResolverInstallerSettings::combine(
+                resolver_installer_options(installer, build),
+                filesystem,
+            ),
         }
     }
 }
