@@ -2368,10 +2368,16 @@ pub struct SyncArgs {
     /// Include optional dependencies from the extra group name.
     ///
     /// May be provided more than once.
+    ///
+    /// Note that all optional dependencies are always included in the resolution; this option only
+    /// affects the selection of packages to install.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    ///
+    /// Note that all optional dependencies are always included in the resolution; this option only
+    /// affects the selection of packages to install.
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
 
