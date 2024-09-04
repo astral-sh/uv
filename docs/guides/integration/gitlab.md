@@ -22,6 +22,7 @@ UV:
 ```
 
 ## Caching
+
 You can speed up your pipeline by re-using cache files between runs. You can read more on
 [GitLab's caching here](https://docs.gitlab.com/ee/ci/caching/)
 
@@ -38,6 +39,7 @@ UV Install:
     # Your uv commands
     run: uv cache prune --ci
 ```
+
 The `uv cache prune --ci` command is used to reduce the size of the cache and is optimized for CI.
 Its effect on performance is dependent on the packages being installed.
 
