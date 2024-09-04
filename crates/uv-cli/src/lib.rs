@@ -3121,7 +3121,7 @@ pub struct ToolUninstallArgs {
 pub struct ToolUpgradeArgs {
     /// The name of the tool to upgrade.
     #[arg(required = true)]
-    pub name: Option<Vec<PackageName>>,
+    pub name: Vec<PackageName>,
 
     /// Upgrade all tools.
     #[arg(long, conflicts_with("name"))]

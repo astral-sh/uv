@@ -414,7 +414,7 @@ impl ToolInstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUpgradeSettings {
-    pub(crate) name: Option<Vec<PackageName>>,
+    pub(crate) name: Vec<PackageName>,
     pub(crate) args: ResolverInstallerOptions,
     pub(crate) filesystem: ResolverInstallerOptions,
 }
@@ -445,7 +445,7 @@ impl ToolUpgradeSettings {
             .unwrap_or_default();
 
         Self {
-            name: name.filter(|_| !all),
+            name: if all { vec![] } else { name },
             args,
             filesystem,
         }
