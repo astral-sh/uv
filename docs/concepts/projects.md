@@ -43,6 +43,22 @@ definitions with [package sources](./dependencies.md) in `tool.uv.sources`.
 
     See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) for more details on getting started with a `pyproject.toml`.
 
+## Defining entry points
+
+uv uses the standard `[project.scripts]` table to define entry points for the project.
+
+For example, to declare an command called `hello` that invokes the `hello` function in the
+`example_package_app` module:
+
+```toml title="pyproject.toml"
+[project.scripts]
+hello = "example_package_app:hello"
+```
+
+!!! important
+
+    Using `[project.scripts]` requires a [build system](#build-systems) to be defined.
+
 ## Build systems
 
 Projects _may_ define a `[build-system]` in the `pyproject.toml`. The build system defines how the
