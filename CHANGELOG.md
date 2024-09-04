@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.4.5
+
+### Enhancements
+
+- Implement `uv build` ([#6895](https://github.com/astral-sh/uv/pull/6895))
+- Add `--package` support to `uv build` ([#6990](https://github.com/astral-sh/uv/pull/6990))
+- Prune unreachable packages from lockfile ([#6959](https://github.com/astral-sh/uv/pull/6959))
+- Prune unreachable wheels from lockfile ([#6961](https://github.com/astral-sh/uv/pull/6961))
+- Show build output by default in `uv build` ([#6912](https://github.com/astral-sh/uv/pull/6912))
+- Support `uv build --wheel` from source distributions ([#6898](https://github.com/astral-sh/uv/pull/6898))
+- Use the root project name for the project virtual environment prompt ([#7021](https://github.com/astral-sh/uv/pull/7021))
+
+### Bug fixes
+
+- Fix handling of inline optional dependencies in `uv add` ([#7023](https://github.com/astral-sh/uv/pull/7023))
+- Reflect exit code in `uv tool run` and `uv run` ([#6994](https://github.com/astral-sh/uv/pull/6994))
+- Revert `pyproject.toml` modifications on Ctrl-C ([#7024](https://github.com/astral-sh/uv/pull/7024))
+- Rollback `pyproject.toml` changes on all errors ([#7022](https://github.com/astral-sh/uv/pull/7022))
+- Use correct ordering semantics for narrowing upper-bounded Python requirements ([#7031](https://github.com/astral-sh/uv/pull/7031))
+- Fix segfault in Windows trampolines ([#6955](https://github.com/astral-sh/uv/pull/6955))
+- Remove unused `__future__.annotations` import in `_virtualenv.py` ([#6996](https://github.com/astral-sh/uv/pull/6996))
+
+### Documentation
+
+- Add documentation for `uv build` ([#6991](https://github.com/astral-sh/uv/pull/6991))
+- Add note to `extra` and `all-extras` in `uv sync` help ([#7013](https://github.com/astral-sh/uv/pull/7013))
+- Add project docs for `project.scripts` ([#7010](https://github.com/astral-sh/uv/pull/7010))
+- Fix available Docker image tag rendering and shorten list ([#7017](https://github.com/astral-sh/uv/pull/7017))
+- Touchup to the project environment config section ([#7038](https://github.com/astral-sh/uv/pull/7038))
+- Clarify precedence of `uv.toml` ([#6986](https://github.com/astral-sh/uv/pull/6986))
+- Fix available Docker tags for `-slim` variants ([#7041](https://github.com/astral-sh/uv/pull/7041))
+
+
 ## 0.4.4
 
 ### Enhancements
