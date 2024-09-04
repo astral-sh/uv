@@ -293,7 +293,7 @@ use [`uvx`](../guides/tools.md) or
     managed = false
     ```
 
-### Custom project environment paths
+### Configuring the project environment path
 
 The `UV_PROJECT_ENVIRONMENT` environment variable can be used to configure the project virtual
 environment path (`.venv` by default).
@@ -310,7 +310,7 @@ the system in a broken state.
 
     If an absolute path is provided and the setting is used across multiple projects, the
     environment will be overwritten by invocations in each project. This setting is only recommended
-    for use in CI or Docker images.
+    for use for a single project in CI or Docker images.
 
 !!! note
 

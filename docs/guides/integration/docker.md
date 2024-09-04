@@ -155,7 +155,7 @@ RUN uv run some_script.py
 !!! tip
 
     Alternatively, the
-    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects.md#custom-project-environment-paths) can
+    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects.md#configuring-the-project-environment-path) can
     be set before syncing to install to the system Python environment and skip environment activation
     entirely.
 
