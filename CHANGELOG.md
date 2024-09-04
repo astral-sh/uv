@@ -32,7 +32,6 @@
 - Clarify precedence of `uv.toml` ([#6986](https://github.com/astral-sh/uv/pull/6986))
 - Fix available Docker tags for `-slim` variants ([#7041](https://github.com/astral-sh/uv/pull/7041))
 
-
 ## 0.4.4
 
 ### Enhancements
