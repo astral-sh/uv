@@ -106,6 +106,7 @@ Applications are the default target for `uv init`, but can also be specified wit
 $ uv init --app example-app
 $ tree example-app
 example-app
+├── .python-version
 ├── README.md
 ├── hello.py
 └── pyproject.toml
@@ -155,6 +156,7 @@ Libraries can be created by using the `--lib` flag:
 $ uv init --lib example-lib
 $ tree example-lib
 example-lib
+├── .python-version
 ├── README.md
 ├── pyproject.toml
 └── src
@@ -217,6 +219,7 @@ The project structure looks the same as a library:
 $ uv init --app --package example-packaged-app
 $ tree example-packaged-app
 example-packaged-app
+├── .python-version
 ├── README.md
 ├── pyproject.toml
 └── src
