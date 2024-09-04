@@ -410,10 +410,29 @@ pub(crate) async fn get_or_init_environment(
                 venv.user_display().cyan()
             )?;
 
+            // Determine a prompt for the environment, in order of preference:
+            //
+            // 1) The name of the project
+            // 2) The name of the directory at the root of the workspace
+            // 3) No prompt
+            let prompt = workspace
+                .pyproject_toml()
+                .project
+                .as_ref()
+                .map(|p| p.name.to_string())
+                .or_else(|| {
+                    workspace
+                        .install_path()
+                        .file_name()
+                        .map(|f| f.to_string_lossy().to_string())
+                })
+                .map(uv_virtualenv::Prompt::Static)
+                .unwrap_or(uv_virtualenv::Prompt::None);
+
             Ok(uv_virtualenv::create_venv(
                 &venv,
                 interpreter,
-                uv_virtualenv::Prompt::None,
+                prompt,
                 false,
                 false,
                 false,

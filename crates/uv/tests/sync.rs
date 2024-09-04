@@ -1891,3 +1891,42 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn sync_environment_prompt() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "my-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running `uv sync` should create `.venv`
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // The `pyvenv.cfg` should contain the prompt matching the project name
+    let pyvenv_cfg =
+        fs_err::read_to_string(context.temp_dir.join(".venv").join("pyvenv.cfg")).unwrap();
+
+    assert!(pyvenv_cfg.contains("prompt = my-project"));
+
+    Ok(())
+}
