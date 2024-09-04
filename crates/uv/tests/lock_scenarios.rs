@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.34/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.37/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 #![allow(clippy::needless_raw_string_hashes)]
@@ -4381,6 +4381,320 @@ fn fork_requires_python() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9.*'", specifier = "==1.0.0" }]
+        "###
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("--index-url")
+        .arg(packse_index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// `c` is not reachable due to the markers, it should be excluded from the lockfile
+///
+/// ```text
+/// unreachable-package
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a==1.0.0; sys_platform == "win32"
+/// │       └── satisfied by a-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b==1.0.0; sys_platform == "linux"
+/// │           └── satisfied by b-1.0.0
+/// └── b
+///     └── b-1.0.0
+/// ```
+#[test]
+fn unreachable_package() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"unreachable-package-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''unreachable-package-a==1.0.0; sys_platform == "win32"''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.8"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-a", marker = "sys_platform == 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "package-a", marker = "sys_platform == 'win32'", specifier = "==1.0.0" }]
+
+        [[package]]
+        name = "package-a"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_package_a-1.0.0.tar.gz", hash = "sha256:308f0b6772e99dcb33acee38003b176e3acffbe01c3c511585db9a7d7ec008f7" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_package_a-1.0.0-py3-none-any.whl", hash = "sha256:cc472ded9f3b260e6cda0e633fa407a13607e190422cb455f02beebd32d6751f" },
+        ]
+        "###
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("--index-url")
+        .arg(packse_index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Check that we only include wheels that match the platform markers
+///
+/// ```text
+/// unreachable-wheels
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a==1.0.0; sys_platform == "win32"
+/// │   │   └── satisfied by a-1.0.0
+/// │   ├── requires b==1.0.0; sys_platform == "linux"
+/// │   │   └── satisfied by b-1.0.0
+/// │   └── requires c==1.0.0; sys_platform == "darwin"
+/// │       └── satisfied by c-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// ├── b
+/// │   └── b-1.0.0
+/// └── c
+///     └── c-1.0.0
+/// ```
+#[test]
+fn unreachable_wheels() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"unreachable-wheels-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''unreachable-wheels-a==1.0.0; sys_platform == "win32"''',
+          '''unreachable-wheels-b==1.0.0; sys_platform == "linux"''',
+          '''unreachable-wheels-c==1.0.0; sys_platform == "darwin"''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###
+    );
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.8"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-a", marker = "sys_platform == 'win32'" },
+            { name = "package-b", marker = "sys_platform == 'linux'" },
+            { name = "package-c", marker = "sys_platform == 'darwin'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "sys_platform == 'win32'", specifier = "==1.0.0" },
+            { name = "package-b", marker = "sys_platform == 'linux'", specifier = "==1.0.0" },
+            { name = "package-c", marker = "sys_platform == 'darwin'", specifier = "==1.0.0" },
+        ]
+
+        [[package]]
+        name = "package-a"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_wheels_a-1.0.0.tar.gz", hash = "sha256:91c6619d1cfa227f3662c0c062b1c0c16efe11e589db2f1836e809e2c6d9961e" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_wheels_a-1.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:e9fb30c5eb114114f9031d0ad2238614c2dcce203c5992848305ccda8f38a53e" },
+        ]
+
+        [[package]]
+        name = "package-b"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_wheels_b-1.0.0.tar.gz", hash = "sha256:253ae69b963651cd5ac16601a445e2e179db9eac552e8cfc37aadf73a88931ed" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_wheels_b-1.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a3de2212ca86f1137324965899ce7f48640ed8db94578f4078d641520b77e13e" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_wheels_b-1.0.0-cp312-cp312-musllinux_1_1_armv7l.whl", hash = "sha256:a3de2212ca86f1137324965899ce7f48640ed8db94578f4078d641520b77e13e" },
+        ]
+
+        [[package]]
+        name = "package-c"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_wheels_c-1.0.0.tar.gz", hash = "sha256:5c4783e85f0fa57b720fd02b5c7e0ff8bc98121546fe2cce435710efe4a34b28" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_wheels_c-1.0.0-cp312-cp312-macosx_14_0_x86_64.whl", hash = "sha256:4b846c5b1646b04828a2bef6c9d180ff7cfd725866013dcec8933de7fb5f9e8d" },
+        ]
+        "###
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("--index-url")
+        .arg(packse_index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Check that we only include wheels that match the required Python version
+///
+/// ```text
+/// requires-python-wheels
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires a==1.0.0
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+///         └── requires python>=3.8
+/// ```
+#[test]
+fn requires_python_wheels() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"requires-python-wheels-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''requires-python-wheels-a==1.0.0''',
+        ]
+        requires-python = ">=3.10"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###
+    );
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.10"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "package-a", specifier = "==1.0.0" }]
+
+        [[package]]
+        name = "package-a"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/requires_python_wheels_a-1.0.0.tar.gz", hash = "sha256:9a11ff73fdc513c4dab0d3e137f4145a00ef0dfc95154360c8f503eed62a03c9" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/requires_python_wheels_a-1.0.0-cp310-cp310-any.whl", hash = "sha256:b979494a0d7dc825b84d6c516ac407143915f6d2840d229ee2a36b3d06deb61d" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/requires_python_wheels_a-1.0.0-cp311-cp311-any.whl", hash = "sha256:b979494a0d7dc825b84d6c516ac407143915f6d2840d229ee2a36b3d06deb61d" },
+        ]
         "###
         );
     });
