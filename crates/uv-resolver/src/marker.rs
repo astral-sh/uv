@@ -1,5 +1,4 @@
-use crate::requires_python::RequiresPythonRange;
-use crate::RequiresPythonBound;
+use crate::requires_python::{LowerBound, RequiresPythonRange, UpperBound};
 use pep440_rs::Version;
 use pep508_rs::{MarkerTree, MarkerTreeKind, MarkerValueVersion};
 use pubgrub::Range;
@@ -62,7 +61,7 @@ pub(crate) fn requires_python(tree: &MarkerTree) -> Option<RequiresPythonRange> 
     let (lower, upper) = range.bounding_range()?;
 
     Some(RequiresPythonRange::new(
-        RequiresPythonBound::new(lower.cloned()),
-        RequiresPythonBound::new(upper.cloned()),
+        LowerBound::new(lower.cloned()),
+        UpperBound::new(upper.cloned()),
     ))
 }

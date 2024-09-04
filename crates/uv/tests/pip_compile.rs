@@ -12315,9 +12315,9 @@ fn importlib_metadata_not_repeated() -> Result<()> {
         # via -r requirements.in
     colorama==0.4.6 ; os_name == 'nt'
         # via build
-    importlib-metadata==6.7.0 ; python_full_version < '3.10'
+    importlib-metadata==6.7.0 ; python_full_version < '3.8'
         # via build
-    importlib-metadata==7.1.0 ; python_full_version >= '3.10' and python_full_version < '3.10.2'
+    importlib-metadata==7.1.0 ; python_full_version >= '3.8' and python_full_version < '3.10.2'
         # via build
     packaging==24.0
         # via build
@@ -12329,9 +12329,9 @@ fn importlib_metadata_not_repeated() -> Result<()> {
         #   pyproject-hooks
     typing-extensions==4.7.1 ; python_full_version < '3.8'
         # via importlib-metadata
-    zipp==3.15.0 ; python_full_version < '3.10'
+    zipp==3.15.0 ; python_full_version < '3.8'
         # via importlib-metadata
-    zipp==3.18.1 ; python_full_version >= '3.10' and python_full_version < '3.10.2'
+    zipp==3.18.1 ; python_full_version >= '3.8' and python_full_version < '3.10.2'
         # via importlib-metadata
 
     ----- stderr -----
