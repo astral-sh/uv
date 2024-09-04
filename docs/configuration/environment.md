@@ -78,7 +78,7 @@ In addition, uv respects the following environment variables:
 - `UV_TOOL_BIN_DIR`: Used to specify the "bin" directory where uv will install tool executables.
 - `UV_PROJECT_ENVIRONMENT`: Use to specify the path to the directory to use for a project virtual
   environment. See the
-  [project documentation](../concepts/projects.md#custom-project-environment-paths) for more
+  [project documentation](../concepts/projects.md#configuring-the-project-environment-path) for more
   details.
 - `UV_PYTHON_INSTALL_DIR`: Used to specify the directory where uv will store managed Python
   installations.
