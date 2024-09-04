@@ -352,8 +352,7 @@ jobs:
             *.tar.gz
             *.sha256
 
-  # Like `linux-arm`, but use `--no-default-features --features flate2/rust_backend` when
-  # building uv.
+  # Like `linux-arm`, but use `--no-default-features` when building uv.
   linux-s390x:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
@@ -378,7 +377,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --release --locked --out dist --no-default-features --features flate2/rust_backend --features self-update
+          args: --release --locked --out dist --no-default-features --features self-update
       - uses: uraimo/run-on-arch-action@v2
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
@@ -421,8 +420,8 @@ jobs:
             *.tar.gz
             *.sha256
 
-  # Like `linux-arm`, but use `--no-default-features --features flate2/rust_backend` when
-  # building uv, and install the `gcc-powerpc64-linux-gnu` package.
+  # Like `linux-arm`, but use `--no-default-features` when building uv,
+  # and install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
@@ -453,7 +452,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --release --locked --out dist --no-default-features --features flate2/rust_backend --features self-update
+          args: --release --locked --out dist --no-default-features --features self-update
           before-script-linux: |
             if command -v yum &> /dev/null; then
                 yum update -y
