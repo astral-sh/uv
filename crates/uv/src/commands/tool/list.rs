@@ -12,7 +12,12 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// List installed tools.
-pub(crate) async fn list(show_paths: bool, cache: &Cache, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn list(
+    show_paths: bool,
+    show_version_specifiers: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?;
     let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
@@ -50,15 +55,30 @@ pub(crate) async fn list(show_paths: bool, cache: &Cache, printer: Printer) -> R
             }
         };
 
+        let mut version_specifier = String::new();
+        if show_version_specifiers {
+            if let Some(source) = tool.requirements().iter().find_map(|req| {
+                (req.name == name)
+                    .then_some(req.source.to_string())
+                    .filter(|s| !s.is_empty())
+            }) {
+                version_specifier.push_str(&format!(r#" (specifier: "{source}")"#));
+            }
+        }
+
         if show_paths {
             writeln!(
                 printer.stdout(),
                 "{} ({})",
-                format!("{name} v{version}").bold(),
-                installed_tools.tool_dir(&name).simplified_display().cyan()
+                format!("{name} v{version}{version_specifier}").bold(),
+                installed_tools.tool_dir(&name).simplified_display().cyan(),
             )?;
         } else {
-            writeln!(printer.stdout(), "{}", format!("{name} v{version}").bold())?;
+            writeln!(
+                printer.stdout(),
+                "{}",
+                format!("{name} v{version}{version_specifier}").bold()
+            )?;
         }
 
         // Output tool entrypoints
