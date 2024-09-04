@@ -59,13 +59,7 @@ pub(crate) async fn list(
             .flatten();
 
         for download in downloads {
-            output.insert((
-                download.python_version().version().clone(),
-                download.os().to_string(),
-                download.key().clone(),
-                Kind::Download,
-                None,
-            ));
+            output.insert((download.key().clone(), Kind::Download, None));
         }
     };
 
@@ -94,9 +88,7 @@ pub(crate) async fn list(
             Kind::System
         };
         output.insert((
-            installation.python_version().clone(),
-            installation.os().to_string(),
-            installation.key().clone(),
+            installation.key(),
             kind,
             Some(installation.interpreter().sys_executable().to_path_buf()),
         ));
@@ -106,7 +98,7 @@ pub(crate) async fn list(
     let mut seen_patch = FxHashSet::default();
     let mut seen_paths = FxHashSet::default();
     let mut include = Vec::new();
-    for (version, os, key, kind, path) in output.iter().rev() {
+    for (key, kind, path) in output.iter().rev() {
         // Do not show the same path more than once
         if let Some(path) = path {
             if !seen_paths.insert(path) {
@@ -116,9 +108,9 @@ pub(crate) async fn list(
 
         // Only show the latest patch version for each download unless all were requested
         if !matches!(kind, Kind::System) {
-            if let [major, minor, ..] = version.release() {
+            if let [major, minor, ..] = key.version().release() {
                 if !seen_minor.insert((
-                    os.clone(),
+                    *key.os(),
                     *major,
                     *minor,
                     key.implementation(),
@@ -130,9 +122,9 @@ pub(crate) async fn list(
                     }
                 }
             }
-            if let [major, minor, patch] = version.release() {
+            if let [major, minor, patch] = key.version().release() {
                 if !seen_patch.insert((
-                    os.clone(),
+                    *key.os(),
                     *major,
                     *minor,
                     *patch,
