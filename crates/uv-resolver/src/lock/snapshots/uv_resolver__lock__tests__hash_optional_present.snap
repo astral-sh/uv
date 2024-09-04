@@ -17,12 +17,12 @@ Ok(
                 ],
             ),
             range: RequiresPythonRange(
-                RequiresPythonBound(
+                LowerBound(
                     Included(
                         "3.12",
                     ),
                 ),
-                RequiresPythonBound(
+                UpperBound(
                     Unbounded,
                 ),
             ),
