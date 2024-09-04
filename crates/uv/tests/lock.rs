@@ -5834,7 +5834,18 @@ fn lock_dev_transitive() -> Result<()> {
 /// Avoid persisting registry credentials in `uv.lock`.
 #[test]
 fn lock_redact_https() -> Result<()> {
-    let context = TestContext::new("3.12");
+    // This test in particular seems to prompt a link mode warning
+    // that occurs when hardlinking fails. In particular, in this test,
+    // uv tries to hardlink between `/tmp` and `~/.local`, which on my
+    // system fails because `/tmp` is a different file system (a ramdisk).
+    // So we filter this warning out so that our snapshot tests pass on
+    // systems where this warning pops up.
+    //
+    // This is caused by using `--no-cache` in some of the commands below,
+    // which in turns means we don't use the test context cache location.
+    // We should probably add a way to configure the `--no-cache` temporary
+    // directory location during testing.
+    let context = TestContext::new("3.12").with_filtered_link_mode_warning();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(

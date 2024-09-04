@@ -179,6 +179,21 @@ impl TestContext {
         }
         self
     }
+
+    /// Adds a filter that specifically ignores the link mode warning.
+    ///
+    /// This occurs in some cases and can be used on an ad hoc basis to squash
+    /// the warning in the snapshots. This is useful because the warning does
+    /// not consistently appear. It is dependent on the environment. (For
+    /// example, sometimes it's dependent on whether `/tmp` and `~/.local` live
+    /// on the same file system.)
+    #[inline]
+    pub fn with_filtered_link_mode_warning(mut self) -> Self {
+        let pattern = "warning: Failed to hardlink files; .*\n.*\n.*\n";
+        self.filters.push((pattern.to_string(), String::new()));
+        self
+    }
+
     /// Discover the path to the XDG state directory. We use this, rather than the OS-specific
     /// temporary directory, because on macOS (and Windows on GitHub Actions), they involve
     /// symlinks. (On macOS, the temporary directory is, like `/var/...`, which resolves to
