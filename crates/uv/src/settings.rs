@@ -464,9 +464,16 @@ impl ToolListSettings {
     /// Resolve the [`ToolListSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let ToolListArgs { show_paths, show_version_specifiers, .. } = args;
+        let ToolListArgs {
+            show_paths,
+            show_version_specifiers,
+            ..
+        } = args;
 
-        Self { show_paths, show_version_specifiers }
+        Self {
+            show_paths,
+            show_version_specifiers,
+        }
     }
 }
 
