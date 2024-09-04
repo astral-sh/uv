@@ -232,6 +232,12 @@ impl ResolutionGraph {
     }
 
     /// Determine the markers under which a package is reachable in the dependency tree.
+    ///
+    /// The algorithm is a variant of Dijkstra's algorithm for not totally ordered distances:
+    /// Whenever we find a shorter distance to a node (a marker that is not a subset of the existing
+    /// marker), we re-queue the node and update all its children. This implicitly handles cycles,
+    /// whenever we re-reach a node through a cycle the marker we have is a more
+    /// specific marker/longer path, so we don't update the node and don't re-queue it.
     fn reachability(
         petgraph: &Graph<ResolutionGraphNode, MarkerTree>,
         fork_markers: &[MarkerTree],
