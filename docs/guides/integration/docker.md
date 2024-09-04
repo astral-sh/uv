@@ -49,11 +49,11 @@ In addition, uv publishes the following images:
     - `uv:python3.9-bookworm`
     - `uv:python3.8-bookworm`
 - Based on `python3.x-slim-bookworm`:
-    - `uv:python3.12-slim-bookworm`
-    - `uv:python3.11-slim-bookworm`
-    - `uv:python3.10-slim-bookworm`
-    - `uv:python3.9-slim-bookworm`
-    - `uv:python3.8-slim-bookworm`
+    - `uv:python3.12-bookworm-slim`
+    - `uv:python3.11-bookworm-slim`
+    - `uv:python3.10-bookworm-slim`
+    - `uv:python3.9-bookworm-slim`
+    - `uv:python3.8-bookworm-slim`
 
 As with the distroless image, each image is published with uv version tags as
 `uv:{major}.{minor}.{patch}-{base}` and `uv:{major}.{minor}-{base}`, e.g., `uv:0.4.4-alpine`.
