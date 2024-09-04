@@ -47,7 +47,7 @@ definitions with [package sources](./dependencies.md) in `tool.uv.sources`.
 
 uv uses the standard `[project.scripts]` table to define entry points for the project.
 
-For example, to declare an command called `hello` that invokes the `hello` function in the
+For example, to declare a command called `hello` that invokes the `hello` function in the
 `example_package_app` module:
 
 ```toml title="pyproject.toml"
@@ -360,7 +360,7 @@ up-to-date, an error will be raised instead of updating the lockfile.
 ### Upgrading locked package versions
 
 By default, uv will prefer the locked versions of packages when running `uv sync` and `uv lock`.
-Package versions will only change if project's dependency constraints exclude the previous, locked
+Package versions will only change if the project's dependency constraints exclude the previous, locked
 version. To upgrade to the latest package versions supported by the project's dependency
 constraints, use `uv lock --upgrade`.
 
