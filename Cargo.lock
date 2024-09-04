@@ -327,15 +327,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "backtrace-ext"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "537beee3be4a18fb023b570f80e3ae28003db9167a751266b259926e25539d50"
-dependencies = [
- "backtrace",
-]
-
-[[package]]
 name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2091,8 +2082,6 @@ version = "7.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4edc8853320c2a0dab800fbda86253c8938f6ea88510dc92c5f1ed20e794afc1"
 dependencies = [
- "backtrace",
- "backtrace-ext",
  "cfg-if",
  "miette-derive",
  "owo-colors",
@@ -4471,7 +4460,6 @@ dependencies = [
  "itertools 0.13.0",
  "jiff",
  "miette",
- "mimalloc",
  "owo-colors",
  "pep440_rs",
  "pep508_rs",
@@ -4489,7 +4477,6 @@ dependencies = [
  "tempfile",
  "textwrap",
  "thiserror",
- "tikv-jemallocator",
  "tokio",
  "toml",
  "tracing",
@@ -4511,6 +4498,8 @@ dependencies = [
  "uv-git",
  "uv-installer",
  "uv-normalize",
+ "uv-performance-flate2-backend",
+ "uv-performance-memory-allocator",
  "uv-python",
  "uv-requirements",
  "uv-resolver",
@@ -4730,7 +4719,6 @@ dependencies = [
  "fs-err",
  "itertools 0.13.0",
  "markdown",
- "mimalloc",
  "owo-colors",
  "pep508_rs",
  "poloto",
@@ -4742,7 +4730,6 @@ dependencies = [
  "serde_json",
  "tagu",
  "textwrap",
- "tikv-jemallocator",
  "tokio",
  "tracing",
  "tracing-durations-export",
@@ -4753,6 +4740,7 @@ dependencies = [
  "uv-installer",
  "uv-macros",
  "uv-options-metadata",
+ "uv-performance-memory-allocator",
  "uv-python",
  "uv-settings",
  "uv-workspace",
@@ -4971,6 +4959,21 @@ name = "uv-options-metadata"
 version = "0.0.1"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "uv-performance-flate2-backend"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+]
+
+[[package]]
+name = "uv-performance-memory-allocator"
+version = "0.1.0"
+dependencies = [
+ "mimalloc",
+ "tikv-jemallocator",
 ]
 
 [[package]]

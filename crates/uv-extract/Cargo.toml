@@ -30,8 +30,12 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
-xz2 = { workspace = true, features = ["static"] }
+xz2 = { workspace = true }
 zip = { workspace = true }
+
+[features]
+default = []
+performance = ["xz2/static"]
 
 [package.metadata.cargo-shear]
 ignored = ["xz2"]

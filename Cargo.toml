@@ -4,6 +4,10 @@ exclude = [
   "scripts",
   # Needs nightly
   "crates/uv-trampoline",
+  # Only used to pull in features, allocators, etc. — we specifically don't want them
+  # to be part of a workspace-wide cargo check, cargo clippy, etc.
+  "crates/uv-performance-memory-allocator",
+  "crates/uv-performance-flate2-backend",
 ]
 resolver = "2"
 
