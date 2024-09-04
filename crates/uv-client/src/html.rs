@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use tl::HTMLTag;
-use tracing::instrument;
+use tracing::{instrument, warn};
 use url::Url;
 
 use pep440_rs::VersionSpecifiers;
@@ -136,7 +136,13 @@ impl SimpleHtml {
             match dist_info_metadata.as_ref() {
                 "true" => Some(CoreMetadata::Bool(true)),
                 "false" => Some(CoreMetadata::Bool(false)),
-                fragment => Some(CoreMetadata::Hashes(Hashes::parse_fragment(fragment)?)),
+                fragment => match Hashes::parse_fragment(fragment) {
+                    Ok(hash) => Some(CoreMetadata::Hashes(hash)),
+                    Err(err) => {
+                        warn!("Failed to parse core metadata value `{fragment}`: {err}");
+                        None
+                    }
+                },
             }
         } else {
             None
