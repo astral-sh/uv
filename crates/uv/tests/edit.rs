@@ -1394,13 +1394,16 @@ fn add_remove_inline_optional() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--optional=types"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Dependencies in `pyproject.toml` are malformed
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + typing-extensions==4.10.0
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -1418,7 +1421,7 @@ fn add_remove_inline_optional() -> Result<()> {
         optional-dependencies = { io = [
             "anyio==3.7.0",
         ], types = [
-            "typing-extensions",
+            "typing-extensions>=4.10.0",
         ] }
 
         [build-system]
@@ -1436,11 +1439,13 @@ fn add_remove_inline_optional() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
+     - typing-extensions==4.10.0
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
