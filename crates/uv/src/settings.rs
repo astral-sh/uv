@@ -414,7 +414,7 @@ impl ToolInstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUpgradeSettings {
-    pub(crate) name: Option<PackageName>,
+    pub(crate) name: Option<Vec<PackageName>>,
     pub(crate) args: ResolverInstallerOptions,
     pub(crate) filesystem: ResolverInstallerOptions,
 }
@@ -473,7 +473,7 @@ impl ToolListSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUninstallSettings {
-    pub(crate) name: Option<PackageName>,
+    pub(crate) name: Option<Vec<PackageName>>,
 }
 
 impl ToolUninstallSettings {

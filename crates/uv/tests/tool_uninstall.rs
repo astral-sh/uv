@@ -69,6 +69,53 @@ fn tool_uninstall() {
 }
 
 #[test]
+fn tool_uninstall_multiple_names() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    context
+        .tool_install()
+        .arg("ruff==0.3.4")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black").arg("ruff")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 3 executables: black, blackd, ruff
+    "###);
+
+    // After uninstalling the tool, it shouldn't be listed.
+    uv_snapshot!(context.filters(), context.tool_list()
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    No tools installed
+    "###);
+}
+
+#[test]
 fn tool_uninstall_not_installed() {
     let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
