@@ -305,7 +305,7 @@ impl PyProjectTomlMut {
             .doc()?
             .entry("optional-dependencies")
             .or_insert(Item::Table(Table::new()))
-            .as_table_mut()
+            .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
         let group = optional_dependencies
