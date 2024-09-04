@@ -13,6 +13,7 @@ use petgraph::{
 use pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
@@ -210,8 +211,31 @@ impl ResolutionGraph {
                 .collect()
         };
 
-        // The markers under which a package is reachable in the dependency tree.
-        //
+        let reachability = Self::reachability(&petgraph, &fork_markers);
+
+        if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
+            report_missing_lower_bounds(&petgraph, &mut diagnostics);
+        }
+
+        Ok(Self {
+            petgraph,
+            requires_python,
+            package_markers,
+            diagnostics,
+            requirements: requirements.to_vec(),
+            constraints: constraints.clone(),
+            overrides: overrides.clone(),
+            options,
+            fork_markers,
+            reachability,
+        })
+    }
+
+    /// Determine the markers under which a package is reachable in the dependency tree.
+    fn reachability(
+        petgraph: &Graph<ResolutionGraphNode, MarkerTree>,
+        fork_markers: &[MarkerTree],
+    ) -> HashMap<NodeIndex, MarkerTree, FxBuildHasher> {
         // Note that we build including the virtual packages due to how we propagate markers through
         // the graph, even though we then only read the markers for base packages.
         let mut reachability = FxHashMap::default();
@@ -272,22 +296,7 @@ impl ResolutionGraph {
             }
         }
 
-        if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
-            report_missing_lower_bounds(&petgraph, &mut diagnostics);
-        }
-
-        Ok(Self {
-            petgraph,
-            requires_python,
-            package_markers,
-            diagnostics,
-            requirements: requirements.to_vec(),
-            constraints: constraints.clone(),
-            overrides: overrides.clone(),
-            options,
-            fork_markers,
-            reachability,
-        })
+        reachability
     }
 
     fn add_edge(
