@@ -380,11 +380,15 @@ impl TestContext {
         // Destroy any remaining UNC prefixes (Windows only)
         filters.push((r"\\\\\?\\".to_string(), String::new()));
 
-        // Remove the version from the packse url in lockfile snapshots. This avoid having a huge
+        // Remove the version from the packse url in lockfile snapshots. This avoids having a huge
         // diff any time we upgrade packse
         filters.push((
             format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}/"),
             "https://astral-sh.github.io/packse/PACKSE_VERSION/".to_string(),
+        ));
+        filters.push((
+            format!("https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/"),
+            "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/".to_string(),
         ));
 
         Self {
