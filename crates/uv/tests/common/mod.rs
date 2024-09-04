@@ -569,6 +569,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv build` command with options shared across scenarios.
+    pub fn build(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("build");
+        self.add_shared_args(&mut command, false);
+        command
+    }
+
     /// Create a `uv python find` command with options shared across scenarios.
     pub fn python_find(&self) -> Command {
         let mut command = Command::new(get_bin());

@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::str::FromStr;
 use std::time::Instant;
 
-use anstream::{eprintln, println};
+use anstream::eprintln;
 use anyhow::Result;
 use clap::Parser;
 use owo_colors::OwoColorize;
@@ -16,7 +16,6 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
-use crate::build::{build, BuildArgs};
 use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
 use crate::generate_all::Args as GenerateAllArgs;
@@ -43,7 +42,6 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-mod build;
 mod clear_compile;
 mod compile;
 mod generate_all;
@@ -57,8 +55,6 @@ const ROOT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
 
 #[derive(Parser)]
 enum Cli {
-    /// Build a source distribution into a wheel.
-    Build(BuildArgs),
     /// Display the metadata for a `.whl` at a given URL.
     WheelMetadata(WheelMetadataArgs),
     /// Compile all `.py` to `.pyc` files in the tree.
@@ -82,10 +78,6 @@ enum Cli {
 async fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli {
-        Cli::Build(args) => {
-            let target = build(args).await?;
-            println!("Wheel built to {}", target.display());
-        }
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args).await?,
         Cli::Compile(args) => compile::compile(args).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,

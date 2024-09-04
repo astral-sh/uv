@@ -659,6 +659,35 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             commands::cache_dir(&cache);
             Ok(ExitStatus::Success)
         }
+        Commands::Build(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::BuildSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
+
+            commands::build(
+                args.src_dir,
+                args.out_dir,
+                args.sdist,
+                args.wheel,
+                args.python,
+                args.settings,
+                cli.no_config,
+                globals.python_preference,
+                globals.python_downloads,
+                globals.connectivity,
+                globals.concurrency,
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
         Commands::Venv(args) => {
             args.compat_args.validate()?;
 
@@ -1134,7 +1163,10 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             commands::lock(
                 args.locked,
