@@ -1,3 +1,8 @@
+use either::Either;
+use itertools::Itertools;
+use petgraph::graph::NodeIndex;
+use petgraph::visit::EdgeRef;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::Infallible;
@@ -5,11 +10,7 @@ use std::fmt::{Debug, Display};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-
-use either::Either;
-use itertools::Itertools;
-use petgraph::visit::EdgeRef;
-use rustc_hash::{FxHashMap, FxHashSet};
+use std::sync::LazyLock;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use tracing::debug;
 use url::Url;
@@ -49,6 +50,25 @@ mod tree;
 
 /// The current version of the lockfile format.
 const VERSION: u32 = 1;
+
+static LINUX_MARKERS: LazyLock<MarkerTree> = LazyLock::new(|| {
+    MarkerTree::from_str(
+        "platform_system == 'Linux' and os_name == 'posix' and sys_platform == 'linux'",
+    )
+    .unwrap()
+});
+static WINDOWS_MARKERS: LazyLock<MarkerTree> = LazyLock::new(|| {
+    MarkerTree::from_str(
+        "platform_system == 'Windows' and os_name == 'nt' and sys_platform == 'win32'",
+    )
+    .unwrap()
+});
+static MAC_MARKERS: LazyLock<MarkerTree> = LazyLock::new(|| {
+    MarkerTree::from_str(
+        "platform_system == 'Darwin' and os_name == 'posix' and sys_platform == 'darwin'",
+    )
+    .unwrap()
+});
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
@@ -104,8 +124,7 @@ impl Lock {
                 .cloned()
                 .unwrap_or_default();
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
-
-            Self::remove_unreachable_wheels(&requires_python, &mut package);
+            Self::remove_unreachable_wheels(graph, &requires_python, node_index, &mut package);
 
             // Add all dependencies
             for edge in graph.petgraph.edges(node_index) {
@@ -215,12 +234,60 @@ impl Lock {
     }
 
     /// Remove wheels that can't be selected for installation due to environment markers.
-    fn remove_unreachable_wheels(requires_python: &RequiresPython, package: &mut Package) {
-        // Remove wheels that don't match `requires-python` and can't be selected for
-        // installation.
-        package
+    ///
+    /// For example, a package included under `sys_platform == 'win32'` does not need Linux
+    /// wheels.
+    fn remove_unreachable_wheels(
+        graph: &ResolutionGraph,
+        requires_python: &RequiresPython,
+        node_index: NodeIndex,
+        locked_dist: &mut Package,
+    ) {
+        // Remove wheels that don't match `requires-python` and can't be selected for installation.
+        locked_dist
             .wheels
             .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
+
+        // Filter by platform tags.
+
+        // See https://github.com/pypi/warehouse/blob/ccff64920db7965078cf1fdb50f028e640328887/warehouse/forklift/legacy.py#L100-L169
+        // for a list of relevant platforms.
+        let linux_tags = [
+            "manylinux1_",
+            "manylinux2010_",
+            "manylinux2014_",
+            "musllinux_",
+            "manylinux_",
+        ];
+        let windows_tags = ["win32", "win_arm64", "win_amd64", "win_ia64"];
+
+        locked_dist.wheels.retain(|wheel| {
+            // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
+            // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
+            // own sufficient to exclude linux wheels), but due to
+            // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
+            // a single disjointness check with the intersection is sufficient, so we have one
+            // constant per platform.
+            let reachability_markers = &graph.reachability[&node_index];
+            let platform_tags = &wheel.filename.platform_tag;
+            if platform_tags.iter().all(|tag| {
+                linux_tags.into_iter().any(|linux_tag| {
+                    // These two linux tags are allowed by warehouse.
+                    tag.starts_with(linux_tag) || tag == "linux_armv6l" || tag == "linux_armv7l"
+                })
+            }) {
+                !reachability_markers.is_disjoint(&LINUX_MARKERS)
+            } else if platform_tags
+                .iter()
+                .all(|tag| windows_tags.contains(&&**tag))
+            {
+                !graph.reachability[&node_index].is_disjoint(&WINDOWS_MARKERS)
+            } else if platform_tags.iter().all(|tag| tag.starts_with("macosx_")) {
+                !graph.reachability[&node_index].is_disjoint(&MAC_MARKERS)
+            } else {
+                true
+            }
+        });
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
