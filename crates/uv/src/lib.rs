@@ -672,6 +672,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
             commands::build(
                 args.src,
+                args.package,
                 args.out_dir,
                 args.sdist,
                 args.wheel,
