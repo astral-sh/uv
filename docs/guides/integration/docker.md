@@ -18,90 +18,53 @@ $ docker run ghcr.io/astral-sh/uv --help
 
 ### Available images
 
-uv builds and publishes the following Docker tags:
+uv provides a distroless Docker image including the `uv` binary. The following tags are published:
 
 - `uv:latest`
 - `uv:{major}.{minor}.{patch}`, e.g., `uv:0.4.4`
 - `uv:{major}.{minor}`, e.g., `uv:0.4` (the latest patch version)
 
-In addition, uv builds and publishes these additional tags:
+In addition, uv publishes the following images:
 
+<!-- prettier-ignore -->
 - Based on `alpine:3.20`:
-  - `uv:alpine`
-  - `uv:alpine3.20`
-  - `uv:{major}.{minor}-alpine`
-  - `uv:{major}.{minor}-alpine3.20`
-  - `uv:{major}.{minor}.{patch}-alpine`
-  - `uv:{major}.{minor}.{patch}-alpine3.20`
+    - `uv:alpine`
+    - `uv:alpine3.20`
 - Based on `debian:bookworm-slim`:
-  - `uv:debian-slim`
-  - `uv:bookworm-slim`
-  - `uv:{major}.{minor}-debian-slim`
-  - `uv:{major}.{minor}-bookworm-slim`
-  - `uv:{major}.{minor}.{patch}-debian-slim`
-  - `uv:{major}.{minor}.{patch}-bookworm-slim`
+    - `uv:debian-slim`
+    - `uv:bookworm-slim`
 - Based on `buildpack-deps:bookworm`:
-  - `uv:debian`
-  - `uv:bookworm`
-  - `uv:{major}.{minor}-debian`
-  - `uv:{major}.{minor}-bookworm`
-  - `uv:{major}.{minor}.{patch}-debian`
-  - `uv:{major}.{minor}.{patch}-bookworm`
+    - `uv:debian`
+    - `uv:bookworm`
 - Based on `python3.x-alpine`:
-  - `uv:python3.12-alpine`
-  - `uv:python3.11-alpine`
-  - `uv:python3.10-alpine`
-  - `uv:python3.9-alpine`
-  - `uv:python3.8-alpine`
-  - `uv:{major}.{minor}-python3.12-alpine`
-  - `uv:{major}.{minor}-python3.11-alpine`
-  - `uv:{major}.{minor}-python3.10-alpine`
-  - `uv:{major}.{minor}-python3.9-alpine`
-  - `uv:{major}.{minor}-python3.8-alpine`
-  - `uv:{major}.{minor}.{patch}-python3.12-alpine`
-  - `uv:{major}.{minor}.{patch}-python3.11-alpine`
-  - `uv:{major}.{minor}.{patch}-python3.10-alpine`
-  - `uv:{major}.{minor}.{patch}-python3.9-alpine`
-  - `uv:{major}.{minor}.{patch}-python3.8-alpine`
+    - `uv:python3.12-alpine`
+    - `uv:python3.11-alpine`
+    - `uv:python3.10-alpine`
+    - `uv:python3.9-alpine`
+    - `uv:python3.8-alpine`
 - Based on `python3.x-bookworm`:
-  - `uv:python3.12-bookworm`
-  - `uv:python3.11-bookworm`
-  - `uv:python3.10-bookworm`
-  - `uv:python3.9-bookworm`
-  - `uv:python3.8-bookworm`
-  - `uv:{major}.{minor}-python3.12-bookworm`
-  - `uv:{major}.{minor}-python3.11-bookworm`
-  - `uv:{major}.{minor}-python3.10-bookworm`
-  - `uv:{major}.{minor}-python3.9-bookworm`
-  - `uv:{major}.{minor}-python3.8-bookworm`
-  - `uv:{major}.{minor}.{patch}-python3.12-bookworm`
-  - `uv:{major}.{minor}.{patch}-python3.11-bookworm`
-  - `uv:{major}.{minor}.{patch}-python3.10-bookworm`
-  - `uv:{major}.{minor}.{patch}-python3.9-bookworm`
-  - `uv:{major}.{minor}.{patch}-python3.8-bookworm`
+    - `uv:python3.12-bookworm`
+    - `uv:python3.11-bookworm`
+    - `uv:python3.10-bookworm`
+    - `uv:python3.9-bookworm`
+    - `uv:python3.8-bookworm`
 - Based on `python3.x-slim-bookworm`:
-  - `uv:python3.12-slim-bookworm`
-  - `uv:python3.11-slim-bookworm`
-  - `uv:python3.10-slim-bookworm`
-  - `uv:python3.9-slim-bookworm`
-  - `uv:python3.8-slim-bookworm`
-  - `uv:{major}.{minor}-python3.12-slim-bookworm`
-  - `uv:{major}.{minor}-python3.11-slim-bookworm`
-  - `uv:{major}.{minor}-python3.10-slim-bookworm`
-  - `uv:{major}.{minor}-python3.9-slim-bookworm`
-  - `uv:{major}.{minor}-python3.8-slim-bookworm`
-  - `uv:{major}.{minor}.{patch}-python3.12-slim-bookworm`
-  - `uv:{major}.{minor}.{patch}-python3.11-slim-bookworm`
-  - `uv:{major}.{minor}.{patch}-python3.10-slim-bookworm`
-  - `uv:{major}.{minor}.{patch}-python3.9-slim-bookworm`
-  - `uv:{major}.{minor}.{patch}-python3.8-slim-bookworm`
+    - `uv:python3.12-slim-bookworm`
+    - `uv:python3.11-slim-bookworm`
+    - `uv:python3.10-slim-bookworm`
+    - `uv:python3.9-slim-bookworm`
+    - `uv:python3.8-slim-bookworm`
+
+As with the distroless image, each image is published with uv version tags as
+`uv:{major}.{minor}.{patch}-{base}` and `uv:{major}.{minor}-{base}`, e.g., `uv:0.4.4-alpine`.
 
 For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
 page.
 
 ### Installing uv
 
-uv can also be installed by copying from the official distroless Docker image:
+Use one of the above images with uv pre-installed or install uv by copying the binary from the
+official distroless Docker image:
 
 ```dockerfile title="Dockerfile"
 FROM python:3.12-slim-bookworm
