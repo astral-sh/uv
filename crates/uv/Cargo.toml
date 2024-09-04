@@ -48,6 +48,7 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 axoupdater = { workspace = true, features = ["github_releases", "tokio"], optional = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
+ctrlc = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
