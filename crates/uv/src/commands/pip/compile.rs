@@ -321,12 +321,12 @@ pub(crate) async fn pip_compile(
     };
 
     // Don't enforce hashes in `pip compile`.
+    let build_hashes = HashStrategy::None;
     let build_constraints = Constraints::from_requirements(
         build_constraints
             .iter()
             .map(|constraint| constraint.requirement.clone()),
     );
-    let build_hashes = HashStrategy::None;
 
     let build_dispatch = BuildDispatch::new(
         &client,

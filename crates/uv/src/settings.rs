@@ -1629,6 +1629,7 @@ pub(crate) struct BuildSettings {
     pub(crate) out_dir: Option<PathBuf>,
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
+    pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
@@ -1643,6 +1644,7 @@ impl BuildSettings {
             package,
             sdist,
             wheel,
+            build_constraint,
             python,
             build,
             refresh,
@@ -1655,6 +1657,10 @@ impl BuildSettings {
             out_dir,
             sdist,
             wheel,
+            build_constraint: build_constraint
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),

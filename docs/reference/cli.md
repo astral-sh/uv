@@ -6225,6 +6225,11 @@ uv build [OPTIONS] [SRC]
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
+</dd><dt><code>--build-constraint</code>, <code>-b</code> <i>build-constraint</i></dt><dd><p>Constrain build dependencies using the given requirements files when building distributions.</p>
+
+<p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a build dependency that&#8217;s installed. However, including a package in a constraints file will <em>not</em> trigger the inclusion of that package on its own.</p>
+
+<p>May also be set with the <code>UV_BUILD_CONSTRAINT</code> environment variable.</p>
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
