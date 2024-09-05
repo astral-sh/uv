@@ -7,7 +7,7 @@ use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_tool::{InstalledTools, Tool, ToolEntrypoint};
+use uv_tool::{InstalledTools, PackageId, Tool, ToolEntrypoint};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -100,7 +100,12 @@ async fn do_uninstall(
         for (name, receipt) in installed_tools.tools()? {
             let Ok(receipt) = receipt else {
                 // If the tool is not installed properly, attempt to remove the environment anyway.
-                match installed_tools.remove_environment(&name) {
+                let pkg = PackageId {
+                    name: name.clone(),
+                    suffix: None, // TODO add support for suffix
+                };
+
+                match installed_tools.remove_environment(&pkg) {
                     Ok(()) => {
                         dangling = true;
                         writeln!(
@@ -124,9 +129,14 @@ async fn do_uninstall(
     } else {
         let mut entrypoints = vec![];
         for name in names {
-            let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
+            let pkg = PackageId {
+                name: name.clone(),
+                suffix: None, // TODO add support for suffix
+            };
+            let Some(receipt) = installed_tools.get_tool_receipt(&pkg)? else {
                 // If the tool is not installed properly, attempt to remove the environment anyway.
-                match installed_tools.remove_environment(&name) {
+
+                match installed_tools.remove_environment(&pkg) {
                     Ok(()) => {
                         writeln!(
                             printer.stderr(),
@@ -178,7 +188,11 @@ async fn uninstall_tool(
     tools: &InstalledTools,
 ) -> Result<Vec<ToolEntrypoint>> {
     // Remove the tool itself.
-    tools.remove_environment(name)?;
+    let pkg = PackageId {
+        name: name.clone(),
+        suffix: None, // TODO add support for suffix
+    };
+    tools.remove_environment(&pkg)?;
 
     // Remove the tool's entrypoints.
     let entrypoints = receipt.entrypoints();

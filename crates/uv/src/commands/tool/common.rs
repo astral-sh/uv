@@ -16,7 +16,9 @@ use uv_installer::SitePackages;
 use uv_python::PythonEnvironment;
 use uv_settings::ToolOptions;
 use uv_shell::Shell;
-use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
+use uv_tool::{
+    entrypoint_paths, find_executable_directory, InstalledTools, PackageId, Tool, ToolEntrypoint,
+};
 use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
@@ -71,11 +73,17 @@ pub(crate) fn install_executables(
     python: Option<String>,
     requirements: Vec<Requirement>,
     printer: Printer,
+    suffix: &Option<String>,
 ) -> anyhow::Result<ExitStatus> {
     let site_packages = SitePackages::from_environment(environment)?;
     let installed = site_packages.get_packages(name);
     let Some(installed_dist) = installed.first().copied() else {
         bail!("Expected at least one requirement")
+    };
+
+    let pkg = PackageId {
+        name: name.clone(),
+        suffix: suffix.clone(),
     };
 
     // Find a suitable path to install into
@@ -98,12 +106,15 @@ pub(crate) fn install_executables(
     let target_entry_points = entry_points
         .into_iter()
         .map(|(name, source_path)| {
-            let target_path = executable_directory.join(
-                source_path
-                    .file_name()
-                    .map(std::borrow::ToOwned::to_owned)
-                    .unwrap_or_else(|| OsString::from(name.clone())),
-            );
+            let mut file_name = source_path
+                .file_name()
+                .map(std::borrow::ToOwned::to_owned)
+                .unwrap_or_else(|| OsString::from(name.clone()));
+            if let Some(suffix) = suffix {
+                file_name.push(suffix);
+            }
+
+            let target_path = executable_directory.join(file_name);
             (name, source_path, target_path)
         })
         .collect::<BTreeSet<_>>();
@@ -118,7 +129,7 @@ pub(crate) fn install_executables(
         hint_executable_from_dependency(name, &site_packages, printer)?;
 
         // Clean up the environment we just created.
-        installed_tools.remove_environment(name)?;
+        installed_tools.remove_environment(&pkg)?;
 
         return Ok(ExitStatus::Failure);
     }
@@ -138,7 +149,7 @@ pub(crate) fn install_executables(
         }
     } else if existing_entry_points.peek().is_some() {
         // Clean up the environment we just created
-        installed_tools.remove_environment(name)?;
+        installed_tools.remove_environment(&pkg)?;
 
         let existing_entry_points = existing_entry_points
             // SAFETY: We know the target has a filename because we just constructed it above
@@ -190,7 +201,7 @@ pub(crate) fn install_executables(
             .map(|(name, _, target_path)| ToolEntrypoint::new(name, target_path)),
         options,
     );
-    installed_tools.add_tool_receipt(name, tool)?;
+    installed_tools.add_tool_receipt(&pkg, tool)?;
 
     // If the executable directory isn't on the user's PATH, warn.
     if !Shell::contains_path(&executable_directory) {

@@ -3156,6 +3156,10 @@ pub struct ToolInstallArgs {
         help_heading = "Python options"
     )]
     pub python: Option<String>,
+
+    /// The suffix to install the package and executables with
+    #[arg(long, help_heading = "Installer options")]
+    pub suffix: Option<String>,
 }
 
 #[derive(Args)]

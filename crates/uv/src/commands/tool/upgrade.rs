@@ -10,7 +10,7 @@ use uv_configuration::Concurrency;
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, ResolverInstallerOptions, ToolOptions};
-use uv_tool::InstalledTools;
+use uv_tool::{InstalledTools, PackageId};
 
 use crate::commands::pip::loggers::{SummaryResolveLogger, UpgradeInstallLogger};
 use crate::commands::project::{update_environment, EnvironmentUpdate};
@@ -59,7 +59,11 @@ pub(crate) async fn upgrade(
         debug!("Upgrading tool: `{name}`");
 
         // Ensure the tool is installed.
-        let existing_tool_receipt = match installed_tools.get_tool_receipt(&name) {
+        let pkg = PackageId {
+            name: name.clone(),
+            suffix: None, // TODO add support for suffix
+        };
+        let existing_tool_receipt = match installed_tools.get_tool_receipt(&pkg) {
             Ok(Some(receipt)) => receipt,
             Ok(None) => {
                 let install_command = format!("uv tool install {name}");
@@ -83,7 +87,11 @@ pub(crate) async fn upgrade(
             }
         };
 
-        let existing_environment = match installed_tools.get_environment(&name, cache) {
+        let pkg = PackageId {
+            name: name.clone(),
+            suffix: None, // TODO add support for suffix
+        };
+        let existing_environment = match installed_tools.get_environment(&pkg, cache) {
             Ok(Some(environment)) => environment,
             Ok(None) => {
                 let install_command = format!("uv tool install {name}");
@@ -149,6 +157,7 @@ pub(crate) async fn upgrade(
             // existing executables.
             remove_entrypoints(&existing_tool_receipt);
 
+            let suffix = None; // TODO add support for suffix
             install_executables(
                 &environment,
                 &name,
@@ -158,6 +167,7 @@ pub(crate) async fn upgrade(
                 existing_tool_receipt.python().to_owned(),
                 requirements.to_vec(),
                 printer,
+                &suffix, /* TODO suffix upgrade */
             )?;
         }
     }

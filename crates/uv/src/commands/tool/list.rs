@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
-use uv_tool::InstalledTools;
+use uv_tool::{InstalledTools, PackageId};
 use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
@@ -46,9 +46,13 @@ pub(crate) async fn list(
             );
             continue;
         };
+        let pkg = PackageId {
+            name: name.clone(),
+            suffix: None, // TODO Add suffix option
+        };
 
         // Output tool name and version
-        let version = match installed_tools.version(&name, cache) {
+        let version = match installed_tools.version(&pkg, cache) {
             Ok(version) => version,
             Err(e) => {
                 writeln!(printer.stderr(), "{e}")?;
@@ -74,7 +78,7 @@ pub(crate) async fn list(
                 printer.stdout(),
                 "{} ({})",
                 format!("{name} v{version}{version_specifier}").bold(),
-                installed_tools.tool_dir(&name).simplified_display().cyan(),
+                installed_tools.tool_dir(&pkg).simplified_display().cyan(),
             )?;
         } else {
             writeln!(

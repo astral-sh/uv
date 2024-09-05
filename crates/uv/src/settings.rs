@@ -364,6 +364,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) force: bool,
     pub(crate) editable: bool,
+    pub(crate) suffix: Option<String>,
 }
 
 impl ToolInstallSettings {
@@ -381,6 +382,7 @@ impl ToolInstallSettings {
             build,
             refresh,
             python,
+            suffix,
         } = args;
 
         let options = resolver_installer_options(installer, build).combine(
@@ -406,6 +408,7 @@ impl ToolInstallSettings {
             refresh: Refresh::from(refresh),
             options,
             settings,
+            suffix,
         }
     }
 }

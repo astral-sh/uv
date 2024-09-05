@@ -17,7 +17,7 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{ResolverInstallerOptions, ToolOptions};
-use uv_tool::InstalledTools;
+use uv_tool::{InstalledTools, PackageId};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
@@ -42,6 +42,7 @@ pub(crate) async fn install(
     force: bool,
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
+    suffix: Option<String>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -241,6 +242,11 @@ pub(crate) async fn install(
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
 
+    let pkg = PackageId {
+        name: from.name.clone(),
+        suffix: suffix.clone(),
+    };
+
     // Find the existing receipt, if it exists. If the receipt is present but malformed, we'll
     // remove the environment and continue with the install.
     //
@@ -249,31 +255,31 @@ pub(crate) async fn install(
     //
     // (If we find existing entrypoints later on, and the tool _doesn't_ exist, we'll avoid removing
     // the external tool's entrypoints (without `--force`).)
-    let (existing_tool_receipt, invalid_tool_receipt) =
-        match installed_tools.get_tool_receipt(&from.name) {
-            Ok(None) => (None, false),
-            Ok(Some(receipt)) => (Some(receipt), false),
-            Err(_) => {
-                // If the tool is not installed properly, remove the environment and continue.
-                match installed_tools.remove_environment(&from.name) {
-                    Ok(()) => {
-                        warn_user!(
-                            "Removed existing `{from}` with invalid receipt",
-                            from = from.name.cyan()
-                        );
-                    }
-                    Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(err) => {
-                        return Err(err.into());
-                    }
+    let (existing_tool_receipt, invalid_tool_receipt) = match installed_tools.get_tool_receipt(&pkg)
+    {
+        Ok(None) => (None, false),
+        Ok(Some(receipt)) => (Some(receipt), false),
+        Err(_) => {
+            // If the tool is not installed properly, remove the environment and continue.
+            match installed_tools.remove_environment(&pkg) {
+                Ok(()) => {
+                    warn_user!(
+                        "Removed existing `{from}` with invalid receipt",
+                        from = from.name.cyan()
+                    );
                 }
-                (None, true)
+                Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => {
+                    return Err(err.into());
+                }
             }
-        };
+            (None, true)
+        }
+    };
 
     let existing_environment =
         installed_tools
-            .get_environment(&from.name, &cache)?
+            .get_environment(&pkg, &cache)?
             .filter(|environment| {
                 python_request.as_ref().map_or(true, |python_request| {
                     if python_request.satisfied(environment.interpreter(), &cache) {
@@ -308,7 +314,7 @@ pub(crate) async fn install(
                 if *tool_receipt.options() != options {
                     // ...but the options differ, we need to update the receipt.
                     installed_tools
-                        .add_tool_receipt(&from.name, tool_receipt.clone().with_options(options))?;
+                        .add_tool_receipt(&pkg, tool_receipt.clone().with_options(options))?;
                 }
 
                 // We're done, though we might need to update the receipt.
@@ -378,7 +384,7 @@ pub(crate) async fn install(
         )
         .await?;
 
-        let environment = installed_tools.create_environment(&from.name, interpreter)?;
+        let environment = installed_tools.create_environment(&pkg, interpreter)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
         // executables.
@@ -411,5 +417,6 @@ pub(crate) async fn install(
         python,
         requirements,
         printer,
+        &suffix,
     )
 }

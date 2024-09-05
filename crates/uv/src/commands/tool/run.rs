@@ -25,6 +25,7 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_tool::PackageId;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
 
@@ -436,9 +437,14 @@ async fn get_or_create_environment(
         let installed_tools = InstalledTools::from_settings()?.init()?;
         let _lock = installed_tools.lock().await?;
 
+        let pkg = PackageId {
+            name: from.name.clone(),
+            suffix: None, // TODO add suffix support
+        };
+
         let existing_environment =
             installed_tools
-                .get_environment(&from.name, cache)?
+                .get_environment(&pkg, cache)?
                 .filter(|environment| {
                     python_request.as_ref().map_or(true, |python_request| {
                         python_request.satisfied(environment.interpreter(), cache)
