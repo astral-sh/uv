@@ -364,8 +364,11 @@ up-to-date, an error will be raised instead of updating the lockfile.
 
 By default, uv will prefer the locked versions of packages when running `uv sync` and `uv lock`.
 Package versions will only change if the project's dependency constraints exclude the previous,
-locked version. To upgrade to the latest package versions supported by the project's dependency
-constraints, use `uv lock --upgrade`.
+locked version. You can manually update versions of packages in the lockfile using the following commands:
+
+- `uv lock --upgrade` updates all packages to the latest version supported by the project's dependency constraints.
+- `uv lock --upgrade-package <package>` updates `<package>` to the latest supported version.
+- `uv lock --upgrade-package <package>==<version>` updates `<package>` to the specified `<version>`.
 
 ### Limited resolution environments
 
