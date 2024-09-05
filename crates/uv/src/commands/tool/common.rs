@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::path::Path;
 use std::{collections::BTreeSet, ffi::OsString};
 
 use anyhow::{bail, Context};
@@ -106,15 +107,21 @@ pub(crate) fn install_executables(
     let target_entry_points = entry_points
         .into_iter()
         .map(|(name, source_path)| {
-            let mut file_name = source_path
-                .file_name()
+            let mut file_stem = source_path
+                .file_stem()
                 .map(std::borrow::ToOwned::to_owned)
                 .unwrap_or_else(|| OsString::from(name.clone()));
             if let Some(suffix) = suffix {
-                file_name.push(suffix);
+                file_stem.push(suffix);
             }
 
-            let target_path = executable_directory.join(file_name);
+            let target_path = if let Some(extension) = source_path.extension() {
+                let path = Path::new(&file_stem).with_extension(extension);
+                executable_directory.join(path)
+            } else {
+                let path = Path::new(&file_stem);
+                executable_directory.join(path)
+            };
             (name, source_path, target_path)
         })
         .collect::<BTreeSet<_>>();

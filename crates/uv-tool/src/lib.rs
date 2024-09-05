@@ -56,11 +56,21 @@ pub enum Error {
     Serialization(#[from] toml_edit::ser::Error),
 }
 
-/// A Package identitifier
+/// A Tool name
+///
+/// TODO: This representation works for installing, but could be problematic for upgrading and uninstalling
+/// Consider changing it to either a single String (with the resolved name), or an enum with variants for different identifiers
 #[derive(Debug, Clone)]
 pub struct ToolName {
     pub name: PackageName,
     pub suffix: Option<String>,
+}
+
+impl fmt::Display for ToolName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO Decide how Tools are displayed
+        write!(f, "{}", self.name)
+    }
 }
 
 /// A collection of uv-managed tools installed on the current system.
@@ -165,8 +175,7 @@ impl InstalledTools {
         let path = self.tool_dir(name).join("uv-receipt.toml");
 
         debug!(
-            "Adding metadata entry for tool `{}` at {}",
-            name.name,
+            "Adding metadata entry for tool `{name}` at {}",
             path.user_display()
         );
 
@@ -191,8 +200,7 @@ impl InstalledTools {
         let environment_path = self.tool_dir(name);
 
         debug!(
-            "Deleting environment for tool `{}` at {}",
-            name.name,
+            "Deleting environment for tool `{name}` at {}",
             environment_path.user_display()
         );
 
@@ -217,8 +225,7 @@ impl InstalledTools {
         match PythonEnvironment::from_root(&environment_path, cache) {
             Ok(venv) => {
                 debug!(
-                    "Using existing environment for tool `{}`: {}",
-                    name.name,
+                    "Using existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
                 Ok(Some(venv))
@@ -251,8 +258,7 @@ impl InstalledTools {
         match fs_err::remove_dir_all(&environment_path) {
             Ok(()) => {
                 debug!(
-                    "Removed existing environment for tool `{}`: {}",
-                    name.name,
+                    "Removed existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
             }
@@ -261,8 +267,7 @@ impl InstalledTools {
         }
 
         debug!(
-            "Creating environment for tool `{}`: {}",
-            name.name,
+            "Creating environment for tool `{name}`: {}",
             environment_path.user_display()
         );
 
