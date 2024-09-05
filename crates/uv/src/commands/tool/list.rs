@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
-use uv_tool::{InstalledTools, PackageId};
+use uv_tool::{InstalledTools, ToolName};
 use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
@@ -46,7 +46,7 @@ pub(crate) async fn list(
             );
             continue;
         };
-        let pkg = PackageId {
+        let pkg = ToolName {
             name: name.clone(),
             suffix: None, // TODO Add suffix option
         };

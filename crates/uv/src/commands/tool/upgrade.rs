@@ -10,7 +10,7 @@ use uv_configuration::Concurrency;
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, ResolverInstallerOptions, ToolOptions};
-use uv_tool::{InstalledTools, PackageId};
+use uv_tool::{InstalledTools, ToolName};
 
 use crate::commands::pip::loggers::{SummaryResolveLogger, UpgradeInstallLogger};
 use crate::commands::project::{update_environment, EnvironmentUpdate};
@@ -59,7 +59,7 @@ pub(crate) async fn upgrade(
         debug!("Upgrading tool: `{name}`");
 
         // Ensure the tool is installed.
-        let pkg = PackageId {
+        let pkg = ToolName {
             name: name.clone(),
             suffix: None, // TODO add support for suffix
         };
@@ -87,7 +87,7 @@ pub(crate) async fn upgrade(
             }
         };
 
-        let pkg = PackageId {
+        let pkg = ToolName {
             name: name.clone(),
             suffix: None, // TODO add support for suffix
         };

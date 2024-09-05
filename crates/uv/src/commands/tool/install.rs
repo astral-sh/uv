@@ -17,7 +17,7 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{ResolverInstallerOptions, ToolOptions};
-use uv_tool::{InstalledTools, PackageId};
+use uv_tool::{InstalledTools, ToolName};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
@@ -242,7 +242,7 @@ pub(crate) async fn install(
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
 
-    let pkg = PackageId {
+    let pkg = ToolName {
         name: from.name.clone(),
         suffix: suffix.clone(),
     };

@@ -7,7 +7,7 @@ use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_tool::{InstalledTools, PackageId, Tool, ToolEntrypoint};
+use uv_tool::{InstalledTools, Tool, ToolEntrypoint, ToolName};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -100,7 +100,7 @@ async fn do_uninstall(
         for (name, receipt) in installed_tools.tools()? {
             let Ok(receipt) = receipt else {
                 // If the tool is not installed properly, attempt to remove the environment anyway.
-                let pkg = PackageId {
+                let pkg = ToolName {
                     name: name.clone(),
                     suffix: None, // TODO add support for suffix
                 };
@@ -129,7 +129,7 @@ async fn do_uninstall(
     } else {
         let mut entrypoints = vec![];
         for name in names {
-            let pkg = PackageId {
+            let pkg = ToolName {
                 name: name.clone(),
                 suffix: None, // TODO add support for suffix
             };
@@ -188,7 +188,7 @@ async fn uninstall_tool(
     tools: &InstalledTools,
 ) -> Result<Vec<ToolEntrypoint>> {
     // Remove the tool itself.
-    let pkg = PackageId {
+    let pkg = ToolName {
         name: name.clone(),
         suffix: None, // TODO add support for suffix
     };

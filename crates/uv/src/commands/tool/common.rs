@@ -17,7 +17,7 @@ use uv_python::PythonEnvironment;
 use uv_settings::ToolOptions;
 use uv_shell::Shell;
 use uv_tool::{
-    entrypoint_paths, find_executable_directory, InstalledTools, PackageId, Tool, ToolEntrypoint,
+    entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint, ToolName,
 };
 use uv_warnings::warn_user;
 
@@ -81,7 +81,7 @@ pub(crate) fn install_executables(
         bail!("Expected at least one requirement")
     };
 
-    let pkg = PackageId {
+    let pkg = ToolName {
         name: name.clone(),
         suffix: suffix.clone(),
     };

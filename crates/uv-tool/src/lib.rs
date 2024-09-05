@@ -58,7 +58,7 @@ pub enum Error {
 
 /// A Package identitifier
 #[derive(Debug, Clone)]
-pub struct PackageId {
+pub struct ToolName {
     pub name: PackageName,
     pub suffix: Option<String>,
 }
@@ -94,7 +94,7 @@ impl InstalledTools {
     }
 
     /// Return the expected directory for a tool with the given [`PackageName`].
-    pub fn tool_dir(&self, name: &PackageId) -> PathBuf {
+    pub fn tool_dir(&self, name: &ToolName) -> PathBuf {
         if let Some(suffix) = &name.suffix {
             self.root.join(name.name.to_string() + suffix)
         } else {
@@ -141,7 +141,7 @@ impl InstalledTools {
     /// error.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    pub fn get_tool_receipt(&self, name: &PackageId) -> Result<Option<Tool>, Error> {
+    pub fn get_tool_receipt(&self, name: &ToolName) -> Result<Option<Tool>, Error> {
         let path = self.tool_dir(name).join("uv-receipt.toml");
         match ToolReceipt::from_path(&path) {
             Ok(tool_receipt) => Ok(Some(tool_receipt.tool)),
@@ -160,7 +160,7 @@ impl InstalledTools {
     /// Any existing receipt will be replaced.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    pub fn add_tool_receipt(&self, name: &PackageId, tool: Tool) -> Result<(), Error> {
+    pub fn add_tool_receipt(&self, name: &ToolName, tool: Tool) -> Result<(), Error> {
         let tool_receipt = ToolReceipt::from(tool);
         let path = self.tool_dir(name).join("uv-receipt.toml");
 
@@ -187,7 +187,7 @@ impl InstalledTools {
     /// # Errors
     ///
     /// If no such environment exists for the tool.
-    pub fn remove_environment(&self, name: &PackageId) -> Result<(), Error> {
+    pub fn remove_environment(&self, name: &ToolName) -> Result<(), Error> {
         let environment_path = self.tool_dir(name);
 
         debug!(
@@ -209,7 +209,7 @@ impl InstalledTools {
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn get_environment(
         &self,
-        name: &PackageId,
+        name: &ToolName,
         cache: &Cache,
     ) -> Result<Option<PythonEnvironment>, Error> {
         let environment_path = self.tool_dir(name);
@@ -242,7 +242,7 @@ impl InstalledTools {
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn create_environment(
         &self,
-        name: &PackageId,
+        name: &ToolName,
         interpreter: Interpreter,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
@@ -287,7 +287,7 @@ impl InstalledTools {
     }
 
     /// Return the [`Version`] of an installed tool.
-    pub fn version(&self, name: &PackageId, cache: &Cache) -> Result<Version, Error> {
+    pub fn version(&self, name: &ToolName, cache: &Cache) -> Result<Version, Error> {
         let environment_path = self.tool_dir(name);
         let environment = PythonEnvironment::from_root(&environment_path, cache)?;
         let site_packages = SitePackages::from_environment(&environment)
