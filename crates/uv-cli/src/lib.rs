@@ -1979,6 +1979,15 @@ pub struct BuildArgs {
     #[arg(long)]
     pub wheel: bool,
 
+    /// Constrain build dependencies using the given requirements files when building
+    /// distributions.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// build dependency that's installed. However, including a package in a constraints file will
+    /// _not_ trigger the inclusion of that package on its own.
+    #[arg(long, short, env = "UV_BUILD_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub build_constraint: Vec<Maybe<PathBuf>>,
+
     /// The Python interpreter to use for the build environment.
     ///
     /// By default, builds are executed in isolated virtual environments. The

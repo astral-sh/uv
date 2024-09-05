@@ -670,12 +670,20 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
+            // Resolve the build constraints.
+            let build_constraints = args
+                .build_constraint
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
+
             commands::build(
                 args.src,
                 args.package,
                 args.out_dir,
                 args.sdist,
                 args.wheel,
+                build_constraints,
                 args.python,
                 args.settings,
                 cli.no_config,

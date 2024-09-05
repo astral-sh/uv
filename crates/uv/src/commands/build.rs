@@ -5,6 +5,7 @@ use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 use std::borrow::Cow;
 
+use crate::commands::pip::operations;
 use anyhow::Result;
 use distribution_filename::SourceDistExtension;
 use owo_colors::OwoColorize;
@@ -20,6 +21,7 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
+use uv_requirements::RequirementsSource;
 use uv_resolver::{FlatIndex, RequiresPython};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace};
@@ -32,6 +34,7 @@ pub(crate) async fn build(
     output_dir: Option<PathBuf>,
     sdist: bool,
     wheel: bool,
+    build_constraints: Vec<RequirementsSource>,
     python: Option<String>,
     settings: ResolverSettings,
     no_config: bool,
@@ -49,6 +52,7 @@ pub(crate) async fn build(
         output_dir.as_deref(),
         sdist,
         wheel,
+        &build_constraints,
         python.as_deref(),
         settings.as_ref(),
         no_config,
@@ -88,6 +92,7 @@ async fn build_impl(
     output_dir: Option<&Path>,
     sdist: bool,
     wheel: bool,
+    build_constraints: &[RequirementsSource],
     python_request: Option<&str>,
     settings: ResolverSettingsRef<'_>,
     no_config: bool,
@@ -225,6 +230,10 @@ async fn build_impl(
         store_credentials_from_url(url);
     }
 
+    // Read build constraints.
+    let build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(native_tls)
@@ -251,8 +260,6 @@ async fn build_impl(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = Constraints::default();
-    let build_hasher = HashStrategy::default();
     let hasher = HashStrategy::None;
 
     // Resolve the flat indexes from `--find-links`.
