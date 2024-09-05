@@ -4,6 +4,8 @@ use std::fmt::Formatter;
 use std::path::{Path, PathBuf};
 
 use either::Either;
+use petgraph::graph::NodeIndex;
+use petgraph::visit::IntoNodeReferences;
 use petgraph::{Directed, Graph};
 use rustc_hash::{FxHashMap, FxHashSet};
 use url::Url;
@@ -16,16 +18,17 @@ use uv_fs::Simplified;
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
-use crate::graph_ops::{propagate_markers, Markers};
+use crate::graph_ops::marker_reachability;
 use crate::lock::{Package, PackageId, Source};
 use crate::{Lock, LockError};
 
-type LockGraph<'lock> = Graph<Node<'lock>, Edge, Directed>;
+type LockGraph<'lock> = Graph<&'lock Package, Edge, Directed>;
 
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
 #[derive(Debug)]
 pub struct RequirementsTxtExport<'lock> {
     graph: LockGraph<'lock>,
+    reachability: FxHashMap<NodeIndex, MarkerTree>,
     hashes: bool,
 }
 
@@ -68,7 +71,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         }
 
         // Add the root package to the graph.
-        inverse.insert(&root.id, petgraph.add_node(Node::from_package(root)));
+        inverse.insert(&root.id, petgraph.add_node(root));
 
         // Create all the relevant nodes.
         let mut seen = FxHashSet::default();
@@ -97,7 +100,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
                 // Add the dependency to the graph.
                 if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
-                    entry.insert(petgraph.add_node(Node::from_package(dep_dist)));
+                    entry.insert(petgraph.add_node(dep_dist));
                 }
 
                 // Add the edge.
@@ -120,31 +123,28 @@ impl<'lock> RequirementsTxtExport<'lock> {
             }
         }
 
-        let graph = propagate_markers(petgraph);
+        let reachability = marker_reachability(&petgraph, &[]);
 
-        Ok(Self { graph, hashes })
+        Ok(Self {
+            graph: petgraph,
+            reachability,
+            hashes,
+        })
     }
 }
 
 impl std::fmt::Display for RequirementsTxtExport<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Collect all packages.
-        let mut nodes = self
-            .graph
-            .raw_nodes()
-            .iter()
-            .map(|node| &node.weight)
-            .collect::<Vec<_>>();
+        let mut nodes = self.graph.node_references().collect::<Vec<_>>();
 
         // Sort the nodes, such that unnamed URLs (editables) appear at the top.
-        nodes.sort_unstable_by(|a, b| {
-            NodeComparator::from(a.package).cmp(&NodeComparator::from(b.package))
+        nodes.sort_unstable_by(|(_, a), (_, b)| {
+            NodeComparator::from(**a).cmp(&NodeComparator::from(**b))
         });
 
-        // Write out each node.
-        for node in nodes {
-            let Node { package, markers } = node;
-
+        // Write out each package.
+        for (node_index, package) in nodes {
             match &package.id.source {
                 Source::Registry(_) => {
                     write!(f, "{}=={}", package.id.name, package.id.version)?;
@@ -201,7 +201,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                 }
             }
 
-            if let Some(contents) = markers.contents() {
+            if let Some(contents) = self.reachability[&node_index].contents() {
                 write!(f, " ; {contents}")?;
             }
 
@@ -220,29 +220,6 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
         }
 
         Ok(())
-    }
-}
-
-/// The nodes of the [`LockGraph`].
-#[derive(Debug)]
-struct Node<'lock> {
-    package: &'lock Package,
-    markers: MarkerTree,
-}
-
-impl<'lock> Node<'lock> {
-    /// Construct a [`Node`] from a [`Package`].
-    fn from_package(package: &'lock Package) -> Self {
-        Self {
-            package,
-            markers: MarkerTree::default(),
-        }
-    }
-}
-
-impl Markers for Node<'_> {
-    fn set_markers(&mut self, markers: MarkerTree) {
-        self.markers = markers;
     }
 }
 
