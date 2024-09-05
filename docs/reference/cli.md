@@ -2811,6 +2811,8 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
+</dd><dt><code>--suffix</code> <i>suffix</i></dt><dd><p>The suffix to install the package and executables with</p>
+
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
