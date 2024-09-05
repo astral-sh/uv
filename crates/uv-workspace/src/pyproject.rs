@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use pep440_rs::VersionSpecifiers;
+use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 use uv_fs::relative_to;
 use uv_git::GitReference;
@@ -87,6 +87,8 @@ impl AsRef<[u8]> for PyProjectToml {
 pub struct Project {
     /// The name of the project
     pub name: PackageName,
+    /// The version of the project
+    pub version: Option<Version>,
     /// The Python versions this project is compatible with.
     pub requires_python: Option<VersionSpecifiers>,
     /// The optional dependencies of the project.
