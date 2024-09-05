@@ -1581,6 +1581,7 @@ mod tests {
                 "root": "[ROOT]/albatross-in-example/examples/bird-feeder",
                 "project": {
                   "name": "bird-feeder",
+                  "version": "1.0.0",
                   "requires-python": ">=3.12",
                   "optional-dependencies": null
                 },
@@ -1591,6 +1592,7 @@ mod tests {
             "pyproject_toml": {
               "project": {
                 "name": "bird-feeder",
+                "version": "1.0.0",
                 "requires-python": ">=3.12",
                 "optional-dependencies": null
               },
@@ -1624,6 +1626,7 @@ mod tests {
                     "root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
                     "project": {
                       "name": "bird-feeder",
+                      "version": "1.0.0",
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
@@ -1634,6 +1637,7 @@ mod tests {
                 "pyproject_toml": {
                   "project": {
                     "name": "bird-feeder",
+                    "version": "1.0.0",
                     "requires-python": ">=3.12",
                     "optional-dependencies": null
                   },
@@ -1666,6 +1670,7 @@ mod tests {
                     "root": "[ROOT]/albatross-root-workspace",
                     "project": {
                       "name": "albatross",
+                      "version": "0.1.0",
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
@@ -1675,6 +1680,7 @@ mod tests {
                     "root": "[ROOT]/albatross-root-workspace/packages/bird-feeder",
                     "project": {
                       "name": "bird-feeder",
+                      "version": "1.0.0",
                       "requires-python": ">=3.8",
                       "optional-dependencies": null
                     },
@@ -1684,6 +1690,7 @@ mod tests {
                     "root": "[ROOT]/albatross-root-workspace/packages/seeds",
                     "project": {
                       "name": "seeds",
+                      "version": "1.0.0",
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
@@ -1698,6 +1705,7 @@ mod tests {
                 "pyproject_toml": {
                   "project": {
                     "name": "albatross",
+                    "version": "0.1.0",
                     "requires-python": ">=3.12",
                     "optional-dependencies": null
                   },
@@ -1751,6 +1759,7 @@ mod tests {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
                     "project": {
                       "name": "albatross",
+                      "version": "0.1.0",
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
@@ -1760,6 +1769,7 @@ mod tests {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/bird-feeder",
                     "project": {
                       "name": "bird-feeder",
+                      "version": "1.0.0",
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
@@ -1769,6 +1779,7 @@ mod tests {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/seeds",
                     "project": {
                       "name": "seeds",
+                      "version": "1.0.0",
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
@@ -1823,6 +1834,7 @@ mod tests {
                     "root": "[ROOT]/albatross-just-project",
                     "project": {
                       "name": "albatross",
+                      "version": "0.1.0",
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
@@ -1833,6 +1845,7 @@ mod tests {
                 "pyproject_toml": {
                   "project": {
                     "name": "albatross",
+                    "version": "0.1.0",
                     "requires-python": ">=3.12",
                     "optional-dependencies": null
                   },
