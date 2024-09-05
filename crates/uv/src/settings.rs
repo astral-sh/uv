@@ -1630,6 +1630,7 @@ pub(crate) struct BuildSettings {
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
     pub(crate) build_constraint: Vec<PathBuf>,
+    pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
@@ -1645,6 +1646,10 @@ impl BuildSettings {
             sdist,
             wheel,
             build_constraint,
+            require_hashes,
+            no_require_hashes,
+            verify_hashes,
+            no_verify_hashes,
             python,
             build,
             refresh,
@@ -1661,6 +1666,10 @@ impl BuildSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            hash_checking: HashCheckingMode::from_args(
+                flag(require_hashes, no_require_hashes).unwrap_or_default(),
+                flag(verify_hashes, no_verify_hashes).unwrap_or_default(),
+            ),
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),

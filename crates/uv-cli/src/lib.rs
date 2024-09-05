@@ -1988,6 +1988,46 @@ pub struct BuildArgs {
     #[arg(long, short, env = "UV_BUILD_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub build_constraint: Vec<Maybe<PathBuf>>,
 
+    /// Require a matching hash for each build requirement.
+    ///
+    /// Hash-checking mode is all or nothing. If enabled, _all_ build requirements must be provided
+    /// with a corresponding hash or set of hashes via the `--build-constraints` argument.
+    /// Additionally, if enabled, _all_ requirements must either be pinned to exact versions
+    /// (e.g., `==1.0.0`), or be specified via direct URL.
+    ///
+    /// Hash-checking mode introduces a number of additional constraints:
+    ///
+    /// - Git dependencies are not supported.
+    /// - Editable installs are not supported.
+    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
+    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
+    #[arg(
+        long,
+        env = "UV_REQUIRE_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_require_hashes"),
+    )]
+    pub require_hashes: bool,
+
+    #[arg(long, overrides_with("require_hashes"), hide = true)]
+    pub no_require_hashes: bool,
+
+    /// Validate any hashes provided in the build constraints file.
+    ///
+    /// Unlike `--require-hashes`, `--verify-hashes` does not require that all requirements have
+    /// hashes; instead, it will limit itself to verifying the hashes of those requirements that do
+    /// include them.
+    #[arg(
+        long,
+        env = "UV_VERIFY_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_verify_hashes"),
+    )]
+    pub verify_hashes: bool,
+
+    #[arg(long, overrides_with("verify_hashes"), hide = true)]
+    pub no_verify_hashes: bool,
+
     /// The Python interpreter to use for the build environment.
     ///
     /// By default, builds are executed in isolated virtual environments. The
