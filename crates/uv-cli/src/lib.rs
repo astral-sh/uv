@@ -3201,7 +3201,7 @@ pub struct ToolDirArgs {
 pub struct ToolUninstallArgs {
     /// The name of the tool to uninstall.
     #[arg(required = true)]
-    pub name: Option<Vec<PackageName>>,
+    pub name: Vec<PackageName>,
 
     /// Uninstall all tools.
     #[arg(long, conflicts_with("name"))]
