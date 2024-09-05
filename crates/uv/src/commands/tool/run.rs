@@ -80,7 +80,7 @@ pub(crate) async fn run(
 ) -> anyhow::Result<ExitStatus> {
     // treat empty command as `uv tool list`
     let Some(command) = command else {
-        return tool_list(false, &cache, printer).await;
+        return tool_list(false, false, &cache, printer).await;
     };
 
     let (target, args) = command.split();

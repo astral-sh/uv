@@ -872,7 +872,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::tool_list(args.show_paths, &cache, printer).await
+            commands::tool_list(
+                args.show_paths,
+                args.show_version_specifiers,
+                &cache,
+                printer,
+            )
+            .await
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Upgrade(args),
