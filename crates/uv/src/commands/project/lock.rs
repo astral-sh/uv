@@ -16,7 +16,9 @@ use pypi_types::{Requirement, SupportedEnvironments};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade};
+use uv_configuration::{
+    BuildOptions, Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
@@ -436,6 +438,7 @@ async fn do_lock(
             interpreter,
             &requires_python,
             index_locations,
+            build_options,
             upgrade,
             &options,
             &database,
@@ -590,6 +593,7 @@ impl ValidatedLock {
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
         index_locations: &IndexLocations,
+        build_options: &BuildOptions,
         upgrade: &Upgrade,
         options: &Options,
         database: &DistributionDatabase<'_, Context>,
@@ -706,6 +710,7 @@ impl ValidatedLock {
                 constraints,
                 overrides,
                 indexes,
+                build_options,
                 interpreter.tags()?,
                 database,
             )
