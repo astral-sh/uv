@@ -35,6 +35,7 @@ pub(crate) async fn build(
     sdist: bool,
     wheel: bool,
     build_constraints: Vec<RequirementsSource>,
+    hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     settings: ResolverSettings,
     no_config: bool,
@@ -53,6 +54,7 @@ pub(crate) async fn build(
         sdist,
         wheel,
         &build_constraints,
+        hash_checking,
         python.as_deref(),
         settings.as_ref(),
         no_config,
@@ -93,6 +95,7 @@ async fn build_impl(
     sdist: bool,
     wheel: bool,
     build_constraints: &[RequirementsSource],
+    hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     settings: ResolverSettingsRef<'_>,
     no_config: bool,
@@ -235,16 +238,19 @@ async fn build_impl(
         operations::read_constraints(build_constraints, &client_builder).await?;
 
     // Collect the set of required hashes.
-    // Enforce (but never require) the build constraints, if `--require-hashes` or `--verify-hashes`
-    // is provided. _Requiring_ hashes would be too strict, and would break with pip.
-    let build_hasher = HashStrategy::from_requirements(
-        std::iter::empty(),
-        build_constraints
-            .iter()
-            .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-        Some(&interpreter.resolver_markers()),
-        HashCheckingMode::Verify,
-    )?;
+    let hasher = if let Some(hash_checking) = hash_checking {
+        HashStrategy::from_requirements(
+            std::iter::empty(),
+            build_constraints
+                .iter()
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            Some(&interpreter.resolver_markers()),
+            hash_checking,
+        )?
+    } else {
+        HashStrategy::None
+    };
+
     let build_constraints = Constraints::from_requirements(
         build_constraints
             .iter()
@@ -279,7 +285,7 @@ async fn build_impl(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, None, &build_hasher, build_options)
+        FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
     // Initialize any shared state.
@@ -301,7 +307,7 @@ async fn build_impl(
         build_isolation,
         link_mode,
         build_options,
-        &build_hasher,
+        &hasher,
         exclude_newer,
         sources,
         concurrency,

@@ -6434,6 +6434,17 @@ uv build [OPTIONS] [SRC]
 
 </dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
 
+</dd><dt><code>--require-hashes</code></dt><dd><p>Require a matching hash for each build requirement.</p>
+
+<p>Hash-checking mode is all or nothing. If enabled, <em>all</em> build requirements must be provided with a corresponding hash or set of hashes via the <code>--build-constraints</code> argument. Additionally, if enabled, <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
+
+<p>Hash-checking mode introduces a number of additional constraints:</p>
+
+<ul>
+<li>Git dependencies are not supported. - Editable installs are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
+</ul>
+
+<p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p>
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
@@ -6458,6 +6469,11 @@ uv build [OPTIONS] [SRC]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
+</dd><dt><code>--verify-hashes</code></dt><dd><p>Validate any hashes provided in the build constraints file.</p>
+
+<p>Unlike <code>--require-hashes</code>, <code>--verify-hashes</code> does not require that all requirements have hashes; instead, it will limit itself to verifying the hashes of those requirements that do include them.</p>
+
+<p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd><dt><code>--wheel</code></dt><dd><p>Build a binary distribution (&quot;wheel&quot;) from the given directory</p>

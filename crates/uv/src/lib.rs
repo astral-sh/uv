@@ -684,6 +684,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.sdist,
                 args.wheel,
                 build_constraints,
+                args.hash_checking,
                 args.python,
                 args.settings,
                 cli.no_config,
