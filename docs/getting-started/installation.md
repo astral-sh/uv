@@ -103,6 +103,14 @@ uv is available in the core Homebrew packages.
 $ brew install uv
 ```
 
+### Winget
+
+uv is available via [winget](https://winstall.app/apps/astral-sh.uv).
+
+```console
+$ winget install --id=astral-sh.uv  -e
+```
+
 ### Docker
 
 uv provides a Docker image at
