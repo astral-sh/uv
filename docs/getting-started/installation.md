@@ -54,6 +54,15 @@ Request a specific version by including it in the URL:
     $ powershell -c "irm https://astral.sh/uv/0.4.5/install.ps1 | iex"
     ```
 
+!!! tip
+
+    The installer will update your shell profiles to ensure the uv binary is on your `PATH`. To
+    disable this behavior, set `INSTALLER_NO_MODIFY_PATH=1`. For example:
+
+    ```
+    INSTALLER_NO_MODIFY_PATH=1 bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+    ```
+
 ### PyPI
 
 For convenience, uv is published to [PyPI](https://pypi.org/project/uv/).
@@ -116,6 +125,11 @@ When uv is installed via the standalone installer, it can update itself on-deman
 ```console
 $ uv self update
 ```
+
+!!! tip
+
+    Updating uv will re-run the installer and can modify your shell profiles. To disable this
+    behavior, set `INSTALLER_NO_MODIFY_PATH=1`.
 
 When another installation method is used, self-updates are disabled. Use the package manager's
 upgrade method instead. For example, with `pip`:
