@@ -897,9 +897,9 @@ impl Lock {
             }
         }
 
-        // Validate that the member sources have not changed (e.g., switched from packaged to
-        // virtual).
+        // Validate that the member sources have not changed.
         {
+            // E.g., that they've switched from virtual to non-virtual or vice versa.
             for (name, member) in workspace.packages() {
                 let expected = !member.pyproject_toml().is_package();
                 let actual = self
@@ -909,6 +909,30 @@ impl Lock {
                     .map(|package| matches!(package.id.source, Source::Virtual(_)));
                 if actual.map_or(true, |actual| actual != expected) {
                     return Ok(SatisfiesResult::MismatchedSources(name.clone(), expected));
+                }
+            }
+
+            // E.g., that the version has changed.
+            for (name, member) in workspace.packages() {
+                let Some(expected) = member
+                    .pyproject_toml()
+                    .project
+                    .as_ref()
+                    .and_then(|project| project.version.as_ref())
+                else {
+                    continue;
+                };
+                let actual = self
+                    .find_by_name(name)
+                    .ok()
+                    .flatten()
+                    .map(|package| &package.id.version);
+                if actual.map_or(true, |actual| actual != expected) {
+                    return Ok(SatisfiesResult::MismatchedVersion(
+                        name.clone(),
+                        expected.clone(),
+                        actual.cloned(),
+                    ));
                 }
             }
         }
@@ -1194,6 +1218,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
     /// The lockfile uses a different set of sources for its workspace members.
     MismatchedSources(PackageName, bool),
+    /// The lockfile uses a different set of version for its workspace members.
+    MismatchedVersion(PackageName, Version, Option<Version>),
     /// The lockfile uses a different set of requirements.
     MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.

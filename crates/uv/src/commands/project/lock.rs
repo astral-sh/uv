@@ -739,6 +739,18 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedVersion(name, expected, actual) => {
+                if let Some(actual) = actual {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched version: `{name}` (expected: `{expected}`, found: `{actual}`)"
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched version: `{name}` (expected: `{expected}`)"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedRequirements(expected, actual) => {
                 debug!(
                     "Ignoring existing lockfile due to mismatched requirements:\n  Expected: {:?}\n  Actual: {:?}",

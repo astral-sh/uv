@@ -1893,6 +1893,72 @@ fn sync_virtual_env_warning() -> Result<()> {
 }
 
 #[test]
+fn sync_update_project() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "my-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + my-project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Bump the project version.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "my-project"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - my-project==0.1.0 (from file://[TEMP_DIR]/)
+     + my-project==0.2.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn sync_environment_prompt() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
 
