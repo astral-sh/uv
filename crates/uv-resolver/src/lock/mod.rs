@@ -2280,14 +2280,14 @@ impl Source {
 
     fn from_direct_built_dist(direct_dist: &DirectUrlBuiltDist) -> Source {
         Source::Direct(
-            UrlString::from(&direct_dist.url),
+            normalize_url(direct_dist.url.to_url()),
             DirectSource { subdirectory: None },
         )
     }
 
     fn from_direct_source_dist(direct_dist: &DirectUrlSourceDist) -> Source {
         Source::Direct(
-            UrlString::from(&direct_dist.url),
+            normalize_url(direct_dist.url.to_url()),
             DirectSource {
                 subdirectory: direct_dist
                     .subdirectory
