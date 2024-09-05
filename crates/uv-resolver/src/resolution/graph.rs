@@ -512,7 +512,18 @@ impl ResolutionGraph {
             }
         }
 
-        // 2. Look for hashes from the registry, which are served at the package level.
+        // 2. Look for hashes for the distribution (i.e., the specific wheel or source distribution).
+        if let Some(metadata_response) = index.distributions().get(version_id) {
+            if let MetadataResponse::Found(ref archive) = *metadata_response {
+                let mut digests = archive.hashes.clone();
+                digests.sort_unstable();
+                if !digests.is_empty() {
+                    return digests;
+                }
+            }
+        }
+
+        // 3. Look for hashes from the registry, which are served at the package level.
         if let Some(versions_response) = index.packages().get(name) {
             if let VersionsResponse::Found(ref version_maps) = *versions_response {
                 if let Some(digests) = version_maps
@@ -526,17 +537,6 @@ impl ResolutionGraph {
                     if !digests.is_empty() {
                         return digests;
                     }
-                }
-            }
-        }
-
-        // 3. Look for hashes for the distribution (i.e., the specific wheel or source distribution).
-        if let Some(metadata_response) = index.distributions().get(version_id) {
-            if let MetadataResponse::Found(ref archive) = *metadata_response {
-                let mut digests = archive.hashes.clone();
-                digests.sort_unstable();
-                if !digests.is_empty() {
-                    return digests;
                 }
             }
         }
