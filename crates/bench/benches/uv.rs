@@ -92,7 +92,7 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, IndexStrategy, SourceStrategy,
+        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, SourceStrategy,
     };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
@@ -159,7 +159,7 @@ mod resolver {
         let installed_packages = EmptyInstalledPackages;
         let sources = SourceStrategy::default();
         let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
-        let build_constraints = [];
+        let build_constraints = Constraints::default();
 
         let python_requirement = if universal {
             PythonRequirement::from_requires_python(
@@ -173,7 +173,7 @@ mod resolver {
         let build_context = BuildDispatch::new(
             client,
             &cache,
-            &build_constraints,
+            build_constraints,
             interpreter,
             &index_locations,
             &flat_index,
@@ -185,6 +185,7 @@ mod resolver {
             build_isolation,
             LinkMode::default(),
             &build_options,
+            &hashes,
             exclude_newer,
             sources,
             concurrency,

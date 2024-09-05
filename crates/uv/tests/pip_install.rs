@@ -5132,14 +5132,14 @@ fn require_hashes_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
     "###
     );
 
     Ok(())
 }
 
-/// If a hash is only included as a constraint, that's not good enough for `--require-hashes`.
+/// If a hash is only included as a constraint, that's good enough for `--require-hashes`.
 #[test]
 fn require_hashes_constraint() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -5155,19 +5155,25 @@ fn require_hashes_constraint() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
+        .arg("--no-deps")
         .arg("--require-hashes")
         .arg("-c")
         .arg(constraints_txt.path()), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: anyio==4.0.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
     "###
     );
 
     // Include the hash in the requirements file, but pin the version in the constraint file.
+    let context = TestContext::new("3.12");
+
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
         "anyio --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
@@ -5180,6 +5186,7 @@ fn require_hashes_constraint() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
+        .arg("--no-deps")
         .arg("--require-hashes")
         .arg("-c")
         .arg(constraints_txt.path()), @r###"
@@ -5188,7 +5195,77 @@ fn require_hashes_constraint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
+    "###
+    );
+
+    // Include the wrong hash in the requirements file, but the right hash in constraints. This
+    // should fail.
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--no-deps")
+        .arg("--require-hashes")
+        .arg("-c")
+        .arg(constraints_txt.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Hash mismatch for `anyio==4.0.0`
+
+    Expected:
+      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+
+    Computed:
+      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+    "###
+    );
+
+    // Include the right hash in the requirements file, but the wrong hash in constraints. This
+    // should succeed.
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--no-deps")
+        .arg("--require-hashes")
+        .arg("-c")
+        .arg(constraints_txt.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
     "###
     );
 
@@ -5306,7 +5383,7 @@ fn require_hashes_override() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: anyio==4.0.0
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: anyio==4.0.0
     "###
     );
 
@@ -5331,7 +5408,7 @@ fn require_hashes_override() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "###
     );
 
@@ -5401,17 +5478,21 @@ fn verify_hashes_missing_version() -> Result<()> {
             # via anyio
     "})?;
 
-    // Raise an error.
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--verify-hashes"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--verify-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 

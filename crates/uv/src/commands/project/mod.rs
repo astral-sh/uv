@@ -12,7 +12,7 @@ use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, Reinstall, Upgrade};
+use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
@@ -506,13 +506,14 @@ pub(crate) async fn resolve_names(
     // optional on the downstream APIs.
     let hasher = HashStrategy::default();
     let flat_index = FlatIndex::default();
-    let build_constraints = [];
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -524,6 +525,7 @@ pub(crate) async fn resolve_names(
         build_isolation,
         *link_mode,
         build_options,
+        &build_hasher,
         *exclude_newer,
         *sources,
         concurrency,
@@ -630,7 +632,8 @@ pub(crate) async fn resolve_environment<'a>(
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
-    let build_constraints = [];
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
 
     // When resolving from an interpreter, we assume an empty environment, so reinstalls and
     // upgrades aren't relevant.
@@ -648,7 +651,7 @@ pub(crate) async fn resolve_environment<'a>(
     let resolve_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -660,6 +663,7 @@ pub(crate) async fn resolve_environment<'a>(
         build_isolation,
         link_mode,
         build_options,
+        &build_hasher,
         exclude_newer,
         sources,
         concurrency,
@@ -759,7 +763,8 @@ pub(crate) async fn sync_environment(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = [];
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
     let dry_run = false;
     let hasher = HashStrategy::default();
 
@@ -774,7 +779,7 @@ pub(crate) async fn sync_environment(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -786,6 +791,7 @@ pub(crate) async fn sync_environment(
         build_isolation,
         link_mode,
         build_options,
+        &build_hasher,
         exclude_newer,
         sources,
         concurrency,
@@ -949,7 +955,8 @@ pub(crate) async fn update_environment(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = [];
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
     let dev = Vec::default();
     let dry_run = false;
     let extras = ExtrasSpecification::default();
@@ -971,7 +978,7 @@ pub(crate) async fn update_environment(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -983,6 +990,7 @@ pub(crate) async fn update_environment(
         build_isolation,
         *link_mode,
         build_options,
+        &build_hasher,
         *exclude_newer,
         *sources,
         concurrency,

@@ -35,7 +35,8 @@ use tracing::instrument;
 
 use cache_key::CanonicalUrl;
 use distribution_types::{
-    FlatIndexLocation, IndexUrl, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    FlatIndexLocation, IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use pep508_rs::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
 use pypi_types::Requirement;
@@ -56,7 +57,7 @@ pub struct RequirementsSpecification {
     /// The requirements for the project.
     pub requirements: Vec<UnresolvedRequirementSpecification>,
     /// The constraints for the project.
-    pub constraints: Vec<Requirement>,
+    pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
     /// The source trees from which to extract requirements.
@@ -129,6 +130,7 @@ impl RequirementsSpecification {
                         .constraints
                         .into_iter()
                         .map(Requirement::from)
+                        .map(NameRequirementSpecification::from)
                         .collect(),
                     index_url: requirements_txt.index_url.map(IndexUrl::from),
                     extra_index_urls: requirements_txt
@@ -247,13 +249,16 @@ impl RequirementsSpecification {
         }
 
         // Read all constraints, treating both requirements _and_ constraints as constraints.
-        // Overrides are ignored, as are the hashes, as they are not relevant for constraints.
+        // Overrides are ignored.
         for source in constraints {
             let source = Self::from_source(source, client_builder).await?;
             for entry in source.requirements {
                 match entry.requirement {
                     UnresolvedRequirement::Named(requirement) => {
-                        spec.constraints.push(requirement);
+                        spec.constraints.push(NameRequirementSpecification {
+                            requirement,
+                            hashes: entry.hashes,
+                        });
                     }
                     UnresolvedRequirement::Unnamed(requirement) => {
                         return Err(anyhow::anyhow!(

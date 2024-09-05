@@ -13,7 +13,9 @@ use pypi_types::redact_git_credentials;
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions, SourceStrategy};
+use uv_configuration::{
+    Concurrency, Constraints, ExtrasSpecification, InstallOptions, SourceStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::{Simplified, CWD};
@@ -241,10 +243,11 @@ pub(crate) async fn add(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let python_version = None;
-    let python_platform = None;
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
     let hasher = HashStrategy::default();
-    let build_constraints = [];
+    let python_platform = None;
+    let python_version = None;
     let sources = SourceStrategy::Enabled;
 
     // Determine the environment for the resolution.
@@ -290,7 +293,7 @@ pub(crate) async fn add(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         target.interpreter(),
         &settings.index_locations,
         &flat_index,
@@ -302,6 +305,7 @@ pub(crate) async fn add(
         build_isolation,
         settings.link_mode,
         &settings.build_options,
+        &build_hasher,
         settings.exclude_newer,
         sources,
         concurrency,
