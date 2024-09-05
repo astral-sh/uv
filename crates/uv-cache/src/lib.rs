@@ -899,14 +899,11 @@ impl Display for CacheBucket {
     }
 }
 
+/// A timestamp for an archive, which could be a directory (in which case the modification time is
+/// the latest modification time of the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the
+/// directory) or a single file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ArchiveTimestamp {
-    /// The archive consists of a single file with the given modification time.
-    Exact(Timestamp),
-    /// The archive consists of a directory. The modification time is the latest modification time
-    /// of the `pyproject.toml` or `setup.py` file in the directory.
-    Approximate(Timestamp),
-}
+pub struct ArchiveTimestamp(Timestamp);
 
 impl ArchiveTimestamp {
     /// Return the modification timestamp for an archive, which could be a file (like a wheel or a zip
@@ -917,7 +914,7 @@ impl ArchiveTimestamp {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
         let metadata = fs_err::metadata(path.as_ref())?;
         if metadata.is_file() {
-            Ok(Some(Self::Exact(Timestamp::from_metadata(&metadata))))
+            Ok(Some(Self(Timestamp::from_metadata(&metadata))))
         } else {
             Self::from_source_tree(path)
         }
@@ -926,7 +923,7 @@ impl ArchiveTimestamp {
     /// Return the modification timestamp for a file.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, io::Error> {
         let metadata = fs_err::metadata(path.as_ref())?;
-        Ok(Self::Exact(Timestamp::from_metadata(&metadata)))
+        Ok(Self(Timestamp::from_metadata(&metadata)))
     }
 
     /// Return the modification timestamp for a source tree, i.e., a directory.
@@ -968,15 +965,12 @@ impl ArchiveTimestamp {
             return Ok(None);
         };
 
-        Ok(Some(Self::Approximate(timestamp)))
+        Ok(Some(Self(timestamp)))
     }
 
     /// Return the modification timestamp for an archive.
     pub fn timestamp(&self) -> Timestamp {
-        match self {
-            Self::Exact(timestamp) => *timestamp,
-            Self::Approximate(timestamp) => *timestamp,
-        }
+        self.0
     }
 
     /// Returns `true` if the `target` (an installed or cached distribution) is up-to-date with the
