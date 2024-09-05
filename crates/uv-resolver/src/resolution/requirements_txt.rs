@@ -22,6 +22,8 @@ pub(crate) struct RequirementsTxtDist {
     pub(crate) version: Version,
     pub(crate) extras: Vec<ExtraName>,
     pub(crate) hashes: Vec<HashDigest>,
+    /// Propagated markers that determine whether this package should be installed on the current
+    /// platform, without looking at which packages depend on it.
     pub(crate) markers: MarkerTree,
 }
 
@@ -162,10 +164,8 @@ impl RequirementsTxtDist {
             }
         }
     }
-}
 
-impl From<&AnnotatedDist> for RequirementsTxtDist {
-    fn from(annotated: &AnnotatedDist) -> Self {
+    pub(crate) fn from_annotated_dist(annotated: &AnnotatedDist, markers: MarkerTree) -> Self {
         Self {
             dist: annotated.dist.clone(),
             version: annotated.version.clone(),
@@ -175,7 +175,7 @@ impl From<&AnnotatedDist> for RequirementsTxtDist {
                 vec![]
             },
             hashes: annotated.hashes.clone(),
-            markers: MarkerTree::default(),
+            markers,
         }
     }
 }
