@@ -585,6 +585,23 @@ You can limit `uv build` to building a source distribution with `uv build --sour
 distribution with `uv build --binary`, or build both distributions from source with
 `uv build --source --binary`.
 
+`uv build` accepts `--build-constraints`, which can be used to constrain the versions of any build
+requirements during the build process. When coupled with `--require-hashes`, uv will enforce that
+the requirement used to build the project match specific, known hashes, for reproducibility.
+
+For example, given the following `constraints.txt`:
+
+```text
+setuptools==68.2.2 --hash=sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
+```
+
+Running the following would build the project with the specified version of `setuptools`, and verify
+that the downloaded `setuptools` distribution matches the specified hash:
+
+```console
+$ uv build --build-constraints constraints.txt --require-hashes
+```
+
 ## Build isolation
 
 By default, uv builds all packages in isolated virtual environments, as per

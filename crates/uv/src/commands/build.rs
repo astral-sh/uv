@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{BuildKind, BuildOutput, Concurrency, Constraints};
+use uv_configuration::{BuildKind, BuildOutput, Concurrency, Constraints, HashCheckingMode};
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
 use uv_normalize::PackageName;
@@ -234,6 +234,23 @@ async fn build_impl(
     let build_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
 
+    // Collect the set of required hashes.
+    // Enforce (but never require) the build constraints, if `--require-hashes` or `--verify-hashes`
+    // is provided. _Requiring_ hashes would be too strict, and would break with pip.
+    let build_hasher = HashStrategy::from_requirements(
+        std::iter::empty(),
+        build_constraints
+            .iter()
+            .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+        Some(&interpreter.resolver_markers()),
+        HashCheckingMode::Verify,
+    )?;
+    let build_constraints = Constraints::from_requirements(
+        build_constraints
+            .iter()
+            .map(|constraint| constraint.requirement.clone()),
+    );
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(native_tls)
@@ -258,15 +275,11 @@ async fn build_impl(
         BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
     };
 
-    // TODO(charlie): These are all default values. We should consider whether we want to make them
-    // optional on the downstream APIs.
-    let hasher = HashStrategy::None;
-
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, None, &hasher, build_options)
+        FlatIndex::from_entries(entries, None, &build_hasher, build_options)
     };
 
     // Initialize any shared state.
