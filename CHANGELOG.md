@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.4.6
+
+### Enhancements
+
+- Accept `--build-constraints` in `uv build` ([#7085](https://github.com/astral-sh/uv/pull/7085))
+- Add `--require-hashes` and `--verify-hashes` to `uv build` ([#7094](https://github.com/astral-sh/uv/pull/7094))
+- Add `--show-version-specifiers` to `uv tool list` ([#7050](https://github.com/astral-sh/uv/pull/7050))
+- Respect hashes in constraints files ([#7093](https://github.com/astral-sh/uv/pull/7093))
+- Upgrade installer scripts ([#7092](https://github.com/astral-sh/uv/pull/7092))
+- Allow specifying multiple packages in `uv tool upgrade` and `uninstall` ([#7037](https://github.com/astral-sh/uv/pull/7037))
+- Sort by implementation in `uv python list` ([#6918](https://github.com/astral-sh/uv/pull/6918))
+
+### Bug fixes
+
+- Invalidate lockfile when member versions change ([#7102](https://github.com/astral-sh/uv/pull/7102))
+- Strip fragments from direct source URLs in lockfile ([#7061](https://github.com/astral-sh/uv/pull/7061))
+- Support `--no-build` and `--no-binary` in `uv sync` et al ([#7100](https://github.com/astral-sh/uv/pull/7100))
+- Use distribution hash over registry hash ([#7060](https://github.com/astral-sh/uv/pull/7060))
+- Fix inverted log message ([#7063](https://github.com/astral-sh/uv/pull/7063))
+- Adjust Docker `ENTRYPOINT` and `CMD` for inherited images ([#7054](https://github.com/astral-sh/uv/pull/7054))
+
+### Documentation
+
+- Add winget to installers ([#7088](https://github.com/astral-sh/uv/pull/7088))
+- Document how to disable path modifications during install ([#7090](https://github.com/astral-sh/uv/pull/7090))
+- Document how to manually update locked package version ([#7083](https://github.com/astral-sh/uv/pull/7083))
+- Document official `setup-uv` action ([#7056](https://github.com/astral-sh/uv/pull/7056))
+- Update docs on `.python-version` file ([#7051](https://github.com/astral-sh/uv/pull/7051))
+
 ## 0.4.5
 
 ### Enhancements
