@@ -9,15 +9,17 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, UnresolvedRequirementSpecification, Verbatim};
+use distribution_types::{
+    IndexLocations, NameRequirementSpecification, UnresolvedRequirementSpecification, Verbatim,
+};
 use install_wheel_rs::linker::LinkMode;
 use pypi_types::{Requirement, SupportedEnvironments};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary,
-    NoBuild, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
+    NoBinary, NoBuild, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -136,7 +138,11 @@ pub(crate) async fn pip_compile(
     let constraints = constraints
         .iter()
         .cloned()
-        .chain(constraints_from_workspace.into_iter())
+        .chain(
+            constraints_from_workspace
+                .into_iter()
+                .map(NameRequirementSpecification::from),
+        )
         .collect();
 
     let overrides: Vec<UnresolvedRequirementSpecification> = overrides
@@ -314,10 +320,18 @@ pub(crate) async fn pip_compile(
         BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
     };
 
+    // Don't enforce hashes in `pip compile`.
+    let build_constraints = Constraints::from_requirements(
+        build_constraints
+            .iter()
+            .map(|constraint| constraint.requirement.clone()),
+    );
+    let build_hashes = HashStrategy::None;
+
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
-        &build_constraints,
+        build_constraints,
         &interpreter,
         &index_locations,
         &flat_index,
@@ -329,6 +343,7 @@ pub(crate) async fn pip_compile(
         build_isolation,
         link_mode,
         &build_options,
+        &build_hashes,
         exclude_newer,
         sources,
         concurrency,

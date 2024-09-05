@@ -8,13 +8,15 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
+use distribution_types::{
+    IndexLocations, NameRequirementSpecification, UnresolvedRequirementSpecification,
+};
 use pep440_rs::Version;
 use pypi_types::{Requirement, SupportedEnvironments};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, Reinstall, Upgrade};
+use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
@@ -386,7 +388,8 @@ async fn do_lock(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = [];
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
 
     // Resolve the flat indexes from `--find-links`.
@@ -400,7 +403,7 @@ async fn do_lock(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -412,6 +415,7 @@ async fn do_lock(
         build_isolation,
         link_mode,
         build_options,
+        &build_hasher,
         exclude_newer,
         sources,
         concurrency,
@@ -504,7 +508,11 @@ async fn do_lock(
                     .chain(requirements.iter().cloned())
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
-                constraints.clone(),
+                constraints
+                    .iter()
+                    .cloned()
+                    .map(NameRequirementSpecification::from)
+                    .collect(),
                 overrides
                     .iter()
                     .cloned()

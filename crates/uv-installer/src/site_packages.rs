@@ -8,7 +8,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
 use distribution_types::{
-    Diagnostic, InstalledDist, Name, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    Diagnostic, InstalledDist, Name, NameRequirementSpecification, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{Requirement, ResolverMarkerEnvironment, VerbatimParsedUrl};
@@ -283,18 +284,18 @@ impl SitePackages {
     pub fn satisfies(
         &self,
         requirements: &[UnresolvedRequirementSpecification],
-        constraints: &[Requirement],
+        constraints: &[NameRequirementSpecification],
         markers: &ResolverMarkerEnvironment,
     ) -> Result<SatisfiesResult> {
         // Collect the constraints.
         let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
             constraints
                 .iter()
-                .fold(FxHashMap::default(), |mut constraints, requirement| {
+                .fold(FxHashMap::default(), |mut constraints, constraint| {
                     constraints
-                        .entry(&requirement.name)
+                        .entry(&constraint.requirement.name)
                         .or_default()
-                        .push(requirement);
+                        .push(&constraint.requirement);
                     constraints
                 });
 

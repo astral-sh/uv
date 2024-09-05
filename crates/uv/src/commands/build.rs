@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{BuildKind, BuildOutput, Concurrency};
+use uv_configuration::{BuildKind, BuildOutput, Concurrency, Constraints};
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
 use uv_normalize::PackageName;
@@ -251,7 +251,8 @@ async fn build_impl(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = [];
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
     let hasher = HashStrategy::None;
 
     // Resolve the flat indexes from `--find-links`.
@@ -268,7 +269,7 @@ async fn build_impl(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         &interpreter,
         index_locations,
         &flat_index,
@@ -280,6 +281,7 @@ async fn build_impl(
         build_isolation,
         link_mode,
         build_options,
+        &build_hasher,
         exclude_newer,
         sources,
         concurrency,
