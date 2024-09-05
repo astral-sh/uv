@@ -2565,6 +2565,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         },
         force: false,
         editable: false,
+        suffix: None,
     }
 
     ----- stderr -----
