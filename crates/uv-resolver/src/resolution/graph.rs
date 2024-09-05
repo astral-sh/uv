@@ -367,7 +367,7 @@ impl ResolutionGraph {
         // Map the package to a distribution.
         let (dist, hashes, metadata) = Self::parse_dist(
             name,
-            url,
+            url.as_ref(),
             version,
             pins,
             diagnostics,
@@ -420,7 +420,7 @@ impl ResolutionGraph {
 
     fn parse_dist(
         name: &PackageName,
-        url: &Option<VerbatimParsedUrl>,
+        url: Option<&VerbatimParsedUrl>,
         version: &Version,
         pins: &FilePins,
         diagnostics: &mut Vec<ResolutionDiagnostic>,
@@ -435,7 +435,8 @@ impl ResolutionGraph {
             let version_id = VersionId::from_url(&url.verbatim);
 
             // Extract the hashes.
-            let hashes = Self::get_hashes(&version_id, name, version, preferences, index);
+            let hashes =
+                Self::get_hashes(name, Some(url), &version_id, version, preferences, index);
 
             // Extract the metadata.
             let metadata = {
@@ -477,7 +478,7 @@ impl ResolutionGraph {
             }
 
             // Extract the hashes.
-            let hashes = Self::get_hashes(&version_id, name, version, preferences, index);
+            let hashes = Self::get_hashes(name, None, &version_id, version, preferences, index);
 
             // Extract the metadata.
             let metadata = {
@@ -499,8 +500,9 @@ impl ResolutionGraph {
     /// Identify the hashes for the [`VersionId`], preserving any hashes that were provided by the
     /// lockfile.
     fn get_hashes(
-        version_id: &VersionId,
         name: &PackageName,
+        url: Option<&VerbatimParsedUrl>,
+        version_id: &VersionId,
         version: &Version,
         preferences: &Preferences,
         index: &InMemoryIndex,
@@ -524,18 +526,20 @@ impl ResolutionGraph {
         }
 
         // 3. Look for hashes from the registry, which are served at the package level.
-        if let Some(versions_response) = index.packages().get(name) {
-            if let VersionsResponse::Found(ref version_maps) = *versions_response {
-                if let Some(digests) = version_maps
-                    .iter()
-                    .find_map(|version_map| version_map.hashes(version))
-                    .map(|mut digests| {
-                        digests.sort_unstable();
-                        digests
-                    })
-                {
-                    if !digests.is_empty() {
-                        return digests;
+        if url.is_none() {
+            if let Some(versions_response) = index.packages().get(name) {
+                if let VersionsResponse::Found(ref version_maps) = *versions_response {
+                    if let Some(digests) = version_maps
+                        .iter()
+                        .find_map(|version_map| version_map.hashes(version))
+                        .map(|mut digests| {
+                            digests.sort_unstable();
+                            digests
+                        })
+                    {
+                        if !digests.is_empty() {
+                            return digests;
+                        }
                     }
                 }
             }
