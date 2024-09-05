@@ -758,7 +758,7 @@ fn wheel_from_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Building source distribution from wheel...
+    Building wheel from source distribution...
     running egg_info
     writing src/project.egg-info/PKG-INFO
     writing dependency_links to src/project.egg-info/dependency_links.txt
@@ -815,7 +815,7 @@ fn wheel_from_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Building source distribution from wheel...
+    Building wheel from source distribution...
     error: `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`.
     "###);
 
