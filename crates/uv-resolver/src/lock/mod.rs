@@ -31,7 +31,7 @@ use pypi_types::{
     redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
     RequirementSource, ResolverMarkerEnvironment,
 };
-use uv_configuration::ExtrasSpecification;
+use uv_configuration::{BuildOptions, ExtrasSpecification};
 use uv_distribution::DistributionDatabase;
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
@@ -561,6 +561,7 @@ impl Lock {
         tags: &Tags,
         extras: &ExtrasSpecification,
         dev: &[GroupName],
+        build_options: &BuildOptions,
     ) -> Result<Resolution, LockError> {
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
@@ -649,7 +650,11 @@ impl Lock {
             }
             map.insert(
                 dist.id.name.clone(),
-                ResolvedDist::Installable(dist.to_dist(project.workspace().install_path(), tags)?),
+                ResolvedDist::Installable(dist.to_dist(
+                    project.workspace().install_path(),
+                    tags,
+                    build_options,
+                )?),
             );
             hashes.insert(dist.id.name.clone(), dist.hashes());
         }
@@ -876,6 +881,7 @@ impl Lock {
         constraints: &[Requirement],
         overrides: &[Requirement],
         indexes: Option<&IndexLocations>,
+        build_options: &BuildOptions,
         tags: &Tags,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
@@ -1066,7 +1072,7 @@ impl Lock {
             }
 
             // Get the metadata for the distribution.
-            let dist = package.to_dist(workspace.install_path(), tags)?;
+            let dist = package.to_dist(workspace.install_path(), tags, build_options)?;
 
             let Ok(archive) = database
                 .get_or_build_wheel_metadata(&dist, HashPolicy::None)
@@ -1565,78 +1571,106 @@ impl Package {
     }
 
     /// Convert the [`Package`] to a [`Dist`] that can be used in installation.
-    fn to_dist(&self, workspace_root: &Path, tags: &Tags) -> Result<Dist, LockError> {
-        if let Some(best_wheel_index) = self.find_best_wheel(tags) {
-            return match &self.id.source {
-                Source::Registry(source) => {
-                    let wheels = self
-                        .wheels
-                        .iter()
-                        .map(|wheel| wheel.to_registry_dist(source, workspace_root))
-                        .collect::<Result<_, LockError>>()?;
-                    let reg_built_dist = RegistryBuiltDist {
-                        wheels,
-                        best_wheel_index,
-                        sdist: None,
-                    };
-                    Ok(Dist::Built(BuiltDist::Registry(reg_built_dist)))
-                }
-                Source::Path(path) => {
-                    let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
-                    let path_dist = PathBuiltDist {
-                        filename,
-                        url: verbatim_url(workspace_root.join(path), &self.id)?,
-                        install_path: workspace_root.join(path),
-                    };
-                    let built_dist = BuiltDist::Path(path_dist);
-                    Ok(Dist::Built(built_dist))
-                }
-                Source::Direct(url, direct) => {
-                    let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
-                    let url = Url::from(ParsedArchiveUrl {
-                        url: url.to_url(),
-                        subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
-                        ext: DistExtension::Wheel,
-                    });
-                    let direct_dist = DirectUrlBuiltDist {
-                        filename,
-                        location: url.clone(),
-                        url: VerbatimUrl::from_url(url),
-                    };
-                    let built_dist = BuiltDist::DirectUrl(direct_dist);
-                    Ok(Dist::Built(built_dist))
-                }
-                Source::Git(_, _) => Err(LockErrorKind::InvalidWheelSource {
-                    id: self.id.clone(),
-                    source_type: "Git",
-                }
-                .into()),
-                Source::Directory(_) => Err(LockErrorKind::InvalidWheelSource {
-                    id: self.id.clone(),
-                    source_type: "directory",
-                }
-                .into()),
-                Source::Editable(_) => Err(LockErrorKind::InvalidWheelSource {
-                    id: self.id.clone(),
-                    source_type: "editable",
-                }
-                .into()),
-                Source::Virtual(_) => Err(LockErrorKind::InvalidWheelSource {
-                    id: self.id.clone(),
-                    source_type: "virtual",
-                }
-                .into()),
+    fn to_dist(
+        &self,
+        workspace_root: &Path,
+        tags: &Tags,
+        build_options: &BuildOptions,
+    ) -> Result<Dist, LockError> {
+        let no_binary = build_options.no_binary_package(&self.id.name);
+        let no_build = build_options.no_build_package(&self.id.name);
+
+        if !no_binary {
+            if let Some(best_wheel_index) = self.find_best_wheel(tags) {
+                return match &self.id.source {
+                    Source::Registry(source) => {
+                        let wheels = self
+                            .wheels
+                            .iter()
+                            .map(|wheel| wheel.to_registry_dist(source, workspace_root))
+                            .collect::<Result<_, LockError>>()?;
+                        let reg_built_dist = RegistryBuiltDist {
+                            wheels,
+                            best_wheel_index,
+                            sdist: None,
+                        };
+                        Ok(Dist::Built(BuiltDist::Registry(reg_built_dist)))
+                    }
+                    Source::Path(path) => {
+                        let filename: WheelFilename =
+                            self.wheels[best_wheel_index].filename.clone();
+                        let path_dist = PathBuiltDist {
+                            filename,
+                            url: verbatim_url(workspace_root.join(path), &self.id)?,
+                            install_path: workspace_root.join(path),
+                        };
+                        let built_dist = BuiltDist::Path(path_dist);
+                        Ok(Dist::Built(built_dist))
+                    }
+                    Source::Direct(url, direct) => {
+                        let filename: WheelFilename =
+                            self.wheels[best_wheel_index].filename.clone();
+                        let url = Url::from(ParsedArchiveUrl {
+                            url: url.to_url(),
+                            subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                            ext: DistExtension::Wheel,
+                        });
+                        let direct_dist = DirectUrlBuiltDist {
+                            filename,
+                            location: url.clone(),
+                            url: VerbatimUrl::from_url(url),
+                        };
+                        let built_dist = BuiltDist::DirectUrl(direct_dist);
+                        Ok(Dist::Built(built_dist))
+                    }
+                    Source::Git(_, _) => Err(LockErrorKind::InvalidWheelSource {
+                        id: self.id.clone(),
+                        source_type: "Git",
+                    }
+                    .into()),
+                    Source::Directory(_) => Err(LockErrorKind::InvalidWheelSource {
+                        id: self.id.clone(),
+                        source_type: "directory",
+                    }
+                    .into()),
+                    Source::Editable(_) => Err(LockErrorKind::InvalidWheelSource {
+                        id: self.id.clone(),
+                        source_type: "editable",
+                    }
+                    .into()),
+                    Source::Virtual(_) => Err(LockErrorKind::InvalidWheelSource {
+                        id: self.id.clone(),
+                        source_type: "virtual",
+                    }
+                    .into()),
+                };
             };
-        };
-
-        if let Some(sdist) = self.to_source_dist(workspace_root)? {
-            return Ok(Dist::Source(sdist));
         }
 
-        Err(LockErrorKind::NeitherSourceDistNorWheel {
-            id: self.id.clone(),
+        if !no_build {
+            if let Some(sdist) = self.to_source_dist(workspace_root)? {
+                return Ok(Dist::Source(sdist));
+            }
         }
-        .into())
+
+        match (no_binary, no_build) {
+            (true, true) => Err(LockErrorKind::NoBinaryNoBuild {
+                id: self.id.clone(),
+            }
+            .into()),
+            (true, false) => Err(LockErrorKind::NoBinary {
+                id: self.id.clone(),
+            }
+            .into()),
+            (false, true) => Err(LockErrorKind::NoBuild {
+                id: self.id.clone(),
+            }
+            .into()),
+            (false, false) => Err(LockErrorKind::NeitherSourceDistNorWheel {
+                id: self.id.clone(),
+            }
+            .into()),
+        }
     }
 
     /// Convert the source of this [`Package`] to a [`SourceDist`] that can be used in installation.
@@ -3756,6 +3790,26 @@ enum LockErrorKind {
     #[error("distribution {id} can't be installed because it doesn't have a source distribution or wheel for the current platform")]
     NeitherSourceDistNorWheel {
         /// The ID of the distribution that has a missing base.
+        id: PackageId,
+    },
+    /// An error that occurs when a distribution is marked as both `--no-binary` and `--no-build`.
+    #[error("distribution {id} can't be installed because it is marked as both `--no-binary` and `--no-build`")]
+    NoBinaryNoBuild {
+        /// The ID of the distribution.
+        id: PackageId,
+    },
+    /// An error that occurs when a distribution is marked as both `--no-binary`, but no source
+    /// distribution is available.
+    #[error("distribution {id} can't be installed because it is marked as `--no-binary` but has no source distribution")]
+    NoBinary {
+        /// The ID of the distribution.
+        id: PackageId,
+    },
+    /// An error that occurs when a distribution is marked as both `--no-build`, but no binary
+    /// distribution is available.
+    #[error("distribution {id} can't be installed because it is marked as `--no-build` but has no binary distribution")]
+    NoBuild {
+        /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when converting between URLs and paths.

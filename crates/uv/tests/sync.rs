@@ -1930,3 +1930,113 @@ fn sync_environment_prompt() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn no_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn no_binary_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["django_allauth==0.51.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("django-allauth"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    error: distribution django-allauth==0.51.0 @ registry+https://pypi.org/simple can't be installed because it is marked as `--no-build` but has no binary distribution
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn no_build() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
