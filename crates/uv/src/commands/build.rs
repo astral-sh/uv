@@ -436,7 +436,7 @@ async fn build_impl(
             BuiltDistributions::Both(output_dir.join(&sdist), output_dir.join(&wheel))
         }
         BuildPlan::WheelFromSdist => {
-            anstream::eprintln!("{}", "Building source distribution from wheel...".bold());
+            anstream::eprintln!("{}", "Building wheel from source distribution...".bold());
 
             // Extract the source distribution into a temporary directory.
             let reader = fs_err::tokio::File::open(src.path()).await?;
