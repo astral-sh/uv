@@ -50,6 +50,7 @@ use uv_normalize::PackageName;
 pub use crate::annotation::*;
 pub use crate::any::*;
 pub use crate::buildable::*;
+pub use crate::cache_info::*;
 pub use crate::cached::*;
 pub use crate::diagnostic::*;
 pub use crate::error::*;
@@ -62,11 +63,13 @@ pub use crate::prioritized_distribution::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
+pub use crate::timestamp::*;
 pub use crate::traits::*;
 
 mod annotation;
 mod any;
 mod buildable;
+mod cache_info;
 mod cached;
 mod diagnostic;
 mod error;
@@ -79,6 +82,7 @@ mod prioritized_distribution;
 mod resolution;
 mod resolved;
 mod specified_requirement;
+mod timestamp;
 mod traits;
 
 #[derive(Debug, Clone)]

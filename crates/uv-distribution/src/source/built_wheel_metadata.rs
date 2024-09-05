@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use crate::source::revision::Revision;
 use distribution_filename::WheelFilename;
-use distribution_types::Hashed;
+use distribution_types::{CacheInfo, Hashed};
 use platform_tags::Tags;
 use pypi_types::HashDigest;
 use uv_cache::CacheShard;
@@ -19,6 +20,8 @@ pub(crate) struct BuiltWheelMetadata {
     pub(crate) filename: WheelFilename,
     /// The computed hashes of the source distribution from which the wheel was built.
     pub(crate) hashes: Vec<HashDigest>,
+    /// The cache information for the underlying source distribution.
+    pub(crate) cache_info: CacheInfo,
 }
 
 impl BuiltWheelMetadata {
@@ -43,14 +46,16 @@ impl BuiltWheelMetadata {
             target: cache_shard.join(filename.stem()),
             path,
             filename,
+            cache_info: CacheInfo::default(),
             hashes: vec![],
         })
     }
 
-    /// Set the computed hashes of the wheel.
     #[must_use]
-    pub(crate) fn with_hashes(mut self, hashes: Vec<HashDigest>) -> Self {
+    pub(crate) fn with_revision(mut self, revision: Revision) -> Self {
+        let (hashes, cache_info) = revision.into_metadata();
         self.hashes = hashes;
+        self.cache_info = cache_info;
         self
     }
 }

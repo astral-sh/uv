@@ -7,11 +7,11 @@ use anstream::eprintln;
 use anyhow::Result;
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
+use distribution_types::Timestamp;
 use owo_colors::OwoColorize;
-use tracing::{debug, instrument};
-
 use settings::PipTreeSettings;
-use uv_cache::{Cache, Refresh, Timestamp};
+use tracing::{debug, instrument};
+use uv_cache::{Cache, Refresh};
 use uv_cli::{
     compat::CompatArgs, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
     ProjectCommand,

@@ -5,25 +5,23 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use distribution_filename::{SourceDistExtension, WheelFilename};
+use distribution_types::{
+    BuildableSource, CacheInfo, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
+    PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
+};
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
+use install_wheel_rs::metadata::read_archive_metadata;
+use platform_tags::Tags;
+use pypi_types::{HashDigest, Metadata12, Metadata23, RequiresTxt};
 use reqwest::Response;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, Instrument};
 use url::Url;
-use zip::ZipArchive;
-
-use distribution_filename::{SourceDistExtension, WheelFilename};
-use distribution_types::{
-    BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
-    PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
-};
-use install_wheel_rs::metadata::read_archive_metadata;
-use platform_tags::Tags;
-use pypi_types::{HashDigest, Metadata12, Metadata23, RequiresTxt};
 use uv_cache::{
-    ArchiveTimestamp, Cache, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Removal,
-    Timestamp, WheelCache,
+    Cache, CacheBucket, CacheEntry, CacheShard, Removal,
+    WheelCache,
 };
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -32,6 +30,7 @@ use uv_configuration::{BuildKind, BuildOutput};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
 use uv_types::{BuildContext, SourceBuildTrait};
+use zip::ZipArchive;
 
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
@@ -432,7 +431,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
-            return Ok(built_wheel.with_hashes(revision.into_hashes()));
+            return Ok(built_wheel.with_revision(revision));
         }
 
         let task = self
@@ -458,11 +457,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
+        // Extract the revision metadata.
+        let (hashes, cache_info) = revision.into_metadata();
+
         Ok(BuiltWheelMetadata {
             path: cache_shard.join(&disk_filename),
             target: cache_shard.join(wheel_filename.stem()),
             filename: wheel_filename,
-            hashes: revision.into_hashes(),
+            hashes,
+            cache_info,
         })
     }
 
@@ -512,6 +515,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             });
         }
 
+        // If there are build settings, we need to scope to a cache shard.
+        let config_settings = self.build_context.config_settings();
+        let cache_key = if config_settings.is_empty() {
+            None
+        } else {
+            Some(cache_key::cache_digest(config_settings))
+        };
+        let cache_shard = if let Some(cache_key) = cache_key {
+            cache_shard.shard(cache_key)
+        } else {
+            cache_shard
+        };
+
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
@@ -522,7 +538,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             });
         }
 
-        // Otherwise, we either need to build the metadata or the wheel.
+        // Otherwise, we either need to build the metadata.
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_metadata(source, source_dist_entry.path(), subdirectory)
@@ -671,6 +687,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
 
+        // If there are build settings, we need to scope to a cache shard.
+        let config_settings = self.build_context.config_settings();
+        let cache_key = if config_settings.is_empty() {
+            None
+        } else {
+            Some(cache_key::cache_digest(config_settings))
+        };
+        let cache_shard = if let Some(cache_key) = cache_key {
+            cache_shard.shard(cache_key)
+        } else {
+            cache_shard
+        };
+
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
             return Ok(built_wheel);
@@ -700,11 +729,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
+        // Extract the revision metadata.
+        let (hashes, cache_info) = revision.into_metadata();
+
         Ok(BuiltWheelMetadata {
             path: cache_shard.join(&disk_filename),
             target: cache_shard.join(filename.stem()),
             filename,
-            hashes: revision.into_hashes(),
+            hashes,
+            cache_info,
         })
     }
 
@@ -821,7 +854,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Determine the last-modified time of the source distribution.
-        let modified = ArchiveTimestamp::from_file(&resource.path).map_err(Error::CacheRead)?;
+        let cache_info = CacheInfo::from_file(&resource.path).map_err(Error::CacheRead)?;
 
         // Read the existing metadata from the cache.
         let revision_entry = cache_shard.entry(LOCAL_REVISION);
@@ -829,7 +862,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the revision already exists, return it. There's no need to check for freshness, since
         // we use an exact timestamp.
         if let Some(pointer) = LocalRevisionPointer::read_from(&revision_entry)? {
-            if pointer.is_up_to_date(modified) {
+            if *pointer.cache_info() == cache_info {
                 let revision = pointer.into_revision();
                 if revision.has_digests(hashes) {
                     return Ok(revision);
@@ -846,18 +879,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let hashes = self
             .persist_archive(&resource.path, resource.ext, entry.path(), hashes)
             .await?;
-        let revision = revision.with_hashes(hashes);
+
+        // Include the hashes and cache info in the revision.
+        let revision = revision.with_hashes(hashes).with_cache_info(cache_info);
 
         // Persist the revision.
-        write_atomic(
-            revision_entry.path(),
-            rmp_serde::to_vec(&CachedByTimestamp {
-                timestamp: modified.timestamp(),
-                data: revision.clone(),
-            })?,
-        )
-        .await
-        .map_err(Error::CacheWrite)?;
+        let pointer = LocalRevisionPointer {
+            revision: revision.clone(),
+        };
+        pointer.write_to(&revision_entry).await?;
 
         Ok(revision)
     }
@@ -896,6 +926,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
 
+        // If there are build settings, we need to scope to a cache shard.
+        let config_settings = self.build_context.config_settings();
+        let cache_key = if config_settings.is_empty() {
+            None
+        } else {
+            Some(cache_key::cache_digest(config_settings))
+        };
+        let cache_shard = if let Some(cache_key) = cache_key {
+            cache_shard.shard(cache_key)
+        } else {
+            cache_shard
+        };
+
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
             return Ok(built_wheel);
@@ -923,11 +966,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
+        // Extract the revision metadata.
+        let (hashes, cache_info) = revision.into_metadata();
+
         Ok(BuiltWheelMetadata {
             path: cache_shard.join(&disk_filename),
             target: cache_shard.join(filename.stem()),
             filename,
-            hashes: vec![],
+            hashes,
+            cache_info,
         })
     }
 
@@ -945,6 +992,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Before running the build, check that the hashes match.
         if hashes.is_validate() {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
+        }
+
+        if let Some(metadata) =
+            Self::read_static_metadata(source, &resource.install_path, None).await?
+        {
+            return Ok(ArchiveMetadata::from(
+                Metadata::from_workspace(
+                    metadata,
+                    resource.install_path.as_ref(),
+                    self.build_context.sources(),
+                )
+                .await?,
+            ));
         }
 
         let cache_shard = self.build_context.cache().shard(
@@ -967,18 +1027,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
 
-        if let Some(metadata) =
-            Self::read_static_metadata(source, &resource.install_path, None).await?
-        {
-            return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(
-                    metadata,
-                    resource.install_path.as_ref(),
-                    self.build_context.sources(),
-                )
-                .await?,
-            ));
-        }
+        // If there are build settings, we need to scope to a cache shard.
+        let config_settings = self.build_context.config_settings();
+        let cache_key = if config_settings.is_empty() {
+            None
+        } else {
+            Some(cache_key::cache_digest(config_settings))
+        };
+        let cache_shard = if let Some(cache_key) = cache_key {
+            cache_shard.shard(cache_key)
+        } else {
+            cache_shard
+        };
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -1062,13 +1122,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Determine the last-modified time of the source distribution.
-        let Some(modified) =
-            ArchiveTimestamp::from_source_tree(&resource.install_path).map_err(Error::CacheRead)?
-        else {
-            return Err(Error::DirWithoutEntrypoint(
-                resource.install_path.to_path_buf(),
-            ));
-        };
+        let cache_info =
+            CacheInfo::from_directory(&resource.install_path).map_err(Error::CacheRead)?;
 
         // Read the existing metadata from the cache.
         let entry = cache_shard.entry(LOCAL_REVISION);
@@ -1082,16 +1137,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .is_fresh()
         {
             if let Some(pointer) = LocalRevisionPointer::read_from(&entry)? {
-                if pointer.timestamp == modified.timestamp() {
+                if *pointer.cache_info() == cache_info {
                     return Ok(pointer.into_revision());
                 }
             }
         }
 
         // Otherwise, we need to create a new revision.
-        let revision = Revision::new();
+        let revision = Revision::new().with_cache_info(cache_info);
         let pointer = LocalRevisionPointer {
-            timestamp: modified.timestamp(),
             revision: revision.clone(),
         };
         pointer.write_to(&entry).await?;
@@ -1164,6 +1218,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             target: cache_shard.join(filename.stem()),
             filename,
             hashes: vec![],
+            cache_info: CacheInfo::default(),
         })
     }
 
@@ -1737,7 +1792,6 @@ impl HttpRevisionPointer {
 /// Encoded with `MsgPack`, and represented on disk by a `.rev` file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct LocalRevisionPointer {
-    timestamp: Timestamp,
     revision: Revision,
 }
 
@@ -1763,9 +1817,8 @@ impl LocalRevisionPointer {
             .map_err(Error::CacheWrite)
     }
 
-    /// Returns `true` if the revision is up-to-date with the given modified timestamp.
-    pub(crate) fn is_up_to_date(&self, modified: ArchiveTimestamp) -> bool {
-        self.timestamp == modified.timestamp()
+    pub(crate) fn cache_info(&self) -> &CacheInfo {
+        self.revision.cache_info()
     }
 
     /// Return the [`Revision`] from the pointer.

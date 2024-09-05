@@ -21,6 +21,7 @@ name = "install_wheel_rs"
 
 [dependencies]
 distribution-filename = { workspace = true }
+distribution-types = { workspace = true }
 pep440_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }

@@ -5,9 +5,8 @@ use tracing::{debug, trace};
 use url::Url;
 
 use cache_key::{CanonicalUrl, RepositoryUrl};
-use distribution_types::{InstalledDirectUrlDist, InstalledDist};
+use distribution_types::{CacheInfo, InstalledDirectUrlDist, InstalledDist};
 use pypi_types::{DirInfo, DirectUrl, RequirementSource, VcsInfo, VcsKind};
-use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum RequirementSatisfaction {
@@ -50,6 +49,7 @@ impl RequirementSatisfaction {
                 let InstalledDist::Url(InstalledDirectUrlDist {
                     direct_url,
                     editable,
+                    cache,
                     ..
                 }) = &distribution
                 else {
@@ -80,15 +80,17 @@ impl RequirementSatisfaction {
 
                 // If the requirement came from a local path, check freshness.
                 if requested_url.scheme() == "file" {
+                    // STOPSHIP(charlie): If we have no cache info, assume it's out-of-date.
                     if let Ok(archive) = requested_url.to_file_path() {
-                        if !ArchiveTimestamp::up_to_date_with(
-                            &archive,
-                            ArchiveTarget::Install(distribution),
-                        )? {
+                        let cache_info = CacheInfo::from_path(&archive)?;
+                        if cache.as_ref().map_or(true, |cache| *cache != cache_info) {
                             return Ok(Self::OutOfDate);
                         }
                     }
                 }
+
+                // If this points to a source distribution (?)... check if the build settings match
+                // the installed distribution.
 
                 // Otherwise, assume the requirement is up-to-date.
                 Ok(Self::Satisfied)
@@ -153,7 +155,9 @@ impl RequirementSatisfaction {
                 ext: _,
                 url: _,
             } => {
-                let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
+                let InstalledDist::Url(InstalledDirectUrlDist {
+                    direct_url, cache, ..
+                }) = &distribution
                 else {
                     return Ok(Self::Mismatch);
                 };
@@ -184,11 +188,9 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 }
 
-                if !ArchiveTimestamp::up_to_date_with(
-                    requested_path,
-                    ArchiveTarget::Install(distribution),
-                )? {
-                    trace!("Installed package is out of date");
+                // STOPSHIP(charlie): If we have no cache info, assume it's out-of-date.
+                let cache_info = CacheInfo::from_path(requested_path)?;
+                if cache.as_ref().map_or(true, |cache| *cache != cache_info) {
                     return Ok(Self::OutOfDate);
                 }
 
@@ -200,7 +202,9 @@ impl RequirementSatisfaction {
                 r#virtual: _,
                 url: _,
             } => {
-                let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
+                let InstalledDist::Url(InstalledDirectUrlDist {
+                    direct_url, cache, ..
+                }) = &distribution
                 else {
                     return Ok(Self::Mismatch);
                 };
@@ -242,11 +246,9 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 }
 
-                if !ArchiveTimestamp::up_to_date_with(
-                    requested_path,
-                    ArchiveTarget::Install(distribution),
-                )? {
-                    trace!("Installed package is out of date");
+                // STOPSHIP(charlie): If we have no cache info, assume it's out-of-date.
+                let cache_info = CacheInfo::from_path(requested_path)?;
+                if cache.as_ref().map_or(true, |cache| *cache != cache_info) {
                     return Ok(Self::OutOfDate);
                 }
 

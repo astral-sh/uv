@@ -140,6 +140,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.build_options
     }
 
+    fn config_settings(&self) -> &ConfigSettings {
+        self.config_settings
+    }
+
     fn sources(&self) -> SourceStrategy {
         self.sources
     }
@@ -219,6 +223,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             &BuildOptions::default(),
             self.hasher,
             self.index_locations,
+            self.config_settings,
             self.cache(),
             venv,
             &markers,

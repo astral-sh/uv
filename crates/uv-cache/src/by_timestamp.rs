@@ -1,6 +1,5 @@
+use distribution_types::Timestamp;
 use serde::{Deserialize, Serialize};
-
-use crate::timestamp::Timestamp;
 
 #[derive(Deserialize, Serialize)]
 pub struct CachedByTimestamp<Data> {

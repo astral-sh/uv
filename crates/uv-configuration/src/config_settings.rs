@@ -1,3 +1,4 @@
+use cache_key::CacheKeyHasher;
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     str::FromStr,
@@ -108,6 +109,14 @@ impl FromIterator<ConfigSettingEntry> for ConfigSettings {
 }
 
 impl ConfigSettings {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Convert the settings to a string that can be passed directly to a PEP 517 build backend.
     pub fn escape_for_python(&self) -> String {
         serde_json::to_string(self).expect("Failed to serialize config settings")
@@ -147,6 +156,18 @@ impl ConfigSettings {
             }
         }
         Self(config)
+    }
+}
+
+impl cache_key::CacheKey for ConfigSettings {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        for (key, value) in &self.0 {
+            key.cache_key(state);
+            match value {
+                ConfigSettingValue::String(value) => value.cache_key(state),
+                ConfigSettingValue::List(values) => values.cache_key(state),
+            }
+        }
     }
 }
 

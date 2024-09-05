@@ -10,7 +10,7 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 pub use archive::ArchiveId;
-use distribution_types::InstalledDist;
+use distribution_types::{InstalledDist, Timestamp};
 use pypi_types::Metadata23;
 use uv_fs::{cachedir, directories};
 use uv_normalize::PackageName;
@@ -19,7 +19,6 @@ pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
 pub use crate::removal::{rm_rf, Removal};
-pub use crate::timestamp::Timestamp;
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
@@ -28,7 +27,6 @@ mod by_timestamp;
 #[cfg(feature = "clap")]
 mod cli;
 mod removal;
-mod timestamp;
 mod wheel;
 
 /// A [`CacheEntry`] which may or may not exist yet.

@@ -5,7 +5,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
+use crate::script::{scripts_from_ini, Script};
+use crate::wheel::{
+    extra_dist_info, install_data, parse_wheel_file, read_record_file, write_script_entrypoints,
+    LibKind,
+};
+use crate::{Error, Layout};
 use distribution_filename::WheelFilename;
+use distribution_types::CacheInfo;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use pypi_types::{DirectUrl, Metadata12};
@@ -16,13 +23,6 @@ use tempfile::tempdir_in;
 use tracing::{debug, instrument};
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
-
-use crate::script::{scripts_from_ini, Script};
-use crate::wheel::{
-    extra_dist_info, install_data, parse_wheel_file, read_record_file, write_script_entrypoints,
-    LibKind,
-};
-use crate::{Error, Layout};
 
 #[derive(Debug, Default)]
 pub struct Locks(Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>);
@@ -41,6 +41,7 @@ pub fn install_wheel(
     wheel: impl AsRef<Path>,
     filename: &WheelFilename,
     direct_url: Option<&DirectUrl>,
+    cache_info: Option<&CacheInfo>,
     installer: Option<&str>,
     link_mode: LinkMode,
     locks: &Locks,
@@ -145,6 +146,7 @@ pub fn install_wheel(
         &dist_info_prefix,
         true,
         direct_url,
+        cache_info,
         installer,
         &mut record,
     )?;
