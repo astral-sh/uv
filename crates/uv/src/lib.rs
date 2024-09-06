@@ -1323,6 +1323,7 @@ async fn run_project(
                 args.format,
                 args.package,
                 args.hashes,
+                args.output_file,
                 args.extras,
                 args.dev,
                 args.locked,
@@ -1334,6 +1335,7 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                globals.quiet,
                 &cache,
                 printer,
             )

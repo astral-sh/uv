@@ -2966,6 +2966,10 @@ pub struct ExportArgs {
     #[arg(long, overrides_with("hashes"))]
     pub no_hashes: bool,
 
+    /// Write the compiled requirements to the given `requirements.txt` file.
+    #[arg(long, short)]
+    pub output_file: Option<PathBuf>,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or
