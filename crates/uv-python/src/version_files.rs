@@ -1,3 +1,4 @@
+use std::ops::Add;
 use std::path::{Path, PathBuf};
 
 use fs_err as fs;
@@ -146,6 +147,7 @@ impl PythonVersionFile {
                 .iter()
                 .map(PythonRequest::to_canonical_string)
                 .join("\n")
+                .add("\n")
                 .as_bytes(),
         )
         .await
