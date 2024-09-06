@@ -317,14 +317,8 @@ impl RequiresPython {
     /// markers are "complexified" to put the `requires-python` assumption back
     /// into the marker explicitly.
     pub(crate) fn simplify_markers(&self, marker: MarkerTree) -> MarkerTree {
-        let simplified = marker.simplify_python_versions(Range::from(self.range().clone()));
-        // FIXME: This is a hack to avoid the hidden state created by
-        // ADD's `restrict_versions`. I believe this is sound, but it's
-        // wasteful and silly.
-        simplified
-            .try_to_string()
-            .map(|s| s.parse().unwrap())
-            .unwrap_or(MarkerTree::TRUE)
+        let (lower, upper) = (self.range().lower(), self.range().upper());
+        marker.simplify_python_versions(lower.0.as_ref(), upper.0.as_ref())
     }
 
     /// The inverse of `simplify_markers`.
@@ -342,13 +336,9 @@ impl RequiresPython {
     /// ```text
     /// python_full_version >= '3.8' and python_full_version < '3.12'
     /// ```
-    pub(crate) fn complexify_markers(&self, mut marker: MarkerTree) -> MarkerTree {
-        // PERF: There's likely a way to amortize this, particularly
-        // the construction of `to_marker_tree`. But at time of
-        // writing, it wasn't clear if this was an actual perf problem
-        // or not. If it is, try a `std::sync::OnceLock`.
-        marker.and(self.to_marker_tree());
-        marker
+    pub(crate) fn complexify_markers(&self, marker: MarkerTree) -> MarkerTree {
+        let (lower, upper) = (self.range().lower(), self.range().upper());
+        marker.complexify_python_versions(lower.0.as_ref(), upper.0.as_ref())
     }
 
     /// Returns `false` if the wheel's tags state it can't be used in the given Python version
