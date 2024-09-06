@@ -7,6 +7,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 #[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(try_from = "CacheInfoWire")]
 pub struct CacheInfo {
     timestamp: Option<Timestamp>,
     commit: Option<Commit>,
@@ -31,11 +32,10 @@ impl CacheInfo {
 
     pub fn from_directory(directory: &Path) -> io::Result<Self> {
         let mut commit = None;
-        let mut timestamp = None;
 
         // Always compute the modification timestamp for the `pyproject.toml`, `setup.py`, and
         // `setup.cfg` files, if they exist.
-        timestamp = {
+        let mut timestamp = {
             let pyproject_toml = directory
                 .join("pyproject.toml")
                 .metadata()
@@ -111,6 +111,33 @@ impl CacheInfo {
 
     pub fn is_empty(&self) -> bool {
         self.timestamp.is_none() && self.commit.is_none()
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct TimestampCommit {
+    timestamp: Option<Timestamp>,
+    commit: Option<Commit>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(untagged)]
+enum CacheInfoWire {
+    Timestamp(Timestamp),
+    TimestampCommit(TimestampCommit),
+}
+
+impl From<CacheInfoWire> for CacheInfo {
+    fn from(wire: CacheInfoWire) -> Self {
+        match wire {
+            CacheInfoWire::Timestamp(timestamp) => Self {
+                timestamp: Some(timestamp),
+                ..Self::default()
+            },
+            CacheInfoWire::TimestampCommit(TimestampCommit { timestamp, commit }) => {
+                Self { timestamp, commit }
+            }
+        }
     }
 }
 

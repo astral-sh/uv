@@ -80,17 +80,15 @@ impl RequirementSatisfaction {
 
                 // If the requirement came from a local path, check freshness.
                 if requested_url.scheme() == "file" {
-                    // STOPSHIP(charlie): If we have no cache info, assume it's out-of-date.
                     if let Ok(archive) = requested_url.to_file_path() {
-                        let cache_info = CacheInfo::from_path(&archive)?;
-                        if cache.as_ref().map_or(true, |cache| *cache != cache_info) {
+                        let Some(cache) = cache.as_ref() else {
+                            return Ok(Self::OutOfDate);
+                        };
+                        if *cache != CacheInfo::from_path(&archive)? {
                             return Ok(Self::OutOfDate);
                         }
                     }
                 }
-
-                // If this points to a source distribution (?)... check if the build settings match
-                // the installed distribution.
 
                 // Otherwise, assume the requirement is up-to-date.
                 Ok(Self::Satisfied)
@@ -188,9 +186,10 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 }
 
-                // STOPSHIP(charlie): If we have no cache info, assume it's out-of-date.
-                let cache_info = CacheInfo::from_path(requested_path)?;
-                if cache.as_ref().map_or(true, |cache| *cache != cache_info) {
+                let Some(cache) = cache.as_ref() else {
+                    return Ok(Self::OutOfDate);
+                };
+                if *cache != CacheInfo::from_path(&requested_path)? {
                     return Ok(Self::OutOfDate);
                 }
 
@@ -246,9 +245,10 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 }
 
-                // STOPSHIP(charlie): If we have no cache info, assume it's out-of-date.
-                let cache_info = CacheInfo::from_path(requested_path)?;
-                if cache.as_ref().map_or(true, |cache| *cache != cache_info) {
+                let Some(cache) = cache.as_ref() else {
+                    return Ok(Self::OutOfDate);
+                };
+                if *cache != CacheInfo::from_path(&requested_path)? {
                     return Ok(Self::OutOfDate);
                 }
 

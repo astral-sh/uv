@@ -42,6 +42,33 @@ pub struct Options {
     #[option_group]
     pub pip: Option<PipOptions>,
 
+    /// The keys to consider when caching builds for the project.
+    ///
+    /// By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`, or
+    /// `setup.cfg` files in the project directory are modified. Cache keys enable you to specify
+    /// additional files or directories that should trigger a rebuild when modified.
+    ///
+    /// For example, if a project uses dynamic metadata to read its dependencies from a
+    /// `requirements.txt` file, you can specify `cache-keys = [{ file = "requirements.txt" }]` to
+    /// ensure that the project is rebuilt whenever the `requirements.txt` file is modified.
+    ///
+    /// Cache keys can also include version control information. For example, if a project uses
+    /// `setuptools_scm` to read its version from a Git tag, you can specify
+    /// `cache-keys = [{ git = true }]` to include the current Git commit hash in the cache key.
+    ///
+    /// Cache keys only affect the project defined by the `pyproject.toml` in which they're
+    /// specified (as opposed to, e.g., affecting all members in a workspace).
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[dict]",
+        example = r#"
+            cache-keys = [{ file = "requirements.txt" }, { git = true }]
+        "#
+    )]
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    cache_keys: serde::de::IgnoredAny,
+
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
     #[cfg_attr(feature = "schemars", schemars(skip))]
@@ -74,11 +101,6 @@ pub struct Options {
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
     r#package: serde::de::IgnoredAny,
-
-    // STOPSHIP(charlie): Document this in `pyproject.rs.`
-    #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    cache_keys: serde::de::IgnoredAny,
 }
 
 impl Options {

@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use crate::source::revision::Revision;
 use distribution_filename::WheelFilename;
 use distribution_types::{CacheInfo, Hashed};
 use platform_tags::Tags;
@@ -52,10 +51,8 @@ impl BuiltWheelMetadata {
     }
 
     #[must_use]
-    pub(crate) fn with_revision(mut self, revision: Revision) -> Self {
-        let (hashes, cache_info) = revision.into_metadata();
+    pub(crate) fn with_hashes(mut self, hashes: Vec<HashDigest>) -> Self {
         self.hashes = hashes;
-        self.cache_info = cache_info;
         self
     }
 }

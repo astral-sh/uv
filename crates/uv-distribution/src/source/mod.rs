@@ -436,7 +436,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
-            return Ok(built_wheel.with_revision(revision));
+            return Ok(built_wheel.with_hashes(revision.into_hashes()));
         }
 
         let task = self
@@ -462,15 +462,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
-        // Extract the revision metadata.
-        let (hashes, cache_info) = revision.into_metadata();
-
         Ok(BuiltWheelMetadata {
             path: cache_shard.join(&disk_filename),
             target: cache_shard.join(wheel_filename.stem()),
             filename: wheel_filename,
-            hashes,
-            cache_info,
+            hashes: revision.into_hashes(),
+            cache_info: CacheInfo::default(),
         })
     }
 
@@ -670,7 +667,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = lock_shard(cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self
+        let LocalRevisionPointer {
+            cache_info,
+            revision,
+        } = self
             .archive_revision(source, resource, cache_shard, hashes)
             .await?;
 
@@ -724,14 +724,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
-        // Extract the revision metadata.
-        let (hashes, cache_info) = revision.into_metadata();
-
         Ok(BuiltWheelMetadata {
             path: cache_shard.join(&disk_filename),
             target: cache_shard.join(filename.stem()),
             filename,
-            hashes,
+            hashes: revision.into_hashes(),
             cache_info,
         })
     }
@@ -750,7 +747,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = lock_shard(cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self
+        let LocalRevisionPointer { revision, .. } = self
             .archive_revision(source, resource, cache_shard, hashes)
             .await?;
 
@@ -850,7 +847,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
-    ) -> Result<Revision, Error> {
+    ) -> Result<LocalRevisionPointer, Error> {
         // Verify that the archive exists.
         if !resource.path.is_file() {
             return Err(Error::NotFound(resource.url.clone()));
@@ -866,9 +863,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // we use an exact timestamp.
         if let Some(pointer) = LocalRevisionPointer::read_from(&revision_entry)? {
             if *pointer.cache_info() == cache_info {
-                let revision = pointer.into_revision();
-                if revision.has_digests(hashes) {
-                    return Ok(revision);
+                if pointer.revision().has_digests(hashes) {
+                    return Ok(pointer);
                 }
             }
         }
@@ -884,15 +880,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?;
 
         // Include the hashes and cache info in the revision.
-        let revision = revision.with_hashes(hashes).with_cache_info(cache_info);
+        let revision = revision.with_hashes(hashes);
 
         // Persist the revision.
         let pointer = LocalRevisionPointer {
-            revision: revision.clone(),
+            cache_info,
+            revision,
         };
         pointer.write_to(&revision_entry).await?;
 
-        Ok(revision)
+        Ok(pointer)
     }
 
     /// Build a source distribution from a local source tree (i.e., directory), either editable or
@@ -921,7 +918,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = lock_shard(&cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self
+        let LocalRevisionPointer {
+            cache_info,
+            revision,
+        } = self
             .source_tree_revision(source, resource, &cache_shard)
             .await?;
 
@@ -964,14 +964,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
-        // Extract the revision metadata.
-        let (hashes, cache_info) = revision.into_metadata();
-
         Ok(BuiltWheelMetadata {
             path: cache_shard.join(&disk_filename),
             target: cache_shard.join(filename.stem()),
             filename,
-            hashes,
+            hashes: revision.into_hashes(),
             cache_info,
         })
     }
@@ -1017,7 +1014,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = lock_shard(&cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self
+        let LocalRevisionPointer { revision, .. } = self
             .source_tree_revision(source, resource, &cache_shard)
             .await?;
 
@@ -1108,7 +1105,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
         cache_shard: &CacheShard,
-    ) -> Result<Revision, Error> {
+    ) -> Result<LocalRevisionPointer, Error> {
         // Verify that the source tree exists.
         if !resource.install_path.is_dir() {
             return Err(Error::NotFound(resource.url.clone()));
@@ -1131,19 +1128,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         {
             if let Some(pointer) = LocalRevisionPointer::read_from(&entry)? {
                 if *pointer.cache_info() == cache_info {
-                    return Ok(pointer.into_revision());
+                    return Ok(pointer);
                 }
             }
         }
 
         // Otherwise, we need to create a new revision.
-        let revision = Revision::new().with_cache_info(cache_info);
+        let revision = Revision::new();
         let pointer = LocalRevisionPointer {
-            revision: revision.clone(),
+            cache_info,
+            revision,
         };
         pointer.write_to(&entry).await?;
 
-        Ok(revision)
+        Ok(pointer)
     }
 
     /// Build a source distribution from a Git repository.
@@ -1800,6 +1798,7 @@ impl HttpRevisionPointer {
 /// Encoded with `MsgPack`, and represented on disk by a `.rev` file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct LocalRevisionPointer {
+    cache_info: CacheInfo,
     revision: Revision,
 }
 
@@ -1826,7 +1825,11 @@ impl LocalRevisionPointer {
     }
 
     pub(crate) fn cache_info(&self) -> &CacheInfo {
-        self.revision.cache_info()
+        &self.cache_info
+    }
+
+    pub(crate) fn revision(&self) -> &Revision {
+        &self.revision
     }
 
     /// Return the [`Revision`] from the pointer.

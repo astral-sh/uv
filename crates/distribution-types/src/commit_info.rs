@@ -2,11 +2,11 @@ use std::path::{Path, PathBuf};
 
 /// The current commit information for a repository.
 #[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-pub struct Commit(String);
+pub(crate) struct Commit(String);
 
 impl Commit {
     /// Return the [`CommitInfo`] for the repository at the given path.
-    pub fn from_repository(path: &Path) -> Option<Self> {
+    pub(crate) fn from_repository(path: &Path) -> Option<Self> {
         // Find the `.git` directory, searching through parent directories if necessary.
         let git_dir = path
             .ancestors()

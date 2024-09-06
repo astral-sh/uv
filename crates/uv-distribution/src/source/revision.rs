@@ -1,4 +1,4 @@
-use distribution_types::{CacheInfo, Hashed};
+use distribution_types::Hashed;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -14,7 +14,6 @@ use pypi_types::HashDigest;
 pub(crate) struct Revision {
     id: RevisionId,
     hashes: Vec<HashDigest>,
-    cache_info: CacheInfo,
 }
 
 impl Revision {
@@ -23,17 +22,12 @@ impl Revision {
         Self {
             id: RevisionId::new(),
             hashes: vec![],
-            cache_info: CacheInfo::default(),
         }
     }
 
     /// Return the unique ID of the manifest.
     pub(crate) fn id(&self) -> &RevisionId {
         &self.id
-    }
-
-    pub(crate) fn cache_info(&self) -> &CacheInfo {
-        &self.cache_info
     }
 
     /// Return the computed hashes of the archive.
@@ -46,22 +40,10 @@ impl Revision {
         self.hashes
     }
 
-    /// Return the computed hashes and cache info of the archive.
-    pub(crate) fn into_metadata(self) -> (Vec<HashDigest>, CacheInfo) {
-        (self.hashes, self.cache_info)
-    }
-
     /// Set the computed hashes of the archive.
     #[must_use]
     pub(crate) fn with_hashes(mut self, hashes: Vec<HashDigest>) -> Self {
         self.hashes = hashes;
-        self
-    }
-
-    /// Set the cache info of the archive.
-    #[must_use]
-    pub(crate) fn with_cache_info(mut self, cache_info: CacheInfo) -> Self {
-        self.cache_info = cache_info;
         self
     }
 }

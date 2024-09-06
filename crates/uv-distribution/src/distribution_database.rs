@@ -329,8 +329,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     archive,
                     filename: built_wheel.filename,
                     hashes: built_wheel.hashes,
-                    // STOPSHIP: Here, we'd want the cache info to come from BuiltWheelMetadata.
-                    cache: CacheInfo::default(),
+                    cache: built_wheel.cache_info,
                 });
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
@@ -347,7 +346,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             archive: self.build_context.cache().archive(&id),
             hashes: built_wheel.hashes,
             filename: built_wheel.filename,
-            // STOPSHIP: Here, we'd want the cache info to come from BuiltWheelMetadata.
             cache: built_wheel.cache_info,
         })
     }
