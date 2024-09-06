@@ -30,6 +30,7 @@ requirements-txt = { path = "crates/requirements-txt" }
 uv-auth = { path = "crates/uv-auth" }
 uv-build = { path = "crates/uv-build" }
 uv-cache = { path = "crates/uv-cache" }
+uv-cache-info = { path = "crates/uv-cache-info" }
 uv-cli = { path = "crates/uv-cli" }
 uv-client = { path = "crates/uv-client" }
 uv-configuration = { path = "crates/uv-configuration" }

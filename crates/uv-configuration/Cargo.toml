@@ -20,6 +20,7 @@ platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-auth = { workspace = true }
 uv-cache = { workspace = true }
+uv-cache-info = { workspace = true }
 uv-normalize = { workspace = true }
 
 clap = { workspace = true, features = ["derive"], optional = true }

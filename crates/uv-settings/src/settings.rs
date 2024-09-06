@@ -6,6 +6,7 @@ use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
+use uv_cache_info::CacheKey;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
     TrustedHost,
@@ -66,8 +67,7 @@ pub struct Options {
         "#
     )]
     #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    cache_keys: serde::de::IgnoredAny,
+    cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.

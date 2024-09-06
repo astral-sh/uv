@@ -2,13 +2,14 @@ use std::fmt::Write;
 use std::str::FromStr;
 
 use anyhow::{bail, Result};
-use distribution_types::{Timestamp, UnresolvedRequirementSpecification};
+use distribution_types::UnresolvedRequirementSpecification;
 use owo_colors::OwoColorize;
 use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::MarkerTree;
 use pypi_types::{Requirement, RequirementSource};
 use tracing::debug;
 use uv_cache::{Cache, Refresh};
+use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, Upgrade};
 use uv_normalize::PackageName;

@@ -21,6 +21,17 @@
         "null"
       ]
     },
+    "cache-keys": {
+      "description": "The keys to consider when caching builds for the project.\n\nBy default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`, or `setup.cfg` files in the project directory are modified. Cache keys enable you to specify additional files or directories that should trigger a rebuild when modified.\n\nFor example, if a project uses dynamic metadata to read its dependencies from a `requirements.txt` file, you can specify `cache-keys = [{ file = \"requirements.txt\" }]` to ensure that the project is rebuilt whenever the `requirements.txt` file is modified.\n\nCache keys can also include version control information. For example, if a project uses `setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }]` to include the current Git commit hash in the cache key.\n\nCache keys only affect the project defined by the `pyproject.toml` in which they're specified (as opposed to, e.g., affecting all members in a workspace).",
+      "writeOnly": true,
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/CacheKey"
+      }
+    },
     "compile-bytecode": {
       "description": "Compile Python files to bytecode after installation.\n\nBy default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`); instead, compilation is performed lazily the first time a module is imported. For use-cases in which start time is critical, such as CLI applications and Docker containers, this option can be enabled to trade longer installation times for faster start times.\n\nWhen enabled, uv will process the entire site-packages directory (including packages that are not being modified by the current operation) for consistency. Like pip, it will also ignore errors.",
       "type": [
@@ -415,6 +426,40 @@
           "enum": [
             "split"
           ]
+        }
+      ]
+    },
+    "CacheKey": {
+      "anyOf": [
+        {
+          "description": "Ex) `\"Cargo.lock\"`",
+          "type": "string"
+        },
+        {
+          "description": "Ex) `{ file = \"Cargo.lock\" }`",
+          "type": "object",
+          "required": [
+            "file"
+          ],
+          "properties": {
+            "file": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Ex) `{ git = true }`",
+          "type": "object",
+          "required": [
+            "git"
+          ],
+          "properties": {
+            "git": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       ]
     },

@@ -5,9 +5,16 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use crate::distribution_database::ManagedClient;
+use crate::error::Error;
+use crate::metadata::{ArchiveMetadata, Metadata};
+use crate::reporter::Facade;
+use crate::source::built_wheel_metadata::BuiltWheelMetadata;
+use crate::source::revision::Revision;
+use crate::{Reporter, RequiresDist};
 use distribution_filename::{SourceDistExtension, WheelFilename};
 use distribution_types::{
-    BuildableSource, CacheInfo, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
+    BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
     PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
 };
 use fs_err::tokio as fs;
@@ -20,6 +27,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, Instrument};
 use url::Url;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
+use uv_cache_info::CacheInfo;
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
@@ -28,14 +36,6 @@ use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
 use uv_types::{BuildContext, SourceBuildTrait};
 use zip::ZipArchive;
-
-use crate::distribution_database::ManagedClient;
-use crate::error::Error;
-use crate::metadata::{ArchiveMetadata, Metadata};
-use crate::reporter::Facade;
-use crate::source::built_wheel_metadata::BuiltWheelMetadata;
-use crate::source::revision::Revision;
-use crate::{Reporter, RequiresDist};
 
 mod built_wheel_metadata;
 mod revision;
@@ -1824,15 +1824,17 @@ impl LocalRevisionPointer {
             .map_err(Error::CacheWrite)
     }
 
+    /// Return the [`CacheInfo`] for the pointer.
     pub(crate) fn cache_info(&self) -> &CacheInfo {
         &self.cache_info
     }
 
+    /// Return the [`Revision`] for the pointer.
     pub(crate) fn revision(&self) -> &Revision {
         &self.revision
     }
 
-    /// Return the [`Revision`] from the pointer.
+    /// Return the [`Revision`] for the pointer.
     pub(crate) fn into_revision(self) -> Revision {
         self.revision
     }

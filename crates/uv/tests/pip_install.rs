@@ -2782,7 +2782,7 @@ fn config_settings() {
     );
 
     // Uninstall the package.
-    uv_snapshot!(context.pip_uninstall()
+    uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("setuptools-editable"), @r###"
     success: true
     exit_code: 0
@@ -2790,7 +2790,7 @@ fn config_settings() {
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - setuptools-editable==0.1.0 (from file:///Users/crmarsh/workspace/uv/scripts/packages/setuptools_editable)
+     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
     "###);
 
     // Install the editable package with `--editable_mode=compat`. We should ignore the cached

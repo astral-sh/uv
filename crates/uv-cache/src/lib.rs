@@ -10,8 +10,9 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 pub use archive::ArchiveId;
-use distribution_types::{InstalledDist, Timestamp};
+use distribution_types::InstalledDist;
 use pypi_types::Metadata23;
+use uv_cache_info::Timestamp;
 use uv_fs::{cachedir, directories};
 use uv_normalize::PackageName;
 

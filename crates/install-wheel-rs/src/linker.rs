@@ -12,7 +12,6 @@ use crate::wheel::{
 };
 use crate::{Error, Layout};
 use distribution_filename::WheelFilename;
-use distribution_types::CacheInfo;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use pypi_types::{DirectUrl, Metadata12};
@@ -21,6 +20,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
+use uv_cache_info::CacheInfo;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 

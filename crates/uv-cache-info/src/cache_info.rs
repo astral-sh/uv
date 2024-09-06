@@ -7,6 +7,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 #[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 #[serde(try_from = "CacheInfoWire")]
 pub struct CacheInfo {
     timestamp: Option<Timestamp>,
@@ -82,18 +83,20 @@ impl CacheInfo {
         // Incorporate any additional timestamps or VCS information.
         for cache_key in &cache_keys {
             match cache_key {
-                CacheKey::File(path) => {
-                    let key_timestamp = path
-                        .metadata()
-                        .ok()
-                        .filter(std::fs::Metadata::is_file)
-                        .as_ref()
-                        .map(Timestamp::from_metadata);
-                    timestamp = max(timestamp, key_timestamp);
+                CacheKey::Path(file) | CacheKey::File { file } => {
+                    timestamp = max(
+                        timestamp,
+                        file.metadata()
+                            .ok()
+                            .filter(std::fs::Metadata::is_file)
+                            .as_ref()
+                            .map(Timestamp::from_metadata),
+                    );
                 }
-                CacheKey::Git => {
+                CacheKey::Git { git: true } => {
                     commit = Commit::from_repository(directory);
                 }
+                CacheKey::Git { git: false } => {}
             }
         }
 
@@ -160,40 +163,14 @@ struct ToolUv {
     cache_keys: Option<Vec<CacheKey>>,
 }
 
-#[derive(Debug)]
-enum CacheKey {
-    /// Ex) `{ file = "Cargo.lock" }` or `"Cargo.lock"`
-    File(PathBuf),
+#[derive(Debug, Clone, serde::Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
+pub enum CacheKey {
+    /// Ex) `"Cargo.lock"`
+    Path(PathBuf),
+    /// Ex) `{ file = "Cargo.lock" }`
+    File { file: PathBuf },
     /// Ex) `{ git = true }`
-    Git,
-}
-
-impl<'de> serde::de::Deserialize<'de> for CacheKey {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum CacheKeyHelper {
-            FileMap { file: PathBuf },
-            GitMap { git: bool },
-            SimpleFile(PathBuf),
-        }
-
-        let helper = CacheKeyHelper::deserialize(deserializer)?;
-        match helper {
-            CacheKeyHelper::FileMap { file } => Ok(CacheKey::File(file)),
-            CacheKeyHelper::GitMap { git } => {
-                if git {
-                    Ok(CacheKey::Git)
-                } else {
-                    Err(serde::de::Error::custom(
-                        "Invalid value for git key, expected true",
-                    ))
-                }
-            }
-            CacheKeyHelper::SimpleFile(file) => Ok(CacheKey::File(file)),
-        }
-    }
+    Git { git: bool },
 }

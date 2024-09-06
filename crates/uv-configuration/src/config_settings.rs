@@ -109,10 +109,12 @@ impl FromIterator<ConfigSettingEntry> for ConfigSettings {
 }
 
 impl ConfigSettings {
+    /// Returns the number of settings in the configuration.
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    /// Returns `true` if the configuration contains no settings.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }

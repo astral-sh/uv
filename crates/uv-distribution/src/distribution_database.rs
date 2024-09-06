@@ -16,12 +16,13 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, BuiltDist, CacheInfo, Dist, FileLocation, HashPolicy, Hashed, IndexLocations,
-    Name, SourceDist, Timestamp,
+    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, IndexLocations, Name,
+    SourceDist,
 };
 use platform_tags::Tags;
 use pypi_types::HashDigest;
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
+use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };

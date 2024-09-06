@@ -28,12 +28,33 @@ If you're running into caching issues, uv includes a few escape hatches:
 
 ## Dynamic metadata
 
-Note that for local directory dependencies in particular (e.g., editables), uv will _only_ reinstall
-the package if its `pyproject.toml`, `setup.py`, or `setup.cfg` file has changed. This is a
+By default, uv will _only_ rebuild and reinstall local directory dependencies (e.g., editables) if
+the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the directory root has changed. This is a
 heuristic and, in some cases, may lead to fewer re-installs than desired.
 
-For example, if a local dependency uses `dynamic` metadata, you can instruct uv to _always_
-reinstall the package by adding `reinstall-package` to the `uv` section of your `pyproject.toml`:
+To incorporate other information into the cache key for a given package, you can add cache key
+entries under `tool.uv.cache-key`, which can include both file paths and Git commit hashes.
+
+For example, if a project uses [`setuptools-scm`](https://pypi.org/project/setuptools-scm/), and
+should be rebuilt whenever the commit hash changes, you can add the following to the project's
+`pyproject.toml`:
+
+```toml title="pyproject.toml"
+[tool.uv]
+cache-key = [{ git = true }]
+```
+
+Similarly, if a project reads from a `requirements.txt` to populate its dependencies, you can add
+the following to the project's `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[tool.uv]
+cache-key = [{ file = "requirements.txt" }]
+```
+
+As an escape hatch, if a project uses `dynamic` metadata that isn't covered by `tool.uv.cache-key`,
+you can instruct uv to _always_ rebuild and reinstall it by adding the project to the
+`tool.uv.reinstall-package` list:
 
 ```toml title="pyproject.toml"
 [tool.uv]

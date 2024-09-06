@@ -68,6 +68,7 @@ pub trait BuildContext {
     /// This method exists to avoid fetching source distributions if we know we can't build them.
     fn build_options(&self) -> &BuildOptions;
 
+    /// The [`ConfigSettings`] used to build distributions.
     fn config_settings(&self) -> &ConfigSettings;
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.

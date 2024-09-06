@@ -7,13 +7,14 @@ use tracing::debug;
 
 use distribution_filename::{DistExtension, WheelFilename};
 use distribution_types::{
-    CacheInfo, CachedDirectUrlDist, CachedDist, DirectUrlBuiltDist, DirectUrlSourceDist,
-    DirectorySourceDist, Error, GitSourceDist, Hashed, IndexLocations, InstalledDist, Name,
-    PathBuiltDist, PathSourceDist, RemoteSource, Timestamp, Verbatim,
+    CachedDirectUrlDist, CachedDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
+    Error, GitSourceDist, Hashed, IndexLocations, InstalledDist, Name, PathBuiltDist,
+    PathSourceDist, RemoteSource, Verbatim,
 };
 use platform_tags::Tags;
 use pypi_types::{Requirement, RequirementSource, ResolverMarkerEnvironment};
 use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_cache_info::{CacheInfo, Timestamp};
 use uv_configuration::{BuildOptions, ConfigSettings, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,

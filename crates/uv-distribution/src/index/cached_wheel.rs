@@ -1,13 +1,13 @@
 use std::path::Path;
 
+use crate::archive::Archive;
+use crate::{HttpArchivePointer, LocalArchivePointer};
 use distribution_filename::WheelFilename;
-use distribution_types::{CacheInfo, CachedDirectUrlDist, CachedRegistryDist, Hashed};
+use distribution_types::{CachedDirectUrlDist, CachedRegistryDist, Hashed};
 use pep508_rs::VerbatimUrl;
 use pypi_types::HashDigest;
 use uv_cache::{Cache, CacheBucket, CacheEntry};
-
-use crate::archive::Archive;
-use crate::{HttpArchivePointer, LocalArchivePointer};
+use uv_cache_info::CacheInfo;
 
 #[derive(Debug, Clone)]
 pub struct CachedWheel {

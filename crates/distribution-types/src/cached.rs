@@ -5,11 +5,12 @@ use anyhow::{anyhow, Result};
 use distribution_filename::WheelFilename;
 use pep508_rs::VerbatimUrl;
 use pypi_types::{HashDigest, ParsedDirectoryUrl};
+use uv_cache_info::CacheInfo;
 use uv_normalize::PackageName;
 
 use crate::{
-    BuiltDist, CacheInfo, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion,
-    Name, ParsedUrl, SourceDist, VersionOrUrlRef,
+    BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion, Name,
+    ParsedUrl, SourceDist, VersionOrUrlRef,
 };
 
 /// A built distribution (wheel) that exists in the local cache.

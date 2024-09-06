@@ -10,10 +10,10 @@ use url::Url;
 use distribution_filename::EggInfoFilename;
 use pep440_rs::Version;
 use pypi_types::DirectUrl;
+use uv_cache_info::CacheInfo;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
-use crate::cache_info::CacheInfo;
 use crate::{DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef};
 
 /// A built distribution (wheel) that is installed in a virtual environment.
@@ -36,7 +36,7 @@ pub struct InstalledRegistryDist {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
-    pub cache: Option<CacheInfo>,
+    pub cache_info: Option<CacheInfo>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -47,7 +47,7 @@ pub struct InstalledDirectUrlDist {
     pub url: Url,
     pub editable: bool,
     pub path: PathBuf,
-    pub cache: Option<CacheInfo>,
+    pub cache_info: Option<CacheInfo>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -93,7 +93,7 @@ impl InstalledDist {
 
             let name = PackageName::from_str(name)?;
             let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
-            let cache = Self::cache_info(path)?;
+            let cache_info = Self::cache_info(path)?;
 
             return if let Some(direct_url) = Self::direct_url(path)? {
                 match Url::try_from(&direct_url) {
@@ -104,7 +104,7 @@ impl InstalledDist {
                         direct_url: Box::new(direct_url),
                         url,
                         path: path.to_path_buf(),
-                        cache,
+                        cache_info,
                     }))),
                     Err(err) => {
                         warn!("Failed to parse direct URL: {err}");
@@ -112,7 +112,7 @@ impl InstalledDist {
                             name,
                             version,
                             path: path.to_path_buf(),
-                            cache,
+                            cache_info,
                         })))
                     }
                 }
@@ -121,7 +121,7 @@ impl InstalledDist {
                     name,
                     version,
                     path: path.to_path_buf(),
-                    cache,
+                    cache_info,
                 })))
             };
         }

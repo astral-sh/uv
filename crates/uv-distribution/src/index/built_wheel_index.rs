@@ -2,10 +2,11 @@ use crate::index::cached_wheel::CachedWheel;
 use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LOCAL_REVISION};
 use crate::Error;
 use distribution_types::{
-    CacheInfo, DirectUrlSourceDist, DirectorySourceDist, GitSourceDist, Hashed, PathSourceDist,
+    DirectUrlSourceDist, DirectorySourceDist, GitSourceDist, Hashed, PathSourceDist,
 };
 use platform_tags::Tags;
 use uv_cache::{Cache, CacheBucket, CacheShard, WheelCache};
+use uv_cache_info::CacheInfo;
 use uv_configuration::ConfigSettings;
 use uv_fs::symlinks;
 use uv_types::HashStrategy;

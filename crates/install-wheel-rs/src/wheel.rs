@@ -3,8 +3,10 @@ use std::io::{BufReader, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::{env, io};
 
+use crate::record::RecordEntry;
+use crate::script::Script;
+use crate::{Error, Layout};
 use data_encoding::BASE64URL_NOPAD;
-use distribution_types::CacheInfo;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use mailparse::parse_headers;
@@ -12,15 +14,12 @@ use pypi_types::DirectUrl;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 use tracing::{instrument, warn};
+use uv_cache_info::CacheInfo;
 use uv_fs::{relative_to, Simplified};
 use uv_normalize::PackageName;
 use walkdir::WalkDir;
 use zip::write::FileOptions;
 use zip::ZipWriter;
-
-use crate::record::RecordEntry;
-use crate::script::Script;
-use crate::{Error, Layout};
 
 const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 

@@ -1045,10 +1045,10 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "toml",
  "tracing",
  "url",
  "urlencoding",
+ "uv-cache-info",
  "uv-fs",
  "uv-git",
  "uv-normalize",
@@ -1763,7 +1763,6 @@ dependencies = [
  "csv",
  "data-encoding",
  "distribution-filename",
- "distribution-types",
  "fs-err",
  "indoc",
  "mailparse",
@@ -1782,6 +1781,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tracing",
+ "uv-cache-info",
  "uv-fs",
  "uv-normalize",
  "uv-warnings",
@@ -2789,7 +2789,6 @@ name = "pypi-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "cache-key",
  "distribution-filename",
  "indexmap",
  "itertools 0.13.0",
@@ -2800,7 +2799,6 @@ dependencies = [
  "regex",
  "rkyv",
  "serde",
- "serde_json",
  "thiserror",
  "toml",
  "tracing",
@@ -4502,6 +4500,7 @@ dependencies = [
  "url",
  "uv-auth",
  "uv-cache",
+ "uv-cache-info",
  "uv-cli",
  "uv-client",
  "uv-configuration",
@@ -4599,9 +4598,20 @@ dependencies = [
  "tempfile",
  "tracing",
  "url",
+ "uv-cache-info",
  "uv-fs",
  "uv-normalize",
  "walkdir",
+]
+
+[[package]]
+name = "uv-cache-info"
+version = "0.0.1"
+dependencies = [
+ "fs-err",
+ "schemars",
+ "serde",
+ "toml",
 ]
 
 [[package]]
@@ -4701,6 +4711,7 @@ dependencies = [
  "url",
  "uv-auth",
  "uv-cache",
+ "uv-cache-info",
  "uv-normalize",
 ]
 
@@ -4799,6 +4810,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-cache",
+ "uv-cache-info",
  "uv-client",
  "uv-configuration",
  "uv-extract",
@@ -4902,6 +4914,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-cache",
+ "uv-cache-info",
  "uv-configuration",
  "uv-distribution",
  "uv-extract",
@@ -4960,7 +4973,6 @@ dependencies = [
  "clap",
  "configparser",
  "distribution-filename",
- "distribution-types",
  "fs-err",
  "futures",
  "goblin",
@@ -4991,6 +5003,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-cache",
+ "uv-cache-info",
  "uv-client",
  "uv-extract",
  "uv-fs",
@@ -5123,6 +5136,7 @@ dependencies = [
  "thiserror",
  "toml",
  "tracing",
+ "uv-cache-info",
  "uv-configuration",
  "uv-fs",
  "uv-macros",

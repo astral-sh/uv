@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use distribution_filename::WheelFilename;
-use distribution_types::{CacheInfo, CachedDist, Dist, Hashed};
-use pypi_types::{HashDigest, Metadata23};
-
 use crate::Error;
+use distribution_filename::WheelFilename;
+use distribution_types::{CachedDist, Dist, Hashed};
+use pypi_types::{HashDigest, Metadata23};
+use uv_cache_info::CacheInfo;
 
 /// A locally available wheel.
 #[derive(Debug, Clone)]

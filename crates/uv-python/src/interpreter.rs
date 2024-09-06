@@ -12,7 +12,6 @@ use thiserror::Error;
 use tracing::{trace, warn};
 
 use cache_key::cache_digest;
-use distribution_types::Timestamp;
 use install_wheel_rs::Layout;
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
@@ -20,6 +19,7 @@ use platform_tags::Platform;
 use platform_tags::{Tags, TagsError};
 use pypi_types::{ResolverMarkerEnvironment, Scheme};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
+use uv_cache_info::Timestamp;
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 
 use crate::implementation::LenientImplementationName;
