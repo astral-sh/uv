@@ -1417,7 +1417,7 @@ and `uv tool run` ([#4404](https://github.com/astral-sh/uv/pull/4404))
 
 - Add `--workspace` option to `uv add` ([#4362](https://github.com/astral-sh/uv/pull/4362))
 - Ignore query errors during `uv toolchain list` ([#4382](https://github.com/astral-sh/uv/pull/4382))
-- Respect `.python-version` files and fetch manged toolchains in uv project
+- Respect `.python-version` files and fetch managed toolchains in uv project
 commands ([#4361](https://github.com/astral-sh/uv/pull/4361))
 - Respect `.python-version` in `uv venv --preview` ([#4360](https://github.com/astral-sh/uv/pull/4360))
 

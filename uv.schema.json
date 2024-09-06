@@ -894,7 +894,7 @@
           ]
         },
         "python-platform": {
-          "description": "The platform for which requirements should be resolved.\n\nRepresented as a \"target triple\", a string that describes the target platform in terms of its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or `aaarch64-apple-darwin`.",
+          "description": "The platform for which requirements should be resolved.\n\nRepresented as a \"target triple\", a string that describes the target platform in terms of its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or `aarch64-apple-darwin`.",
           "anyOf": [
             {
               "$ref": "#/definitions/TargetTriple"

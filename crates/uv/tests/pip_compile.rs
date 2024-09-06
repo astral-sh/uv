@@ -8247,7 +8247,7 @@ fn universal_unnecessary_python() -> Result<()> {
 /// on the marker environment. This is usually fine, except in this case,
 /// `torchvision` has an unconditional dependency on `torch`, and this resulted
 /// in the markers being dropped. As a result, we'd previously write a
-/// `requirements.txt` file that unconditionally dependended on two different
+/// `requirements.txt` file that unconditionally depended on two different
 /// versions of `torch`.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/5086>

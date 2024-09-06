@@ -744,7 +744,7 @@ fn sync_build_isolation_extra() -> Result<()> {
 /// Avoid using incompatible versions for build dependencies that are also part of the resolved
 /// environment. This is a very subtle issue, but: when locking, we don't enforce platform
 /// compatibility. So, if we reuse the resolver state to install, and the install itself has to
-/// preform a resolution (e.g., for the build dependencies of a source distribution), that
+/// perform a resolution (e.g., for the build dependencies of a source distribution), that
 /// resolution may choose incompatible versions.
 ///
 /// The key property here is that there's a shared package between the build dependencies and the
