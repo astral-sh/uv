@@ -3,7 +3,6 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound;
 
-use derivative::Derivative;
 use indexmap::IndexSet;
 use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
@@ -719,7 +718,7 @@ impl PubGrubReportFormatter<'_> {
     }
 }
 
-#[derive(Derivative, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) enum PubGrubHint {
     /// There are pre-release versions available for a package, but pre-releases weren't enabled
     /// for that package.
