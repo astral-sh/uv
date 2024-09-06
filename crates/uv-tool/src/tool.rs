@@ -21,6 +21,8 @@ pub struct Tool {
     python: Option<String>,
     /// A mapping of entry point names to their metadata.
     entrypoints: Vec<ToolEntrypoint>,
+    /// A mapping of entry point names to their metadata.
+    manpages: Vec<ToolManpage>,
     /// The [`ToolOptions`] used to install this tool.
     options: ToolOptions,
 }
@@ -30,6 +32,7 @@ struct ToolWire {
     requirements: Vec<RequirementWire>,
     python: Option<String>,
     entrypoints: Vec<ToolEntrypoint>,
+    manpages: Option<Vec<ToolManpage>>,
     #[serde(default)]
     options: ToolOptions,
 }
@@ -54,6 +57,7 @@ impl From<Tool> for ToolWire {
                 .collect(),
             python: tool.python,
             entrypoints: tool.entrypoints,
+            manpages: Some(tool.manpages),
             options: tool.options,
         }
     }
@@ -74,6 +78,7 @@ impl TryFrom<ToolWire> for Tool {
                 .collect(),
             python: tool.python,
             entrypoints: tool.entrypoints,
+            manpages: tool.manpages.unwrap_or_default(),
             options: tool.options,
         })
     }
@@ -82,6 +87,13 @@ impl TryFrom<ToolWire> for Tool {
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ToolEntrypoint {
+    pub name: String,
+    pub install_path: PathBuf,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct ToolManpage {
     pub name: String,
     pub install_path: PathBuf,
 }
@@ -119,14 +131,18 @@ impl Tool {
         requirements: Vec<Requirement>,
         python: Option<String>,
         entrypoints: impl Iterator<Item = ToolEntrypoint>,
+        manpages: impl Iterator<Item = ToolManpage>,
         options: ToolOptions,
     ) -> Self {
         let mut entrypoints: Vec<_> = entrypoints.collect();
         entrypoints.sort();
+        let mut manpages: Vec<_> = manpages.collect();
+        manpages.sort();
         Self {
             requirements,
             python,
             entrypoints,
+            manpages,
             options,
         }
     }
@@ -175,6 +191,18 @@ impl Tool {
             value(entrypoints)
         });
 
+        if !self.manpages.is_empty() {
+            table.insert("manpages", {
+                let manpages = each_element_on_its_line_array(
+                    self.manpages
+                        .iter()
+                        .map(ToolManpage::to_toml)
+                        .map(Table::into_inline_table),
+                );
+                value(manpages)
+            });
+        }
+
         if self.options != ToolOptions::default() {
             let serialized =
                 serde::Serialize::serialize(&self.options, toml_edit::ser::ValueSerializer::new())?;
@@ -193,6 +221,10 @@ impl Tool {
         &self.entrypoints
     }
 
+    pub fn manpages(&self) -> &[ToolManpage] {
+        &self.manpages
+    }
+
     pub fn requirements(&self) -> &[Requirement] {
         &self.requirements
     }
@@ -208,6 +240,25 @@ impl Tool {
 
 impl ToolEntrypoint {
     /// Create a new [`ToolEntrypoint`].
+    pub fn new(name: String, install_path: PathBuf) -> Self {
+        Self { name, install_path }
+    }
+
+    /// Returns the TOML table for this entrypoint.
+    pub(crate) fn to_toml(&self) -> Table {
+        let mut table = Table::new();
+        table.insert("name", value(&self.name));
+        table.insert(
+            "install-path",
+            // Use cross-platform slashes so the toml string type does not change
+            value(PortablePath::from(&self.install_path).to_string()),
+        );
+        table
+    }
+}
+
+impl ToolManpage {
+    /// Create a new [`ToolManpage`].
     pub fn new(name: String, install_path: PathBuf) -> Self {
         Self { name, install_path }
     }

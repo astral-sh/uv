@@ -174,6 +174,104 @@ fn tool_install() {
     });
 }
 
+/// Test installing a tool with `uv tool install` that has manpages
+#[test]
+fn tool_install_manpages() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let xdg_data_dir = context.temp_dir.child("xdg_data");
+
+    // Install `pycowsay`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("XDG_DATA_HOME", xdg_data_dir.as_os_str())
+        // Without bytecode compilation, we encounter a warning similar to:
+        // [TEMP_DIR]/tools/pycowsay/lib/python3.12/site-packages/pycowsay/main.py:23: SyntaxWarning: invalid escape sequence '\ '
+        .env("UV_COMPILE_BYTECODE", "1")
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+    Bytecode compiled 4 files in [TIME]
+     + pycowsay==0.0.0.2
+    Installed 1 executable: pycowsay
+    Installed 1 manpage: man6/pycowsay.6
+    "###);
+
+    tool_dir.child("pycowsay").assert(predicate::path::is_dir());
+    tool_dir
+        .child("pycowsay")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("pycowsay{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Should run pycowsay in the virtual environment
+        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
+        #![TEMP_DIR]/tools/pycowsay/bin/python
+        # -*- coding: utf-8 -*-
+        import re
+        import sys
+        from pycowsay.main import main
+        if __name__ == "__main__":
+            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            sys.exit(main())
+        "###);
+
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pycowsay").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "pycowsay" }]
+        entrypoints = [
+            { name = "pycowsay", install-path = "[TEMP_DIR]/bin/pycowsay" },
+        ]
+        manpages = [
+            { name = "man6/pycowsay.6", install-path = "[TEMP_DIR]/xdg_data/man/man6/pycowsay.6" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        compile-bytecode = true
+        "###);
+    });
+
+    uv_snapshot!(context.filters(), Command::new("pycowsay").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    0.0.0.2
+
+    ----- stderr -----
+    "###);
+
+    let man_dir = xdg_data_dir.child("man");
+    man_dir
+        .child("man6")
+        .child("pycowsay.6")
+        .assert(predicate::path::exists());
+}
+
 #[test]
 fn tool_install_suggest_other_packages_with_executable() {
     let context = TestContext::new("3.12").with_filtered_exe_suffix();
@@ -1290,6 +1388,28 @@ fn tool_install_xdg_data_home() {
         .temp_dir
         .child(format!("data/bin/black{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::exists());
+
+    // Install `pycowsay`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_DATA_HOME", data_home.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pycowsay==0.0.0.2
+    Installed 1 executable: pycowsay
+    Installed 1 manpage: man6/pycowsay.6
+    "###);
+
+    let man_dir = data_home.join("man");
+    assert!(man_dir.join("man6").join("pycowsay.6").exists());
 }
 
 /// Test `uv tool install` when the bin directory is set by `$XDG_BIN_HOME`
@@ -1325,6 +1445,31 @@ fn tool_install_xdg_bin_home() {
     bin_dir
         .child(format!("black{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::exists());
+
+    // Create a man_dir which located at bin_dir/../share/man
+    let man_dir = bin_dir.join("..").join("share").join("man");
+    fs_err::create_dir_all(&man_dir).unwrap();
+
+    // Install `pycowsay` and ensure its manpage is installed to `man_dir`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pycowsay==0.0.0.2
+    Installed 1 executable: pycowsay
+    Installed 1 manpage: man6/pycowsay.6
+    "###);
+
+    assert!(man_dir.join("man6").join("pycowsay.6").exists());
 }
 
 /// Test `uv tool install` when the bin directory is set by `$UV_TOOL_BIN_DIR`
@@ -1360,6 +1505,31 @@ fn tool_install_tool_bin_dir() {
     bin_dir
         .child(format!("black{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::exists());
+
+    // Create a man_dir which located at bin_dir/../share/man
+    let man_dir = bin_dir.join("..").join("share").join("man");
+    fs_err::create_dir_all(&man_dir).unwrap();
+
+    // Install `pycowsay` and ensure its manpage is installed to `man_dir`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("UV_TOOL_BIN_DIR", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pycowsay==0.0.0.2
+    Installed 1 executable: pycowsay
+    Installed 1 manpage: man6/pycowsay.6
+    "###);
+
+    assert!(man_dir.join("man6").join("pycowsay.6").exists());
 }
 
 /// Test installing a tool that lacks entrypoints

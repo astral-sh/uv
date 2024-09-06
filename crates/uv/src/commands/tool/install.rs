@@ -27,7 +27,7 @@ use crate::commands::project::{
 };
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::tool::Target;
-use crate::commands::{reporters::PythonDownloadReporter, tool::common::install_executables};
+use crate::commands::{reporters::PythonDownloadReporter, tool::common::install_resources};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -402,7 +402,7 @@ pub(crate) async fn install(
         .await?
     };
 
-    install_executables(
+    install_resources(
         &environment,
         &from.name,
         &installed_tools,
