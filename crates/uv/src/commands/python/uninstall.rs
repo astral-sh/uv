@@ -148,7 +148,13 @@ async fn do_uninstall(
                 "{}",
                 format!(
                     "Uninstalled {} {}",
-                    format!("Python {}", uninstalled.version()).bold(),
+                    format!(
+                        "Python {}",
+                        uninstalled.version().expect(
+                            "Managed Python installations should always have valid versions"
+                        )
+                    )
+                    .bold(),
                     format!("in {}", elapsed(start.elapsed())).dimmed()
                 )
                 .dimmed()
