@@ -4,7 +4,6 @@ use std::fmt::Formatter;
 use std::path::{Path, PathBuf};
 
 use either::Either;
-use petgraph::graph::NodeIndex;
 use petgraph::visit::IntoNodeReferences;
 use petgraph::{Directed, Graph};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -13,7 +12,7 @@ use url::Url;
 use distribution_filename::{DistExtension, SourceDistExtension};
 use pep508_rs::MarkerTree;
 use pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
-use uv_configuration::ExtrasSpecification;
+use uv_configuration::{ExtrasSpecification, InstallOptions};
 use uv_fs::Simplified;
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -24,11 +23,16 @@ use crate::{Lock, LockError};
 
 type LockGraph<'lock> = Graph<&'lock Package, Edge, Directed>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Node<'lock> {
+    package: &'lock Package,
+    marker: MarkerTree,
+}
+
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
 #[derive(Debug)]
 pub struct RequirementsTxtExport<'lock> {
-    graph: LockGraph<'lock>,
-    reachability: FxHashMap<NodeIndex, MarkerTree>,
+    nodes: Vec<Node<'lock>>,
     hashes: bool,
 }
 
@@ -39,6 +43,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         extras: &ExtrasSpecification,
         dev: &[GroupName],
         hashes: bool,
+        install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
         let size_guess = lock.packages.len();
         let mut petgraph = LockGraph::with_capacity(size_guess, size_guess);
@@ -123,28 +128,33 @@ impl<'lock> RequirementsTxtExport<'lock> {
             }
         }
 
-        let reachability = marker_reachability(&petgraph, &[]);
+        let mut reachability = marker_reachability(&petgraph, &[]);
 
-        Ok(Self {
-            graph: petgraph,
-            reachability,
-            hashes,
-        })
+        // Collect all packages.
+        let mut nodes: Vec<Node> = petgraph
+            .node_references()
+            .filter(|(_index, package)| {
+                install_options.include_package(&package.id.name, root_name, lock.members())
+            })
+            .map(|(index, package)| Node {
+                package,
+                marker: reachability.remove(&index).unwrap_or_default(),
+            })
+            .collect::<Vec<_>>();
+
+        // Sort the nodes, such that unnamed URLs (editables) appear at the top.
+        nodes.sort_unstable_by(|a, b| {
+            NodeComparator::from(a.package).cmp(&NodeComparator::from(b.package))
+        });
+
+        Ok(Self { nodes, hashes })
     }
 }
 
 impl std::fmt::Display for RequirementsTxtExport<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // Collect all packages.
-        let mut nodes = self.graph.node_references().collect::<Vec<_>>();
-
-        // Sort the nodes, such that unnamed URLs (editables) appear at the top.
-        nodes.sort_unstable_by(|(_, a), (_, b)| {
-            NodeComparator::from(**a).cmp(&NodeComparator::from(**b))
-        });
-
         // Write out each package.
-        for (node_index, package) in nodes {
+        for Node { package, marker } in &self.nodes {
             match &package.id.source {
                 Source::Registry(_) => {
                     write!(f, "{}=={}", package.id.name, package.id.version)?;
@@ -201,7 +211,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                 }
             }
 
-            if let Some(contents) = self.reachability[&node_index].contents() {
+            if let Some(contents) = marker.contents() {
                 write!(f, " ; {contents}")?;
             }
 

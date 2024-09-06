@@ -1857,6 +1857,18 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit development dependencies</p>
 
+</dd><dt><code>--no-emit-package</code> <i>no-emit-package</i></dt><dd><p>Do not emit the given package(s).</p>
+
+<p>By default, all of the project&#8217;s dependencies are included in the exported requirements file. The <code>--no-install-package</code> option allows exclusion of specific packages.</p>
+
+</dd><dt><code>--no-emit-project</code></dt><dd><p>Do not emit the current project.</p>
+
+<p>By default, the current project is included in the exported requirements file with all of its dependencies. The <code>--no-emit-project</code> option allows the project to be excluded, but all of its dependencies to remain included.</p>
+
+</dd><dt><code>--no-emit-workspace</code></dt><dd><p>Do not emit any workspace members, including the root project.</p>
+
+<p>By default, all workspace members and their dependencies are included in the exported requirements file, with all of their dependencies. The <code>--no-emit-workspace</code> option allows exclusion of all the workspace members while retaining their dependencies.</p>
+
 </dd><dt><code>--no-hashes</code></dt><dd><p>Omit hashes in the generated output</p>
 
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
