@@ -3131,9 +3131,12 @@ fn invalidate_path_on_cache_key() -> Result<()> {
         requires-python = ">=3.8"
 
         [tool.uv]
-        cache-keys = ["constraints.txt"]
+        cache-keys = ["constraints.txt", { file = "requirements.txt" }]
 "#,
     )?;
+
+    let requirements_txt = editable_dir.child("requirements.txt");
+    requirements_txt.write_str("idna")?;
 
     let constraints_txt = editable_dir.child("constraints.txt");
     constraints_txt.write_str("idna<3.4")?;
@@ -3171,6 +3174,121 @@ fn invalidate_path_on_cache_key() -> Result<()> {
 
     // Modify the constraints file.
     constraints_txt.write_str("idna<3.5")?;
+
+    // Re-installing should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    // Modify the requirements file.
+    requirements_txt.write_str("flask")?;
+
+    // Re-installing should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalidate_path_on_commit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package.
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
+
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ git = true }]
+"#,
+    )?;
+
+    // Create a Git repository.
+    context
+        .temp_dir
+        .child(".git")
+        .child("HEAD")
+        .write_str("ref: refs/heads/main")?;
+    context
+        .temp_dir
+        .child(".git")
+        .child("refs")
+        .child("heads")
+        .child("main")
+        .write_str("1b6638fdb424e993d8354e75c55a3e524050c857")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Re-installing should be a no-op.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Change the current commit.
+    context
+        .temp_dir
+        .child(".git")
+        .child("refs")
+        .child("heads")
+        .child("main")
+        .write_str("a1a42cbd10d83bafd8600ba81f72bbef6c579385")?;
 
     // Re-installing should update the package.
     uv_snapshot!(context.filters(), context.pip_install()

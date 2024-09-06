@@ -71,6 +71,7 @@ mod any;
 mod buildable;
 mod cache_info;
 mod cached;
+mod commit_info;
 mod diagnostic;
 mod error;
 mod file;
