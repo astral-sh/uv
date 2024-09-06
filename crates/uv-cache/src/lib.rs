@@ -404,13 +404,13 @@ impl Cache {
                 // If the directory is not a cache bucket, remove it.
                 if CacheBucket::iter().all(|bucket| entry.file_name() != bucket.to_str()) {
                     let path = entry.path();
-                    debug!("Removing dangling cache entry: {}", path.display());
+                    debug!("Removing dangling cache bucket: {}", path.display());
                     summary += rm_rf(path)?;
                 }
             } else {
                 // If the file is not a marker file, remove it.
                 let path = entry.path();
-                debug!("Removing dangling cache entry: {}", path.display());
+                debug!("Removing dangling cache bucket: {}", path.display());
                 summary += rm_rf(path)?;
             }
         }
@@ -422,7 +422,7 @@ impl Cache {
                 for entry in entries {
                     let entry = entry?;
                     let path = fs_err::canonicalize(entry.path())?;
-                    debug!("Removing dangling cache entry: {}", path.display());
+                    debug!("Removing dangling cache environment: {}", path.display());
                     summary += rm_rf(path)?;
                 }
             }
@@ -481,7 +481,7 @@ impl Cache {
                     let entry = entry?;
                     let path = fs_err::canonicalize(entry.path())?;
                     if !references.contains(&path) {
-                        debug!("Removing dangling cache entry: {}", path.display());
+                        debug!("Removing dangling cache archive: {}", path.display());
                         summary += rm_rf(path)?;
                     }
                 }
