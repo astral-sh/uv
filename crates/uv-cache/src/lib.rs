@@ -18,7 +18,7 @@ use uv_normalize::PackageName;
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
-use crate::removal::{rm_rf, Removal};
+pub use crate::removal::{rm_rf, Removal};
 pub use crate::timestamp::Timestamp;
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
@@ -458,9 +458,7 @@ impl Cache {
             }
         }
 
-        // Third, remove any unused archives (by searching for archives that are not symlinked).
-        // TODO(charlie): Remove any unused source distributions. This requires introspecting the
-        // cache contents, e.g., reading and deserializing the manifests.
+        // Fourth, remove any unused archives (by searching for archives that are not symlinked).
         let mut references = FxHashSet::default();
 
         for bucket in CacheBucket::iter() {

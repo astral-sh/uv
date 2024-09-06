@@ -106,7 +106,7 @@ fn prune_cached_env() {
         .chain([
             // The cache entry does not have a stable key, so we filter it out
             (
-                r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
+                r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
                 "[CACHE_DIR]/$2/[ENTRY]",
             ),
         ])
@@ -151,7 +151,7 @@ fn prune_stale_symlink() -> Result<()> {
         .chain([
             // The cache entry does not have a stable key, so we filter it out
             (
-                r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
+                r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
                 "[CACHE_DIR]/$2/[ENTRY]",
             ),
         ])
@@ -248,6 +248,116 @@ fn prune_unzipped() -> Result<()> {
           hint: Pre-releases are available for iniconfig in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
           hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    "###);
+
+    Ok(())
+}
+
+/// `cache prune` should remove any stale source distribution revisions.
+#[test]
+fn prune_stale_revision() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.temp_dir.child("src").child("__init__.py").touch()?;
+    context.temp_dir.child("README").touch()?;
+
+    // Install the same package twice, with `--reinstall`.
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(".")
+        .arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(".")
+        .arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([
+            // The cache entry does not have a stable key, so we filter it out
+            (
+                r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
+                "[CACHE_DIR]/$2/[ENTRY]",
+            ),
+        ])
+        .collect();
+
+    // Pruning should remove the unused revision.
+    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    Pruning cache at: [CACHE_DIR]/
+    DEBUG Removing dangling source revision: [CACHE_DIR]/built-wheels-v3/[ENTRY]
+    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
+    Removed 8 files ([SIZE])
+    "###);
+
+    // Uninstall and reinstall the package. We should use the cached version.
+    uv_snapshot!(context.filters(), context
+        .pip_uninstall()
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
