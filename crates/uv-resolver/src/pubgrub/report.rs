@@ -720,21 +720,20 @@ impl PubGrubReportFormatter<'_> {
 }
 
 #[derive(Derivative, Debug, Clone)]
-#[derivative(Hash, PartialEq, Eq)]
 pub(crate) enum PubGrubHint {
     /// There are pre-release versions available for a package, but pre-releases weren't enabled
     /// for that package.
     ///
     PrereleaseAvailable {
         package: PubGrubPackage,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         version: Version,
     },
     /// A requirement included a pre-release marker, but pre-releases weren't enabled for that
     /// package.
     PrereleaseRequested {
         package: PubGrubPackage,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         range: Range<Version>,
     },
     /// Requirements were unavailable due to lookups in the index being disabled and no extra
@@ -747,58 +746,160 @@ pub(crate) enum PubGrubHint {
     /// Metadata for a package could not be parsed.
     InvalidPackageMetadata {
         package: PubGrubPackage,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         reason: String,
     },
     /// The structure of a package was invalid (e.g., multiple `.dist-info` directories).
     InvalidPackageStructure {
         package: PubGrubPackage,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         reason: String,
     },
     /// Metadata for a package version could not be found.
     MissingVersionMetadata {
         package: PubGrubPackage,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         version: Version,
     },
     /// Metadata for a package version could not be parsed.
     InvalidVersionMetadata {
         package: PubGrubPackage,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         version: Version,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         reason: String,
     },
     /// Metadata for a package version was inconsistent (e.g., the package name did not match that
     /// of the file).
     InconsistentVersionMetadata {
         package: PubGrubPackage,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         version: Version,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         reason: String,
     },
     /// The structure of a package version was invalid (e.g., multiple `.dist-info` directories).
     InvalidVersionStructure {
         package: PubGrubPackage,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         version: Version,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         reason: String,
     },
     /// The `Requires-Python` requirement was not satisfied.
     RequiresPython {
         source: PythonRequirementSource,
         requires_python: RequiresPython,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         package: PubGrubPackage,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         package_set: Range<Version>,
-        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        // excluded from `PartialEq` and `Hash`
         package_requires_python: Range<Version>,
     },
 }
+
+/// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
+/// used for `Eq` and `Hash` implementations. It is used to derive `PartialEq` and
+/// `Hash` implementations for [`PubGrubHint`].
+#[derive(PartialEq, Eq, Hash)]
+enum PubGrubHintCore {
+    PrereleaseAvailable {
+        package: PubGrubPackage,
+    },
+    PrereleaseRequested {
+        package: PubGrubPackage,
+    },
+    NoIndex,
+    Offline,
+    MissingPackageMetadata {
+        package: PubGrubPackage,
+    },
+    InvalidPackageMetadata {
+        package: PubGrubPackage,
+    },
+    InvalidPackageStructure {
+        package: PubGrubPackage,
+    },
+    MissingVersionMetadata {
+        package: PubGrubPackage,
+    },
+    InvalidVersionMetadata {
+        package: PubGrubPackage,
+    },
+    InconsistentVersionMetadata {
+        package: PubGrubPackage,
+    },
+    InvalidVersionStructure {
+        package: PubGrubPackage,
+    },
+    RequiresPython {
+        source: PythonRequirementSource,
+        requires_python: RequiresPython,
+    },
+}
+
+impl From<PubGrubHint> for PubGrubHintCore {
+    #[inline]
+    fn from(hint: PubGrubHint) -> Self {
+        match hint {
+            PubGrubHint::PrereleaseAvailable { package, .. } => {
+                Self::PrereleaseAvailable { package }
+            }
+            PubGrubHint::PrereleaseRequested { package, .. } => {
+                Self::PrereleaseRequested { package }
+            }
+            PubGrubHint::NoIndex => Self::NoIndex,
+            PubGrubHint::Offline => Self::Offline,
+            PubGrubHint::MissingPackageMetadata { package, .. } => {
+                Self::MissingPackageMetadata { package }
+            }
+            PubGrubHint::InvalidPackageMetadata { package, .. } => {
+                Self::InvalidPackageMetadata { package }
+            }
+            PubGrubHint::InvalidPackageStructure { package, .. } => {
+                Self::InvalidPackageStructure { package }
+            }
+            PubGrubHint::MissingVersionMetadata { package, .. } => {
+                Self::MissingVersionMetadata { package }
+            }
+            PubGrubHint::InvalidVersionMetadata { package, .. } => {
+                Self::InvalidVersionMetadata { package }
+            }
+            PubGrubHint::InconsistentVersionMetadata { package, .. } => {
+                Self::InconsistentVersionMetadata { package }
+            }
+            PubGrubHint::InvalidVersionStructure { package, .. } => {
+                Self::InvalidVersionStructure { package }
+            }
+            PubGrubHint::RequiresPython {
+                source,
+                requires_python,
+                ..
+            } => Self::RequiresPython {
+                source,
+                requires_python,
+            },
+        }
+    }
+}
+
+impl std::hash::Hash for PubGrubHint {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let core = PubGrubHintCore::from(self.clone());
+        core.hash(state);
+    }
+}
+
+impl PartialEq for PubGrubHint {
+    fn eq(&self, other: &Self) -> bool {
+        let core = PubGrubHintCore::from(self.clone());
+        let other_core = PubGrubHintCore::from(other.clone());
+        core == other_core
+    }
+}
+
+impl Eq for PubGrubHint {}
 
 impl std::fmt::Display for PubGrubHint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
