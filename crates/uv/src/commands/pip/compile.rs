@@ -1,9 +1,7 @@
-use std::borrow::Cow;
 use std::env;
-use std::io::stdout;
 use std::path::Path;
 
-use anstream::{eprint, AutoStream};
+use anstream::eprint;
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -43,7 +41,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_environment};
-use crate::commands::ExitStatus;
+use crate::commands::{ExitStatus, OutputWriter};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
@@ -620,55 +618,4 @@ fn cmd(
         .flatten()
         .join(" ");
     format!("uv {args}")
-}
-
-/// A multicasting writer that writes to both the standard output and an output file, if present.
-#[allow(clippy::disallowed_types)]
-struct OutputWriter<'a> {
-    stdout: Option<AutoStream<std::io::Stdout>>,
-    output_file: Option<&'a Path>,
-    buffer: Vec<u8>,
-}
-
-#[allow(clippy::disallowed_types)]
-impl<'a> OutputWriter<'a> {
-    /// Create a new output writer.
-    fn new(include_stdout: bool, output_file: Option<&'a Path>) -> Self {
-        let stdout = include_stdout.then(|| AutoStream::<std::io::Stdout>::auto(stdout()));
-        Self {
-            stdout,
-            output_file,
-            buffer: Vec::new(),
-        }
-    }
-
-    /// Write the given arguments to both standard output and the output buffer, if present.
-    fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> std::io::Result<()> {
-        use std::io::Write;
-
-        // Write to the buffer.
-        if self.output_file.is_some() {
-            self.buffer.write_fmt(args)?;
-        }
-
-        // Write to standard output.
-        if let Some(stdout) = &mut self.stdout {
-            write!(stdout, "{args}")?;
-        }
-
-        Ok(())
-    }
-
-    /// Commit the buffer to the output file.
-    async fn commit(self) -> std::io::Result<()> {
-        if let Some(output_file) = self.output_file {
-            // If the output file is an existing symlink, write to the destination instead.
-            let output_file = fs_err::read_link(output_file)
-                .map(Cow::Owned)
-                .unwrap_or(Cow::Borrowed(output_file));
-            let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
-            uv_fs::write_atomic(output_file, &stream).await?;
-        }
-        Ok(())
-    }
 }
