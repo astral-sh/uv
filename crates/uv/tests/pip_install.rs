@@ -3225,7 +3225,8 @@ fn invalidate_path_on_commit() -> Result<()> {
 
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
-        r#"[project]
+        r#"
+        [project]
         name = "example"
         version = "0.0.0"
         dependencies = ["anyio==4.0.0"]
@@ -3233,7 +3234,7 @@ fn invalidate_path_on_commit() -> Result<()> {
 
         [tool.uv]
         cache-keys = [{ git = true }]
-"#,
+        "#,
     )?;
 
     // Create a Git repository.

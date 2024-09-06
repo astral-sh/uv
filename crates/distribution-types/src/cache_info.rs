@@ -1,4 +1,4 @@
-use crate::commit_info::CommitInfo;
+use crate::commit_info::Commit;
 use crate::timestamp::Timestamp;
 
 use serde::Deserialize;
@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 #[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct CacheInfo {
     timestamp: Option<Timestamp>,
-    commit: Option<CommitInfo>,
+    commit: Option<Commit>,
 }
 
 impl CacheInfo {
@@ -92,7 +92,7 @@ impl CacheInfo {
                     timestamp = max(timestamp, key_timestamp);
                 }
                 CacheKey::Git => {
-                    commit = CommitInfo::from_repository(directory);
+                    commit = Commit::from_repository(directory);
                 }
             }
         }
