@@ -66,7 +66,7 @@ fn prune_stale_directory() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/simple-v4
+    DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
     Removed 1 directory
     "###);
 
@@ -120,8 +120,8 @@ fn prune_cached_env() {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/environments-v1/[ENTRY]
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v1/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     "###);
 }
@@ -165,7 +165,7 @@ fn prune_stale_symlink() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed 44 files ([SIZE])
     "###);
 
@@ -330,7 +330,7 @@ fn prune_stale_revision() -> Result<()> {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/built-wheels-v3/[ENTRY]
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed 8 files ([SIZE])
     "###);
 
