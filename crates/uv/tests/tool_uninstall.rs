@@ -1,7 +1,7 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::PathChild;
+use assert_fs::{assert::PathAssert, fixture::PathChild};
 
 use common::{uv_snapshot, TestContext};
 
@@ -69,10 +69,67 @@ fn tool_uninstall() {
 }
 
 #[test]
+fn tool_uninstall_manpages() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let xdg_data_dir = context.temp_dir.child("xdg_data");
+
+    // Install `pycowsay`
+    context
+        .tool_install()
+        .arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("XDG_DATA_HOME", xdg_data_dir.as_os_str())
+        .assert()
+        .success();
+
+    xdg_data_dir
+        .child("man")
+        .child("man6")
+        .child("pycowsay.6")
+        .assert(predicates::path::exists());
+
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("pycowsay")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("XDG_DATA_HOME", xdg_data_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 executable: pycowsay
+    Uninstalled 1 manpage: man6/pycowsay.6
+    "###);
+
+    xdg_data_dir
+        .child("man")
+        .child("man6")
+        .child("pycowsay.6")
+        .assert(predicates::path::missing());
+
+    // After uninstalling the tool, it shouldn't be listed.
+    uv_snapshot!(context.filters(), context.tool_list()
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    No tools installed
+    "###);
+}
+
+#[test]
 fn tool_uninstall_multiple_names() {
     let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
+    let man_dir = bin_dir.join("..").join("share").join("man");
+    fs_err::create_dir_all(&man_dir).unwrap();
 
     // Install `black`
     context
@@ -85,13 +142,13 @@ fn tool_uninstall_multiple_names() {
 
     context
         .tool_install()
-        .arg("ruff==0.3.4")
+        .arg("pycowsay")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black").arg("ruff")
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black").arg("pycowsay")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
@@ -99,7 +156,8 @@ fn tool_uninstall_multiple_names() {
     ----- stdout -----
 
     ----- stderr -----
-    Uninstalled 3 executables: black, blackd, ruff
+    Uninstalled 3 executables: black, blackd, pycowsay
+    Uninstalled 1 manpage: man6/pycowsay.6
     "###);
 
     // After uninstalling the tool, it shouldn't be listed.
