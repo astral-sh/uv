@@ -2970,6 +2970,29 @@ pub struct ExportArgs {
     #[arg(long, short)]
     pub output_file: Option<PathBuf>,
 
+    /// Do not emit the current project.
+    ///
+    /// By default, the current project is included in the exported requirements file with all of its
+    /// dependencies. The `--no-emit-project` option allows the project to be excluded, but all of
+    /// its dependencies to remain included.
+    #[arg(long, alias = "no-install-project")]
+    pub no_emit_project: bool,
+
+    /// Do not emit any workspace members, including the root project.
+    ///
+    /// By default, all workspace members and their dependencies are included in the exported
+    /// requirements file, with all of their dependencies. The `--no-emit-workspace` option allows
+    /// exclusion of all the workspace members while retaining their dependencies.
+    #[arg(long, alias = "no-install-workspace")]
+    pub no_emit_workspace: bool,
+
+    /// Do not emit the given package(s).
+    ///
+    /// By default, all of the project's dependencies are included in the exported requirements
+    /// file. The `--no-install-package` option allows exclusion of specific packages.
+    #[arg(long, alias = "no-install-package")]
+    pub no_emit_package: Vec<PackageName>,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or

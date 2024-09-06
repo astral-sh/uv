@@ -1323,6 +1323,7 @@ async fn run_project(
                 args.format,
                 args.package,
                 args.hashes,
+                args.install_options,
                 args.output_file,
                 args.extras,
                 args.dev,

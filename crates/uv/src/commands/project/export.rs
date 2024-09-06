@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, ExportFormat, ExtrasSpecification};
+use uv_configuration::{Concurrency, ExportFormat, ExtrasSpecification, InstallOptions};
 use uv_fs::CWD;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
@@ -24,6 +24,7 @@ pub(crate) async fn export(
     format: ExportFormat,
     package: Option<PackageName>,
     hashes: bool,
+    install_options: InstallOptions,
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
     dev: bool,
@@ -125,6 +126,7 @@ pub(crate) async fn export(
                 &extras,
                 &dev,
                 hashes,
+                &install_options,
             )?;
             writeln!(
                 writer,
