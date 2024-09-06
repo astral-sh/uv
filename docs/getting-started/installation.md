@@ -103,6 +103,14 @@ uv is available in the core Homebrew packages.
 $ brew install uv
 ```
 
+### Snap
+
+uv is available on linux via [snap](https://snapcraft.io/astral-uv).
+
+```console
+$ snap install --classic astral-uv
+```
+
 ### Winget
 
 uv is available via [winget](https://winstall.app/apps/astral-sh.uv).
