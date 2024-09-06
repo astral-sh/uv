@@ -2966,7 +2966,7 @@ pub struct ExportArgs {
     #[arg(long, overrides_with("hashes"))]
     pub no_hashes: bool,
 
-    /// Write the compiled requirements to the given `requirements.txt` file.
+    /// Write the exported requirements to the given file.
     #[arg(long, short)]
     pub output_file: Option<PathBuf>,
 
