@@ -1885,7 +1885,7 @@ uv export [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--output-file</code>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the compiled requirements to the given <code>requirements.txt</code> file</p>
+</dd><dt><code>--output-file</code>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the exported requirements to the given file</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Export the dependencies for a specific package in the workspace.</p>
 
