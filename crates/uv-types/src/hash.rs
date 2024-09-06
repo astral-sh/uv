@@ -219,15 +219,35 @@ impl HashStrategy {
                     .collect::<Result<Vec<_>, _>>()?
             };
 
-            // Under `--require-hashes`, every requirement must include a hash.
-            if digests.is_empty() {
-                if mode.is_require() {
-                    if constraint_hashes.get(&id).map_or(true, Vec::is_empty) {
-                        return Err(HashStrategyError::MissingHashes(
+            let digests = if let Some(constraint) = constraint_hashes.remove(&id) {
+                if digests.is_empty() {
+                    // If there are _only_ hashes on the constraints, use them.
+                    constraint
+                } else {
+                    // If there are constraint and requirement hashes, take the intersection.
+                    let intersection: Vec<_> = digests
+                        .into_iter()
+                        .filter(|digest| constraint.contains(digest))
+                        .collect();
+                    if intersection.is_empty() {
+                        return Err(HashStrategyError::NoIntersection(
                             requirement.to_string(),
                             mode,
                         ));
                     }
+                    intersection
+                }
+            } else {
+                digests
+            };
+
+            // Under `--require-hashes`, every requirement must include a hash.
+            if digests.is_empty() {
+                if mode.is_require() {
+                    return Err(HashStrategyError::MissingHashes(
+                        requirement.to_string(),
+                        mode,
+                    ));
                 }
                 continue;
             }
@@ -235,7 +255,8 @@ impl HashStrategy {
             requirement_hashes.insert(id, digests);
         }
 
-        // Merge the hashes, preferring requirements over constraints, to match pip.
+        // Merge the hashes, preferring requirements over constraints, since overlapping
+        // requirements were already merged.
         let hashes: FxHashMap<VersionId, Vec<HashDigest>> = constraint_hashes
             .into_iter()
             .chain(requirement_hashes)
@@ -311,4 +332,6 @@ pub enum HashStrategyError {
     UnpinnedRequirement(String, HashCheckingMode),
     #[error("In `{1}` mode, all requirements must have a hash, but none were provided for: {0}")]
     MissingHashes(String, HashCheckingMode),
+    #[error("In `{1}` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: {0}")]
+    NoIntersection(String, HashCheckingMode),
 }

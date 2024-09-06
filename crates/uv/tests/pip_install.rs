@@ -5199,8 +5199,7 @@ fn require_hashes_constraint() -> Result<()> {
     "###
     );
 
-    // Include the wrong hash in the requirements file, but the right hash in constraints. This
-    // should fail.
+    // Include an empty intersection. This should fail.
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -5224,21 +5223,11 @@ fn require_hashes_constraint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
-      Caused by: Hash mismatch for `anyio==4.0.0`
-
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+    error: In `--require-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: anyio==4.0.0
     "###
     );
 
-    // Include the right hash in the requirements file, but the wrong hash in constraints. This
-    // should succeed.
+    // Include the right hash in both files.
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -5247,7 +5236,38 @@ fn require_hashes_constraint() -> Result<()> {
     )?;
 
     let constraints_txt = context.temp_dir.child("constraints.txt");
-    constraints_txt.write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+    constraints_txt.write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--no-deps")
+        .arg("--require-hashes")
+        .arg("-c")
+        .arg(constraints_txt.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
+    "###
+    );
+
+    // Include the right hash in both files, along with an irrelevant, wrong hash.
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
     // Install the editable packages.
     uv_snapshot!(context.pip_install()
