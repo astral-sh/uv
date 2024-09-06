@@ -2764,9 +2764,37 @@ fn config_settings() {
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
 
-    // Install the editable package with `--editable_mode=compat`.
-    let context = TestContext::new("3.12");
+    // Reinstalling with `--editable_mode=compat` should be a no-op; changes in build configuration
+    // don't invalidate the environment.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/setuptools_editable"))
+        .arg("-C")
+        .arg("editable_mode=compat")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Uninstall the package.
+    uv_snapshot!(context.pip_uninstall()
+        .arg("setuptools-editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - setuptools-editable==0.1.0 (from file:///Users/crmarsh/workspace/uv/scripts/packages/setuptools_editable)
+    "###);
+
+    // Install the editable package with `--editable_mode=compat`. We should ignore the cached
+    // build configuration and rebuild.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("scripts/packages/setuptools_editable"))
@@ -2779,9 +2807,8 @@ fn config_settings() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + iniconfig==2.0.0
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
     "###
     );

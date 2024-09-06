@@ -58,9 +58,16 @@ impl<'a> BuiltWheelIndex<'a> {
             return Ok(None);
         }
 
-        // TODO(charlie): If we have build configuration, only consider wheels that were built under
-        // the specified settings.
-        Ok(self.find(&cache_shard.shard(revision.id())))
+        let cache_shard = cache_shard.shard(revision.id());
+
+        // If there are build settings, we need to scope to a cache shard.
+        let cache_shard = if self.build_configuration.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_key::cache_digest(self.build_configuration))
+        };
+
+        Ok(self.find(&cache_shard))
     }
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a local path.
     pub fn path(&self, source_dist: &PathSourceDist) -> Result<Option<CachedWheel>, Error> {
@@ -88,10 +95,17 @@ impl<'a> BuiltWheelIndex<'a> {
             return Ok(None);
         }
 
-        // TODO(charlie): If we have build configuration, only consider wheels that were built under
-        // the specified settings.
+        let cache_shard = cache_shard.shard(revision.id());
+
+        // If there are build settings, we need to scope to a cache shard.
+        let cache_shard = if self.build_configuration.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_key::cache_digest(self.build_configuration))
+        };
+
         Ok(self
-            .find(&cache_shard.shard(revision.id()))
+            .find(&cache_shard)
             .map(|wheel| wheel.with_cache_info(cache_info)))
     }
 
@@ -130,10 +144,17 @@ impl<'a> BuiltWheelIndex<'a> {
             return Ok(None);
         }
 
-        // TODO(charlie): If we have build configuration, only consider wheels that were built under
-        // the specified settings.
+        let cache_shard = cache_shard.shard(revision.id());
+
+        // If there are build settings, we need to scope to a cache shard.
+        let cache_shard = if self.build_configuration.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_key::cache_digest(self.build_configuration))
+        };
+
         Ok(self
-            .find(&cache_shard.shard(revision.id()))
+            .find(&cache_shard)
             .map(|wheel| wheel.with_cache_info(cache_info)))
     }
 
@@ -151,8 +172,13 @@ impl<'a> BuiltWheelIndex<'a> {
             WheelCache::Git(&source_dist.url, &git_sha.to_short_string()).root(),
         );
 
-        // TODO(charlie): If we have build configuration, only consider wheels that were built under
-        // the specified settings.
+        // If there are build settings, we need to scope to a cache shard.
+        let cache_shard = if self.build_configuration.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_key::cache_digest(self.build_configuration))
+        };
+
         self.find(&cache_shard)
     }
 

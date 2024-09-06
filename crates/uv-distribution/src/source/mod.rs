@@ -426,6 +426,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
 
+        // If there are build settings, we need to scope to a cache shard.
+        let config_settings = self.build_context.config_settings();
+        let cache_shard = if config_settings.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_key::cache_digest(config_settings))
+        };
+
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
             return Ok(built_wheel.with_revision(revision));
@@ -512,19 +520,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             });
         }
 
-        // If there are build settings, we need to scope to a cache shard.
-        let config_settings = self.build_context.config_settings();
-        let cache_key = if config_settings.is_empty() {
-            None
-        } else {
-            Some(cache_key::cache_digest(config_settings))
-        };
-        let cache_shard = if let Some(cache_key) = cache_key {
-            cache_shard.shard(cache_key)
-        } else {
-            cache_shard
-        };
-
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
@@ -534,6 +529,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 hashes: revision.into_hashes(),
             });
         }
+
+        // If there are build settings, we need to scope to a cache shard.
+        let config_settings = self.build_context.config_settings();
+        let cache_shard = if config_settings.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_key::cache_digest(config_settings))
+        };
 
         // Otherwise, we either need to build the metadata.
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
@@ -686,15 +689,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
-        let cache_key = if config_settings.is_empty() {
-            None
-        } else {
-            Some(cache_key::cache_digest(config_settings))
-        };
-        let cache_shard = if let Some(cache_key) = cache_key {
-            cache_shard.shard(cache_key)
-        } else {
+        let cache_shard = if config_settings.is_empty() {
             cache_shard
+        } else {
+            cache_shard.shard(cache_key::cache_digest(config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -809,6 +807,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 hashes: revision.into_hashes(),
             });
         }
+
+        // If there are build settings, we need to scope to a cache shard.
+        let config_settings = self.build_context.config_settings();
+        let cache_shard = if config_settings.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_key::cache_digest(config_settings))
+        };
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -925,15 +931,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
-        let cache_key = if config_settings.is_empty() {
-            None
-        } else {
-            Some(cache_key::cache_digest(config_settings))
-        };
-        let cache_shard = if let Some(cache_key) = cache_key {
-            cache_shard.shard(cache_key)
-        } else {
+        let cache_shard = if config_settings.is_empty() {
             cache_shard
+        } else {
+            cache_shard.shard(cache_key::cache_digest(config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -1024,19 +1025,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
 
-        // If there are build settings, we need to scope to a cache shard.
-        let config_settings = self.build_context.config_settings();
-        let cache_key = if config_settings.is_empty() {
-            None
-        } else {
-            Some(cache_key::cache_digest(config_settings))
-        };
-        let cache_shard = if let Some(cache_key) = cache_key {
-            cache_shard.shard(cache_key)
-        } else {
-            cache_shard
-        };
-
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
@@ -1074,6 +1062,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?,
             ));
         }
+
+        // If there are build settings, we need to scope to a cache shard.
+        let config_settings = self.build_context.config_settings();
+        let cache_shard = if config_settings.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_key::cache_digest(config_settings))
+        };
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -1181,8 +1177,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             CacheBucket::SourceDistributions,
             WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
         );
+        let metadata_entry = cache_shard.entry(METADATA);
 
         let _lock = lock_shard(&cache_shard).await?;
+
+        // If there are build settings, we need to scope to a cache shard.
+        let config_settings = self.build_context.config_settings();
+        let cache_shard = if config_settings.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_key::cache_digest(config_settings))
+        };
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
@@ -1205,7 +1210,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Store the metadata.
-        let metadata_entry = cache_shard.entry(METADATA);
         write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
             .await
             .map_err(Error::CacheWrite)?;
@@ -1252,6 +1256,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             CacheBucket::SourceDistributions,
             WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
         );
+        let metadata_entry = cache_shard.entry(METADATA);
 
         let _lock = lock_shard(&cache_shard).await?;
 
@@ -1270,8 +1275,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If the cache contains compatible metadata, return it.
-        let metadata_entry = cache_shard.entry(METADATA);
-
         if self
             .build_context
             .cache()
@@ -1311,6 +1314,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
             ));
         }
+
+        // If there are build settings, we need to scope to a cache shard.
+        let config_settings = self.build_context.config_settings();
+        let cache_shard = if config_settings.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_key::cache_digest(config_settings))
+        };
 
         // Otherwise, we need to build a wheel.
         let task = self
