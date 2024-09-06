@@ -4812,6 +4812,7 @@ dependencies = [
  "uv-types",
  "uv-warnings",
  "uv-workspace",
+ "walkdir",
  "zip",
 ]
 

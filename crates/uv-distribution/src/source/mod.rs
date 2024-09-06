@@ -22,7 +22,8 @@ use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
 use pypi_types::{HashDigest, Metadata12, Metadata23, RequiresTxt};
 use uv_cache::{
-    ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Timestamp, WheelCache,
+    ArchiveTimestamp, Cache, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Removal,
+    Timestamp, WheelCache,
 };
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -1608,6 +1609,78 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .build()
     }
+}
+
+/// Prune any unused source distributions from the cache.
+pub fn prune(cache: &Cache) -> Result<Removal, Error> {
+    let mut removal = Removal::default();
+
+    let bucket = cache.bucket(CacheBucket::SourceDistributions);
+    if bucket.is_dir() {
+        for entry in walkdir::WalkDir::new(bucket) {
+            let entry = entry.map_err(Error::CacheWalk)?;
+
+            // If we find a `revision.http` file, read the pointer, and remove any extraneous
+            // directories.
+            if entry.file_name() == "revision.http" {
+                let pointer = HttpRevisionPointer::read_from(entry.path())?;
+                if let Some(pointer) = pointer {
+                    // Remove all sibling directories that are not referenced by the pointer.
+                    for sibling in entry
+                        .path()
+                        .parent()
+                        .unwrap()
+                        .read_dir()
+                        .map_err(Error::CacheRead)?
+                    {
+                        let sibling = sibling.map_err(Error::CacheRead)?;
+                        if sibling.file_type().map_err(Error::CacheRead)?.is_dir() {
+                            let sibling_name = sibling.file_name();
+                            if sibling_name != pointer.revision.id().as_str() {
+                                debug!(
+                                    "Removing dangling source revision: {}",
+                                    sibling.path().display()
+                                );
+                                removal +=
+                                    uv_cache::rm_rf(sibling.path()).map_err(Error::CacheWrite)?;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If we find a `revision.rev` file, read the pointer, and remove any extraneous
+            // directories.
+            if entry.file_name() == "revision.rev" {
+                let pointer = LocalRevisionPointer::read_from(entry.path())?;
+                if let Some(pointer) = pointer {
+                    // Remove all sibling directories that are not referenced by the pointer.
+                    for sibling in entry
+                        .path()
+                        .parent()
+                        .unwrap()
+                        .read_dir()
+                        .map_err(Error::CacheRead)?
+                    {
+                        let sibling = sibling.map_err(Error::CacheRead)?;
+                        if sibling.file_type().map_err(Error::CacheRead)?.is_dir() {
+                            let sibling_name = sibling.file_name();
+                            if sibling_name != pointer.revision.id().as_str() {
+                                debug!(
+                                    "Removing dangling source revision: {}",
+                                    sibling.path().display()
+                                );
+                                removal +=
+                                    uv_cache::rm_rf(sibling.path()).map_err(Error::CacheWrite)?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(removal)
 }
 
 /// Validate that the source distribution matches the built metadata.
