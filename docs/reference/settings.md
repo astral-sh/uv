@@ -2361,7 +2361,7 @@ The platform for which requirements should be resolved.
 
 Represented as a "target triple", a string that describes the target platform in terms of
 its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-`aaarch64-apple-darwin`.
+`aarch64-apple-darwin`.
 
 **Default value**: `None`
 

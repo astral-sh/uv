@@ -995,7 +995,7 @@ pub struct PipCompileArgs {
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// `aarch64-apple-darwin`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
@@ -1278,7 +1278,7 @@ pub struct PipSyncArgs {
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// `aarch64-apple-darwin`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
@@ -1553,7 +1553,7 @@ pub struct PipInstallArgs {
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// `aarch64-apple-darwin`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
@@ -2899,7 +2899,7 @@ pub struct TreeArgs {
     ///
     /// Represented as a "target triple", a string that describes the target
     /// platform in terms of its CPU, vendor, and operating system name, like
-    /// `x86_64-unknown-linux-gnu` or `aaarch64-apple-darwin`.
+    /// `x86_64-unknown-linux-gnu` or `aarch64-apple-darwin`.
     #[arg(long, conflicts_with = "universal")]
     pub python_platform: Option<TargetTriple>,
 
