@@ -21,8 +21,7 @@ use pypi_types::ResolverMarkerEnvironment;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, Overrides,
-    Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -350,7 +349,6 @@ pub(crate) async fn install(
     link_mode: LinkMode,
     compile: bool,
     index_urls: &IndexLocations,
-    config_settings: &ConfigSettings,
     hasher: &HashStrategy,
     markers: &ResolverMarkerEnvironment,
     tags: &Tags,
@@ -378,7 +376,6 @@ pub(crate) async fn install(
             build_options,
             hasher,
             index_urls,
-            config_settings,
             cache,
             venv,
             markers,

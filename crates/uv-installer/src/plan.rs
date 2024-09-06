@@ -15,7 +15,7 @@ use platform_tags::Tags;
 use pypi_types::{Requirement, RequirementSource, ResolverMarkerEnvironment};
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
-use uv_configuration::{BuildOptions, ConfigSettings, Reinstall};
+use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
@@ -57,7 +57,6 @@ impl<'a> Planner<'a> {
         build_options: &BuildOptions,
         hasher: &HashStrategy,
         index_locations: &IndexLocations,
-        config_settings: &ConfigSettings,
         cache: &Cache,
         venv: &PythonEnvironment,
         markers: &ResolverMarkerEnvironment,
@@ -65,7 +64,7 @@ impl<'a> Planner<'a> {
     ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
         let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations, hasher);
-        let built_index = BuiltWheelIndex::new(cache, tags, hasher, config_settings);
+        let built_index = BuiltWheelIndex::new(cache, tags, hasher);
 
         let mut cached = vec![];
         let mut remote = vec![];

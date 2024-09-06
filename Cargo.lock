@@ -4611,7 +4611,9 @@ dependencies = [
  "fs-err",
  "schemars",
  "serde",
+ "thiserror",
  "toml",
+ "tracing",
 ]
 
 [[package]]
@@ -4785,7 +4787,6 @@ name = "uv-distribution"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "cache-key",
  "distribution-filename",
  "distribution-types",
  "fs-err",

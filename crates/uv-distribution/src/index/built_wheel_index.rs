@@ -7,7 +7,6 @@ use distribution_types::{
 use platform_tags::Tags;
 use uv_cache::{Cache, CacheBucket, CacheShard, WheelCache};
 use uv_cache_info::CacheInfo;
-use uv_configuration::ConfigSettings;
 use uv_fs::symlinks;
 use uv_types::HashStrategy;
 
@@ -17,22 +16,15 @@ pub struct BuiltWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,
     hasher: &'a HashStrategy,
-    build_configuration: &'a ConfigSettings,
 }
 
 impl<'a> BuiltWheelIndex<'a> {
     /// Initialize an index of built distributions.
-    pub fn new(
-        cache: &'a Cache,
-        tags: &'a Tags,
-        hasher: &'a HashStrategy,
-        build_configuration: &'a ConfigSettings,
-    ) -> Self {
+    pub fn new(cache: &'a Cache, tags: &'a Tags, hasher: &'a HashStrategy) -> Self {
         Self {
             cache,
             tags,
             hasher,
-            build_configuration,
         }
     }
 
@@ -60,13 +52,6 @@ impl<'a> BuiltWheelIndex<'a> {
         }
 
         let cache_shard = cache_shard.shard(revision.id());
-
-        // If there are build settings, we need to scope to a cache shard.
-        let cache_shard = if self.build_configuration.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_key::cache_digest(self.build_configuration))
-        };
 
         Ok(self.find(&cache_shard))
     }
@@ -97,13 +82,6 @@ impl<'a> BuiltWheelIndex<'a> {
         }
 
         let cache_shard = cache_shard.shard(revision.id());
-
-        // If there are build settings, we need to scope to a cache shard.
-        let cache_shard = if self.build_configuration.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_key::cache_digest(self.build_configuration))
-        };
 
         Ok(self
             .find(&cache_shard)
@@ -147,13 +125,6 @@ impl<'a> BuiltWheelIndex<'a> {
 
         let cache_shard = cache_shard.shard(revision.id());
 
-        // If there are build settings, we need to scope to a cache shard.
-        let cache_shard = if self.build_configuration.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_key::cache_digest(self.build_configuration))
-        };
-
         Ok(self
             .find(&cache_shard)
             .map(|wheel| wheel.with_cache_info(cache_info)))
@@ -172,13 +143,6 @@ impl<'a> BuiltWheelIndex<'a> {
             CacheBucket::SourceDistributions,
             WheelCache::Git(&source_dist.url, &git_sha.to_short_string()).root(),
         );
-
-        // If there are build settings, we need to scope to a cache shard.
-        let cache_shard = if self.build_configuration.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_key::cache_digest(self.build_configuration))
-        };
 
         self.find(&cache_shard)
     }

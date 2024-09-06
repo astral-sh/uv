@@ -2,7 +2,7 @@
 name = "install-wheel-rs"
 version = "0.0.1"
 publish = false
-description = "Takes a wheel and installs it, either in a venv or for monotrail"
+description = "Takes a wheel and installs it."
 keywords = ["wheel", "python"]
 
 edition = { workspace = true }

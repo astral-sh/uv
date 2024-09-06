@@ -1,20 +1,38 @@
 use std::path::{Path, PathBuf};
 
-/// The current commit for a repository.
-#[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-pub(crate) struct Commit(String);
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum CacheCommitError {
+    #[error("The repository at {0} is missing a `.git` directory")]
+    MissingGitDir(PathBuf),
+    #[error("The repository at {0} is missing a `HEAD` file")]
+    MissingHead(PathBuf),
+    #[error("The repository at {0} has an invalid reference: `{1}`")]
+    InvalidRef(PathBuf, String),
+    #[error("The discovered commit has an invalid length (expected 40 characters): `{0}`")]
+    WrongLength(String),
+    #[error("The discovered commit has an invalid character (expected hexadecimal): `{0}`")]
+    WrongDigit(String),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
 
-impl Commit {
-    /// Return the [`Commit`] for the repository at the given path.
-    pub(crate) fn from_repository(path: &Path) -> Option<Self> {
+/// The current commit for a repository (i.e., a 40-character hexadecimal string).
+#[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub(crate) struct CacheCommit(String);
+
+impl CacheCommit {
+    /// Return the [`CacheCommit`] for the repository at the given path.
+    pub(crate) fn from_repository(path: &Path) -> Result<Self, CacheCommitError> {
         // Find the `.git` directory, searching through parent directories if necessary.
         let git_dir = path
             .ancestors()
             .map(|ancestor| ancestor.join(".git"))
-            .find(|git_dir| git_dir.exists())?;
+            .find(|git_dir| git_dir.exists())
+            .ok_or_else(|| CacheCommitError::MissingGitDir(path.to_path_buf()))?;
 
-        let git_head_path = git_head(&git_dir)?;
-        let git_head_contents = fs_err::read_to_string(git_head_path).ok()?;
+        let git_head_path =
+            git_head(&git_dir).ok_or_else(|| CacheCommitError::MissingHead(git_dir.clone()))?;
+        let git_head_contents = fs_err::read_to_string(git_head_path)?;
 
         // The contents are either a commit or a reference in the following formats
         // - "<commit>" when the head is detached
@@ -22,14 +40,25 @@ impl Commit {
         // If a commit, checking if the HEAD file has changed is sufficient
         // If a ref, we need to add the head file for that ref to rebuild on commit
         let mut git_ref_parts = git_head_contents.split_whitespace();
-        let commit_or_ref = git_ref_parts.next()?;
-        if let Some(git_ref) = git_ref_parts.next() {
+        let commit_or_ref = git_ref_parts.next().ok_or_else(|| {
+            CacheCommitError::InvalidRef(git_dir.clone(), git_head_contents.clone())
+        })?;
+        let commit = if let Some(git_ref) = git_ref_parts.next() {
             let git_ref_path = git_dir.join(git_ref);
-            let commit = fs_err::read_to_string(git_ref_path).ok()?;
-            Some(Self(commit))
+            fs_err::read_to_string(git_ref_path)?
         } else {
-            Some(Self(commit_or_ref.to_string()))
+            commit_or_ref.to_string()
+        };
+
+        // The commit should be 40 hexadecimal characters.
+        if commit.len() != 40 {
+            return Err(CacheCommitError::WrongLength(commit));
         }
+        if commit.chars().any(|c| !c.is_ascii_hexdigit()) {
+            return Err(CacheCommitError::WrongDigit(commit));
+        }
+
+        Ok(Self(commit))
     }
 }
 
