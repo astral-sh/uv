@@ -242,9 +242,8 @@ impl PythonInstallationKey {
         &self.implementation
     }
 
-    pub fn version(&self) -> PythonVersion {
+    pub fn version(&self) -> Result<PythonVersion, String> {
         PythonVersion::from_str(&format!("{}.{}.{}", self.major, self.minor, self.patch))
-            .expect("Python installation keys must have valid Python versions")
     }
 
     pub fn arch(&self) -> &Arch {
@@ -338,7 +337,12 @@ impl Ord for PythonInstallationKey {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.implementation
             .cmp(&other.implementation)
-            .then_with(|| self.version().cmp(&other.version()))
+            .then_with(|| {
+                self.major
+                    .cmp(&other.major)
+                    .then_with(|| self.minor.cmp(&other.minor))
+                    .then_with(|| self.patch.cmp(&other.patch))
+            })
             .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
             .then_with(|| self.arch.to_string().cmp(&other.arch.to_string()))
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
