@@ -60,7 +60,7 @@ Request a specific version by including it in the URL:
     disable this behavior, set `INSTALLER_NO_MODIFY_PATH=1`. For example:
 
     ```
-    INSTALLER_NO_MODIFY_PATH=1 bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+    curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
     ```
 
 ### PyPI
