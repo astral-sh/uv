@@ -154,15 +154,19 @@ async fn untar_in<'a>(
     Ok(())
 }
 
-/// Unzip a `.tar.gz` archive into the target directory, without requiring `Seek`.
+/// Unzip a `.tar.*` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
-pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
+pub(crate) async fn untar_compression<
+    R: tokio::io::AsyncRead + Unpin,
+    Decoder: tokio::io::AsyncRead + Unpin,
+>(
     reader: R,
+    decoder: impl Fn(tokio::io::BufReader<R>) -> Decoder,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let mut decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
+    let mut decompressed_bytes = decoder(reader);
 
     let archive = tokio_tar::ArchiveBuilder::new(
         &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
@@ -170,61 +174,6 @@ pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
     .set_preserve_mtime(false)
     .build();
     Ok(untar_in(archive, target.as_ref()).await?)
-}
-
-/// Unzip a `.tar.bz2` archive into the target directory, without requiring `Seek`.
-///
-/// This is useful for unpacking files as they're being downloaded.
-pub async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
-    reader: R,
-    target: impl AsRef<Path>,
-) -> Result<(), Error> {
-    let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let mut decompressed_bytes = async_compression::tokio::bufread::BzDecoder::new(reader);
-
-    let archive = tokio_tar::ArchiveBuilder::new(
-        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
-    )
-    .set_preserve_mtime(false)
-    .build();
-    Ok(untar_in(archive, target.as_ref()).await?)
-}
-
-/// Unzip a `.tar.zst` archive into the target directory, without requiring `Seek`.
-///
-/// This is useful for unpacking files as they're being downloaded.
-pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
-    reader: R,
-    target: impl AsRef<Path>,
-) -> Result<(), Error> {
-    let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let mut decompressed_bytes = async_compression::tokio::bufread::ZstdDecoder::new(reader);
-
-    let archive = tokio_tar::ArchiveBuilder::new(
-        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
-    )
-    .set_preserve_mtime(false)
-    .build();
-    Ok(untar_in(archive, target.as_ref()).await?)
-}
-
-/// Unzip a `.tar.xz` archive into the target directory, without requiring `Seek`.
-///
-/// This is useful for unpacking files as they're being downloaded.
-pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
-    reader: R,
-    target: impl AsRef<Path>,
-) -> Result<(), Error> {
-    let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let mut decompressed_bytes = async_compression::tokio::bufread::XzDecoder::new(reader);
-
-    let archive = tokio_tar::ArchiveBuilder::new(
-        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
-    )
-    .set_preserve_mtime(false)
-    .build();
-    untar_in(archive, target.as_ref()).await?;
-    Ok(())
 }
 
 /// Unzip a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
@@ -239,16 +188,36 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
             unzip(reader, target).await?;
         }
         SourceDistExtension::TarGz => {
-            untar_gz(reader, target).await?;
+            untar_compression(
+                reader,
+                async_compression::tokio::bufread::GzipDecoder::new,
+                target,
+            )
+            .await?;
         }
         SourceDistExtension::TarBz2 => {
-            untar_bz2(reader, target).await?;
+            untar_compression(
+                reader,
+                async_compression::tokio::bufread::BzDecoder::new,
+                target,
+            )
+            .await?;
         }
         SourceDistExtension::TarXz => {
-            untar_xz(reader, target).await?;
+            untar_compression(
+                reader,
+                async_compression::tokio::bufread::XzDecoder::new,
+                target,
+            )
+            .await?;
         }
         SourceDistExtension::TarZst => {
-            untar_zst(reader, target).await?;
+            untar_compression(
+                reader,
+                async_compression::tokio::bufread::ZstdDecoder::new,
+                target,
+            )
+            .await?;
         }
     }
     Ok(())
