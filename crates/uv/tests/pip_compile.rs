@@ -6151,7 +6151,7 @@ fn no_deps_valid_extra() -> Result<()> {
     Ok(())
 }
 
-/// Resolve a package with `--no-deps`, including an invalid extra.
+/// Resolve a package with `--no-deps`, including an invalid extra. We don't warn here.
 #[test]
 fn no_deps_invalid_extra() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -6171,7 +6171,6 @@ fn no_deps_invalid_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: The package `flask==3.0.2` does not have an extra named `empty`
     "###
     );
 

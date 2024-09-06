@@ -1459,6 +1459,8 @@ impl Package {
         } else {
             annotated_dist
                 .metadata
+                .as_ref()
+                .expect("metadata is present")
                 .requires_dist
                 .iter()
                 .cloned()
@@ -1471,6 +1473,8 @@ impl Package {
         } else {
             annotated_dist
                 .metadata
+                .as_ref()
+                .expect("metadata is present")
                 .dev_dependencies
                 .iter()
                 .map(|(group, requirements)| {
@@ -2168,8 +2172,8 @@ impl PackageId {
         annotated_dist: &AnnotatedDist,
         root: &Path,
     ) -> Result<PackageId, LockError> {
-        let name = annotated_dist.metadata.name.clone();
-        let version = annotated_dist.metadata.version.clone();
+        let name = annotated_dist.name.clone();
+        let version = annotated_dist.version.clone();
         let source = Source::from_resolved_dist(&annotated_dist.dist, root)?;
         Ok(Self {
             name,

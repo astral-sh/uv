@@ -331,12 +331,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
-                Self::pre_visit(
-                    state.pubgrub.partial_solution.prioritized_packages(),
-                    &self.urls,
-                    &state.python_requirement,
-                    &request_sink,
-                )?;
+                if self.dependency_mode.is_transitive() {
+                    Self::pre_visit(
+                        state.pubgrub.partial_solution.prioritized_packages(),
+                        &self.urls,
+                        &state.python_requirement,
+                        &request_sink,
+                    )?;
+                }
 
                 // Choose a package version.
                 let Some(highest_priority_pkg) = state
@@ -1109,17 +1111,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // Emit a request to fetch the metadata for this version.
         if matches!(&**package, PubGrubPackageInner::Package { .. }) {
-            if self.index.distributions().register(candidate.version_id()) {
-                // Verify that the package is allowed under the hash-checking policy.
-                if !self
-                    .hasher
-                    .allows_package(candidate.name(), candidate.version())
-                {
-                    return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
-                }
+            if self.dependency_mode.is_transitive() {
+                if self.index.distributions().register(candidate.version_id()) {
+                    // Verify that the package is allowed under the hash-checking policy.
+                    if !self
+                        .hasher
+                        .allows_package(candidate.name(), candidate.version())
+                    {
+                        return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
+                    }
 
-                let request = Request::from(dist.for_resolution());
-                request_sink.blocking_send(request)?;
+                    let request = Request::from(dist.for_resolution());
+                    request_sink.blocking_send(request)?;
+                }
             }
         }
 
@@ -1186,6 +1190,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 dev,
                 marker,
             } => {
+                // If we're excluding transitive dependencies, short-circuit.
+                if self.dependency_mode.is_direct() {
+                    return Ok(Dependencies::Unforkable(Vec::default()));
+                }
+
                 // Determine the distribution to lookup.
                 let dist = match url {
                     Some(url) => PubGrubDistribution::from_url(name, url),
@@ -1272,12 +1281,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ));
                     }
                 };
-
-                // If we're excluding transitive dependencies, short-circuit. (It's important that
-                // we fetched the metadata, though, since we need it to validate extras.)
-                if self.dependency_mode.is_direct() {
-                    return Ok(Dependencies::Unforkable(Vec::default()));
-                }
 
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
