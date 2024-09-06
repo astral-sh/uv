@@ -49,13 +49,13 @@ $ echo "ruff" | uv pip compile -
 To lock with optional dependencies enabled, e.g., the "foo" extra:
 
 ```console
-$ uv pip install -r pyproject.toml --extra foo
+$ uv pip compile pyproject.toml --extra foo
 ```
 
 To lock with all optional dependencies enabled:
 
 ```console
-$ uv pip install -r pyproject.toml --all-extras
+$ uv pip compile pyproject.toml --all-extras
 ```
 
 Note extras are not supported with the `requirements.in` format.
