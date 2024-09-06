@@ -14,7 +14,7 @@ use uv_tool::InstalledTools;
 
 use crate::commands::pip::loggers::{SummaryResolveLogger, UpgradeInstallLogger};
 use crate::commands::project::{update_environment, EnvironmentUpdate};
-use crate::commands::tool::common::remove_entrypoints;
+use crate::commands::tool::common::remove_resources;
 use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -146,8 +146,8 @@ pub(crate) async fn upgrade(
         // If we modified the target tool, reinstall the entrypoints.
         if changelog.includes(&name) {
             // At this point, we updated the existing environment, so we should remove any of its
-            // existing executables.
-            remove_entrypoints(&existing_tool_receipt);
+            // existing resources.
+            remove_resources(&existing_tool_receipt);
 
             install_executables(
                 &environment,

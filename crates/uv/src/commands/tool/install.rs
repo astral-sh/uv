@@ -25,7 +25,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
 };
-use crate::commands::tool::common::remove_entrypoints;
+use crate::commands::tool::common::remove_resources;
 use crate::commands::tool::Target;
 use crate::commands::{reporters::PythonDownloadReporter, tool::common::install_resources};
 use crate::commands::{ExitStatus, SharedState};
@@ -355,9 +355,9 @@ pub(crate) async fn install(
         .into_environment();
 
         // At this point, we updated the existing environment, so we should remove any of its
-        // existing executables.
+        // existing resources.
         if let Some(existing_receipt) = existing_tool_receipt {
-            remove_entrypoints(&existing_receipt);
+            remove_resources(&existing_receipt);
         }
 
         environment
@@ -381,9 +381,9 @@ pub(crate) async fn install(
         let environment = installed_tools.create_environment(&from.name, interpreter)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
-        // executables.
+        // resources.
         if let Some(existing_receipt) = existing_tool_receipt {
-            remove_entrypoints(&existing_receipt);
+            remove_resources(&existing_receipt);
         }
 
         // Sync the environment with the resolved requirements.

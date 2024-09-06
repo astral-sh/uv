@@ -48,8 +48,8 @@ pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec
         .collect()
 }
 
-/// Remove any entrypoints attached to the [`Tool`].
-pub(crate) fn remove_entrypoints(tool: &Tool) {
+/// Remove any resources attached to the [`Tool`].
+pub(crate) fn remove_resources(tool: &Tool) {
     for executable in tool
         .entrypoints()
         .iter()
@@ -60,6 +60,16 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
             warn!(
                 "Failed to remove executable: `{}`: {err}",
                 executable.simplified_display()
+            );
+        }
+    }
+
+    for manpage in tool.manpages().iter().map(|manpage| &manpage.install_path) {
+        debug!("Removing manpage: `{}`", manpage.simplified_display());
+        if let Err(err) = fs_err::remove_file(manpage) {
+            warn!(
+                "Failed to remove manpage: `{}`: {err}",
+                manpage.simplified_display()
             );
         }
     }
