@@ -19,10 +19,7 @@ use reqwest::Response;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, Instrument};
 use url::Url;
-use uv_cache::{
-    Cache, CacheBucket, CacheEntry, CacheShard, Removal,
-    WheelCache,
-};
+use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };

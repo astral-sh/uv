@@ -74,6 +74,11 @@ pub struct Options {
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
     r#package: serde::de::IgnoredAny,
+
+    // STOPSHIP(charlie): Document this in `pyproject.rs.`
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    cache_keys: serde::de::IgnoredAny,
 }
 
 impl Options {

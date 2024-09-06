@@ -1045,6 +1045,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "toml",
  "tracing",
  "url",
  "urlencoding",
