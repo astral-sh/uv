@@ -17,7 +17,7 @@ uv provides a standalone installer to download and install uv:
 === "Windows"
 
     ```console
-    $ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
 
 By default, uv is installed to `~/.cargo/bin`.
@@ -51,7 +51,7 @@ Request a specific version by including it in the URL:
 === "Windows"
 
     ```console
-    $ powershell -c "irm https://astral.sh/uv/0.4.6/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.4.6/install.ps1 | iex"
     ```
 
 !!! tip
