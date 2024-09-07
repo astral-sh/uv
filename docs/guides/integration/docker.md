@@ -362,6 +362,11 @@ _contents_ are not copied into the image until the final `uv sync` command.
 
     If you want to remove specific packages from the sync, use `--no-install-package <name>`.
 
+!!! note README file
+
+    If your `pyproject.toml` references a README file with the `project.readme` key, you will
+    also need to mount it for the `uv sync --frozen` command (the layer that installs your project).
+
 ### Using uv temporarily
 
 If uv isn't needed in the final image, the binary can be mounted in each invocation:
