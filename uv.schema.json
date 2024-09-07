@@ -118,7 +118,7 @@
       }
     },
     "find-links": {
-      "description": "Locations to search for candidate distributions, in addition to those found in the registry indexes.\n\nIf a path, the target must be a directory that contains packages as wheel files (`.whl`) or source distributions (usually `.tar.gz` or `.zip`) at the top level.\n\nIf a URL, the page must contain a flat list of links to package files adhering to the formats described above.",
+      "description": "Locations to search for candidate distributions, in addition to those found in the registry indexes.\n\nIf a path, the target must be a directory that contains packages as wheel files (`.whl`) or source distributions (e.g. `.tar.gz` or `.zip`) at the top level.\n\nIf a URL, the page must contain a flat list of links to package files adhering to the formats described above.",
       "type": [
         "array",
         "null"
@@ -698,7 +698,7 @@
           }
         },
         "find-links": {
-          "description": "Locations to search for candidate distributions, in addition to those found in the registry indexes.\n\nIf a path, the target must be a directory that contains packages as wheel files (`.whl`) or source distributions (usually `.tar.gz` or `.zip`) at the top level.\n\nIf a URL, the page must contain a flat list of links to package files adhering to the formats described above.",
+          "description": "Locations to search for candidate distributions, in addition to those found in the registry indexes.\n\nIf a path, the target must be a directory that contains packages as wheel files (`.whl`) or source distributions (e.g. `.tar.gz` or `.zip`) at the top level.\n\nIf a URL, the page must contain a flat list of links to package files adhering to the formats described above.",
           "type": [
             "array",
             "null"

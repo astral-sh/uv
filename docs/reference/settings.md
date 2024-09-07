@@ -370,7 +370,7 @@ Locations to search for candidate distributions, in addition to those found in t
 indexes.
 
 If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
-source distributions (usually `.tar.gz` or `.zip`) at the top level.
+source distributions (e.g. `.tar.gz` or `.zip`) at the top level.
 
 If a URL, the page must contain a flat list of links to package files adhering to the
 formats described above.
@@ -1662,7 +1662,7 @@ Locations to search for candidate distributions, in addition to those found in t
 indexes.
 
 If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
-source distributions (usually `.tar.gz` or `.zip`) at the top level.
+source distributions (e.g. `.tar.gz` or `.zip`) at the top level.
 
 If a URL, the page must contain a flat list of links to package files adhering to the
 formats described above.
