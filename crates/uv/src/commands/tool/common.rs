@@ -309,7 +309,7 @@ fn install_resource_targets(
         #[cfg(unix)]
         replace_symlink(source_path, target_path).context("Failed to install {resource_type}")?;
         #[cfg(windows)]
-        fs_err::copy(source_path, target_path).context("Failed to install entrypoint")?;
+        fs_err::copy(source_path, target_path).context("Failed to install {resource_type}")?;
     }
 
     if !targets.is_empty() {
