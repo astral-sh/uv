@@ -45,13 +45,13 @@ Request a specific version by including it in the URL:
 === "macOS and Linux"
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.4.6/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.4.7/install.sh | sh
     ```
 
 === "Windows"
 
     ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.4.6/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.4.7/install.ps1 | iex"
     ```
 
 !!! tip

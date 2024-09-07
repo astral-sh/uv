@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.7
+
+### Enhancements
+
+- Add `--no-emit-project` and friends to `uv export` ([#7110](https://github.com/astral-sh/uv/pull/7110))
+- Add `--output-file` to `uv export` ([#7109](https://github.com/astral-sh/uv/pull/7109))
+- Prune unused source distributions from the cache in `uv cache prune` ([#7112](https://github.com/astral-sh/uv/pull/7112))
+- Take intersection of constraint and requirements hashes ([#7108](https://github.com/astral-sh/uv/pull/7108))
+
+### Performance
+
+- Skip metadata fetch for `--no-deps` and `pip sync` ([#7127](https://github.com/astral-sh/uv/pull/7127))
+
+### Bug fixes
+
+- Avoid panicking when encountering an invalid Python version during `uv python list` ([#7131](https://github.com/astral-sh/uv/pull/7131))
+- Write trailing newline to `.python-version` files ([#7140](https://github.com/astral-sh/uv/pull/7140))
+
 ## 0.4.6
 
 ### Enhancements
