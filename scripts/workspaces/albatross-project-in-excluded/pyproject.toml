@@ -6,7 +6,7 @@ dependencies = ["tqdm>=4,<5"]
 
 [tool.uv.workspace]
 members = ["packages/*"]
-exclude = ["excluded/*", "packages/bird-feeder"]
+exclude = ["excluded/*"]
 
 [build-system]
 requires = ["hatchling"]

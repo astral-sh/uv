@@ -42,7 +42,6 @@ itertools = { workspace = true }
 anyhow = { workspace = true }
 assert_fs = { version = "1.1.0" }
 insta = { version = "1.39.0", features = ["filters", "json", "redactions"] }
-predicates = { version = "3.0.4" }
 regex = { workspace = true }
 tempfile = { workspace = true }
 
