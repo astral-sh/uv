@@ -506,6 +506,17 @@ uv init [OPTIONS] [PATH]
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
+</dd><dt><code>--vcs</code> <i>vcs</i></dt><dd><p>Initialize a new repository for the given version control system.</p>
+
+<p>By default, uv will try to initialize a Git repository (<code>git</code>). Use <code>none</code> to skip repository initialization.</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>git</code>:  Use Git for version control</li>
+
+<li><code>none</code>:  Do not use version control</li>
+</ul>
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
