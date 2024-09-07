@@ -5,7 +5,6 @@ requires-python = ">=3.12"
 members = [
     "product-a",
     "product-b",
-    "project-a",
     "projects",
 ]
 
@@ -18,11 +17,6 @@ source = { editable = "projects/product-a/project" }
 name = "product-b"
 version = "0.1.0"
 source = { editable = "projects/product-b/project" }
-
-[[package]]
-name = "project-a"
-version = "0.1.0"
-source = { virtual = "projects/project-a" }
 
 [[package]]
 name = "projects"

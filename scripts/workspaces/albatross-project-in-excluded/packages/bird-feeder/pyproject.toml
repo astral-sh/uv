@@ -1,0 +1,9 @@
+[project]
+name = "bird-feeder"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = ["anyio>=4.3.0,<5"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -9,4 +9,5 @@ dependencies = []
 package = false
 
 [tool.uv.workspace]
-members = ["projects/project-*", "projects/product-a/*", "projects/product-b/*"]
+members = ["projects/*", "projects/product-a/*", "projects/product-b/*"]
+exclude = ["projects/product-a", "projects/product-b"]

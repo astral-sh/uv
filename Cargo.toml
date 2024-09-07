@@ -17,6 +17,7 @@ authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+thing = { path = "foo/bar/thing" }
 cache-key = { path = "crates/cache-key" }
 distribution-filename = { path = "crates/distribution-filename" }
 distribution-types = { path = "crates/distribution-types" }
