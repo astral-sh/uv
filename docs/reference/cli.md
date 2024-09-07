@@ -136,7 +136,7 @@ uv run [OPTIONS] <COMMAND>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -610,7 +610,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -910,7 +910,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -1198,7 +1198,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -1479,7 +1479,7 @@ uv lock [OPTIONS]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -1742,7 +1742,7 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -2028,7 +2028,7 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -2383,7 +2383,7 @@ uv tool run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -2651,7 +2651,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -2919,7 +2919,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -4302,7 +4302,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -4674,7 +4674,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -5000,7 +5000,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -6057,7 +6057,7 @@ uv venv [OPTIONS] [PATH]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -6282,7 +6282,7 @@ uv build [OPTIONS] [SRC]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 

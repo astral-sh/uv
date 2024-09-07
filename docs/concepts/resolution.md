@@ -296,6 +296,18 @@ To ensure reproducibility, messages for unsatisfiable resolutions will not menti
 distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated
 as if they do not exist.
 
+## Source distribution
+
+Most packages publish their source distributions as gzip tarball (`.tar.gz`) or zip (`.zip`)
+archives. While less common, other formats are also supported when reading and extracting source
+distributions:
+
+- bzip2 tarball (`.tar.bz2`)
+- gzip tarball (`.tar.gz`)
+- xz tarball (`.tar.xz`)
+- zip (`.zip`)
+- zstd tarball (`.tar.zst`)
+
 ## Learn more
 
 For more details about the internals of the resolver, see the
