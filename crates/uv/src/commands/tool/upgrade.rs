@@ -15,7 +15,7 @@ use uv_tool::InstalledTools;
 use crate::commands::pip::loggers::{SummaryResolveLogger, UpgradeInstallLogger};
 use crate::commands::project::{update_environment, EnvironmentUpdate};
 use crate::commands::tool::common::remove_resources;
-use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
+use crate::commands::{tool::common::install_resources, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -149,7 +149,7 @@ pub(crate) async fn upgrade(
             // existing resources.
             remove_resources(&existing_tool_receipt);
 
-            install_executables(
+            install_resources(
                 &environment,
                 &name,
                 &installed_tools,
