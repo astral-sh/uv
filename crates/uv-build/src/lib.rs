@@ -504,6 +504,8 @@ impl SourceBuild {
         // Setup the build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
         if build_isolation.is_isolated(package_name) {
+            debug!("Resolving build requirements");
+
             let resolved_requirements = Self::get_resolved_requirements(
                 build_context,
                 source_build_context,
@@ -518,6 +520,8 @@ impl SourceBuild {
                 .map_err(|err| {
                     Error::RequirementsInstall("`build-system.requires` (install)", err)
                 })?;
+        } else {
+            debug!("Proceeding without build isolation");
         }
 
         // Figure out what the modified path should be
@@ -554,6 +558,8 @@ impl SourceBuild {
         // environment is already setup.
         let runner = PythonRunner::new(concurrent_builds, level);
         if build_isolation.is_isolated(package_name) {
+            debug!("Creating PEP 517 build environment");
+
             create_pep517_build_environment(
                 &runner,
                 &source_tree,
