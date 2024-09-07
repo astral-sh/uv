@@ -1132,25 +1132,63 @@ impl MarkerTree {
         extra_expression
     }
 
-    /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
+    /// Simplify this marker by *assuming* that the Python version range
+    /// provided is true and that the complement of it is false.
     ///
-    /// Any `extra` markers that are always `true` given the provided extras will be removed.
-    /// Any `extra` markers that are always `false` given the provided extras will be left
-    /// unchanged.
+    /// For example, with `requires-python = '>=3.8'` and a marker tree of
+    /// `python_full_version >= '3.8' and python_full_version <= '3.10'`, this
+    /// would result in a marker of `python_full_version <= '3.10'`.
     ///
-    /// For example, if `dev` is a provided extra, given `sys_platform == 'linux' and extra == 'dev'`,
-    /// the marker will be simplified to `sys_platform == 'linux'`.
+    /// This is useful when one wants to write "simpler" markers in a
+    /// particular context with a bound on the supported Python versions.
+    /// In general, the simplified markers returned shouldn't be used for
+    /// evaluation. Instead, they should be turned back into their more
+    /// "complex" form first.
+    ///
+    /// Note that simplifying a marker and then complexifying it, even
+    /// with the same Python version bounds, is a lossy operation. For
+    /// example, simplifying `python_version < '3.7'` with `requires-python
+    /// = ">=3.8"` will result in a marker that always returns false (e.g.,
+    /// `python_version < '0'`). Therefore, complexifying an always-false
+    /// marker will result in a marker that is still always false, despite
+    /// the fact that the original marker was true for `<3.7`. Therefore,
+    /// simplifying should only be done as a one-way transformation when it is
+    /// known that `requires-python` reflects an eternal lower bound on the
+    /// results of that simplification. (If `requires-python` changes, then one
+    /// should reconstitute all relevant markers from the source data.)
     #[must_use]
     #[allow(clippy::needless_pass_by_value)]
-    pub fn simplify_python_versions(self, python_version: Range<Version>) -> MarkerTree {
-        MarkerTree(INTERNER.lock().restrict_versions(self.0, &|var| match var {
-            // Note that `python_version` is normalized to `python_full_version` internally by the
-            // decision diagram.
-            Variable::Version(MarkerValueVersion::PythonFullVersion) => {
-                Some(python_version.clone())
-            }
-            _ => None,
-        }))
+    pub fn simplify_python_versions(
+        self,
+        lower: Bound<&Version>,
+        upper: Bound<&Version>,
+    ) -> MarkerTree {
+        MarkerTree(
+            INTERNER
+                .lock()
+                .simplify_python_versions(self.0, lower, upper),
+        )
+    }
+
+    /// Complexify marker tree by requiring the given Python version range
+    /// to be true in order for this marker tree to evaluate to true in all
+    /// circumstances.
+    ///
+    /// For example, with `requires-python = '>=3.8'` and a marker tree of
+    /// `python_full_version <= '3.10'`, this would result in a marker of
+    /// `python_full_version >= '3.8' and python_full_version <= '3.10'`.
+    #[must_use]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn complexify_python_versions(
+        self,
+        lower: Bound<&Version>,
+        upper: Bound<&Version>,
+    ) -> MarkerTree {
+        MarkerTree(
+            INTERNER
+                .lock()
+                .complexify_python_versions(self.0, lower, upper),
+        )
     }
 
     /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
@@ -1636,7 +1674,6 @@ mod test {
 
     use insta::assert_snapshot;
     use pep440_rs::Version;
-    use pubgrub::Range;
     use uv_normalize::ExtraName;
 
     use crate::marker::{MarkerEnvironment, MarkerEnvironmentBuilder};
@@ -1711,19 +1748,19 @@ mod test {
 
         assert_eq!(
             m("(python_version <= '3.11' and sys_platform == 'win32') or python_version > '3.11'")
-                .simplify_python_versions(Range::from_range_bounds((
-                    Bound::Excluded(Version::new([3, 12])),
-                    Bound::Unbounded,
-                ))),
+                .simplify_python_versions(
+                    Bound::Excluded(Version::new([3, 12])).as_ref(),
+                    Bound::Unbounded.as_ref(),
+                ),
             MarkerTree::TRUE
         );
 
         assert_eq!(
             m("python_version < '3.10'")
-                .simplify_python_versions(Range::from_range_bounds((
-                    Bound::Excluded(Version::new([3, 7])),
-                    Bound::Unbounded,
-                )))
+                .simplify_python_versions(
+                    Bound::Excluded(Version::new([3, 7])).as_ref(),
+                    Bound::Unbounded.as_ref(),
+                )
                 .try_to_string()
                 .unwrap(),
             "python_full_version < '3.10'"
@@ -1732,28 +1769,29 @@ mod test {
         // Note that `3.12.1` will still match.
         assert_eq!(
             m("python_version <= '3.12'")
-                .simplify_python_versions(Range::from_range_bounds((
-                    Bound::Excluded(Version::new([3, 12])),
-                    Bound::Unbounded,
-                )))
+                .simplify_python_versions(
+                    Bound::Excluded(Version::new([3, 12])).as_ref(),
+                    Bound::Unbounded.as_ref(),
+                )
                 .try_to_string()
                 .unwrap(),
             "python_full_version < '3.13'"
         );
 
         assert_eq!(
-            m("python_full_version <= '3.12'").simplify_python_versions(Range::from_range_bounds(
-                (Bound::Excluded(Version::new([3, 12])), Bound::Unbounded,)
-            )),
+            m("python_full_version <= '3.12'").simplify_python_versions(
+                Bound::Excluded(Version::new([3, 12])).as_ref(),
+                Bound::Unbounded.as_ref(),
+            ),
             MarkerTree::FALSE
         );
 
         assert_eq!(
             m("python_full_version <= '3.12.1'")
-                .simplify_python_versions(Range::from_range_bounds((
-                    Bound::Excluded(Version::new([3, 12])),
-                    Bound::Unbounded,
-                )))
+                .simplify_python_versions(
+                    Bound::Excluded(Version::new([3, 12])).as_ref(),
+                    Bound::Unbounded.as_ref(),
+                )
                 .try_to_string()
                 .unwrap(),
             "python_full_version <= '3.12.1'"
@@ -2521,10 +2559,9 @@ mod test {
     #[test]
     fn test_requires_python() {
         fn simplified(marker: &str) -> MarkerTree {
-            m(marker).simplify_python_versions(Range::from_range_bounds((
-                Bound::Included(Version::new([3, 8])),
-                Bound::Unbounded,
-            )))
+            let lower = Bound::Included(Version::new([3, 8]));
+            let upper = Bound::Unbounded;
+            m(marker).simplify_python_versions(lower.as_ref(), upper.as_ref())
         }
 
         assert_eq!(simplified("python_version >= '3.8'"), MarkerTree::TRUE);
@@ -2785,5 +2822,172 @@ mod test {
     fn is_disjoint(left: impl AsRef<str>, right: impl AsRef<str>) -> bool {
         let (left, right) = (m(left.as_ref()), m(right.as_ref()));
         left.is_disjoint(&right) && right.is_disjoint(&left)
+    }
+
+    #[test]
+    fn complexified_markers() {
+        // Takes optional lower (inclusive) and upper (exclusive)
+        // bounds representing `requires-python` and a "simplified"
+        // marker, and returns the "complexified" marker. That is, a
+        // marker that embeds the `requires-python` constraint into it.
+        let complexify =
+            |lower: Option<[u64; 2]>, upper: Option<[u64; 2]>, marker: &str| -> MarkerTree {
+                let lower = lower
+                    .map(|release| Bound::Included(Version::new(release)))
+                    .unwrap_or(Bound::Unbounded);
+                let upper = upper
+                    .map(|release| Bound::Excluded(Version::new(release)))
+                    .unwrap_or(Bound::Unbounded);
+                m(marker).complexify_python_versions(lower.as_ref(), upper.as_ref())
+            };
+
+        assert_eq!(
+            complexify(None, None, "python_full_version < '3.10'"),
+            m("python_full_version < '3.10'"),
+        );
+        assert_eq!(
+            complexify(Some([3, 8]), None, "python_full_version < '3.10'"),
+            m("python_full_version >= '3.8' and python_full_version < '3.10'"),
+        );
+        assert_eq!(
+            complexify(None, Some([3, 8]), "python_full_version < '3.10'"),
+            m("python_full_version < '3.8'"),
+        );
+        assert_eq!(
+            complexify(Some([3, 8]), Some([3, 8]), "python_full_version < '3.10'"),
+            // Kinda weird, but this normalizes to `false`, just like the above.
+            m("python_full_version < '0' and python_full_version > '0'"),
+        );
+
+        assert_eq!(
+            complexify(Some([3, 11]), None, "python_full_version < '3.10'"),
+            // Kinda weird, but this normalizes to `false`, just like the above.
+            m("python_full_version < '0' and python_full_version > '0'"),
+        );
+        assert_eq!(
+            complexify(Some([3, 11]), None, "python_full_version >= '3.10'"),
+            m("python_full_version >= '3.11'"),
+        );
+        assert_eq!(
+            complexify(Some([3, 11]), None, "python_full_version >= '3.12'"),
+            m("python_full_version >= '3.12'"),
+        );
+
+        assert_eq!(
+            complexify(None, Some([3, 11]), "python_full_version > '3.12'"),
+            // Kinda weird, but this normalizes to `false`, just like the above.
+            m("python_full_version < '0' and python_full_version > '0'"),
+        );
+        assert_eq!(
+            complexify(None, Some([3, 11]), "python_full_version <= '3.12'"),
+            m("python_full_version < '3.11'"),
+        );
+        assert_eq!(
+            complexify(None, Some([3, 11]), "python_full_version <= '3.10'"),
+            m("python_full_version <= '3.10'"),
+        );
+
+        assert_eq!(
+            complexify(Some([3, 11]), None, "python_full_version == '3.8'"),
+            // Kinda weird, but this normalizes to `false`, just like the above.
+            m("python_full_version < '0' and python_full_version > '0'"),
+        );
+        assert_eq!(
+            complexify(
+                Some([3, 11]),
+                None,
+                "python_full_version == '3.8' or python_full_version == '3.12'"
+            ),
+            m("python_full_version == '3.12'"),
+        );
+        assert_eq!(
+            complexify(
+                Some([3, 11]),
+                None,
+                "python_full_version == '3.8' \
+                 or python_full_version == '3.11' \
+                 or python_full_version == '3.12'"
+            ),
+            m("python_full_version == '3.11' or python_full_version == '3.12'"),
+        );
+
+        // Tests a tricky case where if a marker is always true, then
+        // complexifying it will proceed correctly by adding the
+        // requires-python constraint. This is a regression test for
+        // an early implementation that special cased the "always
+        // true" case to return "always true" regardless of the
+        // requires-python bounds.
+        assert_eq!(
+            complexify(
+                Some([3, 12]),
+                None,
+                "python_full_version < '3.10' or python_full_version >= '3.10'"
+            ),
+            m("python_full_version >= '3.12'"),
+        );
+    }
+
+    #[test]
+    fn simplified_markers() {
+        // Takes optional lower (inclusive) and upper (exclusive)
+        // bounds representing `requires-python` and a "complexified"
+        // marker, and returns the "simplified" marker. That is, a
+        // marker that assumes `requires-python` is true.
+        let simplify =
+            |lower: Option<[u64; 2]>, upper: Option<[u64; 2]>, marker: &str| -> MarkerTree {
+                let lower = lower
+                    .map(|release| Bound::Included(Version::new(release)))
+                    .unwrap_or(Bound::Unbounded);
+                let upper = upper
+                    .map(|release| Bound::Excluded(Version::new(release)))
+                    .unwrap_or(Bound::Unbounded);
+                m(marker).simplify_python_versions(lower.as_ref(), upper.as_ref())
+            };
+
+        assert_eq!(
+            simplify(
+                Some([3, 8]),
+                None,
+                "python_full_version >= '3.8' and python_full_version < '3.10'"
+            ),
+            m("python_full_version < '3.10'"),
+        );
+        assert_eq!(
+            simplify(Some([3, 8]), None, "python_full_version < '3.7'"),
+            // Kinda weird, but this normalizes to `false`, just like the above.
+            m("python_full_version < '0' and python_full_version > '0'"),
+        );
+        assert_eq!(
+            simplify(
+                Some([3, 8]),
+                Some([3, 11]),
+                "python_full_version == '3.7.*' \
+                 or python_full_version == '3.8.*' \
+                 or python_full_version == '3.10.*' \
+                 or python_full_version == '3.11.*' \
+                "
+            ),
+            // Given `requires-python = '>=3.8,<3.11'`, only `3.8.*`
+            // and `3.10.*` can possibly be true. So this simplifies
+            // to `!= 3.9.*`.
+            m("python_full_version != '3.9.*'"),
+        );
+        assert_eq!(
+            simplify(
+                Some([3, 8]),
+                None,
+                "python_full_version >= '3.8' and sys_platform == 'win32'"
+            ),
+            m("sys_platform == 'win32'"),
+        );
+        assert_eq!(
+            simplify(
+                Some([3, 8]),
+                None,
+                "python_full_version >= '3.9' \
+                 and (sys_platform == 'win32' or python_full_version >= '3.8')",
+            ),
+            m("python_full_version >= '3.9'"),
+        );
     }
 }
