@@ -1620,19 +1620,18 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
         for entry in walkdir::WalkDir::new(bucket) {
             let entry = entry.map_err(Error::CacheWalk)?;
 
+            if !entry.file_type().is_dir() {
+                continue;
+            }
+
             // If we find a `revision.http` file, read the pointer, and remove any extraneous
             // directories.
-            if entry.file_name() == "revision.http" {
-                let pointer = HttpRevisionPointer::read_from(entry.path())?;
+            let revision = entry.path().join("revision.http");
+            if revision.is_file() {
+                let pointer = HttpRevisionPointer::read_from(revision)?;
                 if let Some(pointer) = pointer {
                     // Remove all sibling directories that are not referenced by the pointer.
-                    for sibling in entry
-                        .path()
-                        .parent()
-                        .unwrap()
-                        .read_dir()
-                        .map_err(Error::CacheRead)?
-                    {
+                    for sibling in entry.path().read_dir().map_err(Error::CacheRead)? {
                         let sibling = sibling.map_err(Error::CacheRead)?;
                         if sibling.file_type().map_err(Error::CacheRead)?.is_dir() {
                             let sibling_name = sibling.file_name();
@@ -1647,21 +1646,18 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
                         }
                     }
                 }
+
+                continue;
             }
 
             // If we find a `revision.rev` file, read the pointer, and remove any extraneous
             // directories.
-            if entry.file_name() == "revision.rev" {
-                let pointer = LocalRevisionPointer::read_from(entry.path())?;
+            let revision = entry.path().join("revision.rev");
+            if revision.is_file() {
+                let pointer = LocalRevisionPointer::read_from(revision)?;
                 if let Some(pointer) = pointer {
                     // Remove all sibling directories that are not referenced by the pointer.
-                    for sibling in entry
-                        .path()
-                        .parent()
-                        .unwrap()
-                        .read_dir()
-                        .map_err(Error::CacheRead)?
-                    {
+                    for sibling in entry.path().read_dir().map_err(Error::CacheRead)? {
                         let sibling = sibling.map_err(Error::CacheRead)?;
                         if sibling.file_type().map_err(Error::CacheRead)?.is_dir() {
                             let sibling_name = sibling.file_name();
@@ -1676,6 +1672,8 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
                         }
                     }
                 }
+
+                continue;
             }
         }
     }
