@@ -581,9 +581,9 @@ You can build the project in a different directory by providing a path to `uv bu
 `uv build` will first build a source distribution, and then build a binary distribution (wheel) from
 that source distribution.
 
-You can limit `uv build` to building a source distribution with `uv build --source`, a binary
-distribution with `uv build --binary`, or build both distributions from source with
-`uv build --source --binary`.
+You can limit `uv build` to building a source distribution with `uv build --sdist`, a binary
+distribution with `uv build --wheel`, or build both distributions from source with
+`uv build --sdist --wheel`.
 
 `uv build` accepts `--build-constraints`, which can be used to constrain the versions of any build
 requirements during the build process. When coupled with `--require-hashes`, uv will enforce that
