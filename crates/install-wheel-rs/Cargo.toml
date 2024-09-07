@@ -20,6 +20,7 @@ workspace = true
 name = "install_wheel_rs"
 
 [dependencies]
+bar = { workspace = true }
 distribution-filename = { workspace = true }
 pep440_rs = { workspace = true }
 platform-tags = { workspace = true }
