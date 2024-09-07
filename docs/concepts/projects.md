@@ -560,9 +560,9 @@ To distribute your project to others (e.g., to upload it to an index like PyPI),
 build it into a distributable format.
 
 Python projects are typically distributed as both source distributions (sdists) and binary
-distributions (wheels). The former is a `.tar.gz` file containing the project's source code along
-with some additional metadata, while the latter is a `.whl` file containing pre-built artifacts that
-can be installed directly.
+distributions (wheels). The former is usually a `.tar.gz` or `.zip` file containing the project's
+source code along with some additional metadata, while the latter is a `.whl` file containing
+pre-built artifacts that can be installed directly.
 
 `uv build` can be used to build both source distributions and binary distributions for your project.
 By default, `uv build` will build the project in the current directory, and place the built

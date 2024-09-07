@@ -128,7 +128,8 @@ A `subdirectory` may be specified if the package isn't in the repository root.
 ### URL
 
 To add a URL source, provide a `https://` URL to either a wheel (ending in `.whl`) or a source
-distribution (ending in `.zip` or `.tar.gz`).
+distribution (usually ending in `.tar.gz` or `.zip`, see
+[here](../concepts/resolution.md#source-distribution) for all supported formats).
 
 For example:
 
@@ -149,13 +150,14 @@ httpx = { url = "https://files.pythonhosted.org/packages/5c/2d/3da5bdf4408b8b280
 ```
 
 URL dependencies can also be manually added or edited in the `pyproject.toml` with the
-`{ url = <url> }` syntax. A `subdirectory` may be specified if the if the source distribution isn't
-in the archive root.
+`{ url = <url> }` syntax. A `subdirectory` may be specified if the source distribution isn't in the
+archive root.
 
 ### Path
 
-To add a path source, provide the path of a wheel (ending in `.whl`), a source distribution (ending
-in `.zip` or `.tar.gz`), or a directory containing a `pyproject.toml`.
+To add a path source, provide the path of a wheel (ending in `.whl`), a source distribution (usually
+ending in `.tar.gz` or `.zip`, see [here](../concepts/resolution.md#source-distribution) for all
+supported formats), or a directory containing a `pyproject.toml`.
 
 For example:
 
