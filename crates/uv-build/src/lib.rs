@@ -258,10 +258,10 @@ impl Write for Printer {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         match self {
             Self::Stderr => {
-                anstream::eprint!("{s}");
+                anstream::eprintln!("{s}");
             }
             Self::Debug => {
-                debug!("{}", s);
+                debug!("{s}");
             }
         }
         Ok(())
@@ -1106,7 +1106,7 @@ impl PythonRunner {
             loop {
                 match reader.next_line().await? {
                     Some(line) => {
-                        let _ = writeln!(printer, "{line}");
+                        let _ = write!(printer, "{line}");
                         buffer.push(line);
                     }
                     None => return Ok(()),
