@@ -128,7 +128,7 @@ A `subdirectory` may be specified if the package isn't in the repository root.
 ### URL
 
 To add a URL source, provide a `https://` URL to either a wheel (ending in `.whl`) or a source
-distribution (usually ending in `.tar.gz` or `.zip`, see
+distribution (typically ending in `.tar.gz` or `.zip`; see
 [here](../concepts/resolution.md#source-distribution) for all supported formats).
 
 For example:
@@ -155,9 +155,9 @@ archive root.
 
 ### Path
 
-To add a path source, provide the path of a wheel (ending in `.whl`), a source distribution (usually
-ending in `.tar.gz` or `.zip`, see [here](../concepts/resolution.md#source-distribution) for all
-supported formats), or a directory containing a `pyproject.toml`.
+To add a path source, provide the path of a wheel (ending in `.whl`), a source distribution
+(typically ending in `.tar.gz` or `.zip`; see [here](../concepts/resolution.md#source-distribution)
+for all supported formats), or a directory containing a `pyproject.toml`.
 
 For example:
 

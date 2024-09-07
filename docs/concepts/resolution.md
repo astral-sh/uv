@@ -299,8 +299,8 @@ as if they do not exist.
 ## Source distribution
 
 Most packages publish their source distributions as gzip tarball (`.tar.gz`) or zip (`.zip`)
-archives, but while less common, other formats exist. uv supports the following formats and
-extensions when reading and extracting source distributions:
+archives. While less common, other formats are also supported when reading and extracting source
+distributions:
 
 - bzip2 tarball (`.tar.bz2`)
 - gzip tarball (`.tar.gz`)

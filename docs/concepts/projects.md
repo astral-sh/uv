@@ -560,7 +560,7 @@ To distribute your project to others (e.g., to upload it to an index like PyPI),
 build it into a distributable format.
 
 Python projects are typically distributed as both source distributions (sdists) and binary
-distributions (wheels). The former is usually a `.tar.gz` or `.zip` file containing the project's
+distributions (wheels). The former is typically a `.tar.gz` or `.zip` file containing the project's
 source code along with some additional metadata, while the latter is a `.whl` file containing
 pre-built artifacts that can be installed directly.
 
