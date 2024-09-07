@@ -24,11 +24,12 @@ mod requirements_txt;
 #[derive(Debug, Clone)]
 pub(crate) struct AnnotatedDist {
     pub(crate) dist: ResolvedDist,
+    pub(crate) name: PackageName,
     pub(crate) version: Version,
     pub(crate) extra: Option<ExtraName>,
     pub(crate) dev: Option<GroupName>,
     pub(crate) hashes: Vec<HashDigest>,
-    pub(crate) metadata: Metadata,
+    pub(crate) metadata: Option<Metadata>,
 }
 
 impl AnnotatedDist {

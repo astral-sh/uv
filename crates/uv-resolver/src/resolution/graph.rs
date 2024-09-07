@@ -300,29 +300,32 @@ impl ResolutionGraph {
             git,
         )?;
 
-        // Validate the extra.
-        if let Some(extra) = extra {
-            if !metadata.provides_extras.contains(extra) {
-                diagnostics.push(ResolutionDiagnostic::MissingExtra {
-                    dist: dist.clone(),
-                    extra: extra.clone(),
-                });
+        if let Some(metadata) = metadata.as_ref() {
+            // Validate the extra.
+            if let Some(extra) = extra {
+                if !metadata.provides_extras.contains(extra) {
+                    diagnostics.push(ResolutionDiagnostic::MissingExtra {
+                        dist: dist.clone(),
+                        extra: extra.clone(),
+                    });
+                }
             }
-        }
 
-        // Validate the development dependency group.
-        if let Some(dev) = dev {
-            if !metadata.dev_dependencies.contains_key(dev) {
-                diagnostics.push(ResolutionDiagnostic::MissingDev {
-                    dist: dist.clone(),
-                    dev: dev.clone(),
-                });
+            // Validate the development dependency group.
+            if let Some(dev) = dev {
+                if !metadata.dev_dependencies.contains_key(dev) {
+                    diagnostics.push(ResolutionDiagnostic::MissingDev {
+                        dist: dist.clone(),
+                        dev: dev.clone(),
+                    });
+                }
             }
         }
 
         // Add the distribution to the graph.
         let index = petgraph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
             dist,
+            name: name.clone(),
             version: version.clone(),
             extra: extra.clone(),
             dev: dev.clone(),
@@ -351,7 +354,7 @@ impl ResolutionGraph {
         preferences: &Preferences,
         index: &InMemoryIndex,
         git: &GitResolver,
-    ) -> Result<(ResolvedDist, Vec<HashDigest>, Metadata), ResolveError> {
+    ) -> Result<(ResolvedDist, Vec<HashDigest>, Option<Metadata>), ResolveError> {
         Ok(if let Some(url) = url {
             // Create the distribution.
             let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
@@ -365,17 +368,17 @@ impl ResolutionGraph {
             // Extract the metadata.
             let metadata = {
                 let response = index.distributions().get(&version_id).unwrap_or_else(|| {
-                    panic!("Every package should have metadata: {version_id:?}")
+                    panic!("Every URL distribution should have metadata: {version_id:?}")
                 });
 
                 let MetadataResponse::Found(archive) = &*response else {
-                    panic!("Every package should have metadata: {version_id:?}")
+                    panic!("Every URL distribution should have metadata: {version_id:?}")
                 };
 
                 archive.metadata.clone()
             };
 
-            (dist.into(), hashes, metadata)
+            (dist.into(), hashes, Some(metadata))
         } else {
             let dist = pins
                 .get(name, version)
@@ -406,15 +409,13 @@ impl ResolutionGraph {
 
             // Extract the metadata.
             let metadata = {
-                let response = index.distributions().get(&version_id).unwrap_or_else(|| {
-                    panic!("Every package should have metadata: {version_id:?}")
-                });
-
-                let MetadataResponse::Found(archive) = &*response else {
-                    panic!("Every package should have metadata: {version_id:?}")
-                };
-
-                archive.metadata.clone()
+                index.distributions().get(&version_id).and_then(|response| {
+                    if let MetadataResponse::Found(archive) = &*response {
+                        Some(archive.metadata.clone())
+                    } else {
+                        None
+                    }
+                })
             };
 
             (dist, hashes, metadata)
@@ -726,13 +727,17 @@ fn has_lower_bound(
             return true;
         }
 
+        let Some(metadata) = neighbor_dist.metadata.as_ref() else {
+            // We can't check for lower bounds if we lack metadata.
+            return true;
+        };
+
         // Get all individual specifier for the current package and check if any has a lower
         // bound.
-        for requirement in neighbor_dist
-            .metadata
+        for requirement in metadata
             .requires_dist
             .iter()
-            .chain(neighbor_dist.metadata.dev_dependencies.values().flatten())
+            .chain(metadata.dev_dependencies.values().flatten())
         {
             if requirement.name != *package_name {
                 continue;

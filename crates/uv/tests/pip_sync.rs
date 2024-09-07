@@ -4783,7 +4783,9 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `example-a-961b4c22==1.0.0`
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -4991,7 +4993,9 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `example-a-961b4c22==1.0.0`
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -5472,7 +5476,9 @@ fn incompatible_build_constraint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `requests==1.2.0`
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: requests==1.2.0
       Caused by: Failed to install requirements from `setup.py` build (resolve)
       Caused by: No solution found when resolving: setuptools>=40.8.0
       Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.

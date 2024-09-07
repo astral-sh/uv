@@ -204,7 +204,7 @@ fn prune_unzipped() -> Result<()> {
 
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    Removed 163 files ([SIZE])
+    Removed 162 files ([SIZE])
     "###);
 
     // Reinstalling the source distribution should not require re-downloading the source
@@ -226,28 +226,20 @@ fn prune_unzipped() -> Result<()> {
      ~ source-distribution==0.0.1
     "###);
 
+    // But reinstalling the other package should require a download, since we pruned the wheel.
     requirements_txt.write_str(indoc! { r"
         iniconfig
     " })?;
     uv_snapshot!(context.filters(), context.pip_sync().env_remove("UV_EXCLUDE_NEWER").arg("requirements.txt").arg("--reinstall").arg("--offline"), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of iniconfig are available:
-              iniconfig<=0.1
-              iniconfig>=1.0.0
-          and all of:
-              iniconfig<=0.1
-              iniconfig>=1.0.0
-          need to be downloaded from a registry, we can conclude that iniconfig<1.0.0 cannot be used.
-          And because you require iniconfig, we can conclude that your requirements are unsatisfiable.
-
-          hint: Pre-releases are available for iniconfig in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)
-
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: iniconfig==2.0.0
+      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
     "###);
 
     Ok(())
