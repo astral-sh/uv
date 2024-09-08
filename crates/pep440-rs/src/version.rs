@@ -1491,6 +1491,7 @@ struct Parser<'a> {
 impl<'a> Parser<'a> {
     /// The "separators" that are allowed in several different parts of a
     /// version.
+    #[allow(clippy::byte_char_slices)]
     const SEPARATOR: ByteSet = ByteSet::new(&[b'.', b'_', b'-']);
 
     /// Create a new `Parser` for parsing the version in the given byte string.
