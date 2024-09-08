@@ -324,7 +324,27 @@ impl CandidateSelector {
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
         );
         let highest = self.use_highest_version(package_name);
-        let allow_prerelease = self.prerelease_strategy.allows(package_name, markers);
+
+        let allow_prerelease = match self.prerelease_strategy.allows(package_name, markers) {
+            AllowPrerelease::Yes => AllowPrerelease::Yes,
+            AllowPrerelease::No => AllowPrerelease::No,
+            AllowPrerelease::IfNecessary => {
+                // If we're looking at a pre-release singleton, pre-check whether _all_ versions are
+                // pre-release.
+                if range.as_singleton().is_some_and(Version::any_prerelease) {
+                    if version_maps
+                        .iter()
+                        .any(|version_map| version_map.versions().all(Version::any_prerelease))
+                    {
+                        AllowPrerelease::Yes
+                    } else {
+                        AllowPrerelease::No
+                    }
+                } else {
+                    AllowPrerelease::IfNecessary
+                }
+            }
+        };
 
         if self.index_strategy == IndexStrategy::UnsafeBestMatch {
             if highest {
@@ -435,14 +455,7 @@ impl CandidateSelector {
                             let Some(dist) = maybe_dist.prioritized_dist() else {
                                 continue;
                             };
-                            tracing::trace!(
-                                "found candidate for package {:?} with range {:?} \
-                                 after {} steps: {:?} version",
-                                package_name,
-                                range,
-                                steps,
-                                version,
-                            );
+                            trace!("found candidate for package {package_name:?} with range {range:?} after {steps} steps: {version:?} version");
                             // If pre-releases are allowed, treat them equivalently
                             // to stable distributions.
                             Candidate::new(
@@ -481,14 +494,7 @@ impl CandidateSelector {
                     let Some(dist) = maybe_dist.prioritized_dist() else {
                         continue;
                     };
-                    tracing::trace!(
-                        "found candidate for package {:?} with range {:?} \
-                         after {} steps: {:?} version",
-                        package_name,
-                        range,
-                        steps,
-                        version,
-                    );
+                    trace!("found candidate for package {package_name:?} with range {range:?} after {steps} steps: {version:?} version");
                     Candidate::new(package_name, version, dist, VersionChoiceKind::Compatible)
                 } else {
                     continue;
@@ -513,10 +519,7 @@ impl CandidateSelector {
 
             return Some(candidate);
         }
-        trace!(
-            "Exhausted all candidates for package {package_name} with range {range} \
-             after {steps} steps",
-        );
+        trace!("Exhausted all candidates for package {package_name} with range {range} after {steps} steps");
         match prerelease {
             None => None,
             Some(PrereleaseCandidate::NotNecessary) => None,
