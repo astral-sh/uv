@@ -303,7 +303,7 @@ archives. While less common, other formats are also supported when reading and e
 distributions:
 
 - bzip2 tarball (`.tar.bz2`)
-- gzip tarball (`.tar.gz`)
+- gzip tarball (`.tar.gz`, `.tgz`)
 - xz tarball (`.tar.xz`)
 - zip (`.zip`)
 - zstd tarball (`.tar.zst`)
