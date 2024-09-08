@@ -357,6 +357,8 @@ and not usable by other tools.
 
 To avoid updating the lockfile during `uv sync` and `uv run` invocations, use the `--frozen` flag.
 
+To avoid updating the environment during `uv run` invocations, use the `--no-sync` flag.
+
 To assert the lockfile matches the project metadata, use the `--locked` flag. If the lockfile is not
 up-to-date, an error will be raised instead of updating the lockfile.
 

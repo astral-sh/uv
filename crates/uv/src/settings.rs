@@ -217,6 +217,7 @@ pub(crate) struct RunSettings {
     pub(crate) show_resolution: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) no_project: bool,
+    pub(crate) no_sync: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -237,6 +238,7 @@ impl RunSettings {
             with_editable,
             with_requirements,
             isolated,
+            no_sync,
             locked,
             frozen,
             installer,
@@ -266,6 +268,7 @@ impl RunSettings {
             show_resolution,
             package,
             no_project,
+            no_sync,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
