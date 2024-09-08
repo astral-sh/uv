@@ -1025,7 +1025,7 @@ fn init_normalized_names() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project is already initialized in `[TEMP_DIR]/foo-bar` (pyproject.toml file exists)
+    error: Project is already initialized in `[TEMP_DIR]/foo-bar` (`pyproject.toml` file exists)
     "###);
 
     let child = context.temp_dir.child("foo-bar");
