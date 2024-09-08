@@ -65,10 +65,28 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No virtual environment found
+    error: No virtual environment found; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
     "###);
 
     assert!(predicates::path::missing().eval(&context.venv));
+
+    Ok(())
+}
+
+#[test]
+fn missing_system() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("anyio")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").arg("--system"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No system Python installation found
+    "###);
 
     Ok(())
 }
