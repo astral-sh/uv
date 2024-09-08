@@ -82,6 +82,8 @@ impl CandidateSelector {
         exclusions: &'a Exclusions,
         markers: &ResolverMarkers,
     ) -> Option<Candidate<'a>> {
+        let is_excluded = exclusions.contains(package_name);
+
         // Check for a preference from a lockfile or a previous fork  that satisfies the range and
         // is allowed.
         if let Some(preferred) = self.get_preferred(
@@ -90,15 +92,15 @@ impl CandidateSelector {
             version_maps,
             preferences,
             installed_packages,
-            exclusions,
+            is_excluded,
             markers,
         ) {
-            trace!("Using preference {} {}", preferred.name, preferred.version,);
+            trace!("Using preference {} {}", preferred.name, preferred.version);
             return Some(preferred);
         }
 
         // Check for a locally installed distribution that satisfies the range and is allowed.
-        if !exclusions.contains(package_name) {
+        if !is_excluded {
             if let Some(installed) = Self::get_installed(package_name, range, installed_packages) {
                 trace!(
                     "Using preference {} {} from installed package",
@@ -128,7 +130,7 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
-        exclusions: &Exclusions,
+        is_excluded: bool,
         resolver_markers: &ResolverMarkers,
     ) -> Option<Candidate> {
         // In the branches, we "sort" the preferences by marker-matching through an iterator that
@@ -156,7 +158,7 @@ impl CandidateSelector {
                     range,
                     version_maps,
                     installed_packages,
-                    exclusions,
+                    is_excluded,
                     resolver_markers,
                 )
             }
@@ -168,7 +170,7 @@ impl CandidateSelector {
                     range,
                     version_maps,
                     installed_packages,
-                    exclusions,
+                    is_excluded,
                     resolver_markers,
                 )
             }
@@ -188,7 +190,7 @@ impl CandidateSelector {
                     range,
                     version_maps,
                     installed_packages,
-                    exclusions,
+                    is_excluded,
                     resolver_markers,
                 )
             }
@@ -203,7 +205,7 @@ impl CandidateSelector {
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
         installed_packages: &'a InstalledPackages,
-        exclusions: &Exclusions,
+        is_excluded: bool,
         resolver_markers: &ResolverMarkers,
     ) -> Option<Candidate<'a>> {
         for (marker, version) in preferences {
@@ -213,7 +215,7 @@ impl CandidateSelector {
             }
 
             // Check for a locally installed distribution that matches the preferred version.
-            if !exclusions.contains(package_name) {
+            if !is_excluded {
                 let installed_dists = installed_packages.get_packages(package_name);
                 match installed_dists.as_slice() {
                     [] => {}
