@@ -1955,7 +1955,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         available_versions
                             .entry(name.clone())
                             .or_insert_with(BTreeSet::new)
-                            .extend(version_map.iter().map(|(version, _)| version.clone()));
+                            .extend(version_map.versions().cloned());
                     }
                 }
             }

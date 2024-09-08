@@ -87,13 +87,23 @@ impl BatchPrefetcher {
         };
         let mut prefetch_count = 0;
         for _ in 0..total_prefetch {
+            let range = match &phase {
+                BatchPrefetchStrategy::Compatible { compatible, .. } => compatible.clone(),
+                BatchPrefetchStrategy::InOrder { previous } => {
+                    if selector.use_highest_version(name) {
+                        Range::strictly_lower_than(previous.clone())
+                    } else {
+                        Range::strictly_higher_than(previous.clone())
+                    }
+                }
+            };
             let candidate = match phase {
                 BatchPrefetchStrategy::Compatible {
                     compatible,
                     previous,
                 } => {
                     if let Some(candidate) =
-                        selector.select_no_preference(name, &compatible, version_map, markers)
+                        selector.select_no_preference(name, &range, version_map, markers)
                     {
                         let compatible = compatible.intersection(
                             &Range::singleton(candidate.version().clone()).complement(),
@@ -106,16 +116,13 @@ impl BatchPrefetcher {
                     } else {
                         // We exhausted the compatible version, switch to ignoring the existing
                         // constraints on the package and instead going through versions in order.
-                        phase = BatchPrefetchStrategy::InOrder { previous };
+                        phase = BatchPrefetchStrategy::InOrder {
+                            previous: previous.clone(),
+                        };
                         continue;
                     }
                 }
-                BatchPrefetchStrategy::InOrder { previous } => {
-                    let range = if selector.use_highest_version(name) {
-                        Range::strictly_lower_than(previous)
-                    } else {
-                        Range::strictly_higher_than(previous)
-                    };
+                BatchPrefetchStrategy::InOrder { previous: _ } => {
                     if let Some(candidate) =
                         selector.select_no_preference(name, &range, version_map, markers)
                     {

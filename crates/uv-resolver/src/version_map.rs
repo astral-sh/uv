@@ -1,7 +1,7 @@
+use pubgrub::Range;
+use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::sync::OnceLock;
-
-use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use tracing::instrument;
 
 use distribution_filename::{DistFilename, WheelFilename};
@@ -130,32 +130,63 @@ impl VersionMap {
         }
     }
 
+    /// Return an iterator over the versions in this map.
+    pub(crate) fn versions(&self) -> impl Iterator<Item = &Version> {
+        match &self.inner {
+            VersionMapInner::Eager(map) => either::Either::Left(map.keys()),
+            VersionMapInner::Lazy(lazy) => either::Either::Right(lazy.map.keys()),
+        }
+    }
+
     /// Return an iterator over the versions and distributions.
     ///
     /// Note that the value returned in this iterator is a [`VersionMapDist`],
     /// which can be used to lazily request a [`CompatibleDist`]. This is
     /// useful in cases where one can skip materializing a full distribution
     /// for each version.
-    pub(crate) fn iter(
-        &self,
-    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> + ExactSizeIterator {
-        match self.inner {
-            VersionMapInner::Eager(ref map) => {
-                either::Either::Left(map.iter().map(|(version, dist)| {
-                    let version_map_dist = VersionMapDistHandle {
-                        inner: VersionMapDistHandleInner::Eager(dist),
-                    };
-                    (version, version_map_dist)
-                }))
-            }
-            VersionMapInner::Lazy(ref lazy) => {
-                either::Either::Right(lazy.map.iter().map(|(version, dist)| {
-                    let version_map_dist = VersionMapDistHandle {
-                        inner: VersionMapDistHandleInner::Lazy { lazy, dist },
-                    };
-                    (version, version_map_dist)
-                }))
-            }
+    pub(crate) fn iter<'a>(
+        &'a self,
+        range: &'a Range<Version>,
+    ) -> impl DoubleEndedIterator<Item = (&'a Version, VersionMapDistHandle)> + ExactSizeIterator + 'a
+    {
+        if let Some(version) = range.as_singleton() {
+            either::Either::Left(match self.inner {
+                VersionMapInner::Eager(ref map) => {
+                    either::Either::Left(map.get(version).into_iter().map(move |dist| {
+                        let version_map_dist = VersionMapDistHandle {
+                            inner: VersionMapDistHandleInner::Eager(dist),
+                        };
+                        (version, version_map_dist)
+                    }))
+                }
+                VersionMapInner::Lazy(ref lazy) => {
+                    either::Either::Right(lazy.map.get(version).into_iter().map(move |dist| {
+                        let version_map_dist = VersionMapDistHandle {
+                            inner: VersionMapDistHandleInner::Lazy { lazy, dist },
+                        };
+                        (version, version_map_dist)
+                    }))
+                }
+            })
+        } else {
+            either::Either::Right(match self.inner {
+                VersionMapInner::Eager(ref map) => {
+                    either::Either::Left(map.iter().map(|(version, dist)| {
+                        let version_map_dist = VersionMapDistHandle {
+                            inner: VersionMapDistHandleInner::Eager(dist),
+                        };
+                        (version, version_map_dist)
+                    }))
+                }
+                VersionMapInner::Lazy(ref lazy) => {
+                    either::Either::Right(lazy.map.iter().map(|(version, dist)| {
+                        let version_map_dist = VersionMapDistHandle {
+                            inner: VersionMapDistHandleInner::Lazy { lazy, dist },
+                        };
+                        (version, version_map_dist)
+                    }))
+                }
+            })
         }
     }
 

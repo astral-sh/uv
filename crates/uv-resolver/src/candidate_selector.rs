@@ -75,7 +75,7 @@ impl CandidateSelector {
     pub(crate) fn select<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &'a Range<Version>,
         version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
@@ -315,10 +315,10 @@ impl CandidateSelector {
     pub(crate) fn select_no_preference<'a>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &'a Range<Version>,
         version_maps: &'a [VersionMap],
         markers: &ResolverMarkers,
-    ) -> Option<Candidate> {
+    ) -> Option<Candidate<'a>> {
         trace!(
             "Selecting candidate for {package_name} with range {range} with {} remote versions",
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
@@ -333,7 +333,10 @@ impl CandidateSelector {
                         .iter()
                         .enumerate()
                         .map(|(map_index, version_map)| {
-                            version_map.iter().rev().map(move |item| (map_index, item))
+                            version_map
+                                .iter(range)
+                                .rev()
+                                .map(move |item| (map_index, item))
                         })
                         .kmerge_by(
                             |(index1, (version1, _)), (index2, (version2, _))| match version1
@@ -355,7 +358,7 @@ impl CandidateSelector {
                         .iter()
                         .enumerate()
                         .map(|(map_index, version_map)| {
-                            version_map.iter().map(move |item| (map_index, item))
+                            version_map.iter(range).map(move |item| (map_index, item))
                         })
                         .kmerge_by(
                             |(index1, (version1, _)), (index2, (version2, _))| match version1
@@ -376,7 +379,7 @@ impl CandidateSelector {
             if highest {
                 version_maps.iter().find_map(|version_map| {
                     Self::select_candidate(
-                        version_map.iter().rev(),
+                        version_map.iter(range).rev(),
                         package_name,
                         range,
                         allow_prerelease,
@@ -385,7 +388,7 @@ impl CandidateSelector {
             } else {
                 version_maps.iter().find_map(|version_map| {
                     Self::select_candidate(
-                        version_map.iter(),
+                        version_map.iter(range),
                         package_name,
                         range,
                         allow_prerelease,
@@ -432,7 +435,7 @@ impl CandidateSelector {
                             let Some(dist) = maybe_dist.prioritized_dist() else {
                                 continue;
                             };
-                            tracing::trace!(
+                            trace!(
                                 "found candidate for package {:?} with range {:?} \
                                  after {} steps: {:?} version",
                                 package_name,
@@ -478,7 +481,7 @@ impl CandidateSelector {
                     let Some(dist) = maybe_dist.prioritized_dist() else {
                         continue;
                     };
-                    tracing::trace!(
+                    trace!(
                         "found candidate for package {:?} with range {:?} \
                          after {} steps: {:?} version",
                         package_name,
