@@ -50,7 +50,7 @@ pub(crate) async fn init(
     if path.join("pyproject.toml").exists() {
         let path = std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
         anyhow::bail!(
-            "Project is already initialized in `{}` (pyproject.toml file exists)",
+            "Project is already initialized in `{}` (`pyproject.toml` file exists)",
             path.display().cyan()
         );
     }
