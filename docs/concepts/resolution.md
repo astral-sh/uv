@@ -299,9 +299,9 @@ as if they do not exist.
 ## Source distribution
 
 [PEP 625](https://peps.python.org/pep-0625/) specifies that packages must distribute source
-distributions as gzip tarball (`.tar.gz`) archives. As before this PEP, other formats were also
-allowed, older formats also need to be supported, for backward compatibility. uv supports reading
-and extracting archives that use the following formats:
+distributions as gzip tarball (`.tar.gz`) archives. Prior to this specification, other archive
+formats, which need to be supported for backward compatibility, were also allowed. uv supports
+reading and extracting archives in the following formats:
 
 - bzip2 tarball (`.tar.bz2`)
 - gzip tarball (`.tar.gz`)
