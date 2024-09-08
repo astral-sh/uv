@@ -298,9 +298,10 @@ as if they do not exist.
 
 ## Source distribution
 
-Most packages publish their source distributions as gzip tarball (`.tar.gz`) or zip (`.zip`)
-archives. While less common, other formats are also supported when reading and extracting source
-distributions:
+[PEP 625](https://peps.python.org/pep-0625/) specifies that packages must distribute source
+distributions as gzip tarball (`.tar.gz`) archives. As before this PEP, other formats were also
+allowed, older formats also need to be supported, for backward compatibility. uv supports reading
+and extracting archives that use the following formats:
 
 - bzip2 tarball (`.tar.bz2`)
 - gzip tarball (`.tar.gz`)
