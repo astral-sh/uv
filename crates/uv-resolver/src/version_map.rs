@@ -144,28 +144,31 @@ impl VersionMap {
     /// which can be used to lazily request a [`CompatibleDist`]. This is
     /// useful in cases where one can skip materializing a full distribution
     /// for each version.
-    pub(crate) fn iter<'a>(
-        &'a self,
-        range: &'a Range<Version>,
-    ) -> impl DoubleEndedIterator<Item = (&'a Version, VersionMapDistHandle)> + ExactSizeIterator + 'a
-    {
+    pub(crate) fn iter(
+        &self,
+        range: &Range<Version>,
+    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> + ExactSizeIterator {
         if let Some(version) = range.as_singleton() {
             either::Either::Left(match self.inner {
                 VersionMapInner::Eager(ref map) => {
-                    either::Either::Left(map.get(version).into_iter().map(move |dist| {
-                        let version_map_dist = VersionMapDistHandle {
-                            inner: VersionMapDistHandleInner::Eager(dist),
-                        };
-                        (version, version_map_dist)
-                    }))
+                    either::Either::Left(map.get_key_value(version).into_iter().map(
+                        move |(version, dist)| {
+                            let version_map_dist = VersionMapDistHandle {
+                                inner: VersionMapDistHandleInner::Eager(dist),
+                            };
+                            (version, version_map_dist)
+                        },
+                    ))
                 }
                 VersionMapInner::Lazy(ref lazy) => {
-                    either::Either::Right(lazy.map.get(version).into_iter().map(move |dist| {
-                        let version_map_dist = VersionMapDistHandle {
-                            inner: VersionMapDistHandleInner::Lazy { lazy, dist },
-                        };
-                        (version, version_map_dist)
-                    }))
+                    either::Either::Right(lazy.map.get_key_value(version).into_iter().map(
+                        move |(version, dist)| {
+                            let version_map_dist = VersionMapDistHandle {
+                                inner: VersionMapDistHandleInner::Lazy { lazy, dist },
+                            };
+                            (version, version_map_dist)
+                        },
+                    ))
                 }
             })
         } else {

@@ -75,7 +75,7 @@ impl CandidateSelector {
     pub(crate) fn select<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
         package_name: &'a PackageName,
-        range: &'a Range<Version>,
+        range: &Range<Version>,
         version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
@@ -315,10 +315,10 @@ impl CandidateSelector {
     pub(crate) fn select_no_preference<'a>(
         &'a self,
         package_name: &'a PackageName,
-        range: &'a Range<Version>,
+        range: &Range<Version>,
         version_maps: &'a [VersionMap],
         markers: &ResolverMarkers,
-    ) -> Option<Candidate<'a>> {
+    ) -> Option<Candidate> {
         trace!(
             "Selecting candidate for {package_name} with range {range} with {} remote versions",
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
@@ -435,7 +435,7 @@ impl CandidateSelector {
                             let Some(dist) = maybe_dist.prioritized_dist() else {
                                 continue;
                             };
-                            trace!(
+                            tracing::trace!(
                                 "found candidate for package {:?} with range {:?} \
                                  after {} steps: {:?} version",
                                 package_name,
@@ -481,7 +481,7 @@ impl CandidateSelector {
                     let Some(dist) = maybe_dist.prioritized_dist() else {
                         continue;
                     };
-                    trace!(
+                    tracing::trace!(
                         "found candidate for package {:?} with range {:?} \
                          after {} steps: {:?} version",
                         package_name,
