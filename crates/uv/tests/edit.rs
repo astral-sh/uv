@@ -438,7 +438,7 @@ fn add_git_private_raw() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg(&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")).arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")).arg("--raw-sources"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
