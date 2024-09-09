@@ -1048,6 +1048,7 @@ dependencies = [
  "tracing",
  "url",
  "urlencoding",
+ "uv-cache-info",
  "uv-fs",
  "uv-git",
  "uv-normalize",
@@ -1780,6 +1781,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tracing",
+ "uv-cache-info",
  "uv-fs",
  "uv-normalize",
  "uv-warnings",
@@ -4498,6 +4500,7 @@ dependencies = [
  "url",
  "uv-auth",
  "uv-cache",
+ "uv-cache-info",
  "uv-cli",
  "uv-client",
  "uv-configuration",
@@ -4595,9 +4598,22 @@ dependencies = [
  "tempfile",
  "tracing",
  "url",
+ "uv-cache-info",
  "uv-fs",
  "uv-normalize",
  "walkdir",
+]
+
+[[package]]
+name = "uv-cache-info"
+version = "0.0.1"
+dependencies = [
+ "fs-err",
+ "schemars",
+ "serde",
+ "thiserror",
+ "toml",
+ "tracing",
 ]
 
 [[package]]
@@ -4681,6 +4697,7 @@ name = "uv-configuration"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "cache-key",
  "clap",
  "distribution-types",
  "either",
@@ -4696,6 +4713,7 @@ dependencies = [
  "url",
  "uv-auth",
  "uv-cache",
+ "uv-cache-info",
  "uv-normalize",
 ]
 
@@ -4793,6 +4811,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-cache",
+ "uv-cache-info",
  "uv-client",
  "uv-configuration",
  "uv-extract",
@@ -4896,6 +4915,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-cache",
+ "uv-cache-info",
  "uv-configuration",
  "uv-distribution",
  "uv-extract",
@@ -4984,6 +5004,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-cache",
+ "uv-cache-info",
  "uv-client",
  "uv-extract",
  "uv-fs",
@@ -5116,6 +5137,7 @@ dependencies = [
  "thiserror",
  "toml",
  "tracing",
+ "uv-cache-info",
  "uv-configuration",
  "uv-fs",
  "uv-macros",

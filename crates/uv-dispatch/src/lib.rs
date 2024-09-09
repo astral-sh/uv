@@ -140,6 +140,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.build_options
     }
 
+    fn config_settings(&self) -> &ConfigSettings {
+        self.config_settings
+    }
+
     fn sources(&self) -> SourceStrategy {
         self.sources
     }

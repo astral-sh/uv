@@ -3215,7 +3215,7 @@ requires-python = ">=3.8"
     "###
     );
 
-    // Re-installing should be a no-op.
+    // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in"), @r###"
     success: true

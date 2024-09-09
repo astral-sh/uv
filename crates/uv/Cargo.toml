@@ -24,6 +24,7 @@ platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-auth = { workspace = true }
 uv-cache = { workspace = true }
+uv-cache-info = { workspace = true }
 uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }

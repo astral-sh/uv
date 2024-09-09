@@ -19,6 +19,7 @@ pep440_rs = { workspace = true }
 pep508_rs = { workspace = true, features = ["serde"] }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
+uv-cache-info = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-normalize = { workspace = true }

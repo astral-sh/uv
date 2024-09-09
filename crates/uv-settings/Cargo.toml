@@ -17,6 +17,7 @@ distribution-types = { workspace = true, features = ["schemars"] }
 install-wheel-rs = { workspace = true, features = ["schemars", "clap"] }
 pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
+uv-cache-info = { workspace = true, features = ["schemars"] }
 uv-configuration = { workspace = true, features = ["schemars", "clap"] }
 uv-fs = { workspace = true }
 uv-macros = { workspace = true }

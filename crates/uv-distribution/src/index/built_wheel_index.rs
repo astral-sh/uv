@@ -1,14 +1,14 @@
+use crate::index::cached_wheel::CachedWheel;
+use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LOCAL_REVISION};
+use crate::Error;
 use distribution_types::{
     DirectUrlSourceDist, DirectorySourceDist, GitSourceDist, Hashed, PathSourceDist,
 };
 use platform_tags::Tags;
-use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, WheelCache};
+use uv_cache::{Cache, CacheBucket, CacheShard, WheelCache};
+use uv_cache_info::CacheInfo;
 use uv_fs::symlinks;
 use uv_types::HashStrategy;
-
-use crate::index::cached_wheel::CachedWheel;
-use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LOCAL_REVISION};
-use crate::Error;
 
 /// A local index of built distributions for a specific source distribution.
 #[derive(Debug)]
@@ -51,9 +51,10 @@ impl<'a> BuiltWheelIndex<'a> {
             return Ok(None);
         }
 
-        Ok(self.find(&cache_shard.shard(revision.id())))
-    }
+        let cache_shard = cache_shard.shard(revision.id());
 
+        Ok(self.find(&cache_shard))
+    }
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a local path.
     pub fn path(&self, source_dist: &PathSourceDist) -> Result<Option<CachedWheel>, Error> {
         let cache_shard = self.cache.shard(
@@ -67,12 +68,10 @@ impl<'a> BuiltWheelIndex<'a> {
             return Ok(None);
         };
 
-        // Determine the last-modified time of the source distribution.
-        let modified =
-            ArchiveTimestamp::from_file(&source_dist.install_path).map_err(Error::CacheRead)?;
-
         // If the distribution is stale, omit it from the index.
-        if !pointer.is_up_to_date(modified) {
+        let cache_info =
+            CacheInfo::from_file(&source_dist.install_path).map_err(Error::CacheRead)?;
+        if cache_info != *pointer.cache_info() {
             return Ok(None);
         }
 
@@ -82,7 +81,11 @@ impl<'a> BuiltWheelIndex<'a> {
             return Ok(None);
         }
 
-        Ok(self.find(&cache_shard.shard(revision.id())))
+        let cache_shard = cache_shard.shard(revision.id());
+
+        Ok(self
+            .find(&cache_shard)
+            .map(|wheel| wheel.with_cache_info(cache_info)))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution built from a
@@ -106,17 +109,11 @@ impl<'a> BuiltWheelIndex<'a> {
             return Ok(None);
         };
 
-        // Determine the last-modified time of the source distribution.
-        let Some(modified) = ArchiveTimestamp::from_source_tree(&source_dist.install_path)
-            .map_err(Error::CacheRead)?
-        else {
-            return Err(Error::DirWithoutEntrypoint(
-                source_dist.install_path.clone(),
-            ));
-        };
-
         // If the distribution is stale, omit it from the index.
-        if !pointer.is_up_to_date(modified) {
+        let cache_info =
+            CacheInfo::from_directory(&source_dist.install_path).map_err(Error::CacheRead)?;
+
+        if cache_info != *pointer.cache_info() {
             return Ok(None);
         }
 
@@ -126,7 +123,11 @@ impl<'a> BuiltWheelIndex<'a> {
             return Ok(None);
         }
 
-        Ok(self.find(&cache_shard.shard(revision.id())))
+        let cache_shard = cache_shard.shard(revision.id());
+
+        Ok(self
+            .find(&cache_shard)
+            .map(|wheel| wheel.with_cache_info(cache_info)))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.

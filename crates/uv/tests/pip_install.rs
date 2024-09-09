@@ -2926,7 +2926,7 @@ requires-python = ">=3.8"
     "###
     );
 
-    // Re-installing should be a no-op.
+    // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
@@ -2951,7 +2951,7 @@ requires-python = ">=3.8"
 "#,
     )?;
 
-    // Re-installing should update the package.
+    // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
@@ -3015,7 +3015,7 @@ dependencies = {file = ["requirements.txt"]}
     "###
     );
 
-    // Re-installing should not re-install, as we don't special-case dynamic metadata.
+    // Installing again should not re-install, as we don't special-case dynamic metadata.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
@@ -3068,7 +3068,7 @@ requires-python = ">=3.8"
     "###
     );
 
-    // Re-installing should be a no-op.
+    // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"
@@ -3093,7 +3093,7 @@ requires-python = ">=3.8"
 "#,
     )?;
 
-    // Re-installing should update the package.
+    // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"
@@ -3108,6 +3108,228 @@ requires-python = ">=3.8"
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalidate_path_on_cache_key() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package.
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = ["constraints.txt", { file = "requirements.txt" }]
+"#,
+    )?;
+
+    let requirements_txt = editable_dir.child("requirements.txt");
+    requirements_txt.write_str("idna")?;
+
+    let constraints_txt = editable_dir.child("constraints.txt");
+    constraints_txt.write_str("idna<3.4")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Installing again should be a no-op.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Modify the constraints file.
+    constraints_txt.write_str("idna<3.5")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    // Modify the requirements file.
+    requirements_txt.write_str("flask")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    // Modify the `pyproject.toml` file (but not in a meaningful way).
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ file = "requirements.txt" }, "constraints.txt"]
+"#,
+    )?;
+
+    // Installing again should be a no-op, since `pyproject.toml` was not included as a cache key.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalidate_path_on_commit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package.
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
+
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ git = true }]
+        "#,
+    )?;
+
+    // Create a Git repository.
+    context
+        .temp_dir
+        .child(".git")
+        .child("HEAD")
+        .write_str("ref: refs/heads/main")?;
+    context
+        .temp_dir
+        .child(".git")
+        .child("refs")
+        .child("heads")
+        .child("main")
+        .write_str("1b6638fdb424e993d8354e75c55a3e524050c857")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Installing again should be a no-op.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Change the current commit.
+    context
+        .temp_dir
+        .child(".git")
+        .child("refs")
+        .child("heads")
+        .child("main")
+        .write_str("a1a42cbd10d83bafd8600ba81f72bbef6c579385")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );

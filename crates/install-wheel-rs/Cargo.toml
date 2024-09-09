@@ -2,7 +2,7 @@
 name = "install-wheel-rs"
 version = "0.0.1"
 publish = false
-description = "Takes a wheel and installs it, either in a venv or for monotrail"
+description = "Takes a wheel and installs it."
 keywords = ["wheel", "python"]
 
 edition = { workspace = true }
@@ -24,6 +24,7 @@ distribution-filename = { workspace = true }
 pep440_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
+uv-cache-info = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-warnings = { workspace = true }

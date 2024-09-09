@@ -3,24 +3,23 @@ use std::io::{BufReader, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::{env, io};
 
+use crate::record::RecordEntry;
+use crate::script::Script;
+use crate::{Error, Layout};
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use mailparse::parse_headers;
+use pypi_types::DirectUrl;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 use tracing::{instrument, warn};
+use uv_cache_info::CacheInfo;
+use uv_fs::{relative_to, Simplified};
+use uv_normalize::PackageName;
 use walkdir::WalkDir;
 use zip::write::FileOptions;
 use zip::ZipWriter;
-
-use pypi_types::DirectUrl;
-use uv_fs::{relative_to, Simplified};
-use uv_normalize::PackageName;
-
-use crate::record::RecordEntry;
-use crate::script::Script;
-use crate::{Error, Layout};
 
 const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 
@@ -728,6 +727,7 @@ pub(crate) fn extra_dist_info(
     dist_info_prefix: &str,
     requested: bool,
     direct_url: Option<&DirectUrl>,
+    cache_info: Option<&CacheInfo>,
     installer: Option<&str>,
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
@@ -740,6 +740,14 @@ pub(crate) fn extra_dist_info(
             site_packages,
             &dist_info_dir.join("direct_url.json"),
             serde_json::to_string(direct_url)?.as_bytes(),
+            record,
+        )?;
+    }
+    if let Some(cache_info) = cache_info {
+        write_file_recorded(
+            site_packages,
+            &dist_info_dir.join("uv_cache.json"),
+            serde_json::to_string(cache_info)?.as_bytes(),
             record,
         )?;
     }
