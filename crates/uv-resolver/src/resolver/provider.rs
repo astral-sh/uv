@@ -61,6 +61,7 @@ pub trait ResolverProvider {
         dist: &'io Dist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
+    /// Returns the [`IndexLocations`] used by this resolver.
     fn index_locations(&self) -> &IndexLocations;
 
     /// Set the [`uv_distribution::Reporter`] to use for this installer.

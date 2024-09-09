@@ -299,6 +299,7 @@ pub(crate) async fn add(
         &flat_index,
         &state.index,
         &state.git,
+        &state.capabilities,
         &state.in_flight,
         settings.index_strategy,
         &settings.config_setting,

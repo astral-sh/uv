@@ -318,6 +318,7 @@ async fn venv_impl(
             &flat_index,
             &state.index,
             &state.git,
+            &state.capabilities,
             &state.in_flight,
             index_strategy,
             &config_settings,

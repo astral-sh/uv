@@ -11,7 +11,7 @@ pub(crate) use build::build;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 pub(crate) use cache_prune::cache_prune;
-use distribution_types::InstalledMetadata;
+use distribution_types::{IndexCapabilities, InstalledMetadata};
 pub(crate) use help::help;
 pub(crate) use pip::check::pip_check;
 pub(crate) use pip::compile::pip_compile;
@@ -200,6 +200,8 @@ pub(crate) struct SharedState {
     pub(crate) index: InMemoryIndex,
     /// The downloaded distributions.
     pub(crate) in_flight: InFlight,
+    /// The discovered capabilities for each registry index.
+    pub(crate) capabilities: IndexCapabilities,
 }
 
 /// A multicasting writer that writes to both the standard output and an output file, if present.

@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -16,7 +15,9 @@ use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
-use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
+use distribution_types::{
+    BuiltDist, File, FileLocation, IndexCapabilities, IndexUrl, IndexUrls, Name,
+};
 use install_wheel_rs::metadata::{find_archive_dist_info, is_metadata_entry};
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
@@ -147,7 +148,7 @@ impl<'a> RegistryClientBuilder<'a> {
 }
 
 impl<'a> TryFrom<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
-    type Error = io::Error;
+    type Error = std::io::Error;
 
     fn try_from(value: BaseClientBuilder<'a>) -> Result<Self, Self::Error> {
         Ok(Self {
@@ -402,7 +403,11 @@ impl RegistryClient {
     /// 2. From a remote wheel by partial zip reading
     /// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
     #[instrument(skip_all, fields(% built_dist))]
-    pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata23, Error> {
+    pub async fn wheel_metadata(
+        &self,
+        built_dist: &BuiltDist,
+        capabilities: &IndexCapabilities,
+    ) -> Result<Metadata23, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheels) => {
                 #[derive(Debug, Clone)]
@@ -451,7 +456,7 @@ impl RegistryClient {
                             .await?
                     }
                     WheelLocation::Url(url) => {
-                        self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
+                        self.wheel_metadata_registry(&wheel.index, &wheel.file, &url, capabilities)
                             .await?
                     }
                 }
@@ -460,7 +465,9 @@ impl RegistryClient {
                 self.wheel_metadata_no_pep658(
                     &wheel.filename,
                     &wheel.url,
+                    None,
                     WheelCache::Url(&wheel.url),
+                    capabilities,
                 )
                 .await?
             }
@@ -489,6 +496,7 @@ impl RegistryClient {
         index: &IndexUrl,
         file: &File,
         url: &Url,
+        capabilities: &IndexCapabilities,
     ) -> Result<Metadata23, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
@@ -536,8 +544,14 @@ impl RegistryClient {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
             // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
             // into the cache and read from there
-            self.wheel_metadata_no_pep658(&filename, url, WheelCache::Index(index))
-                .await
+            self.wheel_metadata_no_pep658(
+                &filename,
+                url,
+                Some(index),
+                WheelCache::Index(index),
+                capabilities,
+            )
+            .await
         }
     }
 
@@ -546,7 +560,9 @@ impl RegistryClient {
         &self,
         filename: &'data WheelFilename,
         url: &'data Url,
+        index: Option<&'data IndexUrl>,
         cache_shard: WheelCache<'data>,
+        capabilities: &'data IndexCapabilities,
     ) -> Result<Metadata23, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
@@ -562,72 +578,80 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let req = self
-            .uncached_client(url)
-            .head(url.clone())
-            .header(
-                "accept-encoding",
-                http::HeaderValue::from_static("identity"),
-            )
-            .build()
-            .map_err(ErrorKind::from)?;
+        // Attempt to fetch via a range request.
+        if index.map_or(true, |index| capabilities.supports_range_requests(index)) {
+            let req = self
+                .uncached_client(url)
+                .head(url.clone())
+                .header(
+                    "accept-encoding",
+                    http::HeaderValue::from_static("identity"),
+                )
+                .build()
+                .map_err(ErrorKind::from)?;
 
-        // Copy authorization headers from the HEAD request to subsequent requests
-        let mut headers = HeaderMap::default();
-        if let Some(authorization) = req.headers().get("authorization") {
-            headers.append("authorization", authorization.clone());
-        }
+            // Copy authorization headers from the HEAD request to subsequent requests
+            let mut headers = HeaderMap::default();
+            if let Some(authorization) = req.headers().get("authorization") {
+                headers.append("authorization", authorization.clone());
+            }
 
-        // This response callback is special, we actually make a number of subsequent requests to
-        // fetch the file from the remote zip.
-        let read_metadata_range_request = |response: Response| {
-            async {
-                let mut reader = AsyncHttpRangeReader::from_head_response(
-                    self.uncached_client(url).clone(),
-                    response,
-                    url.clone(),
-                    headers,
+            // This response callback is special, we actually make a number of subsequent requests to
+            // fetch the file from the remote zip.
+            let read_metadata_range_request = |response: Response| {
+                async {
+                    let mut reader = AsyncHttpRangeReader::from_head_response(
+                        self.uncached_client(url).clone(),
+                        response,
+                        url.clone(),
+                        headers,
+                    )
+                    .await
+                    .map_err(ErrorKind::AsyncHttpRangeReader)?;
+                    trace!("Getting metadata for {filename} by range request");
+                    let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
+                    let metadata = Metadata23::parse_metadata(text.as_bytes()).map_err(|err| {
+                        Error::from(ErrorKind::MetadataParseError(
+                            filename.clone(),
+                            url.to_string(),
+                            Box::new(err),
+                        ))
+                    })?;
+                    Ok::<Metadata23, CachedClientError<Error>>(metadata)
+                }
+                .boxed_local()
+                .instrument(info_span!("read_metadata_range_request", wheel = %filename))
+            };
+
+            let result = self
+                .cached_client()
+                .get_serde(
+                    req,
+                    &cache_entry,
+                    cache_control,
+                    read_metadata_range_request,
                 )
                 .await
-                .map_err(ErrorKind::AsyncHttpRangeReader)?;
-                trace!("Getting metadata for {filename} by range request");
-                let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
-                let metadata = Metadata23::parse_metadata(text.as_bytes()).map_err(|err| {
-                    Error::from(ErrorKind::MetadataParseError(
-                        filename.clone(),
-                        url.to_string(),
-                        Box::new(err),
-                    ))
-                })?;
-                Ok::<Metadata23, CachedClientError<Error>>(metadata)
-            }
-            .boxed_local()
-            .instrument(info_span!("read_metadata_range_request", wheel = %filename))
-        };
+                .map_err(crate::Error::from);
 
-        let result = self
-            .cached_client()
-            .get_serde(
-                req,
-                &cache_entry,
-                cache_control,
-                read_metadata_range_request,
-            )
-            .await
-            .map_err(crate::Error::from);
+            match result {
+                Ok(metadata) => return Ok(metadata),
+                Err(err) => {
+                    if err.is_http_range_requests_unsupported() {
+                        // The range request version failed. Fall back to streaming the file to search
+                        // for the METADATA file.
+                        warn!("Range requests not supported for {filename}; streaming wheel");
 
-        match result {
-            Ok(metadata) => return Ok(metadata),
-            Err(err) => {
-                if err.is_http_range_requests_unsupported() {
-                    // The range request version failed. Fall back to streaming the file to search
-                    // for the METADATA file.
-                    warn!("Range requests not supported for {filename}; streaming wheel");
-                } else {
-                    return Err(err);
+                        // Mark the index as not supporting range requests.
+                        if let Some(index) = index {
+                            capabilities.set_supports_range_requests(index.clone(), false);
+                        }
+                    } else {
+                        return Err(err);
+                    }
                 }
-            }
-        };
+            };
+        }
 
         // Create a request to stream the file.
         let req = self
