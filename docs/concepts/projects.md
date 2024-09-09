@@ -230,7 +230,7 @@ example-packaged-app
 But the module defines a CLI function:
 
 ```python title="__init__.py"
-def hello():
+def hello() -> None:
     print("Hello from example-packaged-app!")
 ```
 
