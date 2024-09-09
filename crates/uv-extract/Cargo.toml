@@ -17,7 +17,7 @@ distribution-filename = { workspace = true }
 pypi-types = { workspace = true }
 
 async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd", "xz"] }
-async_zip = { workspace = true, features = ["tokio"] }
+async_zip = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 md-5 = { workspace = true }

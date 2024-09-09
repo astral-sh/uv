@@ -19,7 +19,6 @@ use distribution_types::{
 };
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
-use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
 use pypi_types::{HashDigest, Metadata12, Metadata23, RequiresTxt};
 use reqwest::Response;
@@ -34,6 +33,7 @@ use uv_client::{
 use uv_configuration::{BuildKind, BuildOutput};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
+use uv_metadata::read_archive_metadata;
 use uv_types::{BuildContext, SourceBuildTrait};
 use zip::ZipArchive;
 
@@ -1444,7 +1444,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
-        let metadata = read_wheel_metadata(&filename, cache_shard.join(&disk_filename))?;
+        let metadata = read_wheel_metadata(&filename, &cache_shard.join(&disk_filename))?;
 
         // Validate the metadata.
         validate(source, &metadata)?;
@@ -1955,14 +1955,12 @@ async fn read_cached_metadata(cache_entry: &CacheEntry) -> Result<Option<Metadat
 }
 
 /// Read the [`Metadata23`] from a built wheel.
-fn read_wheel_metadata(
-    filename: &WheelFilename,
-    wheel: impl Into<PathBuf>,
-) -> Result<Metadata23, Error> {
+fn read_wheel_metadata(filename: &WheelFilename, wheel: &Path) -> Result<Metadata23, Error> {
     let file = fs_err::File::open(wheel).map_err(Error::CacheRead)?;
     let reader = std::io::BufReader::new(file);
     let mut archive = ZipArchive::new(reader)?;
-    let dist_info = read_archive_metadata(filename, &mut archive)?;
+    let dist_info = read_archive_metadata(filename, &mut archive)
+        .map_err(|err| Error::WheelMetadata(wheel.to_path_buf(), Box::new(err)))?;
     Ok(Metadata23::parse_metadata(&dist_info)?)
 }
 

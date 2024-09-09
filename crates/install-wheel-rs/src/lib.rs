@@ -16,7 +16,6 @@ use uv_normalize::PackageName;
 pub use wheel::{parse_wheel_file, read_record_file, LibKind};
 
 pub mod linker;
-pub mod metadata;
 mod record;
 mod script;
 mod uninstall;
@@ -82,24 +81,10 @@ pub enum Error {
     Pep440,
     #[error("Invalid direct_url.json")]
     DirectUrlJson(#[from] serde_json::Error),
-    #[error("No .dist-info directory found")]
-    MissingDistInfo,
     #[error("Cannot uninstall package; `RECORD` file not found at: {}", _0.user_display())]
     MissingRecord(PathBuf),
     #[error("Cannot uninstall package; `top_level.txt` file not found at: {}", _0.user_display())]
     MissingTopLevel(PathBuf),
-    #[error("Multiple .dist-info directories found: {0}")]
-    MultipleDistInfo(String),
-    #[error(
-        "The .dist-info directory {0} does not consist of the normalized package name and version"
-    )]
-    MissingDistInfoSegments(String),
-    #[error("The .dist-info directory {0} does not start with the normalized package name: {1}")]
-    MissingDistInfoPackageName(String, String),
-    #[error("The .dist-info directory {0} does not start with the normalized version: {1}")]
-    MissingDistInfoVersion(String, String),
-    #[error("The .dist-info directory name contains invalid characters")]
-    InvalidDistInfoPrefix,
     #[error("Invalid wheel size")]
     InvalidSize,
     #[error("Invalid package name")]

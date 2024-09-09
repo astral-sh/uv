@@ -39,7 +39,10 @@ pub enum MetadataResponse {
     /// The wheel metadata was found, but the metadata was inconsistent.
     InconsistentMetadata(Box<uv_distribution::Error>),
     /// The wheel has an invalid structure.
-    InvalidStructure(Box<install_wheel_rs::Error>),
+    InvalidStructure {
+        source: String,
+        err: Box<uv_metadata::Error>,
+    },
     /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
 }
@@ -184,8 +187,11 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                     uv_client::ErrorKind::MetadataParseError(_, _, err) => {
                         Ok(MetadataResponse::InvalidMetadata(err))
                     }
-                    uv_client::ErrorKind::DistInfo(err) => {
-                        Ok(MetadataResponse::InvalidStructure(Box::new(err)))
+                    uv_client::ErrorKind::Metadata(_, err) => {
+                        Ok(MetadataResponse::InvalidStructure {
+                            source: dist.to_string(),
+                            err: Box::new(err),
+                        })
                     }
                     kind => Err(uv_client::Error::from(kind).into()),
                 },
@@ -198,8 +204,11 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                 uv_distribution::Error::Metadata(err) => {
                     Ok(MetadataResponse::InvalidMetadata(Box::new(err)))
                 }
-                uv_distribution::Error::DistInfo(err) => {
-                    Ok(MetadataResponse::InvalidStructure(Box::new(err)))
+                uv_distribution::Error::WheelMetadata(source, err) => {
+                    Ok(MetadataResponse::InvalidStructure {
+                        source: source.to_string_lossy().to_string(),
+                        err,
+                    })
                 }
                 err => Err(err),
             },

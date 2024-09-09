@@ -63,8 +63,8 @@ pub enum Error {
     VersionMismatch { given: Version, metadata: Version },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] pypi_types::MetadataError),
-    #[error("Failed to read `dist-info` metadata from built wheel")]
-    DistInfo(#[from] install_wheel_rs::Error),
+    #[error("Failed to read metadata: `{}`", _0.user_display())]
+    WheelMetadata(PathBuf, #[source] Box<uv_metadata::Error>),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
     #[error("Source distribution directory contains neither readable `pyproject.toml` nor `setup.py`: `{}`", _0.user_display())]
