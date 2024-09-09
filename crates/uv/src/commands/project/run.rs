@@ -612,9 +612,11 @@ pub(crate) async fn run(
         })
     };
 
-    // If we're running in an ephemeral environment, add a `sitecustomize.py` to enable loading of
+    // If we're running in an ephemeral environment, add a path file to enable loading of
     // the base environment's site packages. Setting `PYTHONPATH` is insufficient, as it doesn't
     // resolve `.pth` files in the base environment.
+    // And `sitecustomize.py` would be an alternative but it can be shadowed by an existing such
+    // module in the python installation.
     if let Some(ephemeral_env) = ephemeral_env.as_ref() {
         let ephemeral_site_packages = ephemeral_env
             .site_packages()
@@ -626,7 +628,7 @@ pub(crate) async fn run(
             .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
 
         fs_err::write(
-            ephemeral_site_packages.join("sitecustomize.py"),
+            ephemeral_site_packages.join("_uv_ephemeral_overlay.pth"),
             format!(
                 "import site; site.addsitedir(\"{}\")",
                 base_site_packages.escape_for_python()
