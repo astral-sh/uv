@@ -326,24 +326,10 @@ impl CandidateSelector {
         let highest = self.use_highest_version(package_name);
 
         let allow_prerelease = match self.prerelease_strategy.allows(package_name, markers) {
-            AllowPrerelease::Yes => AllowPrerelease::Yes,
-            AllowPrerelease::No => AllowPrerelease::No,
-            AllowPrerelease::IfNecessary => {
-                // If we're looking at a pre-release singleton, pre-check whether _all_ versions are
-                // pre-release.
-                if range.as_singleton().is_some_and(Version::any_prerelease) {
-                    if version_maps
-                        .iter()
-                        .any(|version_map| version_map.versions().all(Version::any_prerelease))
-                    {
-                        AllowPrerelease::Yes
-                    } else {
-                        AllowPrerelease::No
-                    }
-                } else {
-                    AllowPrerelease::IfNecessary
-                }
-            }
+            AllowPrerelease::Yes => true,
+            AllowPrerelease::No => false,
+            // Allow pre-releases if there are no stable versions available.
+            AllowPrerelease::IfNecessary => !version_maps.iter().any(VersionMap::stable),
         };
 
         if self.index_strategy == IndexStrategy::UnsafeBestMatch {
@@ -436,69 +422,24 @@ impl CandidateSelector {
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
-        allow_prerelease: AllowPrerelease,
+        allow_prerelease: bool,
     ) -> Option<Candidate<'a>> {
-        #[derive(Debug)]
-        enum PrereleaseCandidate<'a> {
-            NotNecessary,
-            IfNecessary(&'a Version, &'a PrioritizedDist),
-        }
-
-        let mut prerelease = None;
         let mut steps = 0usize;
         for (version, maybe_dist) in versions {
             steps += 1;
-            let candidate = if version.any_prerelease() {
-                if range.contains(version) {
-                    match allow_prerelease {
-                        AllowPrerelease::Yes => {
-                            let Some(dist) = maybe_dist.prioritized_dist() else {
-                                continue;
-                            };
-                            trace!("found candidate for package {package_name:?} with range {range:?} after {steps} steps: {version:?} version");
-                            // If pre-releases are allowed, treat them equivalently
-                            // to stable distributions.
-                            Candidate::new(
-                                package_name,
-                                version,
-                                dist,
-                                VersionChoiceKind::Compatible,
-                            )
-                        }
-                        AllowPrerelease::IfNecessary => {
-                            let Some(dist) = maybe_dist.prioritized_dist() else {
-                                continue;
-                            };
-                            // If pre-releases are allowed as a fallback, store the
-                            // first-matching prerelease.
-                            if prerelease.is_none() {
-                                prerelease = Some(PrereleaseCandidate::IfNecessary(version, dist));
-                            }
-                            continue;
-                        }
-                        AllowPrerelease::No => {
-                            continue;
-                        }
-                    }
-                } else {
-                    continue;
-                }
-            } else {
-                // If we have at least one stable release, we shouldn't allow the "if-necessary"
-                // pre-release strategy, regardless of whether that stable release satisfies the
-                // current range.
-                prerelease = Some(PrereleaseCandidate::NotNecessary);
 
-                // Return the first-matching stable distribution.
-                if range.contains(version) {
-                    let Some(dist) = maybe_dist.prioritized_dist() else {
-                        continue;
-                    };
-                    trace!("found candidate for package {package_name:?} with range {range:?} after {steps} steps: {version:?} version");
-                    Candidate::new(package_name, version, dist, VersionChoiceKind::Compatible)
-                } else {
+            let candidate = {
+                if version.any_prerelease() && !allow_prerelease {
                     continue;
                 }
+                if !range.contains(version) {
+                    continue;
+                };
+                let Some(dist) = maybe_dist.prioritized_dist() else {
+                    continue;
+                };
+                trace!("found candidate for package {package_name:?} with range {range:?} after {steps} steps: {version:?} version");
+                Candidate::new(package_name, version, dist, VersionChoiceKind::Compatible)
             };
 
             // If candidate is not compatible due to exclude newer, continue searching.
@@ -520,16 +461,7 @@ impl CandidateSelector {
             return Some(candidate);
         }
         trace!("Exhausted all candidates for package {package_name} with range {range} after {steps} steps");
-        match prerelease {
-            None => None,
-            Some(PrereleaseCandidate::NotNecessary) => None,
-            Some(PrereleaseCandidate::IfNecessary(version, dist)) => Some(Candidate::new(
-                package_name,
-                version,
-                dist,
-                VersionChoiceKind::Compatible,
-            )),
-        }
+        None
     }
 }
 
