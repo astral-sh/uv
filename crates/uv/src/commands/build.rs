@@ -361,6 +361,7 @@ async fn build_impl(
                     subdirectory,
                     &version_id,
                     dist,
+                    sources,
                     BuildKind::Sdist,
                     BuildOutput::Stderr,
                 )
@@ -392,6 +393,7 @@ async fn build_impl(
                     subdirectory,
                     &version_id,
                     dist,
+                    sources,
                     BuildKind::Wheel,
                     BuildOutput::Stderr,
                 )
@@ -409,6 +411,7 @@ async fn build_impl(
                     subdirectory,
                     &version_id,
                     dist,
+                    sources,
                     BuildKind::Sdist,
                     BuildOutput::Stderr,
                 )
@@ -426,6 +429,7 @@ async fn build_impl(
                     subdirectory,
                     &version_id,
                     dist,
+                    sources,
                     BuildKind::Wheel,
                     BuildOutput::Stderr,
                 )
@@ -442,6 +446,7 @@ async fn build_impl(
                     subdirectory,
                     &version_id,
                     dist,
+                    sources,
                     BuildKind::Sdist,
                     BuildOutput::Stderr,
                 )
@@ -455,6 +460,7 @@ async fn build_impl(
                     subdirectory,
                     &version_id,
                     dist,
+                    sources,
                     BuildKind::Wheel,
                     BuildOutput::Stderr,
                 )
@@ -488,6 +494,7 @@ async fn build_impl(
                     subdirectory,
                     &version_id,
                     dist,
+                    sources,
                     BuildKind::Wheel,
                     BuildOutput::Stderr,
                 )

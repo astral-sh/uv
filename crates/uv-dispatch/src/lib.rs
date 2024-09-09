@@ -131,6 +131,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.build_options
     }
 
+    // TODO(charlie): We should remove this. It isn't used within the trait.
     fn sources(&self) -> SourceStrategy {
         self.sources
     }
@@ -207,7 +208,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         } = Planner::new(&requirements).build(
             site_packages,
             &Reinstall::default(),
-            &BuildOptions::default(),
+            self.build_options,
             self.hasher,
             self.index_locations,
             self.cache(),
@@ -301,6 +302,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         subdirectory: Option<&'data Path>,
         version_id: &'data str,
         dist: Option<&'data SourceDist>,
+        sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
     ) -> Result<SourceBuild> {
@@ -330,6 +332,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self,
             self.source_build_context.clone(),
             version_id.to_string(),
+            sources,
             self.config_settings.clone(),
             self.build_isolation,
             build_kind,

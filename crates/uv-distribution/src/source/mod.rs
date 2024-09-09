@@ -28,7 +28,7 @@ use uv_cache::{
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::{BuildKind, BuildOutput};
+use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
 use uv_types::{BuildContext, SourceBuildTrait};
@@ -39,7 +39,7 @@ use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::reporter::Facade;
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::revision::Revision;
-use crate::{Reporter, RequiresDist};
+use crate::{LowerBound, Reporter, RequiresDist};
 
 mod built_wheel_metadata;
 mod revision;
@@ -392,6 +392,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             requires_dist,
             project_root,
             self.build_context.sources(),
+            LowerBound::Warn,
         )
         .await?;
         Ok(requires_dist)
@@ -443,7 +444,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Build the source distribution.
         let source_dist_entry = cache_shard.entry(filename);
         let (disk_filename, wheel_filename, metadata) = self
-            .build_distribution(source, source_dist_entry.path(), subdirectory, &cache_shard)
+            .build_distribution(
+                source,
+                source_dist_entry.path(),
+                subdirectory,
+                &cache_shard,
+                SourceStrategy::Disabled,
+            )
             .await?;
 
         if let Some(task) = task {
@@ -525,7 +532,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Otherwise, we either need to build the metadata or the wheel.
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, source_dist_entry.path(), subdirectory)
+            .build_metadata(
+                source,
+                source_dist_entry.path(),
+                subdirectory,
+                SourceStrategy::Disabled,
+            )
             .boxed_local()
             .await?
         {
@@ -550,7 +562,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Build the source distribution.
         let (_disk_filename, _wheel_filename, metadata) = self
-            .build_distribution(source, source_dist_entry.path(), subdirectory, &cache_shard)
+            .build_distribution(
+                source,
+                source_dist_entry.path(),
+                subdirectory,
+                &cache_shard,
+                SourceStrategy::Disabled,
+            )
             .await?;
 
         // Store the metadata.
@@ -685,7 +703,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (disk_filename, filename, metadata) = self
-            .build_distribution(source, source_entry.path(), None, &cache_shard)
+            .build_distribution(
+                source,
+                source_entry.path(),
+                None,
+                &cache_shard,
+                SourceStrategy::Disabled,
+            )
             .await?;
 
         if let Some(task) = task {
@@ -762,7 +786,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, source_entry.path(), None)
+            .build_metadata(source, source_entry.path(), None, SourceStrategy::Disabled)
             .boxed_local()
             .await?
         {
@@ -787,7 +811,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (_disk_filename, _filename, metadata) = self
-            .build_distribution(source, source_entry.path(), None, &cache_shard)
+            .build_distribution(
+                source,
+                source_entry.path(),
+                None,
+                &cache_shard,
+                SourceStrategy::Disabled,
+            )
             .await?;
 
         if let Some(task) = task {
@@ -908,7 +938,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (disk_filename, filename, metadata) = self
-            .build_distribution(source, &resource.install_path, None, &cache_shard)
+            .build_distribution(
+                source,
+                &resource.install_path,
+                None,
+                &cache_shard,
+                self.build_context.sources(),
+            )
             .await?;
 
         if let Some(task) = task {
@@ -996,7 +1032,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, &resource.install_path, None)
+            .build_metadata(
+                source,
+                &resource.install_path,
+                None,
+                self.build_context.sources(),
+            )
             .boxed_local()
             .await?
         {
@@ -1025,7 +1066,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (_disk_filename, _filename, metadata) = self
-            .build_distribution(source, &resource.install_path, None, &cache_shard)
+            .build_distribution(
+                source,
+                &resource.install_path,
+                None,
+                &cache_shard,
+                self.build_context.sources(),
+            )
             .await?;
 
         if let Some(task) = task {
@@ -1144,7 +1191,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (disk_filename, filename, metadata) = self
-            .build_distribution(source, fetch.path(), resource.subdirectory, &cache_shard)
+            .build_distribution(
+                source,
+                fetch.path(),
+                resource.subdirectory,
+                &cache_shard,
+                self.build_context.sources(),
+            )
             .await?;
 
         if let Some(task) = task {
@@ -1243,7 +1296,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, fetch.path(), resource.subdirectory)
+            .build_metadata(
+                source,
+                fetch.path(),
+                resource.subdirectory,
+                self.build_context.sources(),
+            )
             .boxed_local()
             .await?
         {
@@ -1267,7 +1325,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (_disk_filename, _filename, metadata) = self
-            .build_distribution(source, fetch.path(), resource.subdirectory, &cache_shard)
+            .build_distribution(
+                source,
+                fetch.path(),
+                resource.subdirectory,
+                &cache_shard,
+                self.build_context.sources(),
+            )
             .await?;
 
         if let Some(task) = task {
@@ -1405,6 +1469,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source_root: &Path,
         subdirectory: Option<&Path>,
         cache_shard: &CacheShard,
+        sources: SourceStrategy,
     ) -> Result<(String, WheelFilename, Metadata23), Error> {
         debug!("Building: {source}");
 
@@ -1432,6 +1497,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 subdirectory,
                 &source.to_string(),
                 source.as_dist(),
+                sources,
                 if source.is_editable() {
                     BuildKind::Editable
                 } else {
@@ -1463,6 +1529,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         source_root: &Path,
         subdirectory: Option<&Path>,
+        sources: SourceStrategy,
     ) -> Result<Option<Metadata23>, Error> {
         debug!("Preparing metadata for: {source}");
 
@@ -1474,6 +1541,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 subdirectory,
                 &source.to_string(),
                 source.as_dist(),
+                sources,
                 if source.is_editable() {
                     BuildKind::Editable
                 } else {

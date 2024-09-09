@@ -6,7 +6,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
 use crate::metadata::{LoweredRequirement, MetadataError};
-use crate::Metadata;
+use crate::{LowerBound, Metadata};
 
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
@@ -38,6 +38,7 @@ impl RequiresDist {
         metadata: pypi_types::RequiresDist,
         install_path: &Path,
         sources: SourceStrategy,
+        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         match sources {
             SourceStrategy::Enabled => {
@@ -52,7 +53,7 @@ impl RequiresDist {
                     return Ok(Self::from_metadata23(metadata));
                 };
 
-                Self::from_project_workspace(metadata, &project_workspace)
+                Self::from_project_workspace(metadata, &project_workspace, lower_bound)
             }
             SourceStrategy::Disabled => Ok(Self::from_metadata23(metadata)),
         }
@@ -61,6 +62,7 @@ impl RequiresDist {
     fn from_project_workspace(
         metadata: pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
+        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
@@ -92,6 +94,7 @@ impl RequiresDist {
                         project_workspace.project_root(),
                         sources,
                         project_workspace.workspace(),
+                        lower_bound,
                     )
                     .map(LoweredRequirement::into_inner)
                     .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
@@ -115,6 +118,7 @@ impl RequiresDist {
                     project_workspace.project_root(),
                     sources,
                     project_workspace.workspace(),
+                    lower_bound,
                 )
                 .map(LoweredRequirement::into_inner)
                 .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
@@ -152,7 +156,7 @@ mod test {
     use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
-    use crate::RequiresDist;
+    use crate::{LowerBound, RequiresDist};
 
     async fn requires_dist_from_pyproject_toml(contents: &str) -> anyhow::Result<RequiresDist> {
         let pyproject_toml = PyProjectToml::from_string(contents.to_string())?;
@@ -174,6 +178,7 @@ mod test {
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
+            LowerBound::Warn,
         )?)
     }
 

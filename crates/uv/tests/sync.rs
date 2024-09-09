@@ -3,6 +3,7 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
+use indoc::indoc;
 use insta::assert_snapshot;
 
 use common::{uv_snapshot, TestContext};
@@ -2103,6 +2104,157 @@ fn no_build() -> Result<()> {
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn build_system_requires_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let build = context.temp_dir.child("build");
+    build.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "build"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions>=3.10"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    build
+        .child("src")
+        .child("build")
+        .child("__init__.py")
+        .write_str(indoc! { r#"
+            def hello() -> str:
+                return "Hello, world!"
+        "#})?;
+    build.child("README.md").touch()?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "build"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.workspace]
+        members = ["build"]
+
+        [tool.uv.sources]
+        build = { workspace = true }
+        "#,
+    )?;
+
+    context.temp_dir.child("setup.py").write_str(indoc! {r"
+        from setuptools import setup
+
+        from build import hello
+
+        hello()
+
+        setup()
+        ",
+    })?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn build_system_requires_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let build = context.temp_dir.child("build");
+    build.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "build"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions>=3.10"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    build
+        .child("src")
+        .child("build")
+        .child("__init__.py")
+        .write_str(indoc! { r#"
+            def hello() -> str:
+                return "Hello, world!"
+        "#})?;
+    build.child("README.md").touch()?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "build"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        build = { path = "build" }
+        "#,
+    )?;
+
+    context.temp_dir.child("setup.py").write_str(indoc! {r"
+        from setuptools import setup
+
+        from build import hello
+
+        hello()
+
+        setup()
+        ",
+    })?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
 
     Ok(())
 }

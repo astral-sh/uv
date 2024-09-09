@@ -15,6 +15,14 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{PyProjectToml, Source};
 use uv_workspace::Workspace;
 
+#[derive(Debug, Copy, Clone)]
+pub enum LowerBound {
+    /// Allow missing lower bounds.
+    Allow,
+    /// Warn about missing lower bounds.
+    Warn,
+}
+
 #[derive(Debug, Clone)]
 pub struct LoweredRequirement(Requirement);
 
@@ -34,6 +42,7 @@ impl LoweredRequirement {
         project_dir: &Path,
         project_sources: &BTreeMap<PackageName, Source>,
         workspace: &Workspace,
+        lower_bound: LowerBound,
     ) -> Result<Self, LoweringError> {
         let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), Origin::Project)
@@ -63,16 +72,18 @@ impl LoweredRequirement {
         }
 
         let Some(source) = source else {
-            let has_sources = !project_sources.is_empty() || !workspace.sources().is_empty();
-            // Support recursive editable inclusions.
-            if has_sources
-                && requirement.version_or_url.is_none()
-                && &requirement.name != project_name
-            {
-                warn_user_once!(
-                    "Missing version constraint (e.g., a lower bound) for `{}`",
-                    requirement.name
-                );
+            if matches!(lower_bound, LowerBound::Warn) {
+                let has_sources = !project_sources.is_empty() || !workspace.sources().is_empty();
+                // Support recursive editable inclusions.
+                if has_sources
+                    && requirement.version_or_url.is_none()
+                    && &requirement.name != project_name
+                {
+                    warn_user_once!(
+                        "Missing version constraint (e.g., a lower bound) for `{}`",
+                        requirement.name
+                    );
+                }
             }
             return Ok(Self(Requirement::from(requirement)));
         };

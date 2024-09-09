@@ -9,8 +9,8 @@ use uv_configuration::SourceStrategy;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_workspace::WorkspaceError;
 
-pub use crate::metadata::lowering::LoweredRequirement;
 use crate::metadata::lowering::LoweringError;
+pub use crate::metadata::lowering::{LowerBound, LoweredRequirement};
 pub use crate::metadata::requires_dist::RequiresDist;
 
 mod lowering;
@@ -75,6 +75,7 @@ impl Metadata {
             },
             install_path,
             sources,
+            LowerBound::Warn,
         )
         .await?;
 

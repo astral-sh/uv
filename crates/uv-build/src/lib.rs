@@ -30,7 +30,8 @@ use distribution_types::Resolution;
 use pep440_rs::Version;
 use pep508_rs::PackageName;
 use pypi_types::{Requirement, VerbatimParsedUrl};
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings};
+use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_distribution::{LowerBound, RequiresDist};
 use uv_fs::{rename_with_retry, PythonExt, Simplified};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
@@ -83,6 +84,8 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory", _0.simplified_display())]
     InvalidSourceDist(PathBuf),
+    #[error(transparent)]
+    Lowering(#[from] uv_distribution::MetadataError),
     #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectToml(#[from] toml::de::Error),
     #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
@@ -464,6 +467,7 @@ impl SourceBuild {
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
         version_id: String,
+        source_strategy: SourceStrategy,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
         build_kind: BuildKind,
@@ -482,10 +486,19 @@ impl SourceBuild {
         let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
 
         // Check if we have a PEP 517 build backend.
-        let (pep517_backend, project) =
-            Self::extract_pep517_backend(&source_tree, &default_backend).map_err(|err| *err)?;
+        let (pep517_backend, project) = Self::extract_pep517_backend(
+            &source_tree,
+            fallback_package_name,
+            source_strategy,
+            &default_backend,
+        )
+        .await
+        .map_err(|err| *err)?;
 
-        let package_name = project.as_ref().map(|p| &p.name).or(fallback_package_name);
+        let package_name = project
+            .as_ref()
+            .map(|project| &project.name)
+            .or(fallback_package_name);
 
         // Create a virtual environment, or install into the shared environment if requested.
         let venv = if let Some(venv) = build_isolation.shared_environment(package_name) {
@@ -501,7 +514,7 @@ impl SourceBuild {
             )?
         };
 
-        // Setup the build environment. If build isolation is disabled, we assume the build
+        // Set up the build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
         if build_isolation.is_isolated(package_name) {
             debug!("Resolving build requirements");
@@ -524,8 +537,8 @@ impl SourceBuild {
             debug!("Proceeding without build isolation");
         }
 
-        // Figure out what the modified path should be
-        // Remove the PATH variable from the environment variables if it's there
+        // Figure out what the modified path should be.
+        // Remove PATH from the environment variable if it's there.
         let user_path = environment_variables.remove(&OsString::from("PATH"));
         // See if there is an OS PATH variable
         let os_path = env::var_os("PATH");
@@ -563,10 +576,12 @@ impl SourceBuild {
             create_pep517_build_environment(
                 &runner,
                 &source_tree,
+                package_name,
                 &venv,
                 &pep517_backend,
                 build_context,
                 &version_id,
+                source_strategy,
                 build_kind,
                 level,
                 &config_settings,
@@ -627,15 +642,58 @@ impl SourceBuild {
     }
 
     /// Extract the PEP 517 backend from the `pyproject.toml` or `setup.py` file.
-    fn extract_pep517_backend(
+    async fn extract_pep517_backend(
         source_tree: &Path,
+        fallback_package_name: Option<&PackageName>,
+        source_strategy: SourceStrategy,
         default_backend: &Pep517Backend,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
                 let pyproject_toml: PyProjectToml =
                     toml::from_str(&toml).map_err(Error::InvalidPyprojectToml)?;
+
                 let backend = if let Some(build_system) = pyproject_toml.build_system {
+                    // If necessary, lower the requirements.
+                    let requirements = match source_strategy {
+                        SourceStrategy::Enabled => {
+                            if let Some(name) = pyproject_toml
+                                .project
+                                .as_ref()
+                                .map(|project| &project.name)
+                                .or(fallback_package_name)
+                            {
+                                // TODO(charlie): Add a type to lower requirements without providing
+                                // empty extras.
+                                let requires_dist = pypi_types::RequiresDist {
+                                    name: name.clone(),
+                                    requires_dist: build_system.requires,
+                                    provides_extras: vec![],
+                                };
+                                let requires_dist = RequiresDist::from_project_maybe_workspace(
+                                    requires_dist,
+                                    source_tree,
+                                    source_strategy,
+                                    LowerBound::Allow,
+                                )
+                                .await
+                                .map_err(Error::Lowering)?;
+                                requires_dist.requires_dist
+                            } else {
+                                build_system
+                                    .requires
+                                    .into_iter()
+                                    .map(Requirement::from)
+                                    .collect()
+                            }
+                        }
+                        SourceStrategy::Disabled => build_system
+                            .requires
+                            .into_iter()
+                            .map(Requirement::from)
+                            .collect(),
+                    };
+
                     Pep517Backend {
                         // If `build-backend` is missing, inject the legacy setuptools backend, but
                         // retain the `requires`, to match `pip` and `build`. Note that while PEP 517
@@ -648,11 +706,7 @@ impl SourceBuild {
                             .build_backend
                             .unwrap_or_else(|| "setuptools.build_meta:__legacy__".to_string()),
                         backend_path: build_system.backend_path,
-                        requirements: build_system
-                            .requires
-                            .into_iter()
-                            .map(Requirement::from)
-                            .collect(),
+                        requirements,
                     }
                 } else {
                     // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
@@ -941,10 +995,12 @@ fn escape_path_for_python(path: &Path) -> String {
 async fn create_pep517_build_environment(
     runner: &PythonRunner,
     source_tree: &Path,
+    project_name: Option<&PackageName>,
     venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
     version_id: &str,
+    source_strategy: SourceStrategy,
     build_kind: BuildKind,
     level: BuildOutput,
     config_settings: &ConfigSettings,
@@ -1028,7 +1084,33 @@ async fn create_pep517_build_environment(
             version_id,
         )
     })?;
-    let extra_requires: Vec<_> = extra_requires.into_iter().map(Requirement::from).collect();
+
+    // If necessary, lower the requirements.
+    let extra_requires = match source_strategy {
+        SourceStrategy::Enabled => {
+            if let Some(project_name) = project_name {
+                // TODO(charlie): Add a type to lower requirements without providing
+                // empty extras.
+                let requires_dist = pypi_types::RequiresDist {
+                    name: project_name.clone(),
+                    requires_dist: extra_requires,
+                    provides_extras: vec![],
+                };
+                let requires_dist = RequiresDist::from_project_maybe_workspace(
+                    requires_dist,
+                    source_tree,
+                    source_strategy,
+                    LowerBound::Allow,
+                )
+                .await
+                .map_err(Error::Lowering)?;
+                requires_dist.requires_dist
+            } else {
+                extra_requires.into_iter().map(Requirement::from).collect()
+            }
+        }
+        SourceStrategy::Disabled => extra_requires.into_iter().map(Requirement::from).collect(),
+    };
 
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of
     // the pyproject.toml requires (in this case, `wheel`). We can skip doing the whole resolution
@@ -1045,6 +1127,7 @@ async fn create_pep517_build_environment(
             .cloned()
             .chain(extra_requires)
             .collect();
+
         let resolution = build_context
             .resolve(&requirements)
             .await

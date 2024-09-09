@@ -19,6 +19,7 @@ pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
 uv-configuration = { workspace = true }
+uv-distribution = { workspace = true }
 uv-fs = { workspace = true }
 uv-python = { workspace = true }
 uv-types = { workspace = true }

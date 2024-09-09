@@ -4570,6 +4570,7 @@ dependencies = [
  "toml",
  "tracing",
  "uv-configuration",
+ "uv-distribution",
  "uv-fs",
  "uv-python",
  "uv-types",
