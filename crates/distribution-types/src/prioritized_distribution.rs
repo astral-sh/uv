@@ -1,4 +1,5 @@
 use distribution_filename::BuildTag;
+use std::cmp::Reverse;
 use std::fmt::{Display, Formatter};
 
 use pep440_rs::VersionSpecifiers;
@@ -197,7 +198,12 @@ pub enum PythonRequirementKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
-    Compatible(HashComparison, Option<TagPriority>, Option<BuildTag>),
+    Compatible(
+        HashComparison,
+        Option<TagPriority>,
+        Option<BuildTag>,
+        Option<u64>,
+    ),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -377,7 +383,7 @@ impl PrioritizedDist {
             .best_wheel_index
             .map(|i| &self.0.wheels[i])
             .and_then(|(_, compatibility)| match compatibility {
-                WheelCompatibility::Compatible(_, _, _) => None,
+                WheelCompatibility::Compatible(_, _, _, _) => None,
                 WheelCompatibility::Incompatible(incompatibility) => Some(incompatibility),
             })
     }
@@ -483,7 +489,7 @@ impl<'a> CompatibleDist<'a> {
 
 impl WheelCompatibility {
     pub fn is_compatible(&self) -> bool {
-        matches!(self, Self::Compatible(_, _, _))
+        matches!(self, Self::Compatible(_, _, _, _))
     }
 
     /// Return `true` if the current compatibility is more compatible than another.
@@ -492,14 +498,20 @@ impl WheelCompatibility {
     /// Compatible wheel ordering is determined by tag priority.
     pub fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Compatible(_, _, _), Self::Incompatible(_)) => true,
+            (Self::Compatible(_, _, _, _), Self::Incompatible(_)) => true,
             (
-                Self::Compatible(hash, tag_priority, build_tag),
-                Self::Compatible(other_hash, other_tag_priority, other_build_tag),
+                Self::Compatible(hash, tag_priority, build_tag, file_size),
+                Self::Compatible(other_hash, other_tag_priority, other_build_tag, other_file_size),
             ) => {
-                (hash, tag_priority, build_tag) > (other_hash, other_tag_priority, other_build_tag)
+                (hash, tag_priority, build_tag, Reverse(file_size))
+                    > (
+                        other_hash,
+                        other_tag_priority,
+                        other_build_tag,
+                        Reverse(other_file_size),
+                    )
             }
-            (Self::Incompatible(_), Self::Compatible(_, _, _)) => false,
+            (Self::Incompatible(_), Self::Compatible(_, _, _, _)) => false,
             (Self::Incompatible(incompatibility), Self::Incompatible(other_incompatibility)) => {
                 incompatibility.is_more_compatible(other_incompatibility)
             }

@@ -74,8 +74,14 @@ impl FlatIndex {
             DistFilename::WheelFilename(filename) => {
                 let version = filename.version.clone();
 
-                let compatibility =
-                    Self::wheel_compatibility(&filename, &file.hashes, tags, hasher, build_options);
+                let compatibility = Self::wheel_compatibility(
+                    &filename,
+                    &file.hashes,
+                    file.size,
+                    tags,
+                    hasher,
+                    build_options,
+                );
                 let dist = RegistryBuiltWheel {
                     filename,
                     file: Box::new(file),
@@ -145,6 +151,7 @@ impl FlatIndex {
     fn wheel_compatibility(
         filename: &WheelFilename,
         hashes: &[HashDigest],
+        size: Option<u64>,
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
@@ -183,7 +190,7 @@ impl FlatIndex {
         // Break ties with the build tag.
         let build_tag = filename.build_tag.clone();
 
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        WheelCompatibility::Compatible(hash, priority, build_tag, size)
     }
 
     /// Get the [`FlatDistributions`] for the given package name.
