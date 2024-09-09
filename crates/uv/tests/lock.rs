@@ -12581,3 +12581,50 @@ fn lock_strip_fragment() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn lock_request_requires_python() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8, <=3.10"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Request a version that conflicts with `--requires-python`.
+    uv_snapshot!(context.filters(), context.lock().arg("--python").arg("3.12"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.8, <=3.10`
+    "###);
+
+    // Add a `.python-version` file that conflicts.
+    let python_version = context.temp_dir.child(".python-version");
+    python_version.write_str("3.12")?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The Python request from `.python-version` resolved to Python 3.12.[X], which incompatible with the project's Python requirement: `>=3.8, <=3.10`
+    "###);
+
+    Ok(())
+}

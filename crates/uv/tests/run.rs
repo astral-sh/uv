@@ -133,7 +133,7 @@ fn run_with_python_version() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.11, <4`
+    error: The requested interpreter resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.11, <4`
     "###);
 
     Ok(())
@@ -1657,7 +1657,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.12`
+    error: The Python request from `.python-version` resolved to Python 3.8.[X], which incompatible with the project's Python requirement: `>=3.12`
     "###);
 
     // ...even if `--isolated` is provided.
@@ -1667,7 +1667,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.12`
+    error: The Python request from `.python-version` resolved to Python 3.8.[X], which incompatible with the project's Python requirement: `>=3.12`
     "###);
 
     Ok(())
