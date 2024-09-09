@@ -294,7 +294,7 @@ fn init_application_package() -> Result<()> {
     }, {
         assert_snapshot!(
             init, @r###"
-        def hello():
+        def hello() -> None:
             print("Hello from foo!")
         "###
         );

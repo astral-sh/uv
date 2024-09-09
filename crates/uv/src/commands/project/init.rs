@@ -471,7 +471,7 @@ impl InitProjectKind {
                 fs_err::write(
                     init_py,
                     indoc::formatdoc! {r#"
-                    def hello():
+                    def hello() -> None:
                         print("Hello from {name}!")
                     "#},
                 )?;
