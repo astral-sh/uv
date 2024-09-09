@@ -12,7 +12,7 @@ use std::fmt::{Display, Formatter};
 pub struct DistInfoName<'a>(Cow<'a, str>);
 
 impl<'a> DistInfoName<'a> {
-    /// Create a validated, normalized extra name.
+    /// Create a validated, normalized `.dist-info` directory name.
     pub fn new(name: &'a str) -> Self {
         if Self::is_normalized(name) {
             Self(Cow::Borrowed(name))
