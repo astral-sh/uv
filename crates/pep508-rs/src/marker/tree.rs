@@ -1310,7 +1310,7 @@ impl MarkerTree {
                 for _ in 0..level {
                     write!(f, "  ")?;
                 }
-                write!(f, "{} in {} -> ", kind.value(), kind.key())?;
+                write!(f, "{} not in {} -> ", kind.value(), kind.key())?;
                 kind.edge(false).fmt_graph(f, level + 1)?;
             }
             MarkerTreeKind::Extra(kind) => {
@@ -1325,7 +1325,7 @@ impl MarkerTree {
                 for _ in 0..level {
                     write!(f, "  ")?;
                 }
-                write!(f, "extra == {} -> ", kind.name())?;
+                write!(f, "extra != {} -> ", kind.name())?;
                 kind.edge(false).fmt_graph(f, level + 1)?;
             }
         }
