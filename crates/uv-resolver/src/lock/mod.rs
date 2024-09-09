@@ -12,7 +12,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
-use tracing::debug;
 use url::Url;
 
 use cache_key::RepositoryUrl;
@@ -115,10 +114,6 @@ impl Lock {
             if !dist.is_base() {
                 continue;
             }
-            if graph.reachability[&node_index].is_false() {
-                debug!("Removing unreachable package: `{}`", dist.package_id());
-                continue;
-            }
             let fork_markers = graph
                 .fork_markers(dist.name(), &dist.version, dist.dist.version_or_url().url())
                 .cloned()
@@ -132,10 +127,6 @@ impl Lock {
                 else {
                     continue;
                 };
-                // Prune edges leading to unreachable nodes.
-                if graph.reachability[&edge.target()].is_false() {
-                    continue;
-                }
                 let marker = edge.weight().clone();
                 package.add_dependency(&requires_python, dependency_dist, marker, root)?;
             }
@@ -154,9 +145,6 @@ impl Lock {
             let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
                 continue;
             };
-            if graph.reachability[&node_index].is_false() {
-                continue;
-            }
             if let Some(extra) = dist.extra.as_ref() {
                 let id = PackageId::from_annotated_dist(dist, root)?;
                 let Some(package) = packages.get_mut(&id) else {
@@ -171,10 +159,6 @@ impl Lock {
                     else {
                         continue;
                     };
-                    // Prune edges leading to unreachable nodes.
-                    if graph.reachability[&edge.target()].is_false() {
-                        continue;
-                    }
                     let marker = edge.weight().clone();
                     package.add_optional_dependency(
                         &requires_python,
@@ -199,10 +183,6 @@ impl Lock {
                     else {
                         continue;
                     };
-                    // Prune edges leading to unreachable nodes.
-                    if graph.reachability[&edge.target()].is_false() {
-                        continue;
-                    }
                     let marker = edge.weight().clone();
                     package.add_dev_dependency(
                         &requires_python,
@@ -268,7 +248,6 @@ impl Lock {
             // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
             // a single disjointness check with the intersection is sufficient, so we have one
             // constant per platform.
-            let reachability_markers = &graph.reachability[&node_index];
             let platform_tags = &wheel.filename.platform_tag;
             if platform_tags.iter().all(|tag| {
                 linux_tags.into_iter().any(|linux_tag| {
@@ -276,14 +255,20 @@ impl Lock {
                     tag.starts_with(linux_tag) || tag == "linux_armv6l" || tag == "linux_armv7l"
                 })
             }) {
-                !reachability_markers.is_disjoint(&LINUX_MARKERS)
+                !graph.petgraph[node_index]
+                    .marker()
+                    .is_disjoint(&LINUX_MARKERS)
             } else if platform_tags
                 .iter()
                 .all(|tag| windows_tags.contains(&&**tag))
             {
-                !graph.reachability[&node_index].is_disjoint(&WINDOWS_MARKERS)
+                !graph.petgraph[node_index]
+                    .marker()
+                    .is_disjoint(&WINDOWS_MARKERS)
             } else if platform_tags.iter().all(|tag| tag.starts_with("macosx_")) {
-                !graph.reachability[&node_index].is_disjoint(&MAC_MARKERS)
+                !graph.petgraph[node_index]
+                    .marker()
+                    .is_disjoint(&MAC_MARKERS)
             } else {
                 true
             }

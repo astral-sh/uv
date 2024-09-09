@@ -165,7 +165,7 @@ impl RequirementsTxtDist {
         }
     }
 
-    pub(crate) fn from_annotated_dist(annotated: &AnnotatedDist, markers: MarkerTree) -> Self {
+    pub(crate) fn from_annotated_dist(annotated: &AnnotatedDist) -> Self {
         Self {
             dist: annotated.dist.clone(),
             version: annotated.version.clone(),
@@ -175,7 +175,7 @@ impl RequirementsTxtDist {
                 vec![]
             },
             hashes: annotated.hashes.clone(),
-            markers,
+            markers: annotated.marker.clone(),
         }
     }
 }

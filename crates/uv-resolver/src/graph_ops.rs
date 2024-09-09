@@ -2,7 +2,7 @@ use pep508_rs::MarkerTree;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use petgraph::{Direction, Graph};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::hash_map::Entry;
 
 /// Determine the markers under which a package is reachable in the dependency tree.
@@ -18,7 +18,7 @@ pub(crate) fn marker_reachability<T>(
 ) -> FxHashMap<NodeIndex, MarkerTree> {
     // Note that we build including the virtual packages due to how we propagate markers through
     // the graph, even though we then only read the markers for base packages.
-    let mut reachability = FxHashMap::default();
+    let mut reachability = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
 
     // Collect the root nodes.
     //
