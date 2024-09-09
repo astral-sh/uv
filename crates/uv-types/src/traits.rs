@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::{CachedDist, IndexLocations, InstalledDist, Resolution, SourceDist};
+use distribution_types::{
+    CachedDist, IndexCapabilities, IndexLocations, InstalledDist, Resolution, SourceDist,
+};
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
 use uv_cache::Cache;
@@ -56,6 +58,9 @@ pub trait BuildContext {
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
+
+    /// Return a reference to the discovered registry capabilities.
+    fn capabilities(&self) -> &IndexCapabilities;
 
     /// Whether source distribution building or pre-built wheels is disabled.
     ///

@@ -8,7 +8,8 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{
-    IndexLocations, NameRequirementSpecification, UnresolvedRequirementSpecification, Verbatim,
+    IndexCapabilities, IndexLocations, NameRequirementSpecification,
+    UnresolvedRequirementSpecification, Verbatim,
 };
 use install_wheel_rs::linker::LinkMode;
 use pypi_types::{Requirement, SupportedEnvironments};
@@ -292,6 +293,7 @@ pub(crate) async fn pip_compile(
     // Read the lockfile, if present.
     let preferences = read_requirements_txt(output_file, &upgrade).await?;
     let git = GitResolver::default();
+    let capabilities = IndexCapabilities::default();
 
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.
     let build_options = build_options.combine(no_binary, no_build);
@@ -335,6 +337,7 @@ pub(crate) async fn pip_compile(
         &flat_index,
         &source_index,
         &git,
+        &capabilities,
         &in_flight,
         index_strategy,
         &config_settings,

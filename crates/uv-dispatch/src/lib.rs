@@ -11,7 +11,9 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, IndexLocations, Name, Resolution, SourceDist};
+use distribution_types::{
+    CachedDist, IndexCapabilities, IndexLocations, Name, Resolution, SourceDist,
+};
 use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
@@ -42,6 +44,7 @@ pub struct BuildDispatch<'a> {
     flat_index: &'a FlatIndex,
     index: &'a InMemoryIndex,
     git: &'a GitResolver,
+    capabilities: &'a IndexCapabilities,
     in_flight: &'a InFlight,
     build_isolation: BuildIsolation<'a>,
     link_mode: install_wheel_rs::linker::LinkMode,
@@ -65,6 +68,7 @@ impl<'a> BuildDispatch<'a> {
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
         git: &'a GitResolver,
+        capabilities: &'a IndexCapabilities,
         in_flight: &'a InFlight,
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
@@ -85,6 +89,7 @@ impl<'a> BuildDispatch<'a> {
             flat_index,
             index,
             git,
+            capabilities,
             in_flight,
             index_strategy,
             config_settings,
@@ -125,6 +130,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     fn git(&self) -> &GitResolver {
         self.git
+    }
+
+    fn capabilities(&self) -> &IndexCapabilities {
+        self.capabilities
     }
 
     fn build_options(&self) -> &BuildOptions {

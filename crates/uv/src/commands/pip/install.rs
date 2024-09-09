@@ -339,6 +339,7 @@ pub(crate) async fn pip_install(
         &flat_index,
         &state.index,
         &state.git,
+        &state.capabilities,
         &state.in_flight,
         index_strategy,
         config_settings,

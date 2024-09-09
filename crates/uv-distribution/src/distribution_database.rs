@@ -373,7 +373,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let result = self
             .client
-            .managed(|client| client.wheel_metadata(dist).boxed_local())
+            .managed(|client| {
+                client
+                    .wheel_metadata(dist, self.build_context.capabilities())
+                    .boxed_local()
+            })
             .await;
 
         match result {

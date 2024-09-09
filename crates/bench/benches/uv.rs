@@ -83,7 +83,7 @@ mod resolver {
 
     use anyhow::Result;
 
-    use distribution_types::IndexLocations;
+    use distribution_types::{IndexCapabilities, IndexLocations};
     use install_wheel_rs::linker::LinkMode;
     use pep440_rs::Version;
     use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
@@ -152,6 +152,7 @@ mod resolver {
         );
         let flat_index = FlatIndex::default();
         let git = GitResolver::default();
+        let capabilities = IndexCapabilities::default();
         let hashes = HashStrategy::None;
         let in_flight = InFlight::default();
         let index = InMemoryIndex::default();
@@ -179,6 +180,7 @@ mod resolver {
             &flat_index,
             &index,
             &git,
+            &capabilities,
             &in_flight,
             IndexStrategy::default(),
             &config_settings,

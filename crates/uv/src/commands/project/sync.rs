@@ -280,6 +280,7 @@ pub(super) async fn do_sync(
         &flat_index,
         &state.index,
         &state.git,
+        &state.capabilities,
         &state.in_flight,
         index_strategy,
         config_setting,
