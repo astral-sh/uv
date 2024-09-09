@@ -4444,7 +4444,7 @@ fn unreachable_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "###
     );
 

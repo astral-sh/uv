@@ -55,14 +55,21 @@ pub struct ResolutionGraph {
     /// If there are multiple options for a package, track which fork they belong to so we
     /// can write that to the lockfile and later get the correct preference per fork back.
     pub(crate) package_markers: FxHashMap<PackageName, MarkersForDistribution>,
-    /// The markers under which a package is reachable in the dependency tree.
-    pub(crate) reachability: FxHashMap<NodeIndex, MarkerTree>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum ResolutionGraphNode {
     Root,
     Dist(AnnotatedDist),
+}
+
+impl ResolutionGraphNode {
+    pub(crate) fn marker(&self) -> &MarkerTree {
+        match self {
+            ResolutionGraphNode::Root => &MarkerTree::TRUE,
+            ResolutionGraphNode::Dist(dist) => &dist.marker,
+        }
+    }
 }
 
 impl Display for ResolutionGraphNode {
@@ -209,7 +216,18 @@ impl ResolutionGraph {
                 .collect()
         };
 
-        let reachability = marker_reachability(&petgraph, &fork_markers);
+        // Compute and apply the marker reachability.
+        let mut reachability = marker_reachability(&petgraph, &fork_markers);
+
+        // Apply the reachability to the graph.
+        for index in petgraph.node_indices() {
+            if let ResolutionGraphNode::Dist(dist) = &mut petgraph[index] {
+                dist.marker = reachability.remove(&index).unwrap_or_default();
+            }
+        }
+
+        // Discard any unreachable nodes.
+        petgraph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
             report_missing_lower_bounds(&petgraph, &mut diagnostics);
@@ -225,7 +243,6 @@ impl ResolutionGraph {
             overrides: overrides.clone(),
             options,
             fork_markers,
-            reachability,
         })
     }
 
@@ -331,6 +348,7 @@ impl ResolutionGraph {
             dev: dev.clone(),
             hashes,
             metadata,
+            marker: MarkerTree::TRUE,
         }));
         inverse.insert(
             PackageRef {

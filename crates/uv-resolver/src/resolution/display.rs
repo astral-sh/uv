@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
-use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -43,6 +42,15 @@ pub struct DisplayResolutionGraph<'a> {
 enum DisplayResolutionGraphNode {
     Root,
     Dist(RequirementsTxtDist),
+}
+
+impl DisplayResolutionGraphNode {
+    fn markers(&self) -> &MarkerTree {
+        match self {
+            DisplayResolutionGraphNode::Root => &MarkerTree::TRUE,
+            DisplayResolutionGraphNode::Dist(dist) => &dist.markers,
+        }
+    }
 }
 
 impl<'a> DisplayResolutionGraph<'a> {
@@ -136,11 +144,10 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // that for each package tells us if it should be installed on the current platform, without
         // looking at which packages depend on it.
         let petgraph = self.resolution.petgraph.map(
-            |index, node| match node {
+            |_index, node| match node {
                 ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
                 ResolutionGraphNode::Dist(dist) => {
-                    let reachability = self.resolution.reachability[&index].clone();
-                    let dist = RequirementsTxtDist::from_annotated_dist(dist, reachability);
+                    let dist = RequirementsTxtDist::from_annotated_dist(dist);
                     DisplayResolutionGraphNode::Dist(dist)
                 }
             },
@@ -151,7 +158,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
 
         // Reduce the graph, such that all nodes for a single package are combined, regardless of
         // the extras.
-        let petgraph = combine_extras(&petgraph, &self.resolution.reachability);
+        let petgraph = combine_extras(&petgraph);
 
         // Collect all packages.
         let mut nodes = petgraph
@@ -318,10 +325,7 @@ type RequirementsTxtGraph = petgraph::graph::Graph<RequirementsTxtDist, (), petg
 /// node.
 ///
 /// We also remove the root node, to simplify the graph structure.
-fn combine_extras(
-    graph: &IntermediatePetGraph,
-    reachability: &FxHashMap<NodeIndex, MarkerTree>,
-) -> RequirementsTxtGraph {
+fn combine_extras(graph: &IntermediatePetGraph) -> RequirementsTxtGraph {
     let mut next = RequirementsTxtGraph::with_capacity(graph.node_count(), graph.edge_count());
     let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
 
@@ -361,7 +365,7 @@ fn combine_extras(
             };
             let combined_markers = next[inverse[&dist.version_id()]].markers.clone();
             let mut package_markers = combined_markers.clone();
-            package_markers.or(reachability[&index].clone());
+            package_markers.or(graph[index].markers().clone());
             assert_eq!(
                 package_markers,
                 combined_markers,
