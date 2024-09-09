@@ -358,6 +358,7 @@ pub(crate) async fn run(
 
                 // Resolve the Python request and requirement for the workspace.
                 let WorkspacePython {
+                    source,
                     python_request,
                     requires_python,
                 } = WorkspacePython::from_request(
@@ -379,7 +380,12 @@ pub(crate) async fn run(
                 .into_interpreter();
 
                 if let Some(requires_python) = requires_python.as_ref() {
-                    validate_requires_python(&interpreter, project.workspace(), requires_python)?;
+                    validate_requires_python(
+                        &interpreter,
+                        project.workspace(),
+                        requires_python,
+                        &source,
+                    )?;
                 }
 
                 // Create a virtual environment
