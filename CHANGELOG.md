@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.4.8
+
+### Enhancements
+
+- Add support for dynamic cache keys ([#7136](https://github.com/astral-sh/uv/pull/7136))
+- Allow `.dist-info` names with dashes for post releases ([#7208](https://github.com/astral-sh/uv/pull/7208))
+- Use type hints in code from `uv init` ([#7225](https://github.com/astral-sh/uv/pull/7225))
+- Treat `.tgz` the same as `.tar.gz` ([#7201](https://github.com/astral-sh/uv/pull/7201))
+- Direct users towards `uv venv` to create a virtual environment ([#7188](https://github.com/astral-sh/uv/pull/7188))
+- Improve error message for uv init already init-ed ([#7198](https://github.com/astral-sh/uv/pull/7198))
+
+### Performance
+
+- Avoid batch prefetching for un-optimized registries ([#7226](https://github.com/astral-sh/uv/pull/7226))
+- Avoid iteration for singleton selections ([#7195](https://github.com/astral-sh/uv/pull/7195))
+
+### Bug fixes
+
+- Avoid extra newlines in debug logging for source builds ([#7174](https://github.com/astral-sh/uv/pull/7174))
+- Prune unreachable packages from `--universal` output ([#7209](https://github.com/astral-sh/uv/pull/7209))
+- Respect exclusion when collecting workspace members ([#7175](https://github.com/astral-sh/uv/pull/7175))
+- Use path file instead of `sitecustomize.py` ([#7161](https://github.com/astral-sh/uv/pull/7161))
+- Replace incorrect `--source` and `--binary` flags with correct `--sdist` and `--wheel` flags in `uv build` ([#7156](https://github.com/astral-sh/uv/pull/7156))
+
+### Documentation
+
+- Document support for `UV_INSTALL_DIR` ([#7107](https://github.com/astral-sh/uv/pull/7107))
+- List all supported sdist formats ([#7168](https://github.com/astral-sh/uv/pull/7168))
+
 ## 0.4.7
 
 ### Enhancements
