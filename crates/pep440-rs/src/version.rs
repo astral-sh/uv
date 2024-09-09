@@ -329,6 +329,12 @@ impl Version {
         self.is_pre() || self.is_dev()
     }
 
+    /// Whether this is a stable version (i.e., _not_ an alpha/beta/rc or dev version)
+    #[inline]
+    pub fn is_stable(&self) -> bool {
+        !self.is_pre() && !self.is_dev()
+    }
+
     /// Whether this is an alpha/beta/rc version
     #[inline]
     pub fn is_pre(&self) -> bool {
