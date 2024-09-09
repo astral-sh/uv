@@ -45,25 +45,31 @@ pub struct Options {
 
     /// The keys to consider when caching builds for the project.
     ///
-    /// By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`, or
-    /// `setup.cfg` files in the project directory are modified. Cache keys enable you to specify
-    /// additional files or directories that should trigger a rebuild when modified.
+    /// Cache keys enable you to specify the files or directories that should trigger a rebuild when
+    /// modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`,
+    /// or `setup.cfg` files in the project directory are modified, i.e.:
     ///
-    /// For example, if a project uses dynamic metadata to read its dependencies from a
-    /// `requirements.txt` file, you can specify `cache-keys = [{ file = "requirements.txt" }]` to
-    /// ensure that the project is rebuilt whenever the `requirements.txt` file is modified.
+    /// ```toml
+    /// cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]
+    /// ```
+    ///
+    /// As an example: if a project uses dynamic metadata to read its dependencies from a
+    /// `requirements.txt` file, you can specify `cache-keys = [{ file = "requirements.txt" }, { file = "pyproject.toml" }]`
+    /// to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in
+    /// addition to watching the `pyproject.toml`).
     ///
     /// Cache keys can also include version control information. For example, if a project uses
-    /// `setuptools_scm` to read its version from a Git tag, you can specify
-    /// `cache-keys = [{ git = true }]` to include the current Git commit hash in the cache key.
+    /// `setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }, { file = "pyproject.toml" }]`
+    /// to include the current Git commit hash in the cache key (in addition to the
+    /// `pyproject.toml`).
     ///
     /// Cache keys only affect the project defined by the `pyproject.toml` in which they're
     /// specified (as opposed to, e.g., affecting all members in a workspace).
     #[option(
-        default = r#"[]"#,
+        default = r#"[{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]"#,
         value_type = "list[dict]",
         example = r#"
-            cache-keys = [{ file = "requirements.txt" }, { git = true }]
+            cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = true }]
         "#
     )]
     #[serde(default, skip_serializing)]

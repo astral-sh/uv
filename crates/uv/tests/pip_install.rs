@@ -2951,7 +2951,7 @@ requires-python = ">=3.8"
 "#,
     )?;
 
-    // Re-installing should update the package.
+    // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
@@ -3015,7 +3015,7 @@ dependencies = {file = ["requirements.txt"]}
     "###
     );
 
-    // Re-installing should not re-install, as we don't special-case dynamic metadata.
+    // Installing again should not re-install, as we don't special-case dynamic metadata.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
@@ -3093,7 +3093,7 @@ requires-python = ">=3.8"
 "#,
     )?;
 
-    // Re-installing should update the package.
+    // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"
@@ -3175,7 +3175,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     // Modify the constraints file.
     constraints_txt.write_str("idna<3.5")?;
 
-    // Re-installing should update the package.
+    // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"
@@ -3195,7 +3195,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     // Modify the requirements file.
     requirements_txt.write_str("flask")?;
 
-    // Re-installing should update the package.
+    // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"
@@ -3209,6 +3209,32 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    // Modify the `pyproject.toml` file (but not in a meaningful way).
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ file = "requirements.txt" }, "constraints.txt"]
+"#,
+    )?;
+
+    // Installing again should be a no-op, since `pyproject.toml` was not included as a cache key.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
     "###
     );
 
@@ -3291,7 +3317,7 @@ fn invalidate_path_on_commit() -> Result<()> {
         .child("main")
         .write_str("a1a42cbd10d83bafd8600ba81f72bbef6c579385")?;
 
-    // Re-installing should update the package.
+    // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"

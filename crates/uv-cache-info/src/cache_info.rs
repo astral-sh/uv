@@ -44,36 +44,7 @@ impl CacheInfo {
     /// Compute the cache info for a given directory.
     pub fn from_directory(directory: &Path) -> io::Result<Self> {
         let mut commit = None;
-
-        // Always compute the modification timestamp for the `pyproject.toml`, `setup.py`, and
-        // `setup.cfg` files, if they exist.
-        let mut timestamp = {
-            let pyproject_toml = directory
-                .join("pyproject.toml")
-                .metadata()
-                .ok()
-                .filter(std::fs::Metadata::is_file)
-                .as_ref()
-                .map(Timestamp::from_metadata);
-
-            let setup_py = directory
-                .join("setup.py")
-                .metadata()
-                .ok()
-                .filter(std::fs::Metadata::is_file)
-                .as_ref()
-                .map(Timestamp::from_metadata);
-
-            let setup_cfg = directory
-                .join("setup.cfg")
-                .metadata()
-                .ok()
-                .filter(std::fs::Metadata::is_file)
-                .as_ref()
-                .map(Timestamp::from_metadata);
-
-            max(pyproject_toml, max(setup_py, setup_cfg))
-        };
+        let mut timestamp = None;
 
         // Read the cache keys.
         let cache_keys =
@@ -83,13 +54,21 @@ impl CacheInfo {
                         .tool
                         .and_then(|tool| tool.uv)
                         .and_then(|tool_uv| tool_uv.cache_keys)
-                        .unwrap_or_default()
                 } else {
-                    Vec::new()
+                    None
                 }
             } else {
-                Vec::new()
+                None
             };
+
+        // If no cache keys were defined, use the defaults.
+        let cache_keys = cache_keys.unwrap_or_else(|| {
+            vec![
+                CacheKey::Path(directory.join("pyproject.toml")),
+                CacheKey::Path(directory.join("setup.py")),
+                CacheKey::Path(directory.join("setup.cfg")),
+            ]
+        });
 
         // Incorporate any additional timestamps or VCS information.
         for cache_key in &cache_keys {
