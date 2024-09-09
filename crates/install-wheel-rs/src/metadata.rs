@@ -7,7 +7,7 @@ use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
-use uv_normalize::PackageName;
+use uv_normalize::DistInfoName;
 
 use crate::Error;
 
@@ -50,16 +50,19 @@ pub fn find_archive_dist_info<'a, T: Copy>(
 
     // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
     // package name, but only warn if the version is not the normalized version.
-    let Some((name, version)) = dist_info_prefix.rsplit_once('-') else {
-        return Err(Error::MissingDistInfoSegments(dist_info_prefix.to_string()));
-    };
-    if PackageName::from_str(name)? != filename.name {
+    let normalized_prefix = DistInfoName::new(dist_info_prefix);
+    let Some(rest) = normalized_prefix
+        .as_ref()
+        .strip_prefix(filename.name.as_str())
+    else {
         return Err(Error::MissingDistInfoPackageName(
             dist_info_prefix.to_string(),
             filename.name.to_string(),
         ));
-    }
-    if !Version::from_str(version).is_ok_and(|version| version == filename.version) {
+    };
+    if !rest.strip_prefix('-').is_some_and(|version| {
+        Version::from_str(version).is_ok_and(|version| version == filename.version)
+    }) {
         warn!(
             "{}",
             Error::MissingDistInfoVersion(
@@ -87,16 +90,19 @@ pub fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, E
 
     // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
     // package name, but only warn if the version is not the normalized version.
-    let Some((name, version)) = dist_info_prefix.rsplit_once('-') else {
-        return Err(Error::MissingDistInfoSegments(dist_info_prefix.to_string()));
-    };
-    if PackageName::from_str(name)? != filename.name {
+    let normalized_prefix = DistInfoName::new(dist_info_prefix);
+    let Some(rest) = normalized_prefix
+        .as_ref()
+        .strip_prefix(filename.name.as_str())
+    else {
         return Err(Error::MissingDistInfoPackageName(
             dist_info_prefix.to_string(),
             filename.name.to_string(),
         ));
-    }
-    if !Version::from_str(version).is_ok_and(|version| version == filename.version) {
+    };
+    if !rest.strip_prefix('-').is_some_and(|version| {
+        Version::from_str(version).is_ok_and(|version| version == filename.version)
+    }) {
         warn!(
             "{}",
             Error::MissingDistInfoVersion(
@@ -160,16 +166,19 @@ pub fn find_flat_dist_info(
 
     // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
     // package name, but only warn if the version is not the normalized version.
-    let Some((name, version)) = dist_info_prefix.rsplit_once('-') else {
-        return Err(Error::MissingDistInfoSegments(dist_info_prefix.to_string()));
-    };
-    if PackageName::from_str(name)? != filename.name {
+    let normalized_prefix = DistInfoName::new(&dist_info_prefix);
+    let Some(rest) = normalized_prefix
+        .as_ref()
+        .strip_prefix(filename.name.as_str())
+    else {
         return Err(Error::MissingDistInfoPackageName(
             dist_info_prefix.to_string(),
             filename.name.to_string(),
         ));
-    }
-    if !Version::from_str(version).is_ok_and(|version| version == filename.version) {
+    };
+    if !rest.strip_prefix('-').is_some_and(|version| {
+        Version::from_str(version).is_ok_and(|version| version == filename.version)
+    }) {
         warn!(
             "{}",
             Error::MissingDistInfoVersion(
