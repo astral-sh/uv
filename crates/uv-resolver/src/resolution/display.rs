@@ -39,16 +39,16 @@ pub struct DisplayResolutionGraph<'a> {
 }
 
 #[derive(Debug)]
-enum DisplayResolutionGraphNode {
+enum DisplayResolutionGraphNode<'dist> {
     Root,
-    Dist(RequirementsTxtDist),
+    Dist(RequirementsTxtDist<'dist>),
 }
 
-impl DisplayResolutionGraphNode {
+impl DisplayResolutionGraphNode<'_> {
     fn markers(&self) -> &MarkerTree {
         match self {
             DisplayResolutionGraphNode::Root => &MarkerTree::TRUE,
-            DisplayResolutionGraphNode::Dist(dist) => &dist.markers,
+            DisplayResolutionGraphNode::Dist(dist) => dist.markers,
         }
     }
 }
@@ -191,7 +191,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // Display the distribution hashes, if any.
             let mut has_hashes = false;
             if self.show_hashes {
-                for hash in &node.hashes {
+                for hash in node.hashes {
                     has_hashes = true;
                     line.push_str(" \\\n");
                     line.push_str("    --hash=");
@@ -313,10 +313,11 @@ pub enum AnnotationStyle {
 }
 
 /// We don't need the edge markers anymore since we switched to propagated markers.
-type IntermediatePetGraph =
-    petgraph::graph::Graph<DisplayResolutionGraphNode, (), petgraph::Directed>;
+type IntermediatePetGraph<'dist> =
+    petgraph::graph::Graph<DisplayResolutionGraphNode<'dist>, (), petgraph::Directed>;
 
-type RequirementsTxtGraph = petgraph::graph::Graph<RequirementsTxtDist, (), petgraph::Directed>;
+type RequirementsTxtGraph<'dist> =
+    petgraph::graph::Graph<RequirementsTxtDist<'dist>, (), petgraph::Directed>;
 
 /// Reduce the graph, such that all nodes for a single package are combined, regardless of
 /// the extras.
@@ -325,7 +326,7 @@ type RequirementsTxtGraph = petgraph::graph::Graph<RequirementsTxtDist, (), petg
 /// node.
 ///
 /// We also remove the root node, to simplify the graph structure.
-fn combine_extras(graph: &IntermediatePetGraph) -> RequirementsTxtGraph {
+fn combine_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxtGraph<'dist> {
     let mut next = RequirementsTxtGraph::with_capacity(graph.node_count(), graph.edge_count());
     let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
 
@@ -346,9 +347,6 @@ fn combine_extras(graph: &IntermediatePetGraph) -> RequirementsTxtGraph {
             node.extras.extend(dist.extras.iter().cloned());
             node.extras.sort_unstable();
             node.extras.dedup();
-            if dist.extras.is_empty() {
-                node.markers = dist.markers.clone();
-            }
         } else {
             let version_id = dist.version_id();
             let dist = dist.clone();
