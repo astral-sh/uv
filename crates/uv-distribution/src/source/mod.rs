@@ -32,7 +32,7 @@ use uv_client::{
 };
 use uv_configuration::{BuildKind, BuildOutput};
 use uv_extract::hash::Hasher;
-use uv_fs::{write_atomic, LockedFile};
+use uv_fs::{rename_with_retry, write_atomic, LockedFile};
 use uv_metadata::read_archive_metadata;
 use uv_types::{BuildContext, SourceBuildTrait};
 use zip::ZipArchive;
@@ -446,11 +446,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Build the source distribution.
         let source_dist_entry = cache_shard.entry(filename);
-        let source_dist_path = fs::read_link(&source_dist_entry.path())
-            .await
-            .map_err(Error::CacheRead)?;
         let (disk_filename, wheel_filename, metadata) = self
-            .build_distribution(source, &source_dist_path, subdirectory, &cache_shard)
+            .build_distribution(source, source_dist_entry.path(), subdirectory, &cache_shard)
             .await?;
 
         if let Some(task) = task {
@@ -509,13 +506,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(filename);
-        let source_dist_path = fs::read_link(&source_dist_entry.path())
-            .await
-            .map_err(Error::CacheRead)?;
 
         // If the metadata is static, return it.
         if let Some(metadata) =
-            Self::read_static_metadata(source, &source_dist_path, subdirectory).await?
+            Self::read_static_metadata(source, source_dist_entry.path(), subdirectory).await?
         {
             return Ok(ArchiveMetadata {
                 metadata: Metadata::from_metadata23(metadata),
@@ -544,7 +538,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Otherwise, we either need to build the metadata.
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, &source_dist_path, subdirectory)
+            .build_metadata(source, source_dist_entry.path(), subdirectory)
             .boxed_local()
             .await?
         {
@@ -569,7 +563,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Build the source distribution.
         let (_disk_filename, _wheel_filename, metadata) = self
-            .build_distribution(source, &source_dist_path, subdirectory, &cache_shard)
+            .build_distribution(source, source_dist_entry.path(), subdirectory, &cache_shard)
             .await?;
 
         // Store the metadata.
@@ -707,9 +701,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         let source_entry = cache_shard.entry("source");
-        let source_path = fs::read_link(&source_entry.path())
-            .await
-            .map_err(Error::CacheRead)?;
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -718,7 +709,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (disk_filename, filename, metadata) = self
-            .build_distribution(source, &source_path, None, &cache_shard)
+            .build_distribution(source, source_entry.path(), None, &cache_shard)
             .await?;
 
         if let Some(task) = task {
@@ -773,12 +764,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
         let source_entry = cache_shard.entry("source");
-        let source_path = fs::read_link(&source_entry.path())
-            .await
-            .map_err(Error::CacheRead)?;
 
         // If the metadata is static, return it.
-        if let Some(metadata) = Self::read_static_metadata(source, &source_path, None).await? {
+        if let Some(metadata) =
+            Self::read_static_metadata(source, source_entry.path(), None).await?
+        {
             return Ok(ArchiveMetadata {
                 metadata: Metadata::from_metadata23(metadata),
                 hashes: revision.into_hashes(),
@@ -797,7 +787,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, &source_path, None)
+            .build_metadata(source, source_entry.path(), None)
             .boxed_local()
             .await?
         {
@@ -830,7 +820,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (_disk_filename, _filename, metadata) = self
-            .build_distribution(source, &source_path, None, &cache_shard)
+            .build_distribution(source, source_entry.path(), None, &cache_shard)
             .await?;
 
         if let Some(task) = task {
@@ -1367,12 +1357,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         target: &Path,
         hashes: HashPolicy<'_>,
     ) -> Result<Vec<HashDigest>, Error> {
-        let temp_dir = self
-            .build_context
-            .cache()
-            .environment()
-            .map_err(Error::CacheWrite)?;
-
+        let temp_dir = tempfile::tempdir_in(
+            self.build_context
+                .cache()
+                .bucket(CacheBucket::SourceDistributions),
+        )
+        .map_err(Error::CacheWrite)?;
         let reader = response
             .bytes_stream()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
@@ -1406,11 +1396,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         fs_err::tokio::create_dir_all(target.parent().expect("Cache entry to have parent"))
             .await
             .map_err(Error::CacheWrite)?;
-        self.build_context
-            .cache()
-            .persist(extracted, target)
+        rename_with_retry(extracted, target)
             .await
-            .map_err(Error::CacheRead)?;
+            .map_err(Error::CacheWrite)?;
 
         Ok(hashes)
     }
@@ -1425,12 +1413,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<Vec<HashDigest>, Error> {
         debug!("Unpacking for build: {}", path.display());
 
-        let temp_dir = self
-            .build_context
-            .cache()
-            .environment()
-            .map_err(Error::CacheWrite)?;
-
+        let temp_dir = tempfile::tempdir_in(
+            self.build_context
+                .cache()
+                .bucket(CacheBucket::SourceDistributions),
+        )
+        .map_err(Error::CacheWrite)?;
         let reader = fs_err::tokio::File::open(&path)
             .await
             .map_err(Error::CacheRead)?;
@@ -1461,11 +1449,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         fs_err::tokio::create_dir_all(target.parent().expect("Cache entry to have parent"))
             .await
             .map_err(Error::CacheWrite)?;
-        self.build_context
-            .cache()
-            .persist(extracted, target)
+        rename_with_retry(extracted, &target)
             .await
-            .map_err(Error::CacheRead)?;
+            .map_err(Error::CacheWrite)?;
 
         Ok(hashes)
     }

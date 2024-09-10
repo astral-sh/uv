@@ -297,6 +297,7 @@ jobs:
           UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
           UV_CACHE_DIR: C:\Users\runneradmin\very\long\path\to\uv\that\may\exceed\the\allowed\character\limit\for\certain\builds\with\long\paths
         run: |
+          git config --system core.longpaths false
           cargo run --no-default-features --features flate2/rust_backend venv
           cargo run --no-default-features --features flate2/rust_backend pip install nuitka==2.4.8 --verbose
 
