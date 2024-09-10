@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.9
+
+### Enhancements
+
+- Add support for managed Python 3.13 ([#7263](https://github.com/astral-sh/uv/pull/7263))
+- Upgrade managed CPython versions to latest patch releases ([#7263](https://github.com/astral-sh/uv/pull/7263))
+- Allow setting a target version for `uv self update` ([#7252](https://github.com/astral-sh/uv/pull/7252))
+- Create `py.typed` files during `uv init --lib` ([#7232](https://github.com/astral-sh/uv/pull/7232))
+- Add a dedicated error for packages that fail due to `distutils` deprecation ([#7239](https://github.com/astral-sh/uv/pull/7239))
+- Improve error message when requested Python version is unsupported ([#7269](https://github.com/astral-sh/uv/pull/7269))
+- Add `uv run --no-sync` ([#7192]((https://github.com/astral-sh/uv/pull/7192))
+
+### Bug fixes
+
+- Avoid updating `pyproject.toml` offsets on non-add edits ([#7262](https://github.com/astral-sh/uv/pull/7262))
+- Invalidate cache when `--config-settings` change ([#7139](https://github.com/astral-sh/uv/pull/7139))
+- Remove workspace root for single-member workspace with `uv export` ([#7254](https://github.com/astral-sh/uv/pull/7254))
+
 ## 0.4.8
 
 ### Enhancements
