@@ -12,7 +12,7 @@ use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
 use distribution_types::{
-    CachedDist, IndexCapabilities, IndexLocations, Name, Resolution, SourceDist,
+    CachedDist, IndexCapabilities, IndexLocations, Name, Resolution, SourceDist, VersionOrUrlRef,
 };
 use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
@@ -319,6 +319,13 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         build_output: BuildOutput,
     ) -> Result<SourceBuild> {
         let dist_name = dist.map(distribution_types::Name::name);
+        let dist_version = dist
+            .map(distribution_types::DistributionMetadata::version_or_url)
+            .and_then(|version| match version {
+                VersionOrUrlRef::Version(version) => Some(version),
+                VersionOrUrlRef::Url(_) => None,
+            });
+
         // Note we can only prevent builds by name for packages with names
         // unless all builds are disabled.
         if self
@@ -340,6 +347,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             source,
             subdirectory,
             dist_name,
+            dist_version,
             self.interpreter,
             self,
             self.source_build_context.clone(),

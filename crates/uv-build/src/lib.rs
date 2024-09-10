@@ -214,7 +214,12 @@ pub struct SourceBuild {
     /// > directory created by `prepare_metadata_for_build_wheel`, including any unrecognized files
     /// > it created.
     metadata_directory: Option<PathBuf>,
-    /// Package id such as `foo-1.2.3`, for error reporting
+    /// The name of the package, if known.
+    package_name: Option<PackageName>,
+    /// The version of the package, if known.
+    package_version: Option<Version>,
+    /// Distribution identifier, e.g., `foo-1.2.3`. Used for error reporting if the name and
+    /// version are unknown.
     version_id: String,
     /// Whether we do a regular PEP 517 build or an PEP 660 editable build
     build_kind: BuildKind,
@@ -237,6 +242,7 @@ impl SourceBuild {
         source: &Path,
         subdirectory: Option<&Path>,
         fallback_package_name: Option<&PackageName>,
+        fallback_package_version: Option<&Version>,
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
@@ -262,10 +268,19 @@ impl SourceBuild {
         let (pep517_backend, project) =
             Self::extract_pep517_backend(&source_tree, &default_backend).map_err(|err| *err)?;
 
-        let package_name = project.as_ref().map(|p| &p.name).or(fallback_package_name);
+        let package_name = project
+            .as_ref()
+            .map(|project| &project.name)
+            .or(fallback_package_name)
+            .cloned();
+        let package_version = project
+            .as_ref()
+            .and_then(|project| project.version.as_ref())
+            .or(fallback_package_version)
+            .cloned();
 
         // Create a virtual environment, or install into the shared environment if requested.
-        let venv = if let Some(venv) = build_isolation.shared_environment(package_name) {
+        let venv = if let Some(venv) = build_isolation.shared_environment(package_name.as_ref()) {
             venv.clone()
         } else {
             uv_virtualenv::create_venv(
@@ -280,7 +295,7 @@ impl SourceBuild {
 
         // Setup the build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
-        if build_isolation.is_isolated(package_name) {
+        if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Resolving build requirements");
 
             let resolved_requirements = Self::get_resolved_requirements(
@@ -334,7 +349,7 @@ impl SourceBuild {
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
         let runner = PythonRunner::new(concurrent_builds, level);
-        if build_isolation.is_isolated(package_name) {
+        if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Creating PEP 517 build environment");
 
             create_pep517_build_environment(
@@ -343,6 +358,8 @@ impl SourceBuild {
                 &venv,
                 &pep517_backend,
                 build_context,
+                package_name.as_ref(),
+                package_version.as_ref(),
                 &version_id,
                 build_kind,
                 level,
@@ -364,6 +381,8 @@ impl SourceBuild {
             level,
             config_settings,
             metadata_directory: None,
+            package_name,
+            package_version,
             version_id,
             environment_variables,
             modified_path,
@@ -548,6 +567,8 @@ impl SourceBuild {
                 format!("Build backend failed to determine metadata through `prepare_metadata_for_build_{}`", self.build_kind),
                 &output,
                 self.level,
+                self.package_name.as_ref(),
+                self.package_version.as_ref(),
                 &self.version_id,
             ));
         }
@@ -678,6 +699,8 @@ impl SourceBuild {
                 ),
                 &output,
                 self.level,
+                self.package_name.as_ref(),
+                self.package_version.as_ref(),
                 &self.version_id,
             ));
         }
@@ -691,6 +714,8 @@ impl SourceBuild {
                 ),
                 &output,
                 self.level,
+                self.package_name.as_ref(),
+                self.package_version.as_ref(),
                 &self.version_id,
             ));
         }
@@ -721,6 +746,8 @@ async fn create_pep517_build_environment(
     venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
+    package_name: Option<&PackageName>,
+    package_version: Option<&Version>,
     version_id: &str,
     build_kind: BuildKind,
     level: BuildOutput,
@@ -778,6 +805,8 @@ async fn create_pep517_build_environment(
             format!("Build backend failed to determine extra requires with `build_{build_kind}()`"),
             &output,
             level,
+            package_name,
+            package_version,
             version_id,
         ));
     }
@@ -790,6 +819,8 @@ async fn create_pep517_build_environment(
             ),
             &output,
             level,
+            package_name,
+            package_version,
             version_id,
         )
     })?;
@@ -802,6 +833,8 @@ async fn create_pep517_build_environment(
             ),
             &output,
             level,
+            package_name,
+            package_version,
             version_id,
         )
     })?;
