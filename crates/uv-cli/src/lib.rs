@@ -2395,6 +2395,12 @@ pub struct RunArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
+    /// Omit non-development dependencies.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("no_dev"))]
+    pub only_dev: bool,
+
     /// The command to run.
     ///
     /// If the path to a Python script (i.e., ending in `.py`), it will be
@@ -2540,6 +2546,12 @@ pub struct SyncArgs {
     /// Omit development dependencies.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
+
+    /// Omit non-development dependencies.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("no_dev"))]
+    pub only_dev: bool,
 
     /// Do not remove extraneous packages present in the environment.
     ///
@@ -2976,6 +2988,12 @@ pub struct ExportArgs {
     /// Omit development dependencies.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
+
+    /// Omit non-development dependencies.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("no_dev"))]
+    pub only_dev: bool,
 
     /// Include hashes for all dependencies.
     #[arg(long, overrides_with("no_hashes"), hide = true)]
