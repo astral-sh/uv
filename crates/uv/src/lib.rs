@@ -1987,11 +1987,24 @@ where
         }
     }
 
+    let args = args.into_iter().collect::<Vec<_>>();
+    let matches = Cli::command()
+        .mut_arg("help", |arg| arg.action(clap::ArgAction::SetTrue))
+        .ignore_errors(true)
+        .try_get_matches_from(args.clone());
+    let no_color = matches.is_ok_and(|arg| {
+        matches!(
+            arg.try_get_one::<uv_cli::ColorChoice>("color"),
+            Ok(Some(uv_cli::ColorChoice::Never))
+        ) || matches!(arg.try_get_one::<bool>("no_color"), Ok(Some(true)))
+    });
     // `std::env::args` is not `Send` so we parse before passing to our runtime
     // https://github.com/rust-lang/rust/pull/48005
     let cli = match Cli::try_parse_from(args) {
         Ok(cli) => cli,
         Err(mut err) => {
+            let cmd = Cli::command().disable_colored_help(no_color);
+            err = err.with_cmd(&cmd);
             if let Some(ContextValue::String(subcommand)) = err.get(ContextKind::InvalidSubcommand)
             {
                 match subcommand.as_str() {
