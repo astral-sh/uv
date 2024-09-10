@@ -418,8 +418,15 @@ pub struct SelfNamespace {
 #[derive(Subcommand)]
 #[cfg(feature = "self-update")]
 pub enum SelfCommand {
-    /// Update uv to the latest version.
-    Update,
+    /// Update uv.
+    Update(SelfUpdateArgs),
+}
+
+#[derive(Args, Debug)]
+#[cfg(feature = "self-update")]
+pub struct SelfUpdateArgs {
+    /// If not specified, the latest version is used. Otherwise, updates to the specified version.
+    pub target_version: Option<String>,
 }
 
 #[derive(Args)]
