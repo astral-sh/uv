@@ -52,6 +52,21 @@ the following to the project's `pyproject.toml`:
 cache-keys = [{ file = "requirements.txt" }]
 ```
 
+Globs are supported, following the syntax of the
+[`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html) crate. For example, to invalidate the
+cache whenever a `.toml` file in the project directory or any of its subdirectories is modified, use
+the following:
+
+```toml title="pyproject.toml"
+[tool.uv]
+cache-keys = [{ file = "**/*.toml" }]
+```
+
+!!! note
+
+    The use of globs can be expensive, as uv may need to walk the filesystem to determine whether any files have changed.
+    This may, in turn, requiring traversal of large or deeply nested directories.
+
 As an escape hatch, if a project uses `dynamic` metadata that isn't covered by `tool.uv.cache-keys`,
 you can instruct uv to _always_ rebuild and reinstall it by adding the project to the
 `tool.uv.reinstall-package` list:

@@ -4609,6 +4609,7 @@ name = "uv-cache-info"
 version = "0.0.1"
 dependencies = [
  "fs-err",
+ "glob",
  "schemars",
  "serde",
  "thiserror",

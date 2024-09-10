@@ -3265,6 +3265,62 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     "###
     );
 
+    // Modify the `pyproject.toml` to use a glob.
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ file = "**/*.txt" }]
+"#,
+    )?;
+
+    // Write a new file.
+    editable_dir
+        .child("resources")
+        .child("data.txt")
+        .write_str("data")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    // Write a new file in the current directory.
+    editable_dir.child("data.txt").write_str("data")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
     Ok(())
 }
 

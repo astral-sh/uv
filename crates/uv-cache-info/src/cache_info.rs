@@ -1,11 +1,12 @@
 use crate::commit_info::CacheCommit;
 use crate::timestamp::Timestamp;
 
+use glob::MatchOptions;
 use serde::Deserialize;
 use std::cmp::max;
 use std::io;
 use std::path::{Path, PathBuf};
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// The information used to determine whether a built distribution is up-to-date, based on the
 /// timestamps of relevant files, the current commit of a repository, etc.
@@ -64,9 +65,9 @@ impl CacheInfo {
         // If no cache keys were defined, use the defaults.
         let cache_keys = cache_keys.unwrap_or_else(|| {
             vec![
-                CacheKey::Path(directory.join("pyproject.toml")),
-                CacheKey::Path(directory.join("setup.py")),
-                CacheKey::Path(directory.join("setup.cfg")),
+                CacheKey::Path("pyproject.toml".to_string()),
+                CacheKey::Path("setup.py".to_string()),
+                CacheKey::Path("setup.cfg".to_string()),
             ]
         });
 
@@ -74,14 +75,71 @@ impl CacheInfo {
         for cache_key in &cache_keys {
             match cache_key {
                 CacheKey::Path(file) | CacheKey::File { file } => {
-                    timestamp = max(
-                        timestamp,
-                        file.metadata()
-                            .ok()
-                            .filter(std::fs::Metadata::is_file)
-                            .as_ref()
-                            .map(Timestamp::from_metadata),
-                    );
+                    if file.chars().any(|c| matches!(c, '*' | '?' | '[')) {
+                        // Treat the path as a glob.
+                        let path = directory.join(file);
+                        let Some(pattern) = path.to_str() else {
+                            warn!("Failed to convert pattern to string: {}", path.display());
+                            continue;
+                        };
+                        let paths = match glob::glob_with(
+                            pattern,
+                            MatchOptions {
+                                case_sensitive: true,
+                                require_literal_separator: true,
+                                require_literal_leading_dot: false,
+                            },
+                        ) {
+                            Ok(paths) => paths,
+                            Err(err) => {
+                                warn!("Failed to parse glob pattern: {err}");
+                                continue;
+                            }
+                        };
+                        for entry in paths {
+                            let entry = match entry {
+                                Ok(entry) => entry,
+                                Err(err) => {
+                                    warn!("Failed to read glob entry: {err}");
+                                    continue;
+                                }
+                            };
+                            let metadata = match entry.metadata() {
+                                Ok(metadata) => metadata,
+                                Err(err) => {
+                                    warn!("Failed to read metadata for glob entry: {err}");
+                                    continue;
+                                }
+                            };
+                            if metadata.is_file() {
+                                timestamp =
+                                    max(timestamp, Some(Timestamp::from_metadata(&metadata)));
+                            } else {
+                                warn!(
+                                    "Expected file for cache key, but found directory: `{}`",
+                                    entry.display()
+                                );
+                            }
+                        }
+                    } else {
+                        // Treat the path as a file.
+                        let path = directory.join(file);
+                        let metadata = match path.metadata() {
+                            Ok(metadata) => metadata,
+                            Err(err) => {
+                                warn!("Failed to read metadata for file: {err}");
+                                continue;
+                            }
+                        };
+                        if metadata.is_file() {
+                            timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
+                        } else {
+                            warn!(
+                                "Expected file for cache key, but found directory: `{}`",
+                                path.display()
+                            );
+                        }
+                    }
                 }
                 CacheKey::Git { git: true } => match CacheCommit::from_repository(directory) {
                     Ok(commit_info) => commit = Some(commit_info),
@@ -165,10 +223,15 @@ struct ToolUv {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
 pub enum CacheKey {
-    /// Ex) `"Cargo.lock"`
-    Path(PathBuf),
-    /// Ex) `{ file = "Cargo.lock" }`
-    File { file: PathBuf },
+    /// Ex) `"Cargo.lock"` or `"**/*.toml"`
+    Path(String),
+    /// Ex) `{ file = "Cargo.lock" }` or `{ file = "**/*.toml" }`
+    File { file: String },
     /// Ex) `{ git = true }`
     Git { git: bool },
+}
+
+pub enum FilePattern {
+    Glob(String),
+    Path(PathBuf),
 }
