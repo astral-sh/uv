@@ -225,6 +225,7 @@ impl PythonDownloadRequest {
             .filter(move |download| self.satisfied_by_download(download))
     }
 
+    /// Whether this request is satisfied by the key of an existing installation.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
         if let Some(arch) = &self.arch {
             if key.arch != *arch {
@@ -254,7 +255,14 @@ impl PythonDownloadRequest {
         true
     }
 
+    /// Whether this request is satisfied by a Python download.
+    ///
+    /// Note that unlike [`Self::satisfied_by_key`], this method will not match a pre-release
+    /// unless a version is included in the request.
     pub fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
+        if self.version.is_none() && !download.key().prerelease.is_empty() {
+            return false;
+        }
         self.satisfied_by_key(download.key())
     }
 
