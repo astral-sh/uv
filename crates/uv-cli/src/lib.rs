@@ -425,7 +425,7 @@ pub enum SelfCommand {
 #[derive(Args, Debug)]
 #[cfg(feature = "self-update")]
 pub struct SelfUpdateArgs {
-    /// If not specified, the latest version is used. Otherwise, updates to the specified version.
+    /// Update to the specified version. If not provided, uv will update to the latest version.
     pub target_version: Option<String>,
 }
 
