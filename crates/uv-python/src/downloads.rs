@@ -529,9 +529,7 @@ impl ManagedPythonDownload {
     }
 
     pub fn python_version(&self) -> PythonVersion {
-        self.key
-            .version()
-            .expect("Managed Python downloads should always have valid versions")
+        self.key.version()
     }
 
     /// Return the [`Url`] to use when downloading the distribution. If a mirror is set via the

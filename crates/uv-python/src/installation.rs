@@ -244,7 +244,7 @@ impl PythonInstallationKey {
 
     pub fn new_from_version(
         implementation: LenientImplementationName,
-        version: PythonVersion,
+        version: &PythonVersion,
         os: Os,
         arch: Arch,
         libc: Libc,
@@ -270,7 +270,7 @@ impl PythonInstallationKey {
             "{}.{}.{}{}",
             self.major, self.minor, self.patch, self.prerelease
         ))
-        .expect("Python versions for installation keys should always be valid}")
+        .expect("Python installation keys must have valid Python versions")
     }
 
     pub fn arch(&self) -> &Arch {
@@ -341,7 +341,7 @@ impl FromStr for PythonInstallationKey {
 
         Ok(Self::new_from_version(
             implementation,
-            version,
+            &version,
             os,
             arch,
             libc,
@@ -359,12 +359,7 @@ impl Ord for PythonInstallationKey {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.implementation
             .cmp(&other.implementation)
-            .then_with(|| {
-                self.major
-                    .cmp(&other.major)
-                    .then_with(|| self.minor.cmp(&other.minor))
-                    .then_with(|| self.patch.cmp(&other.patch))
-            })
+            .then_with(|| self.version().cmp(&other.version()))
             .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
             .then_with(|| self.arch.to_string().cmp(&other.arch.to_string()))
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))

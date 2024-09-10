@@ -178,13 +178,7 @@ pub(crate) async fn install(
                 "{}",
                 format!(
                     "Installed {} {}",
-                    format!(
-                        "Python {}",
-                        installed.version().expect(
-                            "Managed Python installations should always have valid versions"
-                        )
-                    )
-                    .bold(),
+                    format!("Python {}", installed.version()).bold(),
                     format!("in {}", elapsed(start.elapsed())).dimmed()
                 )
                 .dimmed()
