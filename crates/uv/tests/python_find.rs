@@ -390,3 +390,39 @@ fn python_find_venv() {
     ----- stderr -----
     "###);
 }
+
+#[cfg(unix)]
+#[test]
+fn python_find_unsupported_version() {
+    let context: TestContext = TestContext::new_with_versions(&["3.12"]);
+
+    // Request a low version
+    uv_snapshot!(context.filters(), context.python_find().arg("3.6"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.6 in virtual environments or system path
+    "###);
+
+    // Request a really low version
+    uv_snapshot!(context.filters(), context.python_find().arg("2.6"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 2.6 in virtual environments or system path
+    "###);
+
+    // Request a future version
+    uv_snapshot!(context.filters(), context.python_find().arg("4.2"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 4.2 in virtual environments or system path
+    "###);
+}
