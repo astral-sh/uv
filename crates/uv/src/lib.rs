@@ -1123,6 +1123,7 @@ async fn run_project(
                 args.show_resolution || globals.verbose > 0,
                 args.locked,
                 args.frozen,
+                args.no_sync,
                 args.isolated,
                 args.package,
                 args.no_project,
