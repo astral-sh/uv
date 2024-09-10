@@ -282,9 +282,7 @@ impl ManagedPythonInstallation {
 
     /// The [`PythonVersion`] of the toolchain.
     pub fn version(&self) -> PythonVersion {
-        self.key
-            .version()
-            .expect("Managed Python installations should always have valid versions")
+        self.key.version()
     }
 
     pub fn implementation(&self) -> &ImplementationName {
@@ -331,17 +329,13 @@ impl ManagedPythonInstallation {
         let stdlib = if matches!(self.key.os, Os(target_lexicon::OperatingSystem::Windows)) {
             self.python_dir().join("Lib")
         } else {
-            let version = self
-                .key
-                .version()
-                .expect("Managed Python installations should always have valid versions");
             let python = if matches!(
                 self.key.implementation,
                 LenientImplementationName::Known(ImplementationName::PyPy)
             ) {
-                format!("pypy{}", version.python_version())
+                format!("pypy{}", self.key.version().python_version())
             } else {
-                format!("python{}", version.python_version())
+                format!("python{}", self.key.version().python_version())
             };
             self.python_dir().join("lib").join(python)
         };

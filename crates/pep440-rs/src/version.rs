@@ -1409,6 +1409,12 @@ impl std::fmt::Display for PrereleaseKind {
     }
 }
 
+impl std::fmt::Display for Prerelease {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.kind, self.number)
+    }
+}
+
 /// A part of the [local version identifier](<https://peps.python.org/pep-0440/#local-version-identifiers>)
 ///
 /// Local versions are a mess:

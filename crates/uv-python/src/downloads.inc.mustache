@@ -3,6 +3,8 @@
 // Generated with `{{generated_with}}`
 // From template at `{{generated_from}}`
 
+use std::borrow::Cow;
+
 pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
     {{#versions}}
     ManagedPythonDownload {
@@ -10,6 +12,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: {{value.major}},
             minor: {{value.minor}},
             patch: {{value.patch}},
+            prerelease: Cow::Borrowed("{{value.prerelease}}"),
             implementation: LenientImplementationName::Known(ImplementationName::{{value.name}}),
             arch: Arch(target_lexicon::Architecture::{{value.arch}}),
             os: Os(target_lexicon::OperatingSystem::{{value.os}}),
