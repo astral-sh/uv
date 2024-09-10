@@ -899,7 +899,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
                 return Ok(None);
             }
-            MetadataResponse::InvalidStructure { source: _, err } => {
+            MetadataResponse::InvalidStructure(err) => {
                 self.unavailable_packages.insert(
                     name.clone(),
                     UnavailablePackage::InvalidStructure(err.to_string()),
@@ -1272,8 +1272,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             UnavailableVersion::InconsistentMetadata,
                         ));
                     }
-                    MetadataResponse::InvalidStructure { source: _, err } => {
-                        warn!("Unable to extract metadata for {source}: {err}");
+                    MetadataResponse::InvalidStructure(err) => {
+                        warn!("Unable to extract metadata for {name}: {err}");
                         self.incomplete_packages
                             .entry(name.clone())
                             .or_default()
@@ -1668,7 +1668,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         MetadataResponse::InvalidMetadata(err) => {
                             warn!("Unable to extract metadata for {dist}: {err}");
                         }
-                        MetadataResponse::InvalidStructure { err, source: _ } => {
+                        MetadataResponse::InvalidStructure(err) => {
                             warn!("Unable to extract metadata for {dist}: {err}");
                         }
                         _ => {}
@@ -1686,7 +1686,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         MetadataResponse::InvalidMetadata(err) => {
                             warn!("Unable to extract metadata for {dist}: {err}");
                         }
-                        MetadataResponse::InvalidStructure { source: _, err } => {
+                        MetadataResponse::InvalidStructure(err) => {
                             warn!("Unable to extract metadata for {dist}: {err}");
                         }
                         _ => {}
