@@ -335,7 +335,7 @@ impl FromStr for PythonInstallationKey {
         let version = PythonVersion::from_str(version).map_err(|err| {
             PythonInstallationKeyError::ParseError(
                 key.to_string(),
-                format!("invalid Python version: {err}"),
+                format!("invalid Python version `{version}`: {err}"),
             )
         })?;
 
