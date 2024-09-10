@@ -8,6 +8,149 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         key: PythonInstallationKey {
             major: 3,
             minor: 12,
+            patch: 6,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("0419bafa4444a5aa0c554197bce0679e7cc0f28edc7ee8cfbe0ccea860bdb904")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 6,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("22d119ac7df7f0bddfd4dfd075bcc4eb2532ed3df0bdba0579106835d49ef9cd")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 6,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("190c23eb3b9c6b9638f69dc7fb829df8967ad64c82e82c93898a4d878d18ed2a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 6,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("31a043c40e1dbb528404ff6e1fcad25638d54dfab2d379c3989d47ec24e6938b")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 6,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("d87275e613632ab738528fe20a94a7193e824e91ba7f1e7845e7fcfc1f114900")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 6,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Powerpc64le),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("fb49374b512b0e9f2cd2a720b3836f8a04228d73eb0786e64221eb55979edc6e")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 6,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::S390x),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("89be19666ecb7cdbbfd596e462d690a78a380f1fe5c2967b25a1779b0cec9339")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 6,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("b10d19eb5548a3b3b0a5e6f9109834d7ecfc139bc15754f81a94d39eaa5bdd26")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 6,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("b080463e4f0c452e592cdac1ca97936a6a19bb3d9a64da669a50ca843fce0108")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 6,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("661e2a4b03d6eccbb5b15f5bd2869fbdd39132513394d758287e46115e48d4ef")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 6,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("fe9898060f52c2171c2aa074f470f91339bdcf9896dae6709021c914f58aa863")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
             patch: 5,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
@@ -783,6 +926,149 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64-pc-windows-msvc-shared-install_only.tar.gz",
         sha256: Some("facfaa1fbc8653f95057f3c4a0f8aa833dab0e0b316e24ee8686bc761d4b4f8d")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("74a9e2921aefecf22f79d633fd436dd2e756a075fff45d52c55f55e62b90a4e0")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("7ac6ef4209153a1de211ab112ed318b4d702d6ca2655829ad6695d9523eaf47d")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("71a30c207475cff54cd87054befc9ab9100c4f0e7f95a27c54fcd72b42d855ed")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("248790e6e393159b05701b14eb66b96fcccee1c33497b98f671a9202a1da9efa")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("7c3ffac7aec9c554dcdb822e4154e83629d0c7ab453c2c47e6bbf9b63c912f73")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Powerpc64le),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("01bcf87fa9cea97604a199e3a2a0b43c67368be9e0e4ba8d0e044e853a5b398b")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::S390x),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("6800797c7c3c7899c1b703e556c0552d459df96a1aac93c57d8fb25d6b80ed6c")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("46c5dd0fc5f2963541ac6748671d04e01217f6b4f55dcdf7022e74ccb4452683")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("2f8fdc87e8aab1f9f166575e3379d36abd0f7a87ea6c66c5e97e3aaadedd291d")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("cf7cd0a08aa43e5919483a9e3251b6496049a157ce02fa03ff0cde27b4338fbd")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("2f0648ac8f7cddd2fecc9983120e53063cb6180ebbf62fb4f4c16255d090b67e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1758,6 +2044,149 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64-pc-windows-msvc-shared-install_only.tar.gz",
         sha256: Some("edc08979cb0666a597466176511529c049a6f0bba8adf70df441708f766de5bf")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("cdf154e4ca6e78d613611ddb6bc67a73f682442c31ca498df4383775e87bd5c8")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("e3af89047c713b812779aaa576a364b77f9ebbbbe182fd6bda03a52d3166ee14")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("c600872186409c85937446955e97e86578a98ca4513816c756a15fa9fc2b315d")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("08312ded535dfaf99d78ef802bbef4eba0961eaf8286fe0a94fc368f238bd8dd")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("d96824766a2b05cbaa4cf85a79eb76eaf753144f6db54e63d9cdc494d3f29589")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Powerpc64le),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("9ee250d77a87f356b6d8576d5f57d02fce2cb9982f8272d59dd2f44f24e95cdd")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::S390x),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("8e816379a299da025de9fecc33f7d1b7384b97c689748875f43dc0d71c2dad50")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("89dc3fd2e8d1a1b6c9eb000cbad85830c06ab776eed891bda369847671f0fb4f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("816a958735bb9927b2884d55938683770eda823d4c74c38f2b49ef3cc8ce4585")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("691fbd9da6ff2a18b682d78c4ea9c4fe6fb8f08589a6c82ad3bfef1d8d4df2f3")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("ee0cff039adf2a21481b45274fa10ec59976d901b0afef93346fad07919fe1ce")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3214,6 +3643,149 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-pc-windows-msvc-shared-install_only-20211017T1616.tar.gz",
         sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("80a7fa0a25cf0dbbb4cab9d7dc37b3172efed05cefd0667192690a30cadd85dd")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("2a78b16be1be07cb514183d09b9e421fea9256e366cca0642639c3161611b6ab")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("269aeb811b5a32381070811da02a175f9d6abee92da7673884a6b42c91cf9c6e")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("113c727c2231e3c964ee9784e32d8b91effa9e61a2db4dce5166e21975cbc3f1")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("b47e8d72466e1af94810d9d83b0e0fa8a60773abb31505fc2b8d84bfa16d3b81")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Powerpc64le),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("fe5d14060530f4d6edb53687f4730d28d71d19f11c64ddaf5bde5db69fc3bd01")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::S390x),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("4f428e4294d8688b62452152cab1685c88c2b665bfee00125af7676542c1ed52")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("8af628a1786ebc6012689d3f06cd955672bcb75ff37e9518b4028e38d185d2d7")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("8106a101967d52c78f56603a2fcfa2926c140ca45abfbf5a984cc63b726a0ee9")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("e7e5415db4790ef15bbe2daa9a5d4f8363fd60fd1220692206ef02d534e534c8")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("81d14af5cc30dd1e6203d2ef51aeeeb68b8e807ca71ce2ab038ff517fa553796")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5047,6 +5619,97 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-pc-windows-msvc-shared-pgo-20201021T0245.tar.zst",
         sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("ba5e82a768111e58c1c10f452a8c2a352343ade11a726649305b5be9c50e2c4e")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("a0cf896059fa8f323c88342154868cea4cca32314175e246f0ac601b978f0e7a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("ac5c88f5bba4a6d7f0e1294eb27b66461912277bd01c78f0641b6ea18f8f5253")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("d1df0f170f65b572e34f2f308578e7803a65ba67adda24faf4c3b91c4c35ca12")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("07efe55ae8f494356877effdf98e661d21b1de077964e95940ca1a35119d5b28")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("702256dc8f5fbcd2c696d27cfba6eabc52247129b0b92f602daedb06a4ace6ac")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 20,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("f037f8201f93ba26d6217464c46afac8bf128672b604aedd87724a7824bdf1ff")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
