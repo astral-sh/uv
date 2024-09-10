@@ -537,9 +537,10 @@ impl InitProjectKind {
 
         // Create `src/{name}/__init__.py`, if it doesn't exist already.
         let src_dir = path.join("src").join(&*name.as_dist_info_name());
+        fs_err::create_dir_all(&src_dir)?;
+
         let init_py = src_dir.join("__init__.py");
         if !init_py.try_exists()? {
-            fs_err::create_dir_all(&src_dir)?;
             fs_err::write(
                 init_py,
                 indoc::formatdoc! {r#"
@@ -548,6 +549,10 @@ impl InitProjectKind {
                 "#},
             )?;
         }
+
+        // Create a `py.typed` file
+        let py_typed = src_dir.join("py.typed");
+        fs_err::write(py_typed, "")?;
 
         // Write .python-version if it doesn't exist.
         if let Some(python_request) = python_request {

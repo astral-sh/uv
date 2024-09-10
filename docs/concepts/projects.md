@@ -161,6 +161,7 @@ example-lib
 ├── pyproject.toml
 └── src
     └── example_lib
+        ├── py.typed
         └── __init__.py
 ```
 
