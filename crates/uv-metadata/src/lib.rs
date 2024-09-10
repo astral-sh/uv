@@ -1,15 +1,51 @@
-use std::io::{Read, Seek};
-use std::path::Path;
-use std::str::FromStr;
-
-use tracing::warn;
-use zip::ZipArchive;
+//! Read metadata from wheels and source distributions.
+//!
+//! This module reads all fields exhaustively. The fields are defined in the [Core metadata
+//! specification](https://packaging.python.org/en/latest/specifications/core-metadata/).
 
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
-use uv_normalize::DistInfoName;
+use pypi_types::Metadata23;
+use std::io;
+use std::io::{Read, Seek};
+use std::path::Path;
+use std::str::FromStr;
+use thiserror::Error;
+use tokio::io::AsyncReadExt;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tracing::warn;
+use uv_normalize::{DistInfoName, InvalidNameError};
+use zip::ZipArchive;
 
-use crate::Error;
+/// The caller is responsible for attaching the path or url we failed to read.
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("Failed to read `dist-info` metadata from built wheel")]
+    DistInfo,
+    #[error("No .dist-info directory found")]
+    MissingDistInfo,
+    #[error("Multiple .dist-info directories found: {0}")]
+    MultipleDistInfo(String),
+    #[error(
+        "The .dist-info directory does not consist of the normalized package name and version: `{0}`"
+    )]
+    MissingDistInfoSegments(String),
+    #[error("The .dist-info directory {0} does not start with the normalized package name: {1}")]
+    MissingDistInfoPackageName(String, String),
+    #[error("The .dist-info directory {0} does not start with the normalized version: {1}")]
+    MissingDistInfoVersion(String, String),
+    #[error("The .dist-info directory name contains invalid characters")]
+    InvalidName(#[from] InvalidNameError),
+    #[error("The metadata at {0} is invalid")]
+    InvalidMetadata(String, pypi_types::MetadataError),
+    #[error("Failed to read from zip file")]
+    Zip(#[from] zip::result::ZipError),
+    #[error("Failed to read from zip file")]
+    AsyncZip(#[from] async_zip::error::ZipError),
+    // No `#[from]` to enforce manual review of `io::Error` sources.
+    #[error(transparent)]
+    Io(io::Error),
+}
 
 /// Find the `.dist-info` directory in a zipped wheel.
 ///
@@ -123,13 +159,11 @@ pub fn read_archive_metadata(
     let dist_info_prefix =
         find_archive_dist_info(filename, archive.file_names().map(|name| (name, name)))?.1;
 
-    let mut file = archive
-        .by_name(&format!("{dist_info_prefix}.dist-info/METADATA"))
-        .map_err(|err| Error::Zip(filename.to_string(), err))?;
+    let mut file = archive.by_name(&format!("{dist_info_prefix}.dist-info/METADATA"))?;
 
     #[allow(clippy::cast_possible_truncation)]
     let mut buffer = Vec::with_capacity(file.size() as usize);
-    file.read_to_end(&mut buffer)?;
+    file.read_to_end(&mut buffer).map_err(Error::Io)?;
 
     Ok(buffer)
 }
@@ -142,26 +176,27 @@ pub fn find_flat_dist_info(
     path: impl AsRef<Path>,
 ) -> Result<String, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
-    let Some(dist_info_prefix) = fs_err::read_dir(path.as_ref())?.find_map(|entry| {
-        let entry = entry.ok()?;
-        let file_type = entry.file_type().ok()?;
-        if file_type.is_dir() {
-            let path = entry.path();
+    let Some(dist_info_prefix) = fs_err::read_dir(path.as_ref())
+        .map_err(Error::Io)?
+        .find_map(|entry| {
+            let entry = entry.ok()?;
+            let file_type = entry.file_type().ok()?;
+            if file_type.is_dir() {
+                let path = entry.path();
 
-            let extension = path.extension()?;
-            if extension != "dist-info" {
-                return None;
+                let extension = path.extension()?;
+                if extension != "dist-info" {
+                    return None;
+                }
+
+                let dist_info_prefix = path.file_stem()?.to_str()?;
+                Some(dist_info_prefix.to_string())
+            } else {
+                None
             }
-
-            let dist_info_prefix = path.file_stem()?.to_str()?;
-            Some(dist_info_prefix.to_string())
-        } else {
-            None
-        }
-    }) else {
-        return Err(Error::InvalidWheel(
-            "Missing .dist-info directory".to_string(),
-        ));
+        })
+    else {
+        return Err(Error::MissingDistInfo);
     };
 
     // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
@@ -199,16 +234,86 @@ pub fn read_dist_info_metadata(
     let metadata_file = wheel
         .as_ref()
         .join(format!("{dist_info_prefix}.dist-info/METADATA"));
-    Ok(fs_err::read(metadata_file)?)
+    fs_err::read(metadata_file).map_err(Error::Io)
+}
+
+/// Read a wheel's `METADATA` file from a zip file.
+pub async fn read_metadata_async_seek(
+    filename: &WheelFilename,
+    reader: impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
+) -> Result<Vec<u8>, Error> {
+    let reader = futures::io::BufReader::new(reader.compat());
+    let mut zip_reader = async_zip::base::read::seek::ZipFileReader::new(reader).await?;
+
+    let (metadata_idx, _dist_info_prefix) = find_archive_dist_info(
+        filename,
+        zip_reader
+            .file()
+            .entries()
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| Some((index, entry.filename().as_str().ok()?))),
+    )?;
+
+    // Read the contents of the `METADATA` file.
+    let mut contents = Vec::new();
+    zip_reader
+        .reader_with_entry(metadata_idx)
+        .await?
+        .read_to_end_checked(&mut contents)
+        .await?;
+
+    Ok(contents)
+}
+
+/// Like [`read_metadata_async_seek`], but doesn't use seek.
+pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
+    filename: &WheelFilename,
+    debug_path: &str,
+    reader: R,
+) -> Result<Metadata23, Error> {
+    let reader = futures::io::BufReader::with_capacity(128 * 1024, reader);
+    let mut zip = async_zip::base::read::stream::ZipFileReader::new(reader);
+
+    while let Some(mut entry) = zip.next_with_entry().await? {
+        // Find the `METADATA` entry.
+        let path = entry.reader().entry().filename().as_str()?;
+
+        if is_metadata_entry(path, filename)? {
+            let mut reader = entry.reader_mut().compat();
+            let mut contents = Vec::new();
+            reader.read_to_end(&mut contents).await.unwrap();
+
+            let metadata = Metadata23::parse_metadata(&contents)
+                .map_err(|err| Error::InvalidMetadata(debug_path.to_string(), err))?;
+            return Ok(metadata);
+        }
+
+        // Close current file to get access to the next one. See docs:
+        // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
+        zip = entry.skip().await?;
+    }
+
+    Err(Error::MissingDistInfo)
+}
+
+/// Read the [`Metadata23`] from an unzipped wheel.
+pub fn read_flat_wheel_metadata(
+    filename: &WheelFilename,
+    wheel: impl AsRef<Path>,
+) -> Result<Metadata23, Error> {
+    let dist_info_prefix = find_flat_dist_info(filename, &wheel)?;
+    let metadata = read_dist_info_metadata(&dist_info_prefix, &wheel)?;
+    Metadata23::parse_metadata(&metadata).map_err(|err| {
+        Error::InvalidMetadata(format!("{dist_info_prefix}.dist-info/METADATA"), err)
+    })
 }
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
-
+    use super::find_archive_dist_info;
     use distribution_filename::WheelFilename;
-
-    use crate::metadata::find_archive_dist_info;
+    use std::str::FromStr;
 
     #[test]
     fn test_dot_in_name() {

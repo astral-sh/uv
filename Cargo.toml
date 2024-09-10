@@ -41,12 +41,13 @@ uv-fs = { path = "crates/uv-fs" }
 uv-git = { path = "crates/uv-git" }
 uv-installer = { path = "crates/uv-installer" }
 uv-macros = { path = "crates/uv-macros" }
+uv-metadata = { path = "crates/uv-metadata" }
 uv-normalize = { path = "crates/uv-normalize" }
 uv-options-metadata = { path = "crates/uv-options-metadata" }
+uv-pubgrub = { path = "crates/uv-pubgrub" }
 uv-python = { path = "crates/uv-python" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-resolver = { path = "crates/uv-resolver" }
-uv-pubgrub = { path = "crates/uv-pubgrub" }
 uv-scripts = { path = "crates/uv-scripts" }
 uv-settings = { path = "crates/uv-settings" }
 uv-shell = { path = "crates/uv-shell" }
@@ -64,7 +65,7 @@ async-channel = { version = "2.2.0" }
 async-compression = { version = "0.4.6" }
 async-trait = { version = "0.1.78" }
 async_http_range_reader = { version = "0.8.0" }
-async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "011b24604fa7bc223daaad7712c0694bac8f0a87", features = ["deflate"] }
+async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "011b24604fa7bc223daaad7712c0694bac8f0a87", features = ["deflate", "tokio"] }
 axoupdater = { version = "0.7.0", default-features = false }
 backoff = { version = "0.4.0" }
 base64 = { version = "0.22.0" }

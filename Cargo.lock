@@ -4661,7 +4661,6 @@ dependencies = [
  "hyper",
  "hyper-util",
  "insta",
- "install-wheel-rs",
  "itertools 0.13.0",
  "jiff",
  "pep440_rs",
@@ -4687,6 +4686,7 @@ dependencies = [
  "uv-cache",
  "uv-configuration",
  "uv-fs",
+ "uv-metadata",
  "uv-normalize",
  "uv-version",
  "uv-warnings",
@@ -4794,7 +4794,6 @@ dependencies = [
  "futures",
  "indoc",
  "insta",
- "install-wheel-rs",
  "nanoid",
  "pep440_rs",
  "pep508_rs",
@@ -4818,6 +4817,7 @@ dependencies = [
  "uv-extract",
  "uv-fs",
  "uv-git",
+ "uv-metadata",
  "uv-normalize",
  "uv-types",
  "uv-warnings",
@@ -4937,6 +4937,24 @@ dependencies = [
  "quote",
  "syn 2.0.76",
  "textwrap",
+]
+
+[[package]]
+name = "uv-metadata"
+version = "0.1.0"
+dependencies = [
+ "async_zip",
+ "distribution-filename",
+ "fs-err",
+ "futures",
+ "pep440_rs",
+ "pypi-types",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uv-normalize",
+ "zip",
 ]
 
 [[package]]
@@ -5066,7 +5084,6 @@ dependencies = [
  "futures",
  "indexmap",
  "insta",
- "install-wheel-rs",
  "itertools 0.13.0",
  "jiff",
  "once-map",
@@ -5096,6 +5113,7 @@ dependencies = [
  "uv-distribution",
  "uv-fs",
  "uv-git",
+ "uv-metadata",
  "uv-normalize",
  "uv-pubgrub",
  "uv-python",
