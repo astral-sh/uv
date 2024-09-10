@@ -34,25 +34,41 @@ impl InstallOptions {
         project_name: Option<&PackageName>,
         members: &BTreeSet<PackageName>,
     ) -> bool {
-        // If `--no-install-project` is set, remove the project itself. The project is always
-        // part of the workspace.
-        if self.no_install_project || self.no_install_workspace {
+        // If `--no-install-project` is set, remove the project itself.
+        if self.no_install_project {
             if let Some(project_name) = project_name {
                 if package == project_name {
+                    debug!("Omitting `{package}` from resolution due to `--no-install-project`");
                     return false;
                 }
-            } else {
-                debug!("Ignoring `--no-install-project` for virtual workspace");
-            };
+            }
         }
 
         // If `--no-install-workspace` is set, remove the project and any workspace members.
-        if self.no_install_workspace && members.contains(package) {
-            return false;
+        if self.no_install_workspace {
+            // In some cases, the project root might be omitted from the list of workspace members
+            // encoded in the lockfile. (But we already checked this above if `--no-install-project`
+            // is set.)
+            if !self.no_install_project {
+                if let Some(project_name) = project_name {
+                    if package == project_name {
+                        debug!(
+                            "Omitting `{package}` from resolution due to `--no-install-workspace`"
+                        );
+                        return false;
+                    }
+                }
+            }
+
+            if members.contains(package) {
+                debug!("Omitting `{package}` from resolution due to `--no-install-workspace`");
+                return false;
+            }
         }
 
         // If `--no-install-package` is provided, remove the requested packages.
         if self.no_install_package.contains(package) {
+            debug!("Omitting `{package}` from resolution due to `--no-install-package`");
             return false;
         }
 

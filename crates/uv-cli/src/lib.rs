@@ -2536,11 +2536,6 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
-    // /// Omit non-development dependencies.
-    // ///
-    // /// The project itself will also be omitted.
-    // #[arg(long, conflicts_with("no_dev"))]
-    // pub only_dev: bool,
     /// Do not remove extraneous packages present in the environment.
     ///
     /// When enabled, uv will make the minimum necessary changes to satisfy the requirements.

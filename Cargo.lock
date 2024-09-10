@@ -4700,7 +4700,6 @@ dependencies = [
  "anyhow",
  "cache-key",
  "clap",
- "distribution-types",
  "either",
  "pep508_rs",
  "platform-tags",
