@@ -88,8 +88,9 @@ impl InstallOptions {
         project_name: &PackageName,
         members: &BTreeSet<PackageName>,
     ) -> bool {
-        // If `--no-install-project` is set, remove the project itself.
-        if self.no_install_project && package == project_name {
+        // If `--no-install-project` is set, remove the project itself. The project is always
+        // part of the workspace.
+        if (self.no_install_project || self.no_install_workspace) && package == project_name {
             return false;
         }
 
