@@ -676,10 +676,7 @@ fn python_installation_from_directory(
     cache: &Cache,
 ) -> Result<PythonInstallation, crate::interpreter::Error> {
     let executable = virtualenv_python_executable(path);
-    Ok(PythonInstallation {
-        source: PythonSource::ProvidedPath,
-        interpreter: Interpreter::query(executable, cache)?,
-    })
+    python_installation_from_executable(&executable, cache)
 }
 
 /// Lazily iterate over all Python interpreters on the path with the given executable name.
