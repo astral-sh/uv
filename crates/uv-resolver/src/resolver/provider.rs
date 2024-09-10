@@ -35,9 +35,15 @@ pub enum MetadataResponse {
     /// The wheel metadata was not found.
     MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
-    InvalidMetadata(Box<pypi_types::MetadataError>),
+    InvalidMetadata {
+        source: String,
+        err: Box<pypi_types::MetadataError>,
+    },
     /// The wheel metadata was found, but the metadata was inconsistent.
-    InconsistentMetadata(Box<uv_distribution::Error>),
+    InconsistentMetadata {
+        source: String,
+        err: Box<uv_distribution::Error>,
+    },
     /// The wheel has an invalid structure.
     InvalidStructure {
         source: String,
@@ -185,7 +191,10 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                 uv_distribution::Error::Client(client) => match client.into_kind() {
                     uv_client::ErrorKind::Offline(_) => Ok(MetadataResponse::Offline),
                     uv_client::ErrorKind::MetadataParseError(_, _, err) => {
-                        Ok(MetadataResponse::InvalidMetadata(err))
+                        Ok(MetadataResponse::InvalidMetadata {
+                            source: dist.to_string(),
+                            err,
+                        })
                     }
                     uv_client::ErrorKind::Metadata(_, err) => {
                         Ok(MetadataResponse::InvalidStructure {
@@ -196,14 +205,21 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                     kind => Err(uv_client::Error::from(kind).into()),
                 },
                 uv_distribution::Error::VersionMismatch { .. } => {
-                    Ok(MetadataResponse::InconsistentMetadata(Box::new(err)))
+                    Ok(MetadataResponse::InconsistentMetadata {
+                        source: dist.to_string(),
+                        err: Box::new(err),
+                    })
                 }
                 uv_distribution::Error::NameMismatch { .. } => {
-                    Ok(MetadataResponse::InconsistentMetadata(Box::new(err)))
+                    Ok(MetadataResponse::InconsistentMetadata {
+                        source: dist.to_string(),
+                        err: Box::new(err),
+                    })
                 }
-                uv_distribution::Error::Metadata(err) => {
-                    Ok(MetadataResponse::InvalidMetadata(Box::new(err)))
-                }
+                uv_distribution::Error::Metadata(err) => Ok(MetadataResponse::InvalidMetadata {
+                    source: dist.to_string(),
+                    err: Box::new(err),
+                }),
                 uv_distribution::Error::WheelMetadata(source, err) => {
                     Ok(MetadataResponse::InvalidStructure {
                         source: source.to_string_lossy().to_string(),

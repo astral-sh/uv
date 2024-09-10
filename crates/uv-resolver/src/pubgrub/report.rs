@@ -1,12 +1,11 @@
-use std::borrow::Cow;
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
-use std::ops::Bound;
-
 use indexmap::IndexSet;
 use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
+use std::borrow::Cow;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Bound;
 
 use distribution_types::IndexLocations;
 use pep440_rs::Version;
@@ -602,21 +601,21 @@ impl PubGrubReportFormatter<'_> {
             Some(UnavailablePackage::Offline) => {
                 hints.insert(PubGrubHint::Offline);
             }
-            Some(UnavailablePackage::MissingMetadata) => {
+            Some(UnavailablePackage::MissingMetadata { source }) => {
                 hints.insert(PubGrubHint::MissingPackageMetadata {
                     package: package.clone(),
                 });
             }
-            Some(UnavailablePackage::InvalidMetadata(reason)) => {
+            Some(UnavailablePackage::InvalidMetadata { source, err }) => {
                 hints.insert(PubGrubHint::InvalidPackageMetadata {
                     package: package.clone(),
-                    reason: reason.clone(),
+                    err: err.clone(),
                 });
             }
-            Some(UnavailablePackage::InvalidStructure(reason)) => {
+            Some(UnavailablePackage::InvalidStructure { source, err }) => {
                 hints.insert(PubGrubHint::InvalidPackageStructure {
                     package: package.clone(),
-                    reason: reason.clone(),
+                    err: err.clone(),
                 });
             }
             Some(UnavailablePackage::NotFound) => {}
@@ -637,25 +636,25 @@ impl PubGrubReportFormatter<'_> {
                                 version: version.clone(),
                             });
                         }
-                        IncompletePackage::InvalidMetadata(reason) => {
+                        IncompletePackage::InvalidMetadata(err) => {
                             hints.insert(PubGrubHint::InvalidVersionMetadata {
                                 package: package.clone(),
                                 version: version.clone(),
-                                reason: reason.clone(),
+                                err: err.clone(),
                             });
                         }
-                        IncompletePackage::InconsistentMetadata(reason) => {
+                        IncompletePackage::InconsistentMetadata(err) => {
                             hints.insert(PubGrubHint::InconsistentVersionMetadata {
                                 package: package.clone(),
                                 version: version.clone(),
-                                reason: reason.clone(),
+                                err: err.clone(),
                             });
                         }
-                        IncompletePackage::InvalidStructure(reason) => {
+                        IncompletePackage::InvalidStructure(err) => {
                             hints.insert(PubGrubHint::InvalidVersionStructure {
                                 package: package.clone(),
                                 version: version.clone(),
-                                reason: reason.clone(),
+                                err: err.clone(),
                             });
                         }
                     }
@@ -746,13 +745,13 @@ pub(crate) enum PubGrubHint {
     InvalidPackageMetadata {
         package: PubGrubPackage,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        err: Vec<String>,
     },
     /// The structure of a package was invalid (e.g., multiple `.dist-info` directories).
     InvalidPackageStructure {
         package: PubGrubPackage,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        err: Vec<String>,
     },
     /// Metadata for a package version could not be found.
     MissingVersionMetadata {
@@ -766,7 +765,7 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        err: Vec<String>,
     },
     /// Metadata for a package version was inconsistent (e.g., the package name did not match that
     /// of the file).
@@ -775,7 +774,7 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        err: Vec<String>,
     },
     /// The structure of a package version was invalid (e.g., multiple `.dist-info` directories).
     InvalidVersionStructure {
@@ -783,7 +782,7 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        err: Vec<String>,
     },
     /// The `Requires-Python` requirement was not satisfied.
     RequiresPython {
@@ -948,24 +947,24 @@ impl std::fmt::Display for PubGrubHint {
                     package.bold()
                 )
             }
-            Self::InvalidPackageMetadata { package, reason } => {
+            Self::InvalidPackageMetadata { package, err } => {
                 write!(
                     f,
                     "{}{} Metadata for {} could not be parsed:\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.bold(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(&err.join("\n"), "  ")
                 )
             }
-            Self::InvalidPackageStructure { package, reason } => {
+            Self::InvalidPackageStructure { package, err } => {
                 write!(
                     f,
                     "{}{} The structure of {} was invalid:\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.bold(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(&err.join("\n"), "  ")
                 )
             }
             Self::MissingVersionMetadata { package, version } => {
@@ -981,7 +980,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::InvalidVersionMetadata {
                 package,
                 version,
-                reason,
+                err,
             } => {
                 write!(
                     f,
@@ -990,13 +989,13 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     package.bold(),
                     version.bold(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(&err.join("\n"), "  ")
                 )
             }
             Self::InvalidVersionStructure {
                 package,
                 version,
-                reason,
+                err,
             } => {
                 write!(
                     f,
@@ -1005,13 +1004,13 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     package.bold(),
                     version.bold(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(&err.join("\n"), "  ")
                 )
             }
             Self::InconsistentVersionMetadata {
                 package,
                 version,
-                reason,
+                err,
             } => {
                 write!(
                     f,
@@ -1020,7 +1019,7 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     package.bold(),
                     version.bold(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(&err.join("\n"), "  ")
                 )
             }
             Self::RequiresPython {

@@ -881,28 +881,41 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 return Ok(None);
             }
             MetadataResponse::MissingMetadata => {
-                self.unavailable_packages
-                    .insert(name.clone(), UnavailablePackage::MissingMetadata);
-                return Ok(None);
-            }
-            MetadataResponse::InvalidMetadata(err) => {
                 self.unavailable_packages.insert(
                     name.clone(),
-                    UnavailablePackage::InvalidMetadata(err.to_string()),
+                    UnavailablePackage::MissingMetadata {
+                        source: dist.to_string(),
+                    },
                 );
                 return Ok(None);
             }
-            MetadataResponse::InconsistentMetadata(err) => {
+            MetadataResponse::InvalidMetadata { source, err } => {
                 self.unavailable_packages.insert(
                     name.clone(),
-                    UnavailablePackage::InvalidMetadata(err.to_string()),
+                    UnavailablePackage::InvalidMetadata {
+                        source: source.clone(),
+                        err: err,
+                    },
                 );
                 return Ok(None);
             }
-            MetadataResponse::InvalidStructure { source: _, err } => {
+            MetadataResponse::InconsistentMetadata { source, err } => {
                 self.unavailable_packages.insert(
                     name.clone(),
-                    UnavailablePackage::InvalidStructure(err.to_string()),
+                    UnavailablePackage::InvalidMetadata {
+                        source: source.clone(),
+                        err: err.clone(),
+                    },
+                );
+                return Ok(None);
+            }
+            MetadataResponse::InvalidStructure { source, err } => {
+                self.unavailable_packages.insert(
+                    name.clone(),
+                    UnavailablePackage::InvalidStructure {
+                        source: source.clone(),
+                        err: err.to_string(),
+                    },
                 );
                 return Ok(None);
             }
@@ -1246,8 +1259,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             UnavailableVersion::MissingMetadata,
                         ));
                     }
-                    MetadataResponse::InvalidMetadata(err) => {
-                        warn!("Unable to extract metadata for {name}: {err}");
+                    MetadataResponse::InvalidMetadata { source, err } => {
+                        warn!("Unable to extract metadata for {source}: {err}");
                         self.incomplete_packages
                             .entry(name.clone())
                             .or_default()
@@ -1259,8 +1272,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             UnavailableVersion::InvalidMetadata,
                         ));
                     }
-                    MetadataResponse::InconsistentMetadata(err) => {
-                        warn!("Unable to extract metadata for {name}: {err}");
+                    MetadataResponse::InconsistentMetadata { source, err } => {
+                        warn!("Unable to extract metadata for {source}: {err}");
                         self.incomplete_packages
                             .entry(name.clone())
                             .or_default()
@@ -1272,15 +1285,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             UnavailableVersion::InconsistentMetadata,
                         ));
                     }
-                    MetadataResponse::InvalidStructure { source: _, err } => {
+                    MetadataResponse::InvalidStructure { source, err } => {
                         warn!("Unable to extract metadata for {source}: {err}");
                         self.incomplete_packages
                             .entry(name.clone())
                             .or_default()
-                            .insert(
-                                version.clone(),
-                                IncompletePackage::InvalidStructure(err.to_string()),
-                            );
+                            .insert(version.clone(), IncompletePackage::InvalidStructure(err));
                         return Ok(Dependencies::Unavailable(
                             UnavailableVersion::InvalidStructure,
                         ));
@@ -1665,7 +1675,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }) => {
                     trace!("Received built distribution metadata for: {dist}");
                     match &metadata {
-                        MetadataResponse::InvalidMetadata(err) => {
+                        MetadataResponse::InvalidMetadata { err, source: _ } => {
                             warn!("Unable to extract metadata for {dist}: {err}");
                         }
                         MetadataResponse::InvalidStructure { err, source: _ } => {
@@ -1683,7 +1693,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }) => {
                     trace!("Received source distribution metadata for: {dist}");
                     match &metadata {
-                        MetadataResponse::InvalidMetadata(err) => {
+                        MetadataResponse::InvalidMetadata { err, source: _ } => {
                             warn!("Unable to extract metadata for {dist}: {err}");
                         }
                         MetadataResponse::InvalidStructure { source: _, err } => {

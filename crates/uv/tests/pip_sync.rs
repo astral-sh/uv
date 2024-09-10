@@ -2615,13 +2615,15 @@ fn incompatible_wheel() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `foo @ file://[TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl`
-      Caused by: Failed to unzip wheel: foo-1.2.3-not-compatible-wheel.whl
-      Caused by: unable to locate the end of central directory record
+      × No solution found when resolving dependencies:
+      ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
+
+          hint: The structure of foo was invalid:
+            Failed to read from zip file
     "###
     );
 

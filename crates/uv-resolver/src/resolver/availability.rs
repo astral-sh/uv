@@ -1,7 +1,6 @@
-use std::fmt::{Display, Formatter};
-
 use distribution_types::IncompatibleDist;
 use pep440_rs::Version;
+use std::fmt::{Display, Formatter};
 
 /// The reason why a package or a version cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -93,11 +92,11 @@ pub(crate) enum UnavailablePackage {
     /// The package was not found in the registry.
     NotFound,
     /// The package metadata was not found.
-    MissingMetadata,
+    MissingMetadata { source: String },
     /// The package metadata was found, but could not be parsed.
-    InvalidMetadata(String),
+    InvalidMetadata { source: String, err: Vec<String> },
     /// The package has an invalid structure.
-    InvalidStructure(String),
+    InvalidStructure { source: String, err: Vec<String> },
 }
 
 impl UnavailablePackage {
@@ -106,9 +105,9 @@ impl UnavailablePackage {
             UnavailablePackage::NoIndex => "not found in the provided package locations",
             UnavailablePackage::Offline => "not found in the cache",
             UnavailablePackage::NotFound => "not found in the package registry",
-            UnavailablePackage::MissingMetadata => "not include a `METADATA` file",
-            UnavailablePackage::InvalidMetadata(_) => "invalid metadata",
-            UnavailablePackage::InvalidStructure(_) => "an invalid package format",
+            UnavailablePackage::MissingMetadata { .. } => "not include a `METADATA` file",
+            UnavailablePackage::InvalidMetadata { .. } => "invalid metadata",
+            UnavailablePackage::InvalidStructure { .. } => "an invalid package format",
         }
     }
 
@@ -117,9 +116,9 @@ impl UnavailablePackage {
             UnavailablePackage::NoIndex => format!("was {self}"),
             UnavailablePackage::Offline => format!("was {self}"),
             UnavailablePackage::NotFound => format!("was {self}"),
-            UnavailablePackage::MissingMetadata => format!("does {self}"),
-            UnavailablePackage::InvalidMetadata(_) => format!("has {self}"),
-            UnavailablePackage::InvalidStructure(_) => format!("has {self}"),
+            UnavailablePackage::MissingMetadata { .. } => format!("does {self}"),
+            UnavailablePackage::InvalidMetadata { .. } => format!("has {self}"),
+            UnavailablePackage::InvalidStructure { .. } => format!("has {self}"),
         }
     }
 }
@@ -138,11 +137,11 @@ pub(crate) enum IncompletePackage {
     /// The wheel metadata was not found.
     MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
-    InvalidMetadata(String),
+    InvalidMetadata(Vec<String>),
     /// The wheel metadata was found, but the metadata was inconsistent.
-    InconsistentMetadata(String),
+    InconsistentMetadata(Vec<String>),
     /// The wheel has an invalid structure.
-    InvalidStructure(String),
+    InvalidStructure(Vec<String>),
 }
 
 #[derive(Debug, Clone)]
