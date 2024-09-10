@@ -85,7 +85,7 @@ fn clean_package_pypi() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed 13 files for iniconfig ([SIZE])
+    Removed 12 files for iniconfig ([SIZE])
     "###);
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.
@@ -158,7 +158,7 @@ fn clean_package_index() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed 13 files for iniconfig ([SIZE])
+    Removed 12 files for iniconfig ([SIZE])
     "###);
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.

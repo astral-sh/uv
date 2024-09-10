@@ -712,9 +712,9 @@ dependencies = [
 
 [[package]]
 name = "codspeed"
-version = "2.6.0"
+version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a104ac948e0188b921eb3fcbdd55dcf62e542df4c7ab7e660623f6288302089"
+checksum = "b0c6f324a032703f286b0fbbdb390971f914b41f3410e1615c59730e4b24ebc2"
 dependencies = [
  "colored",
  "libc",
@@ -723,9 +723,9 @@ dependencies = [
 
 [[package]]
 name = "codspeed-criterion-compat"
-version = "2.6.0"
+version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "722c36bdc62d9436d027256ce2627af81ac7a596dfc7d13d849d0d212448d7fe"
+checksum = "0ae52f6f2545ffcd2ac1308f34043eb6ab81e4c741af419b348b2325574f48ee"
 dependencies = [
  "codspeed",
  "colored",
@@ -969,17 +969,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "092966b41edc516079bdf31ec78a2e0588d1d0c08f78b91d8307215928642b2b"
 
 [[package]]
-name = "derivative"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "diff"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1051,6 +1040,7 @@ dependencies = [
  "platform-tags",
  "pypi-types",
  "rkyv",
+ "rustc-hash",
  "schemars",
  "serde",
  "serde_json",
@@ -1058,6 +1048,7 @@ dependencies = [
  "tracing",
  "url",
  "urlencoding",
+ "uv-cache-info",
  "uv-fs",
  "uv-git",
  "uv-normalize",
@@ -1790,6 +1781,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tracing",
+ "uv-cache-info",
  "uv-fs",
  "uv-normalize",
  "uv-warnings",
@@ -1929,6 +1921,22 @@ checksum = "1c9c415a9b7b1e86cd5738f39d34c9e78c765da7fb1756dbd7d31b3b0d2e7afa"
 dependencies = [
  "scopeguard",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "krata-tokio-tar"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8bd5fee9b96acb5fc36b401896d601e6fdcce52b0e651ce24a3b21fb524e79f"
+dependencies = [
+ "filetime",
+ "futures-core",
+ "libc",
+ "portable-atomic",
+ "redox_syscall 0.3.5",
+ "tokio",
+ "tokio-stream",
+ "xattr",
 ]
 
 [[package]]
@@ -2836,9 +2844,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.6"
+version = "0.11.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba92fb39ec7ad06ca2582c0ca834dfeadcaf06ddfc8e635c80aa7e1c05315fdd"
+checksum = "ea0a9b3a42929fad8a7c3de7f86ce0814cfa893328157672680e9fb1145549c5"
 dependencies = [
  "bytes",
  "rand",
@@ -4082,21 +4090,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-tar"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d5714c010ca3e5c27114c1cdeb9d14641ace49874aa5626d7149e47aedace75"
-dependencies = [
- "filetime",
- "futures-core",
- "libc",
- "redox_syscall 0.3.5",
- "tokio",
- "tokio-stream",
- "xattr",
-]
-
-[[package]]
 name = "tokio-util"
 version = "0.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4452,7 +4445,7 @@ checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
 
 [[package]]
 name = "uv"
-version = "0.4.5"
+version = "0.4.8"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4508,6 +4501,7 @@ dependencies = [
  "url",
  "uv-auth",
  "uv-cache",
+ "uv-cache-info",
  "uv-cli",
  "uv-client",
  "uv-configuration",
@@ -4605,9 +4599,22 @@ dependencies = [
  "tempfile",
  "tracing",
  "url",
+ "uv-cache-info",
  "uv-fs",
  "uv-normalize",
  "walkdir",
+]
+
+[[package]]
+name = "uv-cache-info"
+version = "0.0.1"
+dependencies = [
+ "fs-err",
+ "schemars",
+ "serde",
+ "thiserror",
+ "toml",
+ "tracing",
 ]
 
 [[package]]
@@ -4655,7 +4662,6 @@ dependencies = [
  "hyper",
  "hyper-util",
  "insta",
- "install-wheel-rs",
  "itertools 0.13.0",
  "jiff",
  "pep440_rs",
@@ -4681,6 +4687,7 @@ dependencies = [
  "uv-cache",
  "uv-configuration",
  "uv-fs",
+ "uv-metadata",
  "uv-normalize",
  "uv-version",
  "uv-warnings",
@@ -4691,6 +4698,7 @@ name = "uv-configuration"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "cache-key",
  "clap",
  "distribution-types",
  "either",
@@ -4706,6 +4714,7 @@ dependencies = [
  "url",
  "uv-auth",
  "uv-cache",
+ "uv-cache-info",
  "uv-normalize",
 ]
 
@@ -4779,13 +4788,13 @@ name = "uv-distribution"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "cache-key",
  "distribution-filename",
  "distribution-types",
  "fs-err",
  "futures",
  "indoc",
  "insta",
- "install-wheel-rs",
  "nanoid",
  "pep440_rs",
  "pep508_rs",
@@ -4803,15 +4812,18 @@ dependencies = [
  "tracing",
  "url",
  "uv-cache",
+ "uv-cache-info",
  "uv-client",
  "uv-configuration",
  "uv-extract",
  "uv-fs",
  "uv-git",
+ "uv-metadata",
  "uv-normalize",
  "uv-types",
  "uv-warnings",
  "uv-workspace",
+ "walkdir",
  "zip",
 ]
 
@@ -4824,6 +4836,7 @@ dependencies = [
  "distribution-filename",
  "fs-err",
  "futures",
+ "krata-tokio-tar",
  "md-5",
  "pypi-types",
  "rayon",
@@ -4832,7 +4845,6 @@ dependencies = [
  "sha2",
  "thiserror",
  "tokio",
- "tokio-tar",
  "tokio-util",
  "tracing",
  "xz2",
@@ -4905,6 +4917,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-cache",
+ "uv-cache-info",
  "uv-configuration",
  "uv-distribution",
  "uv-extract",
@@ -4925,6 +4938,24 @@ dependencies = [
  "quote",
  "syn 2.0.76",
  "textwrap",
+]
+
+[[package]]
+name = "uv-metadata"
+version = "0.1.0"
+dependencies = [
+ "async_zip",
+ "distribution-filename",
+ "fs-err",
+ "futures",
+ "pep440_rs",
+ "pypi-types",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uv-normalize",
+ "zip",
 ]
 
 [[package]]
@@ -4993,6 +5024,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-cache",
+ "uv-cache-info",
  "uv-client",
  "uv-extract",
  "uv-fs",
@@ -5047,14 +5079,12 @@ dependencies = [
  "cache-key",
  "clap",
  "dashmap",
- "derivative",
  "distribution-filename",
  "distribution-types",
  "either",
  "futures",
  "indexmap",
  "insta",
- "install-wheel-rs",
  "itertools 0.13.0",
  "jiff",
  "once-map",
@@ -5084,6 +5114,7 @@ dependencies = [
  "uv-distribution",
  "uv-fs",
  "uv-git",
+ "uv-metadata",
  "uv-normalize",
  "uv-pubgrub",
  "uv-python",
@@ -5126,6 +5157,7 @@ dependencies = [
  "thiserror",
  "toml",
  "tracing",
+ "uv-cache-info",
  "uv-configuration",
  "uv-fs",
  "uv-macros",
@@ -5205,7 +5237,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.4.5"
+version = "0.4.8"
 
 [[package]]
 name = "uv-virtualenv"
@@ -5236,6 +5268,8 @@ dependencies = [
 name = "uv-workspace"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
+ "assert_fs",
  "either",
  "fs-err",
  "glob",
@@ -5249,6 +5283,7 @@ dependencies = [
  "same-file",
  "schemars",
  "serde",
+ "tempfile",
  "thiserror",
  "tokio",
  "toml",

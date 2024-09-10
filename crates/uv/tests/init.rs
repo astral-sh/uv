@@ -294,7 +294,7 @@ fn init_application_package() -> Result<()> {
     }, {
         assert_snapshot!(
             init, @r###"
-        def hello():
+        def hello() -> None:
             print("Hello from foo!")
         "###
         );
@@ -329,6 +329,7 @@ fn init_library() -> Result<()> {
 
     let pyproject_toml = child.join("pyproject.toml");
     let init_py = child.join("src").join("foo").join("__init__.py");
+    let py_typed = child.join("src").join("foo").join("py.typed");
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib"), @r###"
     success: true
@@ -369,6 +370,15 @@ fn init_library() -> Result<()> {
         def hello() -> str:
             return "Hello from foo!"
         "###
+        );
+    });
+
+    let py_typed = fs_err::read_to_string(py_typed)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            py_typed, @""
         );
     });
 
@@ -1025,7 +1035,7 @@ fn init_normalized_names() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project is already initialized in `[TEMP_DIR]/foo-bar`
+    error: Project is already initialized in `[TEMP_DIR]/foo-bar` (`pyproject.toml` file exists)
     "###);
 
     let child = context.temp_dir.child("foo-bar");

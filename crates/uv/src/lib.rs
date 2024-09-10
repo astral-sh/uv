@@ -8,17 +8,17 @@ use anyhow::Result;
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
-use tracing::{debug, instrument};
-
 use settings::PipTreeSettings;
-use uv_cache::{Cache, Refresh, Timestamp};
+use tracing::{debug, instrument};
+use uv_cache::{Cache, Refresh};
+use uv_cache_info::Timestamp;
 use uv_cli::{
     compat::CompatArgs, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
     ProjectCommand,
 };
 use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace};
 #[cfg(feature = "self-update")]
-use uv_cli::{SelfCommand, SelfNamespace};
+use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_scripts::Pep723Script;
@@ -670,12 +670,21 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
+            // Resolve the build constraints.
+            let build_constraints = args
+                .build_constraint
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
+
             commands::build(
                 args.src,
                 args.package,
                 args.out_dir,
                 args.sdist,
                 args.wheel,
+                build_constraints,
+                args.hash_checking,
                 args.python,
                 args.settings,
                 cli.no_config,
@@ -757,8 +766,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
-            command: SelfCommand::Update,
-        }) => commands::self_update(printer).await,
+            command: SelfCommand::Update(SelfUpdateArgs { target_version }),
+        }) => commands::self_update(target_version, printer).await,
         Commands::Version { output_format } => {
             commands::version(output_format, &mut stdout())?;
             Ok(ExitStatus::Success)
@@ -872,7 +881,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::tool_list(args.show_paths, &cache, printer).await
+            commands::tool_list(
+                args.show_paths,
+                args.show_version_specifiers,
+                &cache,
+                printer,
+            )
+            .await
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Upgrade(args),
@@ -1108,6 +1123,7 @@ async fn run_project(
                 args.show_resolution || globals.verbose > 0,
                 args.locked,
                 args.frozen,
+                args.no_sync,
                 args.isolated,
                 args.package,
                 args.no_project,
@@ -1308,6 +1324,8 @@ async fn run_project(
                 args.format,
                 args.package,
                 args.hashes,
+                args.install_options,
+                args.output_file,
                 args.extras,
                 args.dev,
                 args.locked,
@@ -1319,6 +1337,7 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                globals.quiet,
                 &cache,
                 printer,
             )

@@ -676,10 +676,7 @@ fn python_installation_from_directory(
     cache: &Cache,
 ) -> Result<PythonInstallation, crate::interpreter::Error> {
     let executable = virtualenv_python_executable(path);
-    Ok(PythonInstallation {
-        source: PythonSource::ProvidedPath,
-        interpreter: Interpreter::query(executable, cache)?,
-    })
+    python_installation_from_executable(&executable, cache)
 }
 
 /// Lazily iterate over all Python interpreters on the path with the given executable name.
@@ -779,19 +776,24 @@ pub fn find_python_installations<'a>(
                     .map(FindPythonResult::Ok)
             })
         }),
-        PythonRequest::Version(version) => Box::new({
-            debug!("Searching for {request} in {preference}");
-            python_interpreters(Some(version), None, environments, preference, cache)
-                .filter(|result| match result {
-                    Err(_) => true,
-                    Ok((_source, interpreter)) => version.matches_interpreter(interpreter),
-                })
-                .map(|result| {
-                    result
-                        .map(PythonInstallation::from_tuple)
-                        .map(FindPythonResult::Ok)
-                })
-        }),
+        PythonRequest::Version(version) => {
+            if let Err(err) = version.check_supported() {
+                return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
+            };
+            Box::new({
+                debug!("Searching for {request} in {preference}");
+                python_interpreters(Some(version), None, environments, preference, cache)
+                    .filter(|result| match result {
+                        Err(_) => true,
+                        Ok((_source, interpreter)) => version.matches_interpreter(interpreter),
+                    })
+                    .map(|result| {
+                        result
+                            .map(PythonInstallation::from_tuple)
+                            .map(FindPythonResult::Ok)
+                    })
+            })
+        }
         PythonRequest::Implementation(implementation) => Box::new({
             debug!("Searching for a {request} interpreter in {preference}");
             python_interpreters(None, Some(implementation), environments, preference, cache)
@@ -807,49 +809,61 @@ pub fn find_python_installations<'a>(
                         .map(FindPythonResult::Ok)
                 })
         }),
-        PythonRequest::ImplementationVersion(implementation, version) => Box::new({
-            debug!("Searching for {request} in {preference}");
-            python_interpreters(
-                Some(version),
-                Some(implementation),
-                environments,
-                preference,
-                cache,
-            )
-            .filter(|result| match result {
-                Err(_) => true,
-                Ok((_source, interpreter)) => {
-                    version.matches_interpreter(interpreter)
-                        && interpreter
-                            .implementation_name()
-                            .eq_ignore_ascii_case(implementation.into())
-                }
+        PythonRequest::ImplementationVersion(implementation, version) => {
+            if let Err(err) = version.check_supported() {
+                return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
+            };
+            Box::new({
+                debug!("Searching for {request} in {preference}");
+                python_interpreters(
+                    Some(version),
+                    Some(implementation),
+                    environments,
+                    preference,
+                    cache,
+                )
+                .filter(|result| match result {
+                    Err(_) => true,
+                    Ok((_source, interpreter)) => {
+                        version.matches_interpreter(interpreter)
+                            && interpreter
+                                .implementation_name()
+                                .eq_ignore_ascii_case(implementation.into())
+                    }
+                })
+                .map(|result| {
+                    result
+                        .map(PythonInstallation::from_tuple)
+                        .map(FindPythonResult::Ok)
+                })
             })
-            .map(|result| {
-                result
-                    .map(PythonInstallation::from_tuple)
-                    .map(FindPythonResult::Ok)
+        }
+        PythonRequest::Key(request) => {
+            if let Some(version) = request.version() {
+                if let Err(err) = version.check_supported() {
+                    return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
+                };
+            };
+            Box::new({
+                debug!("Searching for {request} in {preference}");
+                python_interpreters(
+                    request.version(),
+                    request.implementation(),
+                    environments,
+                    preference,
+                    cache,
+                )
+                .filter(|result| match result {
+                    Err(_) => true,
+                    Ok((_source, interpreter)) => request.satisfied_by_interpreter(interpreter),
+                })
+                .map(|result| {
+                    result
+                        .map(PythonInstallation::from_tuple)
+                        .map(FindPythonResult::Ok)
+                })
             })
-        }),
-        PythonRequest::Key(request) => Box::new({
-            debug!("Searching for {request} in {preference}");
-            python_interpreters(
-                request.version(),
-                request.implementation(),
-                environments,
-                preference,
-                cache,
-            )
-            .filter(|result| match result {
-                Err(_) => true,
-                Ok((_source, interpreter)) => request.satisfied_by_interpreter(interpreter),
-            })
-            .map(|result| {
-                result
-                    .map(PythonInstallation::from_tuple)
-                    .map(FindPythonResult::Ok)
-            })
-        }),
+        }
     }
 }
 
@@ -1447,6 +1461,37 @@ impl VersionRequest {
             })
             .chain(self.default_names())
             .flatten()
+    }
+
+    pub(crate) fn check_supported(&self) -> Result<(), String> {
+        match self {
+            Self::Any => (),
+            Self::Major(major) => {
+                if *major < 3 {
+                    return Err(format!(
+                        "Python <3 is not supported but {major} was requested."
+                    ));
+                }
+            }
+            Self::MajorMinor(major, minor) => {
+                if (*major, *minor) < (3, 7) {
+                    return Err(format!(
+                        "Python <3.7 is not supported but {major}.{minor} was requested."
+                    ));
+                }
+            }
+            Self::MajorMinorPatch(major, minor, patch) => {
+                if (*major, *minor) < (3, 7) {
+                    return Err(format!(
+                        "Python <3.7 is not supported but {major}.{minor}.{patch} was requested."
+                    ));
+                }
+            }
+            // TODO(zanieb): We could do some checking here to see if the range can be satisfied
+            Self::Range(_) => (),
+        }
+
+        Ok(())
     }
 
     /// Check if a interpreter matches the requested Python version.

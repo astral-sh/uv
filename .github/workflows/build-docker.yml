@@ -198,7 +198,8 @@ jobs:
           FROM ${BASE_IMAGE}
           COPY --from=${{ env.UV_BASE_IMG }}:latest /uv /usr/local/bin/uv
           COPY --from=${{ env.UV_BASE_IMG }}:latest /uvx /usr/local/bin/uvx
-          ENTRYPOINT ["/usr/local/bin/uv"]
+          ENTRYPOINT []
+          CMD ["/usr/local/bin/uv"]
           EOF
 
           # Initialize a variable to store all tag docker metadata patterns

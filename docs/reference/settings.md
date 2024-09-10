@@ -257,6 +257,52 @@ Linux, and `%LOCALAPPDATA%\uv\cache` on Windows.
 
 ---
 
+### [`cache-keys`](#cache-keys) {: #cache-keys }
+
+The keys to consider when caching builds for the project.
+
+Cache keys enable you to specify the files or directories that should trigger a rebuild when
+modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`,
+or `setup.cfg` files in the project directory are modified, i.e.:
+
+```toml
+cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]
+```
+
+As an example: if a project uses dynamic metadata to read its dependencies from a
+`requirements.txt` file, you can specify `cache-keys = [{ file = "requirements.txt" }, { file = "pyproject.toml" }]`
+to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in
+addition to watching the `pyproject.toml`).
+
+Cache keys can also include version control information. For example, if a project uses
+`setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }, { file = "pyproject.toml" }]`
+to include the current Git commit hash in the cache key (in addition to the
+`pyproject.toml`).
+
+Cache keys only affect the project defined by the `pyproject.toml` in which they're
+specified (as opposed to, e.g., affecting all members in a workspace).
+
+**Default value**: `[{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]`
+
+**Type**: `list[dict]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = true }]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = true }]
+    ```
+
+---
+
 ### [`compile-bytecode`](#compile-bytecode) {: #compile-bytecode }
 
 Compile Python files to bytecode after installation.
@@ -467,7 +513,7 @@ Locations to search for candidate distributions, in addition to those found in t
 indexes.
 
 If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
-source distributions (`.tar.gz` or `.zip`) at the top level.
+source distributions (e.g., `.tar.gz` or `.zip`) at the top level.
 
 If a URL, the page must contain a flat list of links to package files adhering to the
 formats described above.
@@ -1657,7 +1703,7 @@ Locations to search for candidate distributions, in addition to those found in t
 indexes.
 
 If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
-source distributions (`.tar.gz` or `.zip`) at the top level.
+source distributions (e.g., `.tar.gz` or `.zip`) at the top level.
 
 If a URL, the page must contain a flat list of links to package files adhering to the
 formats described above.
@@ -2356,7 +2402,7 @@ The platform for which requirements should be resolved.
 
 Represented as a "target triple", a string that describes the target platform in terms of
 its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-`aaarch64-apple-darwin`.
+`aarch64-apple-darwin`.
 
 **Default value**: `None`
 

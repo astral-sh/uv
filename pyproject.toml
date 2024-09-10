@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.4.5"
+version = "0.4.8"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -53,7 +53,7 @@ changelog_sections.breaking = "Breaking changes"
 changelog_sections.enhancement = "Enhancements"
 changelog_sections.compatibility = "Enhancements"
 changelog_sections.preview = "Preview features"
-changelog_sections.cli = "CLI"
+changelog_sections.cli = "Enhancements"
 changelog_sections.configuration = "Configuration"
 changelog_sections.performance = "Performance"
 changelog_sections.bug = "Bug fixes"

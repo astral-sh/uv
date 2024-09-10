@@ -390,3 +390,69 @@ fn python_find_venv() {
     ----- stderr -----
     "###);
 }
+
+#[cfg(unix)]
+#[test]
+fn python_find_unsupported_version() {
+    let context: TestContext = TestContext::new_with_versions(&["3.12"]);
+
+    // Request a low version
+    uv_snapshot!(context.filters(), context.python_find().arg("3.6"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.7 is not supported but 3.6 was requested.
+    "###);
+
+    // Request a low version with a patch
+    uv_snapshot!(context.filters(), context.python_find().arg("3.6.9"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.7 is not supported but 3.6.9 was requested.
+    "###);
+
+    // Request a really low version
+    uv_snapshot!(context.filters(), context.python_find().arg("2.6"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.7 is not supported but 2.6 was requested.
+    "###);
+
+    // Request a really low version with a patch
+    uv_snapshot!(context.filters(), context.python_find().arg("2.6.8"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.7 is not supported but 2.6.8 was requested.
+    "###);
+
+    // Request a future version
+    uv_snapshot!(context.filters(), context.python_find().arg("4.2"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 4.2 in virtual environments or system path
+    "###);
+
+    // Request a low version with a range
+    uv_snapshot!(context.filters(), context.python_find().arg("<3.0"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python <3.0 in virtual environments or system path
+    "###);
+}

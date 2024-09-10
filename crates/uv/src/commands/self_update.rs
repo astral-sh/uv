@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
 use anyhow::Result;
-use axoupdater::{AxoUpdater, AxoupdateError};
+use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
@@ -11,7 +11,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Attempt to update the uv binary.
-pub(crate) async fn self_update(printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn self_update(version: Option<String>, printer: Printer) -> Result<ExitStatus> {
     let mut updater = AxoUpdater::new_for("uv");
     updater.disable_installer_output();
 
@@ -69,6 +69,14 @@ pub(crate) async fn self_update(printer: Printer) -> Result<ExitStatus> {
             ":".bold()
         )
     )?;
+
+    let update_request = if let Some(version) = version {
+        UpdateRequest::SpecificTag(version)
+    } else {
+        UpdateRequest::Latest
+    };
+
+    updater.configure_version_specifier(update_request);
 
     // Run the updater. This involves a network request, since we need to determine the latest
     // available version of uv.

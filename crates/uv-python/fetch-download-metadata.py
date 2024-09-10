@@ -82,14 +82,23 @@ class Version(NamedTuple):
     major: int
     minor: int
     patch: int
+    prerelease: str = ""
 
     @classmethod
     def from_str(cls, version: str) -> Self:
         major, minor, patch = version.split(".", 3)
-        return cls(int(major), int(minor), int(patch))
+        prerelease = ""
+        for prerelease_kind in ("a", "b", "rc"):
+            parts = patch.split(prerelease_kind, 1)
+            if len(parts) == 2:
+                patch = parts[0]
+                prerelease = prerelease_kind + parts[1]
+                break
+
+        return cls(int(major), int(minor), int(patch), prerelease)
 
     def __str__(self) -> str:
-        return f"{self.major}.{self.minor}.{self.patch}"
+        return f"{self.major}.{self.minor}.{self.patch}{self.prerelease}"
 
 
 class ImplementationName(StrEnum):
@@ -158,7 +167,7 @@ class CPythonFinder(Finder):
     _filename_re = re.compile(
         r"""(?x)
         ^
-            cpython-(?P<ver>\d+\.\d+\.\d+?)
+            cpython-(?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)
             (?:\+\d+)?
             -(?P<triple>.*?)
             (?:-[\dT]+)?\.tar\.(?:gz|zst)
@@ -455,7 +464,9 @@ def render(downloads: list[PythonDownload]) -> None:
     results = {}
     for download in downloads:
         key = download.key()
-        logging.info("Found %s (%s)", key, download.flavor)
+        logging.info(
+            "Found %s%s", key, (" (%s)" % download.flavor) if download.flavor else ""
+        )
         results[key] = {
             "name": download.implementation,
             "arch": download.triple.arch,
@@ -464,6 +475,7 @@ def render(downloads: list[PythonDownload]) -> None:
             "major": download.version.major,
             "minor": download.version.minor,
             "patch": download.version.patch,
+            "prerelease": download.version.prerelease,
             "url": download.url,
             "sha256": download.sha256,
         }

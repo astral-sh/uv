@@ -133,7 +133,7 @@ fn run_with_python_version() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.11, <4`
+    error: The requested interpreter resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.11, <4`
     "###);
 
     Ok(())
@@ -977,6 +977,62 @@ fn run_frozen() -> Result<()> {
 }
 
 #[test]
+fn run_no_sync() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Running with `--no-sync` should succeed error, even if the lockfile isn't present.
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    "###);
+
+    context.lock().assert().success();
+
+    // Running with `--no-sync` should not install any requirements.
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    "###);
+
+    context.sync().assert().success();
+
+    // But it should have access to the installed packages.
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn run_empty_requirements_txt() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1657,7 +1713,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.12`
+    error: The Python request from `.python-version` resolved to Python 3.8.[X], which incompatible with the project's Python requirement: `>=3.12`
     "###);
 
     // ...even if `--isolated` is provided.
@@ -1667,7 +1723,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.12`
+    error: The Python request from `.python-version` resolved to Python 3.8.[X], which incompatible with the project's Python requirement: `>=3.12`
     "###);
 
     Ok(())

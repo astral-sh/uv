@@ -136,7 +136,7 @@ uv run [OPTIONS] <COMMAND>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -264,6 +264,10 @@ uv run [OPTIONS] <COMMAND>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+
+</dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment.</p>
+
+<p>Implies <code>--frozen</code>, as the project dependencies will be ignored (i.e., the lockfile will not be updated, since the environment will not be synced regardless).</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -610,7 +614,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -721,7 +725,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
-</dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
+</dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -910,7 +914,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -1198,7 +1202,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -1479,7 +1483,7 @@ uv lock [OPTIONS]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -1742,7 +1746,7 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -1857,6 +1861,18 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit development dependencies</p>
 
+</dd><dt><code>--no-emit-package</code> <i>no-emit-package</i></dt><dd><p>Do not emit the given package(s).</p>
+
+<p>By default, all of the project&#8217;s dependencies are included in the exported requirements file. The <code>--no-install-package</code> option allows exclusion of specific packages.</p>
+
+</dd><dt><code>--no-emit-project</code></dt><dd><p>Do not emit the current project.</p>
+
+<p>By default, the current project is included in the exported requirements file with all of its dependencies. The <code>--no-emit-project</code> option allows the project to be excluded, but all of its dependencies to remain included.</p>
+
+</dd><dt><code>--no-emit-workspace</code></dt><dd><p>Do not emit any workspace members, including the root project.</p>
+
+<p>By default, all workspace members and their dependencies are included in the exported requirements file, with all of their dependencies. The <code>--no-emit-workspace</code> option allows exclusion of all the workspace members while retaining their dependencies.</p>
+
 </dd><dt><code>--no-hashes</code></dt><dd><p>Omit hashes in the generated output</p>
 
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
@@ -1872,6 +1888,8 @@ uv export [OPTIONS]
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--output-file</code>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the exported requirements to the given file</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Export the dependencies for a specific package in the workspace.</p>
 
@@ -2014,7 +2032,7 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -2168,7 +2186,7 @@ uv tree [OPTIONS]
 
 <p>For example, pass <code>--platform windows</code> to display the dependencies that would be included when installing on Windows.</p>
 
-<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aaarch64-apple-darwin</code>.</p>
+<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 
 <p>Possible values:</p>
 
@@ -2369,7 +2387,7 @@ uv tool run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -2637,7 +2655,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -2905,7 +2923,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -3140,6 +3158,8 @@ uv tool list [OPTIONS]
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt><code>--show-paths</code></dt><dd><p>Whether to display the path to each tool environment and installed executable</p>
+
+</dd><dt><code>--show-version-specifiers</code></dt><dd><p>Whether to display the version specifier(s) used to install each tool</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -4286,7 +4306,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -4453,7 +4473,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be resolved.</p>
 
-<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aaarch64-apple-darwin</code>.</p>
+<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 
 <p>Possible values:</p>
 
@@ -4658,7 +4678,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -4775,7 +4795,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 
-<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aaarch64-apple-darwin</code>.</p>
+<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 
@@ -4984,7 +5004,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -5137,7 +5157,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 
-<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aaarch64-apple-darwin</code>.</p>
+<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 
@@ -6041,7 +6061,7 @@ uv venv [OPTIONS] [PATH]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -6223,6 +6243,11 @@ uv build [OPTIONS] [SRC]
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
+</dd><dt><code>--build-constraint</code>, <code>-b</code> <i>build-constraint</i></dt><dd><p>Constrain build dependencies using the given requirements files when building distributions.</p>
+
+<p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a build dependency that&#8217;s installed. However, including a package in a constraints file will <em>not</em> trigger the inclusion of that package on its own.</p>
+
+<p>May also be set with the <code>UV_BUILD_CONSTRAINT</code> environment variable.</p>
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
@@ -6261,7 +6286,7 @@ uv build [OPTIONS] [SRC]
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
 </dd><dt><code>--find-links</code>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
 
-<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (<code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
@@ -6427,6 +6452,17 @@ uv build [OPTIONS] [SRC]
 
 </dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
 
+</dd><dt><code>--require-hashes</code></dt><dd><p>Require a matching hash for each build requirement.</p>
+
+<p>Hash-checking mode is all or nothing. If enabled, <em>all</em> build requirements must be provided with a corresponding hash or set of hashes via the <code>--build-constraints</code> argument. Additionally, if enabled, <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
+
+<p>Hash-checking mode introduces a number of additional constraints:</p>
+
+<ul>
+<li>Git dependencies are not supported. - Editable installs are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
+</ul>
+
+<p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p>
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
@@ -6451,6 +6487,11 @@ uv build [OPTIONS] [SRC]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
+</dd><dt><code>--verify-hashes</code></dt><dd><p>Validate any hashes provided in the build constraints file.</p>
+
+<p>Unlike <code>--require-hashes</code>, <code>--verify-hashes</code> does not require that all requirements have hashes; instead, it will limit itself to verifying the hashes of those requirements that do include them.</p>
+
+<p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd><dt><code>--wheel</code></dt><dd><p>Build a binary distribution (&quot;wheel&quot;) from the given directory</p>

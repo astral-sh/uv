@@ -106,6 +106,7 @@ Applications are the default target for `uv init`, but can also be specified wit
 $ uv init --app example-app
 $ tree example-app
 example-app
+├── .python-version
 ├── README.md
 ├── hello.py
 └── pyproject.toml
@@ -155,10 +156,12 @@ Libraries can be created by using the `--lib` flag:
 $ uv init --lib example-lib
 $ tree example-lib
 example-lib
+├── .python-version
 ├── README.md
 ├── pyproject.toml
 └── src
     └── example_lib
+        ├── py.typed
         └── __init__.py
 ```
 
@@ -217,6 +220,7 @@ The project structure looks the same as a library:
 $ uv init --app --package example-packaged-app
 $ tree example-packaged-app
 example-packaged-app
+├── .python-version
 ├── README.md
 ├── pyproject.toml
 └── src
@@ -227,7 +231,7 @@ example-packaged-app
 But the module defines a CLI function:
 
 ```python title="__init__.py"
-def hello():
+def hello() -> None:
     print("Hello from example-packaged-app!")
 ```
 
@@ -354,6 +358,8 @@ and not usable by other tools.
 
 To avoid updating the lockfile during `uv sync` and `uv run` invocations, use the `--frozen` flag.
 
+To avoid updating the environment during `uv run` invocations, use the `--no-sync` flag.
+
 To assert the lockfile matches the project metadata, use the `--locked` flag. If the lockfile is not
 up-to-date, an error will be raised instead of updating the lockfile.
 
@@ -361,8 +367,30 @@ up-to-date, an error will be raised instead of updating the lockfile.
 
 By default, uv will prefer the locked versions of packages when running `uv sync` and `uv lock`.
 Package versions will only change if the project's dependency constraints exclude the previous,
-locked version. To upgrade to the latest package versions supported by the project's dependency
-constraints, use `uv lock --upgrade`.
+locked version.
+
+To upgrade all packages:
+
+```console
+$ uv lock --upgrade
+```
+
+To upgrade a single package to the latest version:
+
+```console
+$ uv lock --upgrade-package <package>
+```
+
+To upgrade a single package to a specific version:
+
+```console
+$ uv lock --upgrade-package <package>==<version>
+```
+
+!!! note
+
+    In all cases, upgrades are limited to the project's dependency constraints. For example, if the
+    project defines an upper bound for a package then an upgrade will not go beyond that version.
 
 ### Limited resolution environments
 
@@ -535,9 +563,9 @@ To distribute your project to others (e.g., to upload it to an index like PyPI),
 build it into a distributable format.
 
 Python projects are typically distributed as both source distributions (sdists) and binary
-distributions (wheels). The former is a `.tar.gz` file containing the project's source code along
-with some additional metadata, while the latter is a `.whl` file containing pre-built artifacts that
-can be installed directly.
+distributions (wheels). The former is typically a `.tar.gz` or `.zip` file containing the project's
+source code along with some additional metadata, while the latter is a `.whl` file containing
+pre-built artifacts that can be installed directly.
 
 `uv build` can be used to build both source distributions and binary distributions for your project.
 By default, `uv build` will build the project in the current directory, and place the built
@@ -556,9 +584,26 @@ You can build the project in a different directory by providing a path to `uv bu
 `uv build` will first build a source distribution, and then build a binary distribution (wheel) from
 that source distribution.
 
-You can limit `uv build` to building a source distribution with `uv build --source`, a binary
-distribution with `uv build --binary`, or build both distributions from source with
-`uv build --source --binary`.
+You can limit `uv build` to building a source distribution with `uv build --sdist`, a binary
+distribution with `uv build --wheel`, or build both distributions from source with
+`uv build --sdist --wheel`.
+
+`uv build` accepts `--build-constraints`, which can be used to constrain the versions of any build
+requirements during the build process. When coupled with `--require-hashes`, uv will enforce that
+the requirement used to build the project match specific, known hashes, for reproducibility.
+
+For example, given the following `constraints.txt`:
+
+```text
+setuptools==68.2.2 --hash=sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
+```
+
+Running the following would build the project with the specified version of `setuptools`, and verify
+that the downloaded `setuptools` distribution matches the specified hash:
+
+```console
+$ uv build --build-constraints constraints.txt --require-hashes
+```
 
 ## Build isolation
 

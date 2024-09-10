@@ -65,10 +65,28 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No virtual environment found
+    error: No virtual environment found; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
     "###);
 
     assert!(predicates::path::missing().eval(&context.venv));
+
+    Ok(())
+}
+
+#[test]
+fn missing_system() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("anyio")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").arg("--system"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No system Python installation found
+    "###);
 
     Ok(())
 }
@@ -2597,13 +2615,15 @@ fn incompatible_wheel() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `foo @ file://[TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl`
-      Caused by: Failed to unzip wheel: foo-1.2.3-not-compatible-wheel.whl
-      Caused by: unable to locate the end of central directory record
+      × No solution found when resolving dependencies:
+      ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
+
+          hint: The structure of foo was invalid:
+            Failed to read from zip file
     "###
     );
 
@@ -3197,7 +3217,7 @@ requires-python = ">=3.8"
     "###
     );
 
-    // Re-installing should be a no-op.
+    // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in"), @r###"
     success: true
@@ -3446,7 +3466,7 @@ fn require_hashes_missing_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: anyio==4.0.0
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: anyio==4.0.0
     "###
     );
 
@@ -3487,7 +3507,7 @@ fn require_hashes_missing_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "###
     );
 
@@ -3528,7 +3548,7 @@ fn require_hashes_invalid_operator() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio>4.0.0
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio>4.0.0
     "###
     );
 
@@ -4277,7 +4297,7 @@ fn require_hashes_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
     "###
     );
 
@@ -4301,7 +4321,7 @@ fn require_hashes_repeated_dependency() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "###
     );
 
@@ -4318,7 +4338,7 @@ fn require_hashes_repeated_dependency() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "###
     );
 
@@ -4783,7 +4803,9 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `example-a-961b4c22==1.0.0`
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -4991,7 +5013,9 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `example-a-961b4c22==1.0.0`
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -5052,7 +5076,7 @@ fn require_hashes_url_other_fragment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar
     "###
     );
 
@@ -5472,7 +5496,9 @@ fn incompatible_build_constraint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `requests==1.2.0`
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: requests==1.2.0
       Caused by: Failed to install requirements from `setup.py` build (resolve)
       Caused by: No solution found when resolving: setuptools>=40.8.0
       Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.

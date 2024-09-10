@@ -11,7 +11,9 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, IndexLocations, Name, Resolution, SourceDist};
+use distribution_types::{
+    CachedDist, IndexCapabilities, IndexLocations, Name, Resolution, SourceDist, VersionOrUrlRef,
+};
 use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
@@ -42,11 +44,13 @@ pub struct BuildDispatch<'a> {
     flat_index: &'a FlatIndex,
     index: &'a InMemoryIndex,
     git: &'a GitResolver,
+    capabilities: &'a IndexCapabilities,
     in_flight: &'a InFlight,
     build_isolation: BuildIsolation<'a>,
     link_mode: install_wheel_rs::linker::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
+    hasher: &'a HashStrategy,
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
@@ -58,18 +62,20 @@ impl<'a> BuildDispatch<'a> {
     pub fn new(
         client: &'a RegistryClient,
         cache: &'a Cache,
-        constraints: &'a [Requirement],
+        constraints: Constraints,
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
         git: &'a GitResolver,
+        capabilities: &'a IndexCapabilities,
         in_flight: &'a InFlight,
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
         link_mode: install_wheel_rs::linker::LinkMode,
         build_options: &'a BuildOptions,
+        hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
         sources: SourceStrategy,
         concurrency: Concurrency,
@@ -77,18 +83,20 @@ impl<'a> BuildDispatch<'a> {
         Self {
             client,
             cache,
-            constraints: Constraints::from_requirements(constraints.iter().cloned()),
+            constraints,
             interpreter,
             index_locations,
             flat_index,
             index,
             git,
+            capabilities,
             in_flight,
             index_strategy,
             config_settings,
             build_isolation,
             link_mode,
             build_options,
+            hasher,
             exclude_newer,
             source_build_context: SourceBuildContext::default(),
             build_extra_env_vars: FxHashMap::default(),
@@ -124,8 +132,16 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.git
     }
 
+    fn capabilities(&self) -> &IndexCapabilities {
+        self.capabilities
+    }
+
     fn build_options(&self) -> &BuildOptions {
         self.build_options
+    }
+
+    fn config_settings(&self) -> &ConfigSettings {
+        self.config_settings
     }
 
     fn sources(&self) -> SourceStrategy {
@@ -152,7 +168,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             Some(tags),
             self.flat_index,
             self.index,
-            &HashStrategy::None,
+            self.hasher,
             self,
             EmptyInstalledPackages,
             DistributionDatabase::new(self.client, self, self.concurrency.downloads),
@@ -205,8 +221,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             site_packages,
             &Reinstall::default(),
             &BuildOptions::default(),
-            &HashStrategy::default(),
+            self.hasher,
             self.index_locations,
+            self.config_settings,
             self.cache(),
             venv,
             &markers,
@@ -238,7 +255,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             let preparer = Preparer::new(
                 self.cache,
                 tags,
-                &HashStrategy::None,
+                self.hasher,
                 self.build_options,
                 DistributionDatabase::new(self.client, self, self.concurrency.downloads),
             );
@@ -302,6 +319,13 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         build_output: BuildOutput,
     ) -> Result<SourceBuild> {
         let dist_name = dist.map(distribution_types::Name::name);
+        let dist_version = dist
+            .map(distribution_types::DistributionMetadata::version_or_url)
+            .and_then(|version| match version {
+                VersionOrUrlRef::Version(version) => Some(version),
+                VersionOrUrlRef::Url(_) => None,
+            });
+
         // Note we can only prevent builds by name for packages with names
         // unless all builds are disabled.
         if self
@@ -323,6 +347,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             source,
             subdirectory,
             dist_name,
+            dist_version,
             self.interpreter,
             self,
             self.source_build_context.clone(),

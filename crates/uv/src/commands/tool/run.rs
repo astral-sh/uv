@@ -14,7 +14,8 @@ use distribution_types::{Name, UnresolvedRequirementSpecification};
 use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::MarkerTree;
 use pypi_types::{Requirement, RequirementSource};
-use uv_cache::{Cache, Refresh, Timestamp};
+use uv_cache::{Cache, Refresh};
+use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Concurrency;
@@ -80,7 +81,7 @@ pub(crate) async fn run(
 ) -> anyhow::Result<ExitStatus> {
     // treat empty command as `uv tool list`
     let Some(command) = command else {
-        return tool_list(false, &cache, printer).await;
+        return tool_list(false, false, &cache, printer).await;
     };
 
     let (target, args) = command.split();

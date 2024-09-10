@@ -5,7 +5,9 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
-use distribution_types::{IndexLocations, Resolution, UnresolvedRequirementSpecification};
+use distribution_types::{
+    IndexLocations, NameRequirementSpecification, Resolution, UnresolvedRequirementSpecification,
+};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
@@ -13,7 +15,7 @@ use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, HashCheckingMode,
     IndexStrategy, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
@@ -114,10 +116,14 @@ pub(crate) async fn pip_install(
     let build_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
 
-    let constraints: Vec<Requirement> = constraints
+    let constraints: Vec<NameRequirementSpecification> = constraints
         .iter()
         .cloned()
-        .chain(constraints_from_workspace.into_iter())
+        .chain(
+            constraints_from_workspace
+                .into_iter()
+                .map(NameRequirementSpecification::from),
+        )
         .collect();
 
     let overrides: Vec<UnresolvedRequirementSpecification> = overrides
@@ -247,6 +253,9 @@ pub(crate) async fn pip_install(
                 .iter()
                 .chain(overrides.iter())
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            constraints
+                .iter()
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             Some(&markers),
             hash_checking,
         )?
@@ -297,6 +306,26 @@ pub(crate) async fn pip_install(
         BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
     };
 
+    // Enforce (but never require) the build constraints, if `--require-hashes` or `--verify-hashes`
+    // is provided. _Requiring_ hashes would be too strict, and would break with pip.
+    let build_hasher = if hash_checking.is_some() {
+        HashStrategy::from_requirements(
+            std::iter::empty(),
+            build_constraints
+                .iter()
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            Some(&markers),
+            HashCheckingMode::Verify,
+        )?
+    } else {
+        HashStrategy::None
+    };
+    let build_constraints = Constraints::from_requirements(
+        build_constraints
+            .iter()
+            .map(|constraint| constraint.requirement.clone()),
+    );
+
     // Initialize any shared state.
     let state = SharedState::default();
 
@@ -304,18 +333,20 @@ pub(crate) async fn pip_install(
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
-        &build_constraints,
+        build_constraints,
         interpreter,
         &index_locations,
         &flat_index,
         &state.index,
         &state.git,
+        &state.capabilities,
         &state.in_flight,
         index_strategy,
         config_settings,
         build_isolation,
         link_mode,
         &build_options,
+        &build_hasher,
         exclude_newer,
         sources,
         concurrency,
@@ -377,6 +408,7 @@ pub(crate) async fn pip_install(
         link_mode,
         compile,
         &index_locations,
+        config_settings,
         &hasher,
         &markers,
         &tags,

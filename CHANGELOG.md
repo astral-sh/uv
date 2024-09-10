@@ -1,5 +1,81 @@
 # Changelog
 
+## 0.4.8
+
+### Enhancements
+
+- Add support for dynamic cache keys ([#7136](https://github.com/astral-sh/uv/pull/7136))
+- Allow `.dist-info` names with dashes for post releases ([#7208](https://github.com/astral-sh/uv/pull/7208))
+- Use type hints in code from `uv init` ([#7225](https://github.com/astral-sh/uv/pull/7225))
+- Treat `.tgz` the same as `.tar.gz` ([#7201](https://github.com/astral-sh/uv/pull/7201))
+- Direct users towards `uv venv` to create a virtual environment ([#7188](https://github.com/astral-sh/uv/pull/7188))
+- Improve error message for uv init already init-ed ([#7198](https://github.com/astral-sh/uv/pull/7198))
+
+### Performance
+
+- Avoid batch prefetching for un-optimized registries ([#7226](https://github.com/astral-sh/uv/pull/7226))
+- Avoid iteration for singleton selections ([#7195](https://github.com/astral-sh/uv/pull/7195))
+
+### Bug fixes
+
+- Avoid extra newlines in debug logging for source builds ([#7174](https://github.com/astral-sh/uv/pull/7174))
+- Prune unreachable packages from `--universal` output ([#7209](https://github.com/astral-sh/uv/pull/7209))
+- Respect exclusion when collecting workspace members ([#7175](https://github.com/astral-sh/uv/pull/7175))
+- Use path file instead of `sitecustomize.py` ([#7161](https://github.com/astral-sh/uv/pull/7161))
+- Replace incorrect `--source` and `--binary` flags with correct `--sdist` and `--wheel` flags in `uv build` ([#7156](https://github.com/astral-sh/uv/pull/7156))
+
+### Documentation
+
+- Document support for `UV_INSTALL_DIR` ([#7107](https://github.com/astral-sh/uv/pull/7107))
+- List all supported sdist formats ([#7168](https://github.com/astral-sh/uv/pull/7168))
+
+## 0.4.7
+
+### Enhancements
+
+- Add `--no-emit-project` and friends to `uv export` ([#7110](https://github.com/astral-sh/uv/pull/7110))
+- Add `--output-file` to `uv export` ([#7109](https://github.com/astral-sh/uv/pull/7109))
+- Prune unused source distributions from the cache in `uv cache prune` ([#7112](https://github.com/astral-sh/uv/pull/7112))
+- Take intersection of constraint and requirements hashes ([#7108](https://github.com/astral-sh/uv/pull/7108))
+
+### Performance
+
+- Skip metadata fetch for `--no-deps` and `pip sync` ([#7127](https://github.com/astral-sh/uv/pull/7127))
+
+### Bug fixes
+
+- Avoid panicking when encountering an invalid Python version during `uv python list` ([#7131](https://github.com/astral-sh/uv/pull/7131))
+- Write trailing newline to `.python-version` files ([#7140](https://github.com/astral-sh/uv/pull/7140))
+
+## 0.4.6
+
+### Enhancements
+
+- Accept `--build-constraints` in `uv build` ([#7085](https://github.com/astral-sh/uv/pull/7085))
+- Add `--require-hashes` and `--verify-hashes` to `uv build` ([#7094](https://github.com/astral-sh/uv/pull/7094))
+- Add `--show-version-specifiers` to `uv tool list` ([#7050](https://github.com/astral-sh/uv/pull/7050))
+- Respect hashes in constraints files ([#7093](https://github.com/astral-sh/uv/pull/7093))
+- Upgrade installer scripts ([#7092](https://github.com/astral-sh/uv/pull/7092))
+- Allow specifying multiple packages in `uv tool upgrade` and `uninstall` ([#7037](https://github.com/astral-sh/uv/pull/7037))
+- Sort by implementation in `uv python list` ([#6918](https://github.com/astral-sh/uv/pull/6918))
+
+### Bug fixes
+
+- Invalidate lockfile when member versions change ([#7102](https://github.com/astral-sh/uv/pull/7102))
+- Strip fragments from direct source URLs in lockfile ([#7061](https://github.com/astral-sh/uv/pull/7061))
+- Support `--no-build` and `--no-binary` in `uv sync` et al ([#7100](https://github.com/astral-sh/uv/pull/7100))
+- Use distribution hash over registry hash ([#7060](https://github.com/astral-sh/uv/pull/7060))
+- Fix inverted log message ([#7063](https://github.com/astral-sh/uv/pull/7063))
+- Adjust Docker `ENTRYPOINT` and `CMD` for inherited images ([#7054](https://github.com/astral-sh/uv/pull/7054))
+
+### Documentation
+
+- Add winget to installers ([#7088](https://github.com/astral-sh/uv/pull/7088))
+- Document how to disable path modifications during install ([#7090](https://github.com/astral-sh/uv/pull/7090))
+- Document how to manually update locked package version ([#7083](https://github.com/astral-sh/uv/pull/7083))
+- Document official `setup-uv` action ([#7056](https://github.com/astral-sh/uv/pull/7056))
+- Update docs on `.python-version` file ([#7051](https://github.com/astral-sh/uv/pull/7051))
+
 ## 0.4.5
 
 ### Enhancements
@@ -1388,7 +1464,7 @@ and `uv tool run` ([#4404](https://github.com/astral-sh/uv/pull/4404))
 
 - Add `--workspace` option to `uv add` ([#4362](https://github.com/astral-sh/uv/pull/4362))
 - Ignore query errors during `uv toolchain list` ([#4382](https://github.com/astral-sh/uv/pull/4382))
-- Respect `.python-version` files and fetch manged toolchains in uv project
+- Respect `.python-version` files and fetch managed toolchains in uv project
 commands ([#4361](https://github.com/astral-sh/uv/pull/4361))
 - Respect `.python-version` in `uv venv --preview` ([#4360](https://github.com/astral-sh/uv/pull/4360))
 

@@ -378,7 +378,7 @@ fn mixed_requires_python() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.8. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.8.[X]` followed by `uv pip install -e .`.
+    error: The requested interpreter resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.8. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.8.[X]` followed by `uv pip install -e .`.
     "###);
 
     Ok(())
@@ -744,7 +744,7 @@ fn sync_build_isolation_extra() -> Result<()> {
 /// Avoid using incompatible versions for build dependencies that are also part of the resolved
 /// environment. This is a very subtle issue, but: when locking, we don't enforce platform
 /// compatibility. So, if we reuse the resolver state to install, and the install itself has to
-/// preform a resolution (e.g., for the build dependencies of a source distribution), that
+/// perform a resolution (e.g., for the build dependencies of a source distribution), that
 /// resolution may choose incompatible versions.
 ///
 /// The key property here is that there's a shared package between the build dependencies and the
@@ -1893,6 +1893,72 @@ fn sync_virtual_env_warning() -> Result<()> {
 }
 
 #[test]
+fn sync_update_project() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "my-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + my-project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Bump the project version.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "my-project"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - my-project==0.1.0 (from file://[TEMP_DIR]/)
+     + my-project==0.2.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn sync_environment_prompt() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
 
@@ -1927,6 +1993,116 @@ fn sync_environment_prompt() -> Result<()> {
         fs_err::read_to_string(context.temp_dir.join(".venv").join("pyvenv.cfg")).unwrap();
 
     assert!(pyvenv_cfg.contains("prompt = my-project"));
+
+    Ok(())
+}
+
+#[test]
+fn no_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn no_binary_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["django_allauth==0.51.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("django-allauth"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    error: distribution django-allauth==0.51.0 @ registry+https://pypi.org/simple can't be installed because it is marked as `--no-build` but has no binary distribution
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn no_build() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
 
     Ok(())
 }

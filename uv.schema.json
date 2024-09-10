@@ -21,6 +21,17 @@
         "null"
       ]
     },
+    "cache-keys": {
+      "description": "The keys to consider when caching builds for the project.\n\nCache keys enable you to specify the files or directories that should trigger a rebuild when modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`, or `setup.cfg` files in the project directory are modified, i.e.:\n\n```toml cache-keys = [{ file = \"pyproject.toml\" }, { file = \"setup.py\" }, { file = \"setup.cfg\" }] ```\n\nAs an example: if a project uses dynamic metadata to read its dependencies from a `requirements.txt` file, you can specify `cache-keys = [{ file = \"requirements.txt\" }, { file = \"pyproject.toml\" }]` to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in addition to watching the `pyproject.toml`).\n\nCache keys can also include version control information. For example, if a project uses `setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }, { file = \"pyproject.toml\" }]` to include the current Git commit hash in the cache key (in addition to the `pyproject.toml`).\n\nCache keys only affect the project defined by the `pyproject.toml` in which they're specified (as opposed to, e.g., affecting all members in a workspace).",
+      "writeOnly": true,
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/CacheKey"
+      }
+    },
     "compile-bytecode": {
       "description": "Compile Python files to bytecode after installation.\n\nBy default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`); instead, compilation is performed lazily the first time a module is imported. For use-cases in which start time is critical, such as CLI applications and Docker containers, this option can be enabled to trade longer installation times for faster start times.\n\nWhen enabled, uv will process the entire site-packages directory (including packages that are not being modified by the current operation) for consistency. Like pip, it will also ignore errors.",
       "type": [
@@ -118,7 +129,7 @@
       }
     },
     "find-links": {
-      "description": "Locations to search for candidate distributions, in addition to those found in the registry indexes.\n\nIf a path, the target must be a directory that contains packages as wheel files (`.whl`) or source distributions (`.tar.gz` or `.zip`) at the top level.\n\nIf a URL, the page must contain a flat list of links to package files adhering to the formats described above.",
+      "description": "Locations to search for candidate distributions, in addition to those found in the registry indexes.\n\nIf a path, the target must be a directory that contains packages as wheel files (`.whl`) or source distributions (e.g., `.tar.gz` or `.zip`) at the top level.\n\nIf a URL, the page must contain a flat list of links to package files adhering to the formats described above.",
       "type": [
         "array",
         "null"
@@ -418,6 +429,40 @@
         }
       ]
     },
+    "CacheKey": {
+      "anyOf": [
+        {
+          "description": "Ex) `\"Cargo.lock\"`",
+          "type": "string"
+        },
+        {
+          "description": "Ex) `{ file = \"Cargo.lock\" }`",
+          "type": "object",
+          "required": [
+            "file"
+          ],
+          "properties": {
+            "file": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Ex) `{ git = true }`",
+          "type": "object",
+          "required": [
+            "git"
+          ],
+          "properties": {
+            "git": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "ConfigSettingValue": {
       "oneOf": [
         {
@@ -698,7 +743,7 @@
           }
         },
         "find-links": {
-          "description": "Locations to search for candidate distributions, in addition to those found in the registry indexes.\n\nIf a path, the target must be a directory that contains packages as wheel files (`.whl`) or source distributions (`.tar.gz` or `.zip`) at the top level.\n\nIf a URL, the page must contain a flat list of links to package files adhering to the formats described above.",
+          "description": "Locations to search for candidate distributions, in addition to those found in the registry indexes.\n\nIf a path, the target must be a directory that contains packages as wheel files (`.whl`) or source distributions (e.g., `.tar.gz` or `.zip`) at the top level.\n\nIf a URL, the page must contain a flat list of links to package files adhering to the formats described above.",
           "type": [
             "array",
             "null"
@@ -894,7 +939,7 @@
           ]
         },
         "python-platform": {
-          "description": "The platform for which requirements should be resolved.\n\nRepresented as a \"target triple\", a string that describes the target platform in terms of its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or `aaarch64-apple-darwin`.",
+          "description": "The platform for which requirements should be resolved.\n\nRepresented as a \"target triple\", a string that describes the target platform in terms of its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or `aarch64-apple-darwin`.",
           "anyOf": [
             {
               "$ref": "#/definitions/TargetTriple"

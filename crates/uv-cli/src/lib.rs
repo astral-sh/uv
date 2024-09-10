@@ -418,8 +418,15 @@ pub struct SelfNamespace {
 #[derive(Subcommand)]
 #[cfg(feature = "self-update")]
 pub enum SelfCommand {
-    /// Update uv to the latest version.
-    Update,
+    /// Update uv.
+    Update(SelfUpdateArgs),
+}
+
+#[derive(Args, Debug)]
+#[cfg(feature = "self-update")]
+pub struct SelfUpdateArgs {
+    /// Update to the specified version. If not provided, uv will update to the latest version.
+    pub target_version: Option<String>,
 }
 
 #[derive(Args)]
@@ -995,7 +1002,7 @@ pub struct PipCompileArgs {
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// `aarch64-apple-darwin`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
@@ -1278,7 +1285,7 @@ pub struct PipSyncArgs {
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// `aarch64-apple-darwin`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
@@ -1553,7 +1560,7 @@ pub struct PipInstallArgs {
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// `aarch64-apple-darwin`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
@@ -1979,6 +1986,55 @@ pub struct BuildArgs {
     #[arg(long)]
     pub wheel: bool,
 
+    /// Constrain build dependencies using the given requirements files when building
+    /// distributions.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// build dependency that's installed. However, including a package in a constraints file will
+    /// _not_ trigger the inclusion of that package on its own.
+    #[arg(long, short, env = "UV_BUILD_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub build_constraint: Vec<Maybe<PathBuf>>,
+
+    /// Require a matching hash for each build requirement.
+    ///
+    /// Hash-checking mode is all or nothing. If enabled, _all_ build requirements must be provided
+    /// with a corresponding hash or set of hashes via the `--build-constraints` argument.
+    /// Additionally, if enabled, _all_ requirements must either be pinned to exact versions
+    /// (e.g., `==1.0.0`), or be specified via direct URL.
+    ///
+    /// Hash-checking mode introduces a number of additional constraints:
+    ///
+    /// - Git dependencies are not supported.
+    /// - Editable installs are not supported.
+    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
+    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
+    #[arg(
+        long,
+        env = "UV_REQUIRE_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_require_hashes"),
+    )]
+    pub require_hashes: bool,
+
+    #[arg(long, overrides_with("require_hashes"), hide = true)]
+    pub no_require_hashes: bool,
+
+    /// Validate any hashes provided in the build constraints file.
+    ///
+    /// Unlike `--require-hashes`, `--verify-hashes` does not require that all requirements have
+    /// hashes; instead, it will limit itself to verifying the hashes of those requirements that do
+    /// include them.
+    #[arg(
+        long,
+        env = "UV_VERIFY_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_verify_hashes"),
+    )]
+    pub verify_hashes: bool,
+
+    #[arg(long, overrides_with("verify_hashes"), hide = true)]
+    pub no_verify_hashes: bool,
+
     /// The Python interpreter to use for the build environment.
     ///
     /// By default, builds are executed in isolated virtual environments. The
@@ -2378,6 +2434,13 @@ pub struct RunArgs {
     #[arg(long)]
     pub isolated: bool,
 
+    /// Avoid syncing the virtual environment.
+    ///
+    /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
+    /// be updated, since the environment will not be synced regardless).
+    #[arg(long, conflicts_with = "frozen")]
+    pub no_sync: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or
@@ -2679,7 +2742,7 @@ pub struct AddArgs {
     #[arg(long)]
     pub extra: Option<Vec<ExtraName>>,
 
-    /// Avoid syncing the virtual environment after re-locking the project.
+    /// Avoid syncing the virtual environment.
     #[arg(long, conflicts_with = "frozen")]
     pub no_sync: bool,
 
@@ -2850,7 +2913,7 @@ pub struct TreeArgs {
     ///
     /// Represented as a "target triple", a string that describes the target
     /// platform in terms of its CPU, vendor, and operating system name, like
-    /// `x86_64-unknown-linux-gnu` or `aaarch64-apple-darwin`.
+    /// `x86_64-unknown-linux-gnu` or `aarch64-apple-darwin`.
     #[arg(long, conflicts_with = "universal")]
     pub python_platform: Option<TargetTriple>,
 
@@ -2916,6 +2979,33 @@ pub struct ExportArgs {
     /// Omit hashes in the generated output.
     #[arg(long, overrides_with("hashes"))]
     pub no_hashes: bool,
+
+    /// Write the exported requirements to the given file.
+    #[arg(long, short)]
+    pub output_file: Option<PathBuf>,
+
+    /// Do not emit the current project.
+    ///
+    /// By default, the current project is included in the exported requirements file with all of its
+    /// dependencies. The `--no-emit-project` option allows the project to be excluded, but all of
+    /// its dependencies to remain included.
+    #[arg(long, alias = "no-install-project")]
+    pub no_emit_project: bool,
+
+    /// Do not emit any workspace members, including the root project.
+    ///
+    /// By default, all workspace members and their dependencies are included in the exported
+    /// requirements file, with all of their dependencies. The `--no-emit-workspace` option allows
+    /// exclusion of all the workspace members while retaining their dependencies.
+    #[arg(long, alias = "no-install-workspace")]
+    pub no_emit_workspace: bool,
+
+    /// Do not emit the given package(s).
+    ///
+    /// By default, all of the project's dependencies are included in the exported requirements
+    /// file. The `--no-install-package` option allows exclusion of specific packages.
+    #[arg(long, alias = "no-install-package")]
+    pub no_emit_package: Vec<PackageName>,
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
@@ -3165,9 +3255,14 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_paths: bool,
 
+    /// Whether to display the version specifier(s) used to install each tool.
+    #[arg(long)]
+    pub show_version_specifiers: bool,
+
     // Hide unused global Python options.
     #[arg(long, hide = true)]
     pub python_preference: Option<PythonPreference>,
+
     #[arg(long, hide = true)]
     pub no_python_downloads: bool,
 }
@@ -3196,7 +3291,7 @@ pub struct ToolDirArgs {
 pub struct ToolUninstallArgs {
     /// The name of the tool to uninstall.
     #[arg(required = true)]
-    pub name: Option<Vec<PackageName>>,
+    pub name: Vec<PackageName>,
 
     /// Uninstall all tools.
     #[arg(long, conflicts_with("name"))]
@@ -3481,7 +3576,7 @@ pub struct IndexArgs {
     /// indexes.
     ///
     /// If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
-    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    /// source distributions (e.g., `.tar.gz` or `.zip`) at the top level.
     ///
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.

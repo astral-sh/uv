@@ -12,14 +12,14 @@ use tracing::debug;
 pub use archive::ArchiveId;
 use distribution_types::InstalledDist;
 use pypi_types::Metadata23;
+use uv_cache_info::Timestamp;
 use uv_fs::{cachedir, directories};
 use uv_normalize::PackageName;
 
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
-use crate::removal::{rm_rf, Removal};
-pub use crate::timestamp::Timestamp;
+pub use crate::removal::{rm_rf, Removal};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
@@ -28,7 +28,6 @@ mod by_timestamp;
 #[cfg(feature = "clap")]
 mod cli;
 mod removal;
-mod timestamp;
 mod wheel;
 
 /// A [`CacheEntry`] which may or may not exist yet.
@@ -404,13 +403,13 @@ impl Cache {
                 // If the directory is not a cache bucket, remove it.
                 if CacheBucket::iter().all(|bucket| entry.file_name() != bucket.to_str()) {
                     let path = entry.path();
-                    debug!("Removing dangling cache entry: {}", path.display());
+                    debug!("Removing dangling cache bucket: {}", path.display());
                     summary += rm_rf(path)?;
                 }
             } else {
                 // If the file is not a marker file, remove it.
                 let path = entry.path();
-                debug!("Removing dangling cache entry: {}", path.display());
+                debug!("Removing dangling cache bucket: {}", path.display());
                 summary += rm_rf(path)?;
             }
         }
@@ -422,7 +421,7 @@ impl Cache {
                 for entry in entries {
                     let entry = entry?;
                     let path = fs_err::canonicalize(entry.path())?;
-                    debug!("Removing dangling cache entry: {}", path.display());
+                    debug!("Removing dangling cache environment: {}", path.display());
                     summary += rm_rf(path)?;
                 }
             }
@@ -458,9 +457,7 @@ impl Cache {
             }
         }
 
-        // Third, remove any unused archives (by searching for archives that are not symlinked).
-        // TODO(charlie): Remove any unused source distributions. This requires introspecting the
-        // cache contents, e.g., reading and deserializing the manifests.
+        // Fourth, remove any unused archives (by searching for archives that are not symlinked).
         let mut references = FxHashSet::default();
 
         for bucket in CacheBucket::iter() {
@@ -483,7 +480,7 @@ impl Cache {
                     let entry = entry?;
                     let path = fs_err::canonicalize(entry.path())?;
                     if !references.contains(&path) {
-                        debug!("Removing dangling cache entry: {}", path.display());
+                        debug!("Removing dangling cache archive: {}", path.display());
                         summary += rm_rf(path)?;
                     }
                 }
@@ -899,14 +896,11 @@ impl Display for CacheBucket {
     }
 }
 
+/// A timestamp for an archive, which could be a directory (in which case the modification time is
+/// the latest modification time of the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the
+/// directory) or a single file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ArchiveTimestamp {
-    /// The archive consists of a single file with the given modification time.
-    Exact(Timestamp),
-    /// The archive consists of a directory. The modification time is the latest modification time
-    /// of the `pyproject.toml` or `setup.py` file in the directory.
-    Approximate(Timestamp),
-}
+pub struct ArchiveTimestamp(Timestamp);
 
 impl ArchiveTimestamp {
     /// Return the modification timestamp for an archive, which could be a file (like a wheel or a zip
@@ -917,7 +911,7 @@ impl ArchiveTimestamp {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
         let metadata = fs_err::metadata(path.as_ref())?;
         if metadata.is_file() {
-            Ok(Some(Self::Exact(Timestamp::from_metadata(&metadata))))
+            Ok(Some(Self(Timestamp::from_metadata(&metadata))))
         } else {
             Self::from_source_tree(path)
         }
@@ -926,7 +920,7 @@ impl ArchiveTimestamp {
     /// Return the modification timestamp for a file.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, io::Error> {
         let metadata = fs_err::metadata(path.as_ref())?;
-        Ok(Self::Exact(Timestamp::from_metadata(&metadata)))
+        Ok(Self(Timestamp::from_metadata(&metadata)))
     }
 
     /// Return the modification timestamp for a source tree, i.e., a directory.
@@ -968,15 +962,12 @@ impl ArchiveTimestamp {
             return Ok(None);
         };
 
-        Ok(Some(Self::Approximate(timestamp)))
+        Ok(Some(Self(timestamp)))
     }
 
     /// Return the modification timestamp for an archive.
     pub fn timestamp(&self) -> Timestamp {
-        match self {
-            Self::Exact(timestamp) => *timestamp,
-            Self::Approximate(timestamp) => *timestamp,
-        }
+        self.0
     }
 
     /// Returns `true` if the `target` (an installed or cached distribution) is up-to-date with the

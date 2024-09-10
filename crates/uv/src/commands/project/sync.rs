@@ -6,7 +6,9 @@ use pep508_rs::MarkerTree;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, HashCheckingMode, InstallOptions};
+use uv_configuration::{
+    Concurrency, Constraints, ExtrasSpecification, HashCheckingMode, InstallOptions,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
 use uv_installer::SitePackages;
@@ -217,7 +219,7 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(target, &markers, tags, extras, &dev)?;
+    let resolution = lock.to_resolution(target, &markers, tags, extras, &dev, build_options)?;
 
     // Always skip virtual projects, which shouldn't be built or installed.
     let resolution = apply_no_virtual_project(resolution);
@@ -254,7 +256,8 @@ pub(super) async fn do_sync(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = [];
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
     let dry_run = false;
 
     // Extract the hashes from the lockfile.
@@ -271,18 +274,20 @@ pub(super) async fn do_sync(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         venv.interpreter(),
         index_locations,
         &flat_index,
         &state.index,
         &state.git,
+        &state.capabilities,
         &state.in_flight,
         index_strategy,
         config_setting,
         build_isolation,
         link_mode,
         build_options,
+        &build_hasher,
         exclude_newer,
         sources,
         concurrency,
@@ -300,6 +305,7 @@ pub(super) async fn do_sync(
         link_mode,
         compile_bytecode,
         index_locations,
+        config_setting,
         &hasher,
         &markers,
         tags,

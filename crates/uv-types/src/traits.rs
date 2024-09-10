@@ -3,11 +3,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::{CachedDist, IndexLocations, InstalledDist, Resolution, SourceDist};
+use distribution_types::{
+    CachedDist, IndexCapabilities, IndexLocations, InstalledDist, Resolution, SourceDist,
+};
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, BuildOutput, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_git::GitResolver;
 use uv_python::PythonEnvironment;
 
@@ -57,11 +59,17 @@ pub trait BuildContext {
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
 
+    /// Return a reference to the discovered registry capabilities.
+    fn capabilities(&self) -> &IndexCapabilities;
+
     /// Whether source distribution building or pre-built wheels is disabled.
     ///
     /// This [`BuildContext::setup_build`] calls will fail if builds are disabled.
     /// This method exists to avoid fetching source distributions if we know we can't build them.
     fn build_options(&self) -> &BuildOptions;
+
+    /// The [`ConfigSettings`] used to build distributions.
+    fn config_settings(&self) -> &ConfigSettings;
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> SourceStrategy;

@@ -70,6 +70,7 @@ impl SourceDistExtension {
         match extension {
             "zip" => Ok(Self::Zip),
             "gz" if is_tar(path.as_ref()) => Ok(Self::TarGz),
+            "tgz" => Ok(Self::TarGz),
             "bz2" if is_tar(path.as_ref()) => Ok(Self::TarBz2),
             "xz" if is_tar(path.as_ref()) => Ok(Self::TarXz),
             "zst" if is_tar(path.as_ref()) => Ok(Self::TarZst),
@@ -94,6 +95,6 @@ impl Display for SourceDistExtension {
 pub enum ExtensionError {
     #[error("`.whl`, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`")]
     Dist,
-    #[error("`.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`")]
+    #[error("`.zip`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`")]
     SourceDist,
 }

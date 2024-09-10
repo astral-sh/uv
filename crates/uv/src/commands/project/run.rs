@@ -49,6 +49,7 @@ pub(crate) async fn run(
     show_resolution: bool,
     locked: bool,
     frozen: bool,
+    no_sync: bool,
     isolated: bool,
     package: Option<PackageName>,
     no_project: bool,
@@ -258,6 +259,11 @@ pub(crate) async fn run(
                 "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
+        if no_sync {
+            warn_user!(
+                "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
         if isolated {
             warn_user!(
                 "`--isolated` is a no-op for Python scripts with inline metadata, which always run in isolation"
@@ -318,6 +324,9 @@ pub(crate) async fn run(
             if frozen {
                 warn_user!("`--frozen` has no effect when used alongside `--no-project`");
             }
+            if no_sync {
+                warn_user!("`--no-sync` has no effect when used alongside `--no-project`");
+            }
         } else if project.is_none() {
             // If we can't find a project and the user provided a project-only setting, warn.
             if !extras.is_empty() {
@@ -329,8 +338,8 @@ pub(crate) async fn run(
             if locked {
                 warn_user!("`--locked` has no effect when used outside of a project");
             }
-            if frozen {
-                warn_user!("`--frozen` has no effect when used outside of a project");
+            if no_sync {
+                warn_user!("`--no-sync` has no effect when used outside of a project");
             }
         }
 
@@ -358,6 +367,7 @@ pub(crate) async fn run(
 
                 // Resolve the Python request and requirement for the workspace.
                 let WorkspacePython {
+                    source,
                     python_request,
                     requires_python,
                 } = WorkspacePython::from_request(
@@ -379,7 +389,12 @@ pub(crate) async fn run(
                 .into_interpreter();
 
                 if let Some(requires_python) = requires_python.as_ref() {
-                    validate_requires_python(&interpreter, project.workspace(), requires_python)?;
+                    validate_requires_python(
+                        &interpreter,
+                        project.workspace(),
+                        requires_python,
+                        &source,
+                    )?;
                 }
 
                 // Create a virtual environment
@@ -408,60 +423,64 @@ pub(crate) async fn run(
                 .await?
             };
 
-            let result = match project::lock::do_safe_lock(
-                locked,
-                frozen,
-                project.workspace(),
-                venv.interpreter(),
-                settings.as_ref().into(),
-                if show_resolution {
-                    Box::new(DefaultResolveLogger)
-                } else {
-                    Box::new(SummaryResolveLogger)
-                },
-                connectivity,
-                concurrency,
-                native_tls,
-                cache,
-                printer,
-            )
-            .await
-            {
-                Ok(result) => result,
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::NoSolution(err),
-                ))) => {
-                    let report = miette::Report::msg(format!("{err}")).context(err.header());
-                    eprint!("{report:?}");
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(err) => return Err(err.into()),
-            };
+            if no_sync {
+                debug!("Skipping environment synchronization due to `--no-sync`");
+            } else {
+                let result = match project::lock::do_safe_lock(
+                    locked,
+                    frozen,
+                    project.workspace(),
+                    venv.interpreter(),
+                    settings.as_ref().into(),
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    cache,
+                    printer,
+                )
+                .await
+                {
+                    Ok(result) => result,
+                    Err(ProjectError::Operation(operations::Error::Resolve(
+                        uv_resolver::ResolveError::NoSolution(err),
+                    ))) => {
+                        let report = miette::Report::msg(format!("{err}")).context(err.header());
+                        eprint!("{report:?}");
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(err) => return Err(err.into()),
+                };
 
-            let install_options = InstallOptions::default();
+                let install_options = InstallOptions::default();
 
-            project::sync::do_sync(
-                InstallTarget::from(&project),
-                &venv,
-                result.lock(),
-                &extras,
-                dev,
-                install_options,
-                Modifications::Sufficient,
-                settings.as_ref().into(),
-                &state,
-                if show_resolution {
-                    Box::new(DefaultInstallLogger)
-                } else {
-                    Box::new(SummaryInstallLogger)
-                },
-                connectivity,
-                concurrency,
-                native_tls,
-                cache,
-                printer,
-            )
-            .await?;
+                project::sync::do_sync(
+                    InstallTarget::from(&project),
+                    &venv,
+                    result.lock(),
+                    &extras,
+                    dev,
+                    install_options,
+                    Modifications::Sufficient,
+                    settings.as_ref().into(),
+                    &state,
+                    if show_resolution {
+                        Box::new(DefaultInstallLogger)
+                    } else {
+                        Box::new(SummaryInstallLogger)
+                    },
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    cache,
+                    printer,
+                )
+                .await?;
+            }
 
             venv.into_interpreter()
         } else {
@@ -612,9 +631,11 @@ pub(crate) async fn run(
         })
     };
 
-    // If we're running in an ephemeral environment, add a `sitecustomize.py` to enable loading of
+    // If we're running in an ephemeral environment, add a path file to enable loading of
     // the base environment's site packages. Setting `PYTHONPATH` is insufficient, as it doesn't
     // resolve `.pth` files in the base environment.
+    // And `sitecustomize.py` would be an alternative but it can be shadowed by an existing such
+    // module in the python installation.
     if let Some(ephemeral_env) = ephemeral_env.as_ref() {
         let ephemeral_site_packages = ephemeral_env
             .site_packages()
@@ -626,7 +647,7 @@ pub(crate) async fn run(
             .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
 
         fs_err::write(
-            ephemeral_site_packages.join("sitecustomize.py"),
+            ephemeral_site_packages.join("_uv_ephemeral_overlay.pth"),
             format!(
                 "import site; site.addsitedir(\"{}\")",
                 base_site_packages.escape_for_python()

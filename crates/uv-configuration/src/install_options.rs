@@ -80,4 +80,30 @@ impl InstallOptions {
 
         resolution.filter(|dist| !no_install_packages.contains(dist.name()))
     }
+
+    /// Returns `true` if a package passes the install filters.
+    pub fn include_package(
+        &self,
+        package: &PackageName,
+        project_name: &PackageName,
+        members: &BTreeSet<PackageName>,
+    ) -> bool {
+        // If `--no-install-project` is set, remove the project itself. The project is always
+        // part of the workspace.
+        if (self.no_install_project || self.no_install_workspace) && package == project_name {
+            return false;
+        }
+
+        // If `--no-install-workspace` is set, remove the project and any workspace members.
+        if self.no_install_workspace && members.contains(package) {
+            return false;
+        }
+
+        // If `--no-install-package` is provided, remove the requested packages.
+        if self.no_install_package.contains(package) {
+            return false;
+        }
+
+        true
+    }
 }

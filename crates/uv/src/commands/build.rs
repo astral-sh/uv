@@ -5,6 +5,7 @@ use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 use std::borrow::Cow;
 
+use crate::commands::pip::operations;
 use anyhow::Result;
 use distribution_filename::SourceDistExtension;
 use owo_colors::OwoColorize;
@@ -12,7 +13,7 @@ use std::path::{Path, PathBuf};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{BuildKind, BuildOutput, Concurrency};
+use uv_configuration::{BuildKind, BuildOutput, Concurrency, Constraints, HashCheckingMode};
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
 use uv_normalize::PackageName;
@@ -20,6 +21,7 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
+use uv_requirements::RequirementsSource;
 use uv_resolver::{FlatIndex, RequiresPython};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace};
@@ -32,6 +34,8 @@ pub(crate) async fn build(
     output_dir: Option<PathBuf>,
     sdist: bool,
     wheel: bool,
+    build_constraints: Vec<RequirementsSource>,
+    hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     settings: ResolverSettings,
     no_config: bool,
@@ -49,6 +53,8 @@ pub(crate) async fn build(
         output_dir.as_deref(),
         sdist,
         wheel,
+        &build_constraints,
+        hash_checking,
         python.as_deref(),
         settings.as_ref(),
         no_config,
@@ -88,6 +94,8 @@ async fn build_impl(
     output_dir: Option<&Path>,
     sdist: bool,
     wheel: bool,
+    build_constraints: &[RequirementsSource],
+    hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     settings: ResolverSettingsRef<'_>,
     no_config: bool,
@@ -225,6 +233,30 @@ async fn build_impl(
         store_credentials_from_url(url);
     }
 
+    // Read build constraints.
+    let build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
+
+    // Collect the set of required hashes.
+    let hasher = if let Some(hash_checking) = hash_checking {
+        HashStrategy::from_requirements(
+            std::iter::empty(),
+            build_constraints
+                .iter()
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            Some(&interpreter.resolver_markers()),
+            hash_checking,
+        )?
+    } else {
+        HashStrategy::None
+    };
+
+    let build_constraints = Constraints::from_requirements(
+        build_constraints
+            .iter()
+            .map(|constraint| constraint.requirement.clone()),
+    );
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(native_tls)
@@ -249,11 +281,6 @@ async fn build_impl(
         BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
     };
 
-    // TODO(charlie): These are all default values. We should consider whether we want to make them
-    // optional on the downstream APIs.
-    let build_constraints = [];
-    let hasher = HashStrategy::None;
-
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
@@ -268,18 +295,20 @@ async fn build_impl(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         &interpreter,
         index_locations,
         &flat_index,
         &state.index,
         &state.git,
+        &state.capabilities,
         &state.in_flight,
         index_strategy,
         config_setting,
         build_isolation,
         link_mode,
         build_options,
+        &hasher,
         exclude_newer,
         sources,
         concurrency,
@@ -436,7 +465,7 @@ async fn build_impl(
             BuiltDistributions::Both(output_dir.join(&sdist), output_dir.join(&wheel))
         }
         BuildPlan::WheelFromSdist => {
-            anstream::eprintln!("{}", "Building source distribution from wheel...".bold());
+            anstream::eprintln!("{}", "Building wheel from source distribution...".bold());
 
             // Extract the source distribution into a temporary directory.
             let reader = fs_err::tokio::File::open(src.path()).await?;

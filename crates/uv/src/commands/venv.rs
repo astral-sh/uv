@@ -16,8 +16,8 @@ use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary,
-    NoBuild, SourceStrategy, TrustedHost,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
+    NoBinary, NoBuild, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
@@ -300,7 +300,8 @@ async fn venv_impl(
         let state = SharedState::default();
 
         // For seed packages, assume a bunch of default settings are sufficient.
-        let build_constraints = [];
+        let build_constraints = Constraints::default();
+        let build_hasher = HashStrategy::default();
         let config_settings = ConfigSettings::default();
         let sources = SourceStrategy::Disabled;
 
@@ -311,18 +312,20 @@ async fn venv_impl(
         let build_dispatch = BuildDispatch::new(
             &client,
             cache,
-            &build_constraints,
+            build_constraints,
             interpreter,
             index_locations,
             &flat_index,
             &state.index,
             &state.git,
+            &state.capabilities,
             &state.in_flight,
             index_strategy,
             &config_settings,
             BuildIsolation::Isolated,
             link_mode,
             &build_options,
+            &build_hasher,
             exclude_newer,
             sources,
             concurrency,

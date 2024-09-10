@@ -371,43 +371,187 @@ impl InternerGuard<'_> {
         self.create_node(node.var.clone(), children)
     }
 
-    // Restrict the output of a given version variable in the tree.
-    //
-    // If the provided function `f` returns a `Some` range, the tree will be simplified with
-    // the assumption that the given variable is restricted to values in that range. If the function
-    // returns `None`, the variable will not be affected.
-    pub(crate) fn restrict_versions(
+    /// Simplify this tree by *assuming* that the Python version range provided
+    /// is true and that the complement of it is false.
+    ///
+    /// For example, with `requires-python = '>=3.8'` and a marker tree of
+    /// `python_full_version >= '3.8' and python_full_version <= '3.10'`, this
+    /// would result in a marker of `python_full_version <= '3.10'`.
+    pub(crate) fn simplify_python_versions(
         &mut self,
         i: NodeId,
-        f: &impl Fn(&Variable) -> Option<Range<Version>>,
+        py_lower: Bound<&Version>,
+        py_upper: Bound<&Version>,
     ) -> NodeId {
-        if matches!(i, NodeId::TRUE | NodeId::FALSE) {
+        if matches!(i, NodeId::TRUE | NodeId::FALSE)
+            || matches!((py_lower, py_upper), (Bound::Unbounded, Bound::Unbounded))
+        {
             return i;
         }
 
         let node = self.shared.node(i);
-        if let Edges::Version { edges: ref map } = node.children {
-            if let Some(allowed) = f(&node.var) {
-                // Restrict the output of this variable to the given range.
-                let mut simplified = SmallVec::new();
-                for (range, node) in map {
-                    let restricted = range.intersection(&allowed);
-                    if restricted.is_empty() {
-                        continue;
-                    }
-
-                    simplified.push((restricted.clone(), *node));
-                }
-
-                return self
-                    .create_node(node.var.clone(), Edges::Version { edges: simplified })
-                    .negate(i);
+        // Look for a `python_full_version` expression, otherwise
+        // we recursively simplify.
+        let Node {
+            var: Variable::Version(MarkerValueVersion::PythonFullVersion),
+            children: Edges::Version { ref edges },
+        } = node
+        else {
+            // Simplify all nodes recursively.
+            let children = node.children.map(i, |node_id| {
+                self.simplify_python_versions(node_id, py_lower, py_upper)
+            });
+            return self.create_node(node.var.clone(), children);
+        };
+        let py_range = Range::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
+        if py_range.is_empty() {
+            // Oops, the bounds imply there is nothing that can match,
+            // so we always evaluate to false.
+            return NodeId::FALSE;
+        }
+        let mut new = SmallVec::new();
+        for &(ref range, node) in edges {
+            let overlap = range.intersection(&py_range);
+            if overlap.is_empty() {
+                continue;
             }
+            new.push((overlap.clone(), node));
         }
 
-        // Restrict all nodes recursively.
-        let children = node.children.map(i, |node| self.restrict_versions(node, f));
-        self.create_node(node.var.clone(), children)
+        // Now that we know the only ranges left are those that
+        // intersect with our lower/upper Python version bounds, we
+        // can "extend" out the lower/upper bounds here all the way to
+        // negative and positive infinity, respectively.
+        //
+        // This has the effect of producing a marker that is only
+        // applicable in a context where the Python lower/upper bounds
+        // are known to be satisfied.
+        let &(ref first_range, first_node_id) = new.first().unwrap();
+        let first_upper = first_range.bounding_range().unwrap().1;
+        let clipped = Range::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
+        *new.first_mut().unwrap() = (clipped, first_node_id);
+
+        let &(ref last_range, last_node_id) = new.last().unwrap();
+        let last_lower = last_range.bounding_range().unwrap().0;
+        let clipped = Range::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
+        *new.last_mut().unwrap() = (clipped, last_node_id);
+
+        self.create_node(node.var.clone(), Edges::Version { edges: new })
+            .negate(i)
+    }
+
+    /// Complexify this tree by requiring the given Python version
+    /// range to be true in order for this marker tree to evaluate to
+    /// true in all circumstances.
+    ///
+    /// For example, with `requires-python = '>=3.8'` and a marker tree of
+    /// `python_full_version <= '3.10'`, this would result in a marker of
+    /// `python_full_version >= '3.8' and python_full_version <= '3.10'`.
+    pub(crate) fn complexify_python_versions(
+        &mut self,
+        i: NodeId,
+        py_lower: Bound<&Version>,
+        py_upper: Bound<&Version>,
+    ) -> NodeId {
+        if matches!(i, NodeId::FALSE)
+            || matches!((py_lower, py_upper), (Bound::Unbounded, Bound::Unbounded))
+        {
+            return i;
+        }
+
+        let py_range = Range::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
+        if py_range.is_empty() {
+            // Oops, the bounds imply there is nothing that can match,
+            // so we always evaluate to false.
+            return NodeId::FALSE;
+        }
+        if matches!(i, NodeId::TRUE) {
+            let var = Variable::Version(MarkerValueVersion::PythonFullVersion);
+            let edges = Edges::Version {
+                edges: Edges::from_range(&py_range),
+            };
+            return self.create_node(var, edges).negate(i);
+        }
+
+        let node = self.shared.node(i);
+        let Node {
+            var: Variable::Version(MarkerValueVersion::PythonFullVersion),
+            children: Edges::Version { ref edges },
+        } = node
+        else {
+            // Complexify all nodes recursively.
+            let children = node.children.map(i, |node_id| {
+                self.complexify_python_versions(node_id, py_lower, py_upper)
+            });
+            return self.create_node(node.var.clone(), children);
+        };
+        // The approach we take here is to filter out any range that
+        // has no intersection with our Python lower/upper bounds.
+        // These ranges will now always be false, so we can dismiss
+        // them entirely.
+        //
+        // Then, depending on whether we have finite lower/upper bound,
+        // we "fix up" the edges by clipping the existing ranges and
+        // adding an additional range that covers the Python versions
+        // outside of our bounds by always mapping them to false.
+        let mut new: SmallVec<_> = edges
+            .iter()
+            .filter(|(range, _)| !py_range.intersection(range).is_empty())
+            .cloned()
+            .collect();
+        // Below, we assume `new` has at least one element. It's
+        // subtle, but since 1) edges is a disjoint covering of the
+        // universe and 2) our `py_range` is non-empty at this point,
+        // it must intersect with at least one range.
+        assert!(
+            !new.is_empty(),
+            "expected at least one non-empty intersection"
+        );
+        // This is the NodeId we map to anything that should
+        // always be false. We have to "negate" it in case the
+        // parent is negated.
+        let exclude_node_id = NodeId::FALSE.negate(i);
+        if !matches!(py_lower, Bound::Unbounded) {
+            let &(ref first_range, first_node_id) = new.first().unwrap();
+            let first_upper = first_range.bounding_range().unwrap().1;
+            // When the first range is always false, then we can just
+            // "expand" it out to negative infinity to reflect that
+            // anything less than our lower bound should evaluate to
+            // false. If we don't do this, then we could have two
+            // adjacent ranges map to the same node, which would not be
+            // a canonical representation.
+            if exclude_node_id == first_node_id {
+                let clipped = Range::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
+                *new.first_mut().unwrap() = (clipped, first_node_id);
+            } else {
+                let clipped = Range::from_range_bounds((py_lower.cloned(), first_upper.cloned()));
+                *new.first_mut().unwrap() = (clipped, first_node_id);
+
+                let py_range_lower =
+                    Range::from_range_bounds((py_lower.cloned(), Bound::Unbounded));
+                new.insert(0, (py_range_lower.complement(), NodeId::FALSE.negate(i)));
+            }
+        }
+        if !matches!(py_upper, Bound::Unbounded) {
+            let &(ref last_range, last_node_id) = new.last().unwrap();
+            let last_lower = last_range.bounding_range().unwrap().0;
+            // See lower bound case above for why we do this. The
+            // same reasoning applies here: to maintain a canonical
+            // representation.
+            if exclude_node_id == last_node_id {
+                let clipped = Range::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
+                *new.last_mut().unwrap() = (clipped, last_node_id);
+            } else {
+                let clipped = Range::from_range_bounds((last_lower.cloned(), py_upper.cloned()));
+                *new.last_mut().unwrap() = (clipped, last_node_id);
+
+                let py_range_upper =
+                    Range::from_range_bounds((Bound::Unbounded, py_upper.cloned()));
+                new.push((py_range_upper.complement(), exclude_node_id));
+            }
+        }
+        self.create_node(node.var.clone(), Edges::Version { edges: new })
+            .negate(i)
     }
 }
 

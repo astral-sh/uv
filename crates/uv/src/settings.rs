@@ -217,6 +217,7 @@ pub(crate) struct RunSettings {
     pub(crate) show_resolution: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) no_project: bool,
+    pub(crate) no_sync: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -237,6 +238,7 @@ impl RunSettings {
             with_editable,
             with_requirements,
             isolated,
+            no_sync,
             locked,
             frozen,
             installer,
@@ -266,6 +268,7 @@ impl RunSettings {
             show_resolution,
             package,
             no_project,
+            no_sync,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -457,15 +460,24 @@ impl ToolUpgradeSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct ToolListSettings {
     pub(crate) show_paths: bool,
+    pub(crate) show_version_specifiers: bool,
 }
 
 impl ToolListSettings {
     /// Resolve the [`ToolListSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let ToolListArgs { show_paths, .. } = args;
+        let ToolListArgs {
+            show_paths,
+            show_version_specifiers,
+            python_preference: _,
+            no_python_downloads: _,
+        } = args;
 
-        Self { show_paths }
+        Self {
+            show_paths,
+            show_version_specifiers,
+        }
     }
 }
 
@@ -473,7 +485,7 @@ impl ToolListSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUninstallSettings {
-    pub(crate) name: Option<Vec<PackageName>>,
+    pub(crate) name: Vec<PackageName>,
 }
 
 impl ToolUninstallSettings {
@@ -483,7 +495,7 @@ impl ToolUninstallSettings {
         let ToolUninstallArgs { name, all } = args;
 
         Self {
-            name: name.filter(|_| !all),
+            name: if all { vec![] } else { name },
         }
     }
 }
@@ -948,6 +960,8 @@ pub(crate) struct ExportSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
     pub(crate) hashes: bool,
+    pub(crate) install_options: InstallOptions,
+    pub(crate) output_file: Option<PathBuf>,
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) python: Option<String>,
@@ -969,6 +983,10 @@ impl ExportSettings {
             no_dev,
             hashes,
             no_hashes,
+            output_file,
+            no_emit_project,
+            no_emit_workspace,
+            no_emit_package,
             locked,
             frozen,
             resolver,
@@ -986,6 +1004,12 @@ impl ExportSettings {
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
             hashes: flag(hashes, no_hashes).unwrap_or(true),
+            install_options: InstallOptions::new(
+                no_emit_project,
+                no_emit_workspace,
+                no_emit_package,
+            ),
+            output_file,
             locked,
             frozen,
             python,
@@ -1620,6 +1644,8 @@ pub(crate) struct BuildSettings {
     pub(crate) out_dir: Option<PathBuf>,
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
+    pub(crate) build_constraint: Vec<PathBuf>,
+    pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
@@ -1634,6 +1660,11 @@ impl BuildSettings {
             package,
             sdist,
             wheel,
+            build_constraint,
+            require_hashes,
+            no_require_hashes,
+            verify_hashes,
+            no_verify_hashes,
             python,
             build,
             refresh,
@@ -1646,6 +1677,14 @@ impl BuildSettings {
             out_dir,
             sdist,
             wheel,
+            build_constraint: build_constraint
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            hash_checking: HashCheckingMode::from_args(
+                flag(require_hashes, no_require_hashes).unwrap_or_default(),
+                flag(verify_hashes, no_verify_hashes).unwrap_or_default(),
+            ),
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),

@@ -17,10 +17,22 @@ uv provides a standalone installer to download and install uv:
 === "Windows"
 
     ```console
-    $ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
 
-By default, uv is installed to `~/.cargo/bin`.
+Request a specific version by including it in the URL:
+
+=== "macOS and Linux"
+
+    ```console
+    $ curl -LsSf https://astral.sh/uv/0.4.6/install.sh | sh
+    ```
+
+=== "Windows"
+
+    ```console
+    $ powershell -c "irm https://astral.sh/uv/0.4.6/install.ps1 | iex"
+    ```
 
 !!! tip
 
@@ -40,19 +52,29 @@ By default, uv is installed to `~/.cargo/bin`.
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
 
-Request a specific version by including it in the URL:
+#### Configuring installation
+
+By default, uv is installed to `~/.cargo/bin`. To change the installation path, use
+`UV_INSTALL_DIR`:
 
 === "macOS and Linux"
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.4.5/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/custom/path" sh
     ```
 
 === "Windows"
 
-    ```console
-    $ powershell -c "irm https://astral.sh/uv/0.4.5/install.ps1 | iex"
+    ```powershell
+    $env:UV_INSTALL_DIR = "C:\Custom\Path" powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
+
+The installer will also update your shell profiles to ensure the uv binary is on your `PATH`. To
+disable this behavior, use `INSTALLER_NO_MODIFY_PATH`. For example:
+
+```console
+$ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
+```
 
 ### PyPI
 
@@ -94,6 +116,14 @@ uv is available in the core Homebrew packages.
 $ brew install uv
 ```
 
+### Winget
+
+uv is available via [winget](https://winstall.app/apps/astral-sh.uv).
+
+```console
+$ winget install --id=astral-sh.uv  -e
+```
+
 ### Docker
 
 uv provides a Docker image at
@@ -116,6 +146,11 @@ When uv is installed via the standalone installer, it can update itself on-deman
 ```console
 $ uv self update
 ```
+
+!!! tip
+
+    Updating uv will re-run the installer and can modify your shell profiles. To disable this
+    behavior, set `INSTALLER_NO_MODIFY_PATH=1`.
 
 When another installation method is used, self-updates are disabled. Use the package manager's
 upgrade method instead. For example, with `pip`:

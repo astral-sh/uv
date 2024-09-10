@@ -22,8 +22,8 @@ use tracing::{debug, info, instrument, trace, warn, Level};
 
 use distribution_types::{
     BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
-    IncompatibleWheel, IndexLocations, InstalledDist, PythonRequirementKind, RemoteSource,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    IncompatibleWheel, IndexCapabilities, IndexLocations, InstalledDist, PythonRequirementKind,
+    RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 pub(crate) use fork_map::{ForkMap, ForkSet};
 use locals::Locals;
@@ -95,6 +95,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     groups: Groups,
     preferences: Preferences,
     git: GitResolver,
+    capabilities: IndexCapabilities,
     exclusions: Exclusions,
     urls: Urls,
     locals: Locals,
@@ -169,6 +170,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             python_requirement,
             index,
             build_context.git(),
+            build_context.capabilities(),
             provider,
             installed_packages,
         )
@@ -187,12 +189,14 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         python_requirement: &PythonRequirement,
         index: &InMemoryIndex,
         git: &GitResolver,
+        capabilities: &IndexCapabilities,
         provider: Provider,
         installed_packages: InstalledPackages,
     ) -> Result<Self, ResolveError> {
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
+            capabilities: capabilities.clone(),
             selector: CandidateSelector::for_resolution(options, &manifest, &markers),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &markers, git, options.dependency_mode)?,
@@ -331,12 +335,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
-                Self::pre_visit(
-                    state.pubgrub.partial_solution.prioritized_packages(),
-                    &self.urls,
-                    &state.python_requirement,
-                    &request_sink,
-                )?;
+                if self.dependency_mode.is_transitive() {
+                    Self::pre_visit(
+                        state.pubgrub.partial_solution.prioritized_packages(),
+                        &self.urls,
+                        &state.python_requirement,
+                        &request_sink,
+                    )?;
+                }
 
                 // Choose a package version.
                 let Some(highest_priority_pkg) = state
@@ -456,6 +462,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         &state.python_requirement,
                         &request_sink,
                         &self.index,
+                        &self.capabilities,
                         &self.selector,
                         &state.markers,
                     )?;
@@ -1109,17 +1116,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // Emit a request to fetch the metadata for this version.
         if matches!(&**package, PubGrubPackageInner::Package { .. }) {
-            if self.index.distributions().register(candidate.version_id()) {
-                // Verify that the package is allowed under the hash-checking policy.
-                if !self
-                    .hasher
-                    .allows_package(candidate.name(), candidate.version())
-                {
-                    return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
-                }
+            if self.dependency_mode.is_transitive() {
+                if self.index.distributions().register(candidate.version_id()) {
+                    // Verify that the package is allowed under the hash-checking policy.
+                    if !self
+                        .hasher
+                        .allows_package(candidate.name(), candidate.version())
+                    {
+                        return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
+                    }
 
-                let request = Request::from(dist.for_resolution());
-                request_sink.blocking_send(request)?;
+                    let request = Request::from(dist.for_resolution());
+                    request_sink.blocking_send(request)?;
+                }
             }
         }
 
@@ -1186,6 +1195,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 dev,
                 marker,
             } => {
+                // If we're excluding transitive dependencies, short-circuit.
+                if self.dependency_mode.is_direct() {
+                    return Ok(Dependencies::Unforkable(Vec::default()));
+                }
+
                 // Determine the distribution to lookup.
                 let dist = match url {
                     Some(url) => PubGrubDistribution::from_url(name, url),
@@ -1272,12 +1286,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ));
                     }
                 };
-
-                // If we're excluding transitive dependencies, short-circuit. (It's important that
-                // we fetched the metadata, though, since we need it to validate extras.)
-                if self.dependency_mode.is_direct() {
-                    return Ok(Dependencies::Unforkable(Vec::default()));
-                }
 
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
@@ -1805,7 +1813,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Avoid prefetching source distributions with unbounded lower-bound ranges. This
                 // often leads to failed attempts to build legacy versions of packages that are
                 // incompatible with modern build tools.
-                if !dist.prefetchable() {
+                if dist.wheel().is_some() {
                     if !self.selector.use_highest_version(&package_name) {
                         if let Some((lower, _)) = range.iter().next() {
                             if lower == &Bound::Unbounded {
@@ -1952,7 +1960,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         available_versions
                             .entry(name.clone())
                             .or_insert_with(BTreeSet::new)
-                            .extend(version_map.iter().map(|(version, _)| version.clone()));
+                            .extend(version_map.versions().cloned());
                     }
                 }
             }
