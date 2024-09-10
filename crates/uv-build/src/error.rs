@@ -1,4 +1,7 @@
+use crate::PythonRunnerOutput;
 use itertools::Itertools;
+use pep440_rs::Version;
+use pep508_rs::PackageName;
 use regex::Regex;
 use std::env;
 use std::fmt::{Display, Formatter};
@@ -8,8 +11,6 @@ use std::process::ExitStatus;
 use std::sync::LazyLock;
 use thiserror::Error;
 use tracing::error;
-
-use crate::PythonRunnerOutput;
 use uv_configuration::BuildOutput;
 use uv_fs::Simplified;
 
@@ -45,6 +46,10 @@ static WHEEL_NOT_FOUND_RE: LazyLock<Regex> =
 /// e.g. `ModuleNotFoundError: No module named 'torch'`
 static TORCH_NOT_FOUND_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'torch'").unwrap());
+
+/// e.g. `ModuleNotFoundError: No module named 'distutils'`
+static DISTUTILS_NOT_FOUND_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'distutils'").unwrap());
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -99,12 +104,15 @@ pub enum Error {
 enum MissingLibrary {
     Header(String),
     Linker(String),
-    PythonPackage(String),
+    BuildDependency(String),
+    DeprecatedModule(String, Version),
 }
 
 #[derive(Debug, Error)]
 pub struct MissingHeaderCause {
     missing_library: MissingLibrary,
+    package_name: Option<PackageName>,
+    package_version: Option<Version>,
     version_id: String,
 }
 
@@ -112,38 +120,80 @@ impl Display for MissingHeaderCause {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.missing_library {
             MissingLibrary::Header(header) => {
-                write!(
-                    f,
-                    "This error likely indicates that you need to install a library that provides \"{}\" for {}",
-                    header, self.version_id
-                )
+                if let (Some(package_name), Some(package_version)) =
+                    (&self.package_name, &self.package_version)
+                {
+                    write!(
+                        f,
+                        "This error likely indicates that you need to install a library that provides \"{header}\" for {package_name}@{package_version}",
+                    )
+                } else {
+                    write!(
+                        f,
+                        "This error likely indicates that you need to install a library that provides \"{header}\" for {}",
+                        self.version_id
+                    )
+                }
             }
             MissingLibrary::Linker(library) => {
-                write!(
-                    f,
-                    "This error likely indicates that you need to install the library that provides a shared library \
-                    for {library} for {version_id} (e.g. lib{library}-dev)",
-                    library = library, version_id = self.version_id
-                )
+                if let (Some(package_name), Some(package_version)) =
+                    (&self.package_name, &self.package_version)
+                {
+                    write!(
+                        f,
+                        "This error likely indicates that you need to install the library that provides a shared library for {library} for {package_name}@{package_version} (e.g., lib{library}-dev)",
+                    )
+                } else {
+                    write!(
+                        f,
+                        "This error likely indicates that you need to install the library that provides a shared library for {library} for {version_id} (e.g., lib{library}-dev)",
+                        version_id = self.version_id
+                    )
+                }
             }
-            MissingLibrary::PythonPackage(package) => {
-                write!(
-                    f,
-                    "This error likely indicates that {version_id} depends on {package}, but doesn't declare it as a build dependency. \
-                        If {version_id} is a first-party package, consider adding {package} to its `build-system.requires`. \
-                        Otherwise, `uv pip install {package}` into the environment and re-run with `--no-build-isolation`.",
-                    package = package, version_id = self.version_id
-                )
+            MissingLibrary::BuildDependency(package) => {
+                if let (Some(package_name), Some(package_version)) =
+                    (&self.package_name, &self.package_version)
+                {
+                    write!(
+                        f,
+                        "This error likely indicates that {package_name}@{package_version} depends on {package}, but doesn't declare it as a build dependency. If {package_name} is a first-party package, consider adding {package} to its `build-system.requires`. Otherwise, `uv pip install {package}` into the environment and re-run with `--no-build-isolation`."
+                    )
+                } else {
+                    write!(
+                        f,
+                        "This error likely indicates that {version_id} depends on {package}, but doesn't declare it as a build dependency. If {version_id} is a first-party package, consider adding {package} to its `build-system.requires`. Otherwise, `uv pip install {package}` into the environment and re-run with `--no-build-isolation`.",
+                        version_id = self.version_id
+                    )
+                }
+            }
+            MissingLibrary::DeprecatedModule(package, version) => {
+                if let (Some(package_name), Some(package_version)) =
+                    (&self.package_name, &self.package_version)
+                {
+                    write!(
+                        f,
+                        "{package} was removed from the standard library in Python {version}. Consider adding a constraint (like `{package_name} >{package_version}`) to avoid building a version of {package_name} that depends on {package}.",
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{package} was removed from the standard library in Python {version}. Consider adding a constraint to avoid building a package-version that depends on {package}.",
+                    )
+                }
             }
         }
     }
 }
 
 impl Error {
+    /// Construct an [`Error`] from the output of a failed command.
     pub(crate) fn from_command_output(
         message: String,
         output: &PythonRunnerOutput,
         level: BuildOutput,
+        name: Option<&PackageName>,
+        version: Option<&Version>,
         version_id: impl Into<String>,
     ) -> Self {
         // In the cases I've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff.
@@ -160,9 +210,14 @@ impl Error {
             {
                 Some(MissingLibrary::Linker(library.to_string()))
             } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
-                Some(MissingLibrary::PythonPackage("wheel".to_string()))
+                Some(MissingLibrary::BuildDependency("wheel".to_string()))
             } else if TORCH_NOT_FOUND_RE.is_match(line.trim()) {
-                Some(MissingLibrary::PythonPackage("torch".to_string()))
+                Some(MissingLibrary::BuildDependency("torch".to_string()))
+            } else if DISTUTILS_NOT_FOUND_RE.is_match(line.trim()) {
+                Some(MissingLibrary::DeprecatedModule(
+                    "distutils".to_string(),
+                    Version::new([3, 12]),
+                ))
             } else {
                 None
             }
@@ -175,6 +230,8 @@ impl Error {
                     exit_code: output.status,
                     missing_header_cause: MissingHeaderCause {
                         missing_library,
+                        package_name: name.cloned(),
+                        package_version: version.cloned(),
                         version_id: version_id.into(),
                     },
                 },
@@ -185,6 +242,8 @@ impl Error {
                     stderr: output.stderr.iter().join("\n"),
                     missing_header_cause: MissingHeaderCause {
                         missing_library,
+                        package_name: name.cloned(),
+                        package_version: version.cloned(),
                         version_id: version_id.into(),
                     },
                 },
@@ -208,10 +267,12 @@ impl Error {
 
 #[cfg(test)]
 mod test {
-    use std::process::ExitStatus;
-
     use crate::{Error, PythonRunnerOutput};
     use indoc::indoc;
+    use pep440_rs::Version;
+    use pep508_rs::PackageName;
+    use std::process::ExitStatus;
+    use std::str::FromStr;
     use uv_configuration::BuildOutput;
 
     #[test]
@@ -244,6 +305,8 @@ mod test {
             "Failed building wheel through setup.py".to_string(),
             &output,
             BuildOutput::Debug,
+            None,
+            None,
             "pygraphviz-1.11",
         );
         assert!(matches!(err, Error::MissingHeaderOutput { .. }));
@@ -297,6 +360,8 @@ mod test {
             "Failed building wheel through setup.py".to_string(),
             &output,
             BuildOutput::Debug,
+            None,
+            None,
             "pygraphviz-1.11",
         );
         assert!(matches!(err, Error::MissingHeaderOutput { .. }));
@@ -316,7 +381,7 @@ mod test {
         "###);
         insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
-            @"This error likely indicates that you need to install the library that provides a shared library for ncurses for pygraphviz-1.11 (e.g. libncurses-dev)"
+            @"This error likely indicates that you need to install the library that provides a shared library for ncurses for pygraphviz-1.11 (e.g., libncurses-dev)"
         );
     }
 
@@ -343,6 +408,8 @@ mod test {
             "Failed building wheel through setup.py".to_string(),
             &output,
             BuildOutput::Debug,
+            None,
+            None,
             "pygraphviz-1.11",
         );
         assert!(matches!(err, Error::MissingHeaderOutput { .. }));
@@ -364,6 +431,48 @@ mod test {
         insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
             @"This error likely indicates that pygraphviz-1.11 depends on wheel, but doesn't declare it as a build dependency. If pygraphviz-1.11 is a first-party package, consider adding wheel to its `build-system.requires`. Otherwise, `uv pip install wheel` into the environment and re-run with `--no-build-isolation`."
+        );
+    }
+
+    #[test]
+    fn missing_distutils() {
+        let output = PythonRunnerOutput {
+            status: ExitStatus::default(), // This is wrong but `from_raw` is platform-gated.
+            stdout: Vec::new(),
+            stderr: indoc!(
+                r"
+                import distutils.core
+                ModuleNotFoundError: No module named 'distutils'
+                "
+            )
+            .lines()
+            .map(ToString::to_string)
+            .collect(),
+        };
+
+        let err = Error::from_command_output(
+            "Failed building wheel through setup.py".to_string(),
+            &output,
+            BuildOutput::Debug,
+            Some(&PackageName::from_str("pygraphviz").unwrap()),
+            Some(&Version::new([1, 11])),
+            "pygraphviz-1.11",
+        );
+        assert!(matches!(err, Error::MissingHeaderOutput { .. }));
+        // Unix uses exit status, Windows uses exit code.
+        let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        insta::assert_snapshot!(formatted, @r###"
+        Failed building wheel through setup.py with exit code: 0
+        --- stdout:
+
+        --- stderr:
+        import distutils.core
+        ModuleNotFoundError: No module named 'distutils'
+        ---
+        "###);
+        insta::assert_snapshot!(
+            std::error::Error::source(&err).unwrap(),
+            @"distutils was removed from the standard library in Python 3.12. Consider adding a constraint (like `pygraphviz >1.11`) to avoid building a version of pygraphviz that depends on distutils."
         );
     }
 }
