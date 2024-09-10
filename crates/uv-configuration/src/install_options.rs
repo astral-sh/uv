@@ -1,15 +1,16 @@
 use std::collections::BTreeSet;
 
-use rustc_hash::FxHashSet;
 use tracing::debug;
 
-use distribution_types::{Name, Resolution};
 use pep508_rs::PackageName;
 
 #[derive(Debug, Clone, Default)]
 pub struct InstallOptions {
+    /// Omit the project itself from the resolution.
     pub no_install_project: bool,
+    /// Omit all workspace members (including the project itself) from the resolution.
     pub no_install_workspace: bool,
+    /// Omit the specified packages from the resolution.
     pub no_install_package: Vec<PackageName>,
 }
 
@@ -26,72 +27,23 @@ impl InstallOptions {
         }
     }
 
-    pub fn filter_resolution(
-        &self,
-        resolution: Resolution,
-        project_name: Option<&PackageName>,
-        members: &BTreeSet<PackageName>,
-    ) -> Resolution {
-        // If `--no-install-project` is set, remove the project itself.
-        let resolution = self.apply_no_install_project(resolution, project_name);
-
-        // If `--no-install-workspace` is set, remove the project and any workspace members.
-        let resolution = self.apply_no_install_workspace(resolution, members);
-
-        // If `--no-install-package` is provided, remove the requested packages.
-        self.apply_no_install_package(resolution)
-    }
-
-    fn apply_no_install_project(
-        &self,
-        resolution: Resolution,
-        project_name: Option<&PackageName>,
-    ) -> Resolution {
-        if !self.no_install_project {
-            return resolution;
-        }
-
-        let Some(project_name) = project_name else {
-            debug!("Ignoring `--no-install-project` for virtual workspace");
-            return resolution;
-        };
-
-        resolution.filter(|dist| dist.name() != project_name)
-    }
-
-    fn apply_no_install_workspace(
-        &self,
-        resolution: Resolution,
-        members: &BTreeSet<PackageName>,
-    ) -> Resolution {
-        if !self.no_install_workspace {
-            return resolution;
-        }
-
-        resolution.filter(|dist| !members.contains(dist.name()))
-    }
-
-    fn apply_no_install_package(&self, resolution: Resolution) -> Resolution {
-        if self.no_install_package.is_empty() {
-            return resolution;
-        }
-
-        let no_install_packages = self.no_install_package.iter().collect::<FxHashSet<_>>();
-
-        resolution.filter(|dist| !no_install_packages.contains(dist.name()))
-    }
-
     /// Returns `true` if a package passes the install filters.
     pub fn include_package(
         &self,
         package: &PackageName,
-        project_name: &PackageName,
+        project_name: Option<&PackageName>,
         members: &BTreeSet<PackageName>,
     ) -> bool {
         // If `--no-install-project` is set, remove the project itself. The project is always
         // part of the workspace.
-        if (self.no_install_project || self.no_install_workspace) && package == project_name {
-            return false;
+        if self.no_install_project || self.no_install_workspace {
+            if let Some(project_name) = project_name {
+                if package == project_name {
+                    return false;
+                }
+            } else {
+                debug!("Ignoring `--no-install-project` for virtual workspace");
+            };
         }
 
         // If `--no-install-workspace` is set, remove the project and any workspace members.

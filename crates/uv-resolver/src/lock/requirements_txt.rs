@@ -134,7 +134,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         let mut nodes: Vec<Node> = petgraph
             .node_references()
             .filter(|(_index, package)| {
-                install_options.include_package(&package.id.name, root_name, lock.members())
+                install_options.include_package(&package.id.name, Some(root_name), lock.members())
             })
             .map(|(index, package)| Node {
                 package,
