@@ -33,7 +33,7 @@ the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the directory root has 
 heuristic and, in some cases, may lead to fewer re-installs than desired.
 
 To incorporate other information into the cache key for a given package, you can add cache key
-entries under `tool.uv.cache-key`, which can include both file paths and Git commit hashes.
+entries under `tool.uv.cache-keys`, which can include both file paths and Git commit hashes.
 
 For example, if a project uses [`setuptools-scm`](https://pypi.org/project/setuptools-scm/), and
 should be rebuilt whenever the commit hash changes, you can add the following to the project's
@@ -41,7 +41,7 @@ should be rebuilt whenever the commit hash changes, you can add the following to
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-key = [{ git = true }]
+cache-keys = [{ git = true }]
 ```
 
 Similarly, if a project reads from a `requirements.txt` to populate its dependencies, you can add
@@ -49,10 +49,10 @@ the following to the project's `pyproject.toml`:
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-key = [{ file = "requirements.txt" }]
+cache-keys = [{ file = "requirements.txt" }]
 ```
 
-As an escape hatch, if a project uses `dynamic` metadata that isn't covered by `tool.uv.cache-key`,
+As an escape hatch, if a project uses `dynamic` metadata that isn't covered by `tool.uv.cache-keys`,
 you can instruct uv to _always_ rebuild and reinstall it by adding the project to the
 `tool.uv.reinstall-package` list:
 
