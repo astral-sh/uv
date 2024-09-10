@@ -360,6 +360,7 @@ pub(crate) async fn pip_sync(
         link_mode,
         compile,
         &index_locations,
+        config_settings,
         &hasher,
         &markers,
         &tags,
