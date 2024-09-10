@@ -102,6 +102,7 @@ indoc = { version = "2.0.4" }
 itertools = { version = "0.13.0" }
 jiff = { version = "0.1.6", features = ["serde"] }
 junction = { version = "1.0.0" }
+krata-tokio-tar = { version = "0.4.2" }
 mailparse = { version = "0.15.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
@@ -144,7 +145,6 @@ thiserror = { version = "1.0.56" }
 tl = { git = "https://github.com/charliermarsh/tl.git", rev = "6e25b2ee2513d75385101a8ff9f591ef51f314ec" }
 tokio = { version = "1.35.1", features = ["fs", "io-util", "macros", "process", "signal", "sync"] }
 tokio-stream = { version = "0.1.14" }
-tokio-tar = { version = "0.3.1" }
 tokio-util = { version = "0.7.10", features = ["compat"] }
 toml = { version = "0.8.12" }
 toml_edit = { version = "0.22.13" }
