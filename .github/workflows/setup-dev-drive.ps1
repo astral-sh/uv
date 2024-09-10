@@ -20,5 +20,5 @@ Write-Output `
 	"RUSTUP_HOME=$($Drive)/.rustup" `
 	"CARGO_HOME=$($Drive)/.cargo" `
 	"UV_WORKSPACE=$($Drive)/uv" `
+	"UV_CACHE_DIR=$($Drive)/very/long/path/to/uv/that/may/exceed/the/allowed/character/limit/for/certain/builds/with/long/paths" `
 	>> $env:GITHUB_ENV
-

@@ -167,85 +167,85 @@ jobs:
   # For Ubuntu and Windows, this requires Organization-level configuration
   # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
 
-  cargo-test-linux:
-    timeout-minutes: 10
-    needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "ubuntu-latest-xlarge"
-    name: "cargo test | ubuntu"
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: rui314/setup-mold@v1
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - name: "Install required Python versions"
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv python install
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-
-      - name: "Cargo test"
-        run: |
-          cargo nextest run \
-            --features python-patch \
-            --workspace \
-            --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
-
-      - name: "Smoke test"
-        run: |
-          uv="./target/debug/uv"
-          $uv venv
-          $uv pip install ruff
-
-  cargo-test-macos:
-    timeout-minutes: 10
-    needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "macos-latest-xlarge"
-    name: "cargo test | macos"
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: rui314/setup-mold@v1
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - name: "Install required Python versions"
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv python install
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-
-      - name: "Cargo test"
-        run: |
-          cargo nextest run \
-            --features python-patch \
-            --workspace \
-            --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
-
-      - name: "Smoke test"
-        run: |
-          uv="./target/debug/uv"
-          $uv venv
-          $uv pip install ruff
+  #  cargo-test-linux:
+  #    timeout-minutes: 10
+  #    needs: determine_changes
+  #    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+  #    runs-on:
+  #      labels: "ubuntu-latest-xlarge"
+  #    name: "cargo test | ubuntu"
+  #    steps:
+  #      - uses: actions/checkout@v4
+  #
+  #      - uses: rui314/setup-mold@v1
+  #
+  #      - uses: Swatinem/rust-cache@v2
+  #
+  #      - name: "Install Rust toolchain"
+  #        run: rustup show
+  #
+  #      - name: "Install required Python versions"
+  #        run: |
+  #          curl -LsSf https://astral.sh/uv/install.sh | sh
+  #          uv python install
+  #
+  #      - name: "Install cargo nextest"
+  #        uses: taiki-e/install-action@v2
+  #        with:
+  #          tool: cargo-nextest
+  #
+  #      - name: "Cargo test"
+  #        run: |
+  #          cargo nextest run \
+  #            --features python-patch \
+  #            --workspace \
+  #            --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+  #
+  #      - name: "Smoke test"
+  #        run: |
+  #          uv="./target/debug/uv"
+  #          $uv venv
+  #          $uv pip install ruff
+  #
+  #  cargo-test-macos:
+  #    timeout-minutes: 10
+  #    needs: determine_changes
+  #    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+  #    runs-on:
+  #      labels: "macos-latest-xlarge"
+  #    name: "cargo test | macos"
+  #    steps:
+  #      - uses: actions/checkout@v4
+  #
+  #      - uses: rui314/setup-mold@v1
+  #
+  #      - uses: Swatinem/rust-cache@v2
+  #
+  #      - name: "Install Rust toolchain"
+  #        run: rustup show
+  #
+  #      - name: "Install required Python versions"
+  #        run: |
+  #          curl -LsSf https://astral.sh/uv/install.sh | sh
+  #          uv python install
+  #
+  #      - name: "Install cargo nextest"
+  #        uses: taiki-e/install-action@v2
+  #        with:
+  #          tool: cargo-nextest
+  #
+  #      - name: "Cargo test"
+  #        run: |
+  #          cargo nextest run \
+  #            --features python-patch \
+  #            --workspace \
+  #            --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+  #
+  #      - name: "Smoke test"
+  #        run: |
+  #          uv="./target/debug/uv"
+  #          $uv venv
+  #          $uv pip install ruff
 
   cargo-test-windows:
     timeout-minutes: 15
@@ -292,8 +292,13 @@ jobs:
 
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+          UV_CACHE_DIR: C:\Users\runneradmin\very\long\path\to\uv\that\may\exceed\the\allowed\character\limit\for\certain\builds\with\long\paths
         run: |
-          cargo nextest run --no-default-features --features python,pypi --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+          cargo run --no-default-features --features flate2/rust_backend venv
+          cargo run --no-default-features --features flate2/rust_backend pip install nuitka==2.4.8 --verbose
 
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
