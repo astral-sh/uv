@@ -1,4 +1,4 @@
-# Using uv in GitHub Actions
+# Using uv in GitLab CI/CD
 
 uv offers images with shells, you can choose your preferred tag from the
 [ghcr.io](https://github.com/astral-sh/uv/pkgs/container/uv)
