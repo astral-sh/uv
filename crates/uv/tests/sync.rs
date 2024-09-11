@@ -2161,3 +2161,92 @@ fn no_build() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn sync_wheel_url_source_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "uv-test"
+        version = "0.0.0"
+        requires-python = ">=3.10"
+        dependencies = [
+            "cffi @ https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to validate existing lockfile: distribution cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because it doesn't have a source distribution or wheel for the current platform
+    Resolved 3 packages in [TIME]
+    error: distribution cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because it doesn't have a source distribution or wheel for the current platform
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_wheel_path_source_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Download a wheel.
+    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl")?;
+    let archive = context
+        .temp_dir
+        .child("cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl");
+    let mut archive_file = fs_err::File::create(archive.path())?;
+    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "uv-test"
+        version = "0.0.0"
+        requires-python = ">=3.10"
+        dependencies = ["cffi"]
+
+        [tool.uv.sources]
+        cffi = { path = "cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to validate existing lockfile: distribution cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because it doesn't have a source distribution or wheel for the current platform
+    Resolved 3 packages in [TIME]
+    error: distribution cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because it doesn't have a source distribution or wheel for the current platform
+    "###);
+
+    Ok(())
+}
