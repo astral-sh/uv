@@ -1326,7 +1326,7 @@ jobs:
         run: echo $(which python)
 
       - name: "Validate global Python install"
-        run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
+        run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe --python 3.13
 
   system-test-choco:
     timeout-minutes: 10
