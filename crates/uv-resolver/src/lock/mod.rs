@@ -1399,7 +1399,6 @@ impl TryFrom<LockWire> for Lock {
                         continue;
                     }
                     if !marker1.is_disjoint(marker2) {
-                        eprintln!("{}", lock.to_toml().unwrap());
                         assert!(
                             false,
                             "[{marker1:?}] (for version {version1}) is not disjoint with \
@@ -1705,11 +1704,15 @@ impl Package {
     ) -> Result<Option<distribution_types::SourceDist>, LockError> {
         let sdist = match &self.id.source {
             Source::Path(path) => {
+                // A direct path source can also be a wheel, so validate the extension.
+                let DistExtension::Source(ext) = DistExtension::from_path(path)? else {
+                    return Ok(None);
+                };
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
-                    ext: SourceDistExtension::from_path(path)?,
+                    ext,
                 };
                 distribution_types::SourceDist::Path(path_dist)
             }
@@ -1772,7 +1775,10 @@ impl Package {
                 distribution_types::SourceDist::Git(git_dist)
             }
             Source::Direct(url, direct) => {
-                let ext = SourceDistExtension::from_path(url.as_ref())?;
+                // A direct URL source can also be a wheel, so validate the extension.
+                let DistExtension::Source(ext) = DistExtension::from_path(url.as_ref())? else {
+                    return Ok(None);
+                };
                 let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                 let url = Url::from(ParsedArchiveUrl {
                     url: url.to_url(),
