@@ -189,6 +189,17 @@ a system Python version, uv will use the first compatible version — not the ne
 If a Python version cannot be found on the system, uv will check for a compatible managed Python
 version download.
 
+### Python pre-releases
+
+Python pre-releases will not be selected by default. Python pre-releases will be used if there is no
+other available installation matching the request. For example, if only a pre-release version is
+available it will be used but otherwise a stable release version will be used. Similarly, if the
+path to a pre-release Python executable is provided then no other Python version matches the request
+and the pre-release version will be used.
+
+If a pre-release Python version is available and matches the request, uv will not download a stable
+Python version instead.
+
 ## Disabling automatic Python downloads
 
 By default, uv will automatically download Python versions when needed.
