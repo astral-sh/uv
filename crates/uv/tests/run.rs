@@ -1656,6 +1656,45 @@ fn run_package() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_zipapp() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a zipapp.
+    let child = context.temp_dir.child("app");
+    child.create_dir_all()?;
+
+    let main_script = child.child("__main__.py");
+    main_script.write_str(indoc! { r#"
+        print("Hello, world!")
+       "#
+    })?;
+
+    let zipapp = context.temp_dir.child("app.pyz");
+    let status = context
+        .run()
+        .arg("python")
+        .arg("-m")
+        .arg("zipapp")
+        .arg(child.as_ref())
+        .arg("--output")
+        .arg(zipapp.as_ref())
+        .status()?;
+    assert!(status.success());
+
+    // Run the zipapp.
+    uv_snapshot!(context.filters(), context.run().arg(zipapp.as_ref()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
 /// When the `pyproject.toml` file is invalid.
 #[test]
 fn run_project_toml_error() -> Result<()> {

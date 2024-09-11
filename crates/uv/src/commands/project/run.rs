@@ -780,6 +780,9 @@ pub(crate) enum RunCommand {
     PythonGuiScript(PathBuf, Vec<OsString>),
     /// Execute a Python package containing a `__main__.py` file.
     PythonPackage(PathBuf, Vec<OsString>),
+    /// Execute a Python [zipapp].
+    /// [zipapp]: <https://docs.python.org/3/library/zipapp.html>
+    PythonZipapp(PathBuf, Vec<OsString>),
     /// Execute a `python` script provided via `stdin`.
     PythonStdin(Vec<u8>),
     /// Execute an external command.
@@ -793,10 +796,11 @@ impl RunCommand {
     fn display_executable(&self) -> Cow<'_, str> {
         match self {
             Self::Python(_) => Cow::Borrowed("python"),
-            Self::PythonScript(_, _) | Self::PythonPackage(_, _) | Self::Empty => {
-                Cow::Borrowed("python")
-            }
-            Self::PythonGuiScript(_, _) => Cow::Borrowed("pythonw"),
+            Self::PythonScript(..)
+            | Self::PythonPackage(..)
+            | Self::PythonZipapp(..)
+            | Self::Empty => Cow::Borrowed("python"),
+            Self::PythonGuiScript(..) => Cow::Borrowed("pythonw"),
             Self::PythonStdin(_) => Cow::Borrowed("python -c"),
             Self::External(executable, _) => executable.to_string_lossy(),
         }
@@ -810,7 +814,9 @@ impl RunCommand {
                 process.args(args);
                 process
             }
-            Self::PythonScript(target, args) | Self::PythonPackage(target, args) => {
+            Self::PythonScript(target, args)
+            | Self::PythonPackage(target, args)
+            | Self::PythonZipapp(target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg(target);
                 process.args(args);
@@ -873,7 +879,9 @@ impl std::fmt::Display for RunCommand {
                 }
                 Ok(())
             }
-            Self::PythonScript(target, args) | Self::PythonPackage(target, args) => {
+            Self::PythonScript(target, args)
+            | Self::PythonPackage(target, args)
+            | Self::PythonZipapp(target, args) => {
                 write!(f, "python {}", target.display())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
@@ -917,6 +925,10 @@ impl TryFrom<&ExternalCommand> for RunCommand {
         };
 
         let target_path = PathBuf::from(&target);
+        let metadata = target_path.metadata();
+        let is_file = metadata.as_ref().map_or(false, std::fs::Metadata::is_file);
+        let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);
+
         if target.eq_ignore_ascii_case("-") {
             let mut buf = Vec::with_capacity(1024);
             std::io::stdin().read_to_end(&mut buf)?;
@@ -926,18 +938,20 @@ impl TryFrom<&ExternalCommand> for RunCommand {
         } else if target_path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyc"))
-            && target_path.exists()
+            && is_file
         {
             Ok(Self::PythonScript(target_path, args.to_vec()))
         } else if cfg!(windows)
             && target_path
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
-            && target_path.exists()
+            && is_file
         {
             Ok(Self::PythonGuiScript(target_path, args.to_vec()))
-        } else if target_path.is_dir() && target_path.join("__main__.py").exists() {
+        } else if is_dir && target_path.join("__main__.py").is_file() {
             Ok(Self::PythonPackage(target_path, args.to_vec()))
+        } else if is_file && is_python_zipapp(&target_path) {
+            Ok(Self::PythonZipapp(target_path, args.to_vec()))
         } else {
             Ok(Self::External(
                 target.clone(),
@@ -945,4 +959,16 @@ impl TryFrom<&ExternalCommand> for RunCommand {
             ))
         }
     }
+}
+
+/// Returns `true` if the target is a ZIP archive containing a `__main__.py` file.
+fn is_python_zipapp(target: &Path) -> bool {
+    if let Ok(file) = fs_err::File::open(target) {
+        if let Ok(mut archive) = zip::ZipArchive::new(file) {
+            return archive
+                .by_name("__main__.py")
+                .map_or(false, |f| f.is_file());
+        }
+    }
+    false
 }
