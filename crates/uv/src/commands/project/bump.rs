@@ -32,10 +32,13 @@ pub(crate) async fn bump(to: Option<BumpInstruction>, printer: Printer) -> Resul
                 new_version = Version::from_str(&version)?;
             }
         }
-        pyproject.set_version(new_version)?;
+        pyproject.set_version(&new_version)?;
+        let pyproject_path = workspace.install_path().join("pyproject.toml");
+        fs_err::write(pyproject_path, &pyproject.to_string())?;
+        writeln!(printer.stdout(), "Bumped from {}  to: {}", current_version.to_string(), new_version)?;
         return Ok(ExitStatus::Success);
     }
-    writeln!(printer.stdout(), "Current version: {}", current_version.to_string())?;
+
     Ok(ExitStatus::Success)
 }
 
@@ -80,8 +83,10 @@ fn bumped_version(bump: BumpType, from: &Version, printer: Printer) -> Result<Ve
     let new_release_vec = (0..from.release().len()).map(|i| {
         if i == index {
             from.release()[i] + 1
-        } else {
+        } else if i < index {
             from.release()[i]
+        } else {
+            0
         }
     }).collect::<Vec<u64>>();
     Ok(ret.with_release(new_release_vec).only_release())

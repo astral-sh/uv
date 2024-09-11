@@ -9,6 +9,7 @@ use toml_edit::{Array, DocumentMut, Formatted, Item, RawString, Table, TomlError
 use uv_fs::PortablePath;
 
 use crate::pyproject::{DependencyType, Source};
+use crate::ProjectWorkspace;
 
 /// Raw and mutable representation of a `pyproject.toml`.
 ///
@@ -528,17 +529,14 @@ impl PyProjectTomlMut {
 
         Version::from_str(version).map_err(|_| Error::MalformedWorkspace)
     } 
-    pub fn set_version(&mut self, version: Version) -> Result<(), Error> {
+    pub fn set_version(&mut self, version: &Version) -> Result<(), Error> {
         let project = self
             .doc
             .entry("project")
             .or_insert(Item::Table(Table::new()))
             .as_table_mut()
             .ok_or(Error::MalformedWorkspace)?;
-
-        let version = project
-            .entry("version")
-            .or_insert(Item::Value(Value::String(Formatted::new(version.to_string()))));
+        project.insert("version", Item::Value(Value::String(Formatted::new(version.to_string()))));
 
         Ok(())
     }

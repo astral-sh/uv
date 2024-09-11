@@ -4234,9 +4234,9 @@ pub struct DisplayTreeArgs {
 #[derive(Args)]
 pub struct BumpArgs {
     /// The version to set
-    pub version: Option<String>,
+    #[arg(long)]
+    pub raw: Option<String>,
     /// The version bump to apply
-    #[arg(short, long)]
     pub bump: Option<BumpType>,
 }
 

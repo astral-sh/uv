@@ -544,6 +544,12 @@ impl TestContext {
         self.add_shared_args(&mut command, false);
         command
     }
+    pub fn bump(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("bump");
+        self.add_shared_args(&mut command, false);
+        command
+    }
 
     /// Create a `uv sync` command with options shared across scenarios.
     pub fn sync(&self) -> Command {

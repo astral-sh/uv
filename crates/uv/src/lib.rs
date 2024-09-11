@@ -1350,7 +1350,7 @@ async fn run_project(
                     printer,
                 ).await?;
             }
-            if let Some(bump) = args.version{
+            if let Some(bump) = args.raw{
                 commands::bump(
                     Some(BumpInstruction::String(bump)),
                     printer,

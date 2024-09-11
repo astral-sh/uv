@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.4.8"
+version = "1.1.1"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -76,7 +76,7 @@ version_files = [
 ]
 
 [tool.uv]
-managed = false
+managed = true
 
 [tool.mypy]
 ignore_missing_imports = true
