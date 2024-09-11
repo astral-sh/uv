@@ -2194,7 +2194,6 @@ fn sync_wheel_url_source_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to validate existing lockfile: distribution cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because it doesn't have a source distribution or wheel for the current platform
     Resolved 3 packages in [TIME]
     error: distribution cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because it doesn't have a source distribution or wheel for the current platform
     "###);
@@ -2243,7 +2242,6 @@ fn sync_wheel_path_source_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to validate existing lockfile: distribution cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because it doesn't have a source distribution or wheel for the current platform
     Resolved 3 packages in [TIME]
     error: distribution cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because it doesn't have a source distribution or wheel for the current platform
     "###);

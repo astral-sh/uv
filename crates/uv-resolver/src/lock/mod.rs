@@ -643,7 +643,7 @@ impl Lock {
                     dist.id.name.clone(),
                     ResolvedDist::Installable(dist.to_dist(
                         project.workspace().install_path(),
-                        tags,
+                        TagPolicy::Required(tags),
                         build_options,
                     )?),
                 );
@@ -1088,7 +1088,11 @@ impl Lock {
             }
 
             // Get the metadata for the distribution.
-            let dist = package.to_dist(workspace.install_path(), tags, build_options)?;
+            let dist = package.to_dist(
+                workspace.install_path(),
+                TagPolicy::Preferred(tags),
+                build_options,
+            )?;
 
             let Ok(archive) = database
                 .get_or_build_wheel_metadata(&dist, HashPolicy::None)
@@ -1198,6 +1202,24 @@ impl Lock {
         }
 
         Ok(SatisfiesResult::Satisfied)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+enum TagPolicy<'tags> {
+    /// Exclusively consider wheels that match the specified platform tags.
+    Required(&'tags Tags),
+    /// Prefer wheels that match the specified platform tags, but fall back to incompatible wheels
+    /// if  necessary.
+    Preferred(&'tags Tags),
+}
+
+impl<'tags> TagPolicy<'tags> {
+    /// Returns the platform tags to consider.
+    fn tags(&self) -> &'tags Tags {
+        match self {
+            TagPolicy::Required(tags) | TagPolicy::Preferred(tags) => tags,
+        }
     }
 }
 
@@ -1595,14 +1617,14 @@ impl Package {
     fn to_dist(
         &self,
         workspace_root: &Path,
-        tags: &Tags,
+        tag_policy: TagPolicy<'_>,
         build_options: &BuildOptions,
     ) -> Result<Dist, LockError> {
         let no_binary = build_options.no_binary_package(&self.id.name);
         let no_build = build_options.no_build_package(&self.id.name);
 
         if !no_binary {
-            if let Some(best_wheel_index) = self.find_best_wheel(tags) {
+            if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
                 return match &self.id.source {
                     Source::Registry(source) => {
                         let wheels = self
@@ -2016,10 +2038,12 @@ impl Package {
         Ok(table)
     }
 
-    fn find_best_wheel(&self, tags: &Tags) -> Option<usize> {
+    fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
         let mut best: Option<(TagPriority, usize)> = None;
         for (i, wheel) in self.wheels.iter().enumerate() {
-            let TagCompatibility::Compatible(priority) = wheel.filename.compatibility(tags) else {
+            let TagCompatibility::Compatible(priority) =
+                wheel.filename.compatibility(tag_policy.tags())
+            else {
                 continue;
             };
             match best {
@@ -2033,7 +2057,12 @@ impl Package {
                 }
             }
         }
-        best.map(|(_, i)| i)
+
+        let best = best.map(|(_, i)| i);
+        match tag_policy {
+            TagPolicy::Required(_) => best,
+            TagPolicy::Preferred(_) => best.or_else(|| self.wheels.first().map(|_| 0)),
+        }
     }
 
     /// Returns the [`PackageName`] of the package.
