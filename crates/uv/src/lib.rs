@@ -2,7 +2,6 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
 use std::process::ExitCode;
-use std::str::FromStr;
 
 use anstream::eprintln;
 use anyhow::Result;
@@ -10,7 +9,6 @@ use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use commands::BumpInstruction;
 use owo_colors::OwoColorize;
-use pep440_rs::Version;
 use settings::PipTreeSettings;
 use tracing::{debug, instrument};
 use uv_cache::{Cache, Refresh};
@@ -1348,10 +1346,20 @@ async fn run_project(
         ProjectCommand::Bump(args) => {
             if let Some(bump) = args.bump{
                 commands::bump(
-                    BumpInstruction::Bump(bump),
+                    Some(BumpInstruction::Bump(bump)),
                     printer,
                 ).await?;
             }
+            if let Some(bump) = args.version{
+                commands::bump(
+                    Some(BumpInstruction::String(bump)),
+                    printer,
+                ).await?;
+            }
+            commands::bump(
+                None,
+                printer,
+            ).await?;
             Ok(ExitStatus::Success)
         }
     }

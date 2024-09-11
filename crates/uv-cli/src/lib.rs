@@ -4240,7 +4240,7 @@ pub struct BumpArgs {
     pub bump: Option<BumpType>,
 }
 
-#[derive(Debug, Clone, clap::ValueEnum)]
+#[derive(Debug, Clone, PartialEq,clap::ValueEnum)]
 pub enum BumpType {
     Major,
     Minor,

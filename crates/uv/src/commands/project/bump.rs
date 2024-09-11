@@ -1,5 +1,7 @@
 use std::str::FromStr;
 use anyhow::Result;
+use uv_cli::BumpType;
+use std::fmt::Write;
 
 use uv_fs::CWD;
 
@@ -33,24 +35,16 @@ pub(crate) async fn bump(to: Option<BumpInstruction>, printer: Printer) -> Resul
         pyproject.set_version(new_version)?;
         return Ok(ExitStatus::Success);
     }
-    writeln!(printer, "Current version: {}", current_version.to_string())?;
+    writeln!(printer.stdout(), "Current version: {}", current_version.to_string())?;
     Ok(ExitStatus::Success)
 }
 
 
-#[derive(Debug, Clone, ValueEnum, PartialEq)]
-pub(crate) enum BumpType {
-    Major,
-    Minor,
-    Patch,
-}
-impl BumpType{
-    fn zero_or_one(&self, am_i: BumpType) -> u64 {
-        if self == &am_i {
-            1
-        } else {
-            0
-        }
+fn zero_or_one(i_am: &BumpType, expected: BumpType) -> u64 {
+    if *i_am == expected {
+        1
+    } else {
+        0
     }
 }
 
@@ -72,13 +66,13 @@ fn bumped_version(bump: BumpType, from: &Version, printer: Printer) -> Result<Ve
     if from.release().get(index).is_none() {
         ret = Version::new([
             *from.release().get(0).unwrap_or(
-                &(bump.zero_or_one(BumpType::Major)),
+                &(zero_or_one(&bump, BumpType::Major)),
             ),
             *from.release().get(1).unwrap_or(
-                &(bump.zero_or_one(BumpType::Minor)),
+                &(zero_or_one(&bump, BumpType::Minor)),
             ),
             *from.release().get(2).unwrap_or(
-                &(bump.zero_or_one(BumpType::Patch)),
+                &(zero_or_one(&bump, BumpType::Patch)),
             ),
         ]);
     }
