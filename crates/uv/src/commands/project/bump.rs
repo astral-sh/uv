@@ -70,10 +70,9 @@ fn bumped_version(bump: &BumpType, from: &Version, printer: Printer) -> Result<V
             } else if i > index {
                 // reset the values after the bump index
                 return 0;
-            } else {
-                // get the value from the current version or default to 0
-                return from.release().get(i).map_or(0, |v| *v);
             }
+            // get the value from the current version or default to 0
+            return from.release().get(i).map_or(0, |v| *v);
         })
         .collect::<Vec<u64>>();
     Ok(Version::new(new_release_vec))
