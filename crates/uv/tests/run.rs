@@ -1634,6 +1634,28 @@ fn run_stdin() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let main_script = context.temp_dir.child("__main__.py");
+    main_script.write_str(indoc! { r#"
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
 /// When the `pyproject.toml` file is invalid.
 #[test]
 fn run_project_toml_error() -> Result<()> {
