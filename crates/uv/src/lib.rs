@@ -1342,24 +1342,15 @@ async fn run_project(
                 printer,
             )
             .await
-        },
+        }
         ProjectCommand::Bump(args) => {
-            if let Some(bump) = args.bump{
-                commands::bump(
-                    Some(BumpInstruction::Bump(bump)),
-                    printer,
-                ).await?;
+            if let Some(bump) = args.bump {
+                commands::bump(Some(BumpInstruction::Bump(bump)), printer).await?;
             }
-            if let Some(bump) = args.raw{
-                commands::bump(
-                    Some(BumpInstruction::String(bump)),
-                    printer,
-                ).await?;
+            if let Some(bump) = args.raw {
+                commands::bump(Some(BumpInstruction::String(bump)), printer).await?;
             }
-            commands::bump(
-                None,
-                printer,
-            ).await?;
+            commands::bump(None, printer).await?;
             Ok(ExitStatus::Success)
         }
     }

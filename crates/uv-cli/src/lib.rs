@@ -378,7 +378,7 @@ pub enum Commands {
         #[arg(long, value_enum, default_value = "text")]
         output_format: VersionFormat,
     },
-    
+
     // bump or show project version
     #[command(
         after_help = "Use `uv help bump` for more details.",
@@ -548,7 +548,6 @@ pub enum PipCommand {
         after_long_help = ""
     )]
     Check(PipCheckArgs),
-
 }
 
 #[derive(Subcommand)]
@@ -4230,7 +4229,6 @@ pub struct DisplayTreeArgs {
     pub invert: bool,
 }
 
-
 #[derive(Args)]
 pub struct BumpArgs {
     /// The version to set
@@ -4240,10 +4238,9 @@ pub struct BumpArgs {
     pub bump: Option<BumpType>,
 }
 
-#[derive(Debug, Clone, PartialEq,clap::ValueEnum)]
+#[derive(Debug, Clone, PartialEq, clap::ValueEnum)]
 pub enum BumpType {
     Major,
     Minor,
     Patch,
 }
-

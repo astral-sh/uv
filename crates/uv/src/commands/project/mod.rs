@@ -38,6 +38,7 @@ use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettingsRef};
 
 pub(crate) mod add;
+pub(crate) mod bump;
 pub(crate) mod environment;
 pub(crate) mod export;
 pub(crate) mod init;
@@ -46,7 +47,6 @@ pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
 pub(crate) mod tree;
-pub(crate) mod bump;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {

@@ -1,15 +1,17 @@
-use std::str::FromStr;
 use anyhow::Result;
 use owo_colors::OwoColorize;
-use uv_cli::BumpType;
 use std::fmt::Write;
+use std::str::FromStr;
+use uv_cli::BumpType;
 
 use uv_fs::CWD;
 
 use crate::{commands::ExitStatus, printer::Printer};
 use pep440_rs::Version;
-use uv_workspace::{pyproject_mut::{DependencyTarget, PyProjectTomlMut}, DiscoveryOptions, Workspace};
-
+use uv_workspace::{
+    pyproject_mut::{DependencyTarget, PyProjectTomlMut},
+    DiscoveryOptions, Workspace,
+};
 
 /// Display version information
 pub(crate) async fn bump(to: Option<BumpInstruction>, printer: Printer) -> Result<ExitStatus> {
@@ -22,7 +24,10 @@ pub(crate) async fn bump(to: Option<BumpInstruction>, printer: Printer) -> Resul
     let current_version = pyproject.version()?;
     if let Some(bump) = to {
         if current_version.is_dev() || current_version.is_post() {
-            writeln!(printer.stdout(), "WARNING: dev or post versions will be bumped to release versions")?;
+            writeln!(
+                printer.stdout(),
+                "WARNING: dev or post versions will be bumped to release versions"
+            )?;
         }
         let new_version;
         match bump {
@@ -36,15 +41,21 @@ pub(crate) async fn bump(to: Option<BumpInstruction>, printer: Printer) -> Resul
         pyproject.set_version(&new_version)?;
         let pyproject_path = workspace.install_path().join("pyproject.toml");
         fs_err::write(pyproject_path, &pyproject.to_string())?;
-        writeln!(printer.stdout(), "Bumped from {}  to: {}", current_version.cyan(), new_version.cyan())?;
+        writeln!(
+            printer.stdout(),
+            "Bumped from {}  to: {}",
+            current_version.cyan(),
+            new_version.cyan()
+        )?;
     } else {
-        writeln!(printer.stdout(), "Current version: {}", current_version.to_string().cyan())?;
+        writeln!(
+            printer.stdout(),
+            "Current version: {}",
+            current_version.to_string().cyan()
+        )?;
     }
-    Ok(ExitStatus::Success)    
-
-
+    Ok(ExitStatus::Success)
 }
-
 
 fn zero_or_one(i_am: &BumpType, expected: BumpType) -> u64 {
     if *i_am == expected {
@@ -54,46 +65,49 @@ fn zero_or_one(i_am: &BumpType, expected: BumpType) -> u64 {
     }
 }
 
-pub(crate) enum BumpInstruction{
+pub(crate) enum BumpInstruction {
     Bump(BumpType),
     String(String),
 }
 
-
-
 fn bumped_version(bump: BumpType, from: &Version, printer: Printer) -> Result<Version> {
     let mut ret = from.clone();
-    if from.is_dev()  || from.is_post(){
-        writeln!(printer.stdout(), "WARNING: dev or post versions will be bumped to release versions")?;        
+    if from.is_dev() || from.is_post() {
+        writeln!(
+            printer.stdout(),
+            "WARNING: dev or post versions will be bumped to release versions"
+        )?;
     }
     let index = bump.clone() as usize;
-    // minor / major / patch not exist set to 1/0 based on the 
+    // minor / major / patch not exist set to 1/0 based on the
     // bump type
     if from.release().get(index).is_none() {
         ret = Version::new([
-            *from.release().get(0).unwrap_or(
-                &(zero_or_one(&bump, BumpType::Major)),
-            ),
-            *from.release().get(1).unwrap_or(
-                &(zero_or_one(&bump, BumpType::Minor)),
-            ),
-            *from.release().get(2).unwrap_or(
-                &(zero_or_one(&bump, BumpType::Patch)),
-            ),
+            *from
+                .release()
+                .get(0)
+                .unwrap_or(&(zero_or_one(&bump, BumpType::Major))),
+            *from
+                .release()
+                .get(1)
+                .unwrap_or(&(zero_or_one(&bump, BumpType::Minor))),
+            *from
+                .release()
+                .get(2)
+                .unwrap_or(&(zero_or_one(&bump, BumpType::Patch))),
         ]);
     }
 
-    let new_release_vec = (0..from.release().len()).map(|i| {
-        if i == index {
-            from.release()[i] + 1
-        } else if i < index {
-            from.release()[i]
-        } else {
-            0
-        }
-    }).collect::<Vec<u64>>();
+    let new_release_vec = (0..from.release().len())
+        .map(|i| {
+            if i == index {
+                from.release()[i] + 1
+            } else if i < index {
+                from.release()[i]
+            } else {
+                0
+            }
+        })
+        .collect::<Vec<u64>>();
     Ok(ret.with_release(new_release_vec).only_release())
 }
-
-
-

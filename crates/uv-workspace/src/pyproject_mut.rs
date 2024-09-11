@@ -513,7 +513,7 @@ impl PyProjectTomlMut {
 
         types
     }
-    pub fn version(&mut self) -> Result<Version, Error>{
+    pub fn version(&mut self) -> Result<Version, Error> {
         let project = self
             .doc
             .entry("project")
@@ -528,7 +528,7 @@ impl PyProjectTomlMut {
             .ok_or(Error::MalformedWorkspace)?;
 
         Version::from_str(version).map_err(|_| Error::MalformedWorkspace)
-    } 
+    }
     pub fn set_version(&mut self, version: &Version) -> Result<(), Error> {
         let project = self
             .doc
@@ -536,11 +536,13 @@ impl PyProjectTomlMut {
             .or_insert(Item::Table(Table::new()))
             .as_table_mut()
             .ok_or(Error::MalformedWorkspace)?;
-        project.insert("version", Item::Value(Value::String(Formatted::new(version.to_string()))));
+        project.insert(
+            "version",
+            Item::Value(Value::String(Formatted::new(version.to_string()))),
+        );
 
         Ok(())
     }
-
 }
 
 /// Returns an implicit table.
