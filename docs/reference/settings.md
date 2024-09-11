@@ -76,13 +76,20 @@ As an example: if a project uses dynamic metadata to read its dependencies from 
 to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in
 addition to watching the `pyproject.toml`).
 
+Globs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html)
+crate. For example, to invalidate the cache whenever a `.toml` file in the project directory
+or any of its subdirectories is modified, you can specify `cache-keys = [{ file = "**/*.toml" }]`.
+Note that the use of globs can be expensive, as uv may need to walk the filesystem to
+determine whether any files have changed.
+
 Cache keys can also include version control information. For example, if a project uses
 `setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }, { file = "pyproject.toml" }]`
 to include the current Git commit hash in the cache key (in addition to the
 `pyproject.toml`).
 
 Cache keys only affect the project defined by the `pyproject.toml` in which they're
-specified (as opposed to, e.g., affecting all members in a workspace).
+specified (as opposed to, e.g., affecting all members in a workspace), and all paths and
+globs are interpreted as relative to the project directory.
 
 **Default value**: `[{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]`
 
