@@ -47,7 +47,7 @@ requires-python = ">=3.12"
     success: true
     exit_code: 0
     ----- stdout -----
-    Bumped from 0.515.0  to: 1.1.1
+    Bumped from 0.515.0 to: 1.1.1
 
     ----- stderr -----
     "###);
@@ -82,7 +82,7 @@ requires-python = ">=3.12"
     success: true
     exit_code: 0
     ----- stdout -----
-    Bumped from 0.515.0  to: 0.515.1
+    Bumped from 0.515.0 to: 0.515.1
 
     ----- stderr -----
     "###);
@@ -116,7 +116,7 @@ requires-python = ">=3.12"
     success: true
     exit_code: 0
     ----- stdout -----
-    Bumped from 0.515.3  to: 0.516.0
+    Bumped from 0.515.3 to: 0.516.0
 
     ----- stderr -----
     "###);
@@ -150,7 +150,7 @@ requires-python = ">=3.12"
     success: true
     exit_code: 0
     ----- stdout -----
-    Bumped from 0.515.0  to: 1.0.0
+    Bumped from 0.515.0 to: 1.0.0
 
     ----- stderr -----
     "###);
@@ -161,6 +161,40 @@ requires-python = ">=3.12"
     [project]
     name = "project"
     version = "1.0.0"
+    requires-python = ">=3.12"
+    "###
+    );
+    Ok(())
+}
+
+#[test]
+fn bump_from_non_completed_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1"
+requires-python = ">=3.12"
+"#,
+    )?;
+    uv_snapshot!(context.filters(), context.bump().arg("patch"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Bumped from 0.1 to: 0.1.1
+
+    ----- stderr -----
+    "###);
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    assert_snapshot!(
+        pyproject,
+    @r###"
+    [project]
+    name = "project"
+    version = "0.1.1"
     requires-python = ">=3.12"
     "###
     );

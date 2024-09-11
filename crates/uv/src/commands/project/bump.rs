@@ -23,21 +23,18 @@ pub(crate) async fn bump(to: Option<BumpInstruction>, printer: Printer) -> Resul
     )?;
     let current_version = pyproject.version()?;
     if let Some(bump) = to {
-        let new_version;
-        match bump {
+        let new_version = match bump {
             BumpInstruction::Bump(bump_type) => {
-                new_version = bumped_version(bump_type, &current_version, printer)?;
+                bumped_version(&bump_type, &current_version, printer)?
             }
-            BumpInstruction::String(version) => {
-                new_version = Version::from_str(&version)?;
-            }
-        }
+            BumpInstruction::String(version) => Version::from_str(&version)?,
+        };
         pyproject.set_version(&new_version)?;
         let pyproject_path = workspace.install_path().join("pyproject.toml");
-        fs_err::write(pyproject_path, &pyproject.to_string())?;
+        fs_err::write(pyproject_path, pyproject.to_string())?;
         writeln!(
             printer.stdout(),
-            "Bumped from {}  to: {}",
+            "Bumped from {} to: {}",
             current_version.cyan(),
             new_version.cyan()
         )?;
@@ -51,21 +48,12 @@ pub(crate) async fn bump(to: Option<BumpInstruction>, printer: Printer) -> Resul
     Ok(ExitStatus::Success)
 }
 
-fn zero_or_one(i_am: &BumpType, expected: BumpType) -> u64 {
-    if *i_am == expected {
-        1
-    } else {
-        0
-    }
-}
-
 pub(crate) enum BumpInstruction {
     Bump(BumpType),
     String(String),
 }
 
-fn bumped_version(bump: BumpType, from: &Version, printer: Printer) -> Result<Version> {
-    let mut resolved = from.clone();
+fn bumped_version(bump: &BumpType, from: &Version, printer: Printer) -> Result<Version> {
     if from.is_dev() || from.is_post() {
         writeln!(
             printer.stdout(),
@@ -73,33 +61,18 @@ fn bumped_version(bump: BumpType, from: &Version, printer: Printer) -> Result<Ve
         )?;
     }
     let index = bump.clone() as usize;
-    // minor / major / patch not exist set to 1/0 based on the
-    // bump type
-    if from.release().get(index).is_none() {
-        resolved = Version::new([
-            *from
-                .release()
-                .get(0)
-                .unwrap_or(&(zero_or_one(&bump, BumpType::Major))),
-            *from
-                .release()
-                .get(1)
-                .unwrap_or(&(zero_or_one(&bump, BumpType::Minor))),
-            *from
-                .release()
-                .get(2)
-                .unwrap_or(&(zero_or_one(&bump, BumpType::Patch))),
-        ]);
-    }
-
-    let new_release_vec = (0..resolved.release().len())
+    let new_release_vec = (0..3)
         .map(|i| {
+            #[allow(clippy::comparison_chain)]
             if i == index {
-                from.release()[i] + 1
-            } else if i < index {
-                from.release()[i]
+                // we need to bump it
+                return from.release().get(i).map_or(1, |v| v + 1);
+            } else if i > index {
+                // reset the values after the bump index
+                return 0;
             } else {
-                0
+                // get the value from the current version or default to 0
+                return from.release().get(i).map_or(0, |v| *v);
             }
         })
         .collect::<Vec<u64>>();
