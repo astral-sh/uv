@@ -23,12 +23,6 @@ pub(crate) async fn bump(to: Option<BumpInstruction>, printer: Printer) -> Resul
     )?;
     let current_version = pyproject.version()?;
     if let Some(bump) = to {
-        if current_version.is_dev() || current_version.is_post() {
-            writeln!(
-                printer.stdout(),
-                "WARNING: dev or post versions will be bumped to release versions"
-            )?;
-        }
         let new_version;
         match bump {
             BumpInstruction::Bump(bump_type) => {
@@ -71,7 +65,7 @@ pub(crate) enum BumpInstruction {
 }
 
 fn bumped_version(bump: BumpType, from: &Version, printer: Printer) -> Result<Version> {
-    let mut ret = from.clone();
+    let mut resolved = from.clone();
     if from.is_dev() || from.is_post() {
         writeln!(
             printer.stdout(),
@@ -82,7 +76,7 @@ fn bumped_version(bump: BumpType, from: &Version, printer: Printer) -> Result<Ve
     // minor / major / patch not exist set to 1/0 based on the
     // bump type
     if from.release().get(index).is_none() {
-        ret = Version::new([
+        resolved = Version::new([
             *from
                 .release()
                 .get(0)
@@ -98,7 +92,7 @@ fn bumped_version(bump: BumpType, from: &Version, printer: Printer) -> Result<Ve
         ]);
     }
 
-    let new_release_vec = (0..from.release().len())
+    let new_release_vec = (0..resolved.release().len())
         .map(|i| {
             if i == index {
                 from.release()[i] + 1
@@ -109,5 +103,5 @@ fn bumped_version(bump: BumpType, from: &Version, printer: Printer) -> Result<Ve
             }
         })
         .collect::<Vec<u64>>();
-    Ok(ret.with_release(new_release_vec).only_release())
+    Ok(Version::new(new_release_vec))
 }
