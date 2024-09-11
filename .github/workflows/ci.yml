@@ -1405,7 +1405,7 @@ jobs:
         run: echo $(which python3.13)
 
       - name: "Validate global Python install"
-        run: python3.13 scripts/check_system_python.py --uv ./uv
+        run: python3.13 scripts/check_system_python.py --uv ./uv --python 3.13
 
   system-test-conda:
     timeout-minutes: 10
