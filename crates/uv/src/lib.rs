@@ -766,8 +766,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
-            command: SelfCommand::Update(SelfUpdateArgs { target_version }),
-        }) => commands::self_update(target_version, printer).await,
+            command:
+                SelfCommand::Update(SelfUpdateArgs {
+                    target_version,
+                    token,
+                }),
+        }) => commands::self_update(target_version, token, printer).await,
         Commands::Version { output_format } => {
             commands::version(output_format, &mut stdout())?;
             Ok(ExitStatus::Success)

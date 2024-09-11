@@ -11,9 +11,17 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Attempt to update the uv binary.
-pub(crate) async fn self_update(version: Option<String>, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn self_update(
+    version: Option<String>,
+    token: Option<String>,
+    printer: Printer,
+) -> Result<ExitStatus> {
     let mut updater = AxoUpdater::new_for("uv");
     updater.disable_installer_output();
+
+    if let Some(token) = token {
+        updater.set_github_token(&token);
+    }
 
     // Load the "install receipt" for the current binary. If the receipt is not found, then
     // uv was likely installed via a package manager.

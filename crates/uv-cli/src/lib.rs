@@ -427,6 +427,10 @@ pub enum SelfCommand {
 pub struct SelfUpdateArgs {
     /// Update to the specified version. If not provided, uv will update to the latest version.
     pub target_version: Option<String>,
+
+    /// Specify a github token for authentication during the update process.
+    #[arg(long, env = "UV_GITHUB_TOKEN")]
+    pub token: Option<String>,
 }
 
 #[derive(Args)]
