@@ -777,6 +777,8 @@ pub(crate) enum RunCommand {
     PythonScript(PathBuf, Vec<OsString>),
     /// Execute a `pythonw` script (Windows only).
     PythonGuiScript(PathBuf, Vec<OsString>),
+    /// Execute a Python package containing a `__main__.py` file.
+    PythonPackage(PathBuf, Vec<OsString>),
     /// Execute a `python` script provided via `stdin`.
     PythonStdin(Vec<u8>),
     /// Execute an external command.
@@ -790,7 +792,9 @@ impl RunCommand {
     fn display_executable(&self) -> Cow<'_, str> {
         match self {
             Self::Python(_) => Cow::Borrowed("python"),
-            Self::PythonScript(_, _) | Self::Empty => Cow::Borrowed("python"),
+            Self::PythonScript(_, _) | Self::PythonPackage(_, _) | Self::Empty => {
+                Cow::Borrowed("python")
+            }
             Self::PythonGuiScript(_, _) => Cow::Borrowed("pythonw"),
             Self::PythonStdin(_) => Cow::Borrowed("python -c"),
             Self::External(executable, _) => executable.to_string_lossy(),
@@ -805,7 +809,7 @@ impl RunCommand {
                 process.args(args);
                 process
             }
-            Self::PythonScript(target, args) => {
+            Self::PythonScript(target, args) | Self::PythonPackage(target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg(target);
                 process.args(args);
@@ -868,7 +872,7 @@ impl std::fmt::Display for RunCommand {
                 }
                 Ok(())
             }
-            Self::PythonScript(target, args) => {
+            Self::PythonScript(target, args) | Self::PythonPackage(target, args) => {
                 write!(f, "python {}", target.display())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
@@ -931,6 +935,8 @@ impl TryFrom<&ExternalCommand> for RunCommand {
             && target_path.exists()
         {
             Ok(Self::PythonGuiScript(target_path, args.to_vec()))
+        } else if target_path.is_dir() && target_path.join("__main__.py").exists() {
+            Ok(Self::PythonPackage(target_path, args.to_vec()))
         } else {
             Ok(Self::External(
                 target.clone(),
