@@ -378,12 +378,6 @@ pub enum Commands {
         #[arg(long, value_enum, default_value = "text")]
         output_format: VersionFormat,
     },
-
-    // bump or show project version
-    #[command(
-        after_help = "Use `uv help bump` for more details.",
-        after_long_help = ""
-    )]
     /// Generate shell completion
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion(GenerateShellCompletionArgs),
@@ -704,7 +698,7 @@ pub enum ProjectCommand {
     Export(ExportArgs),
     /// Display the project's dependency tree.
     Tree(TreeArgs),
-    // bump / set or show project version.
+    /// Bump, set or show project version.
     Bump(BumpArgs),
 }
 

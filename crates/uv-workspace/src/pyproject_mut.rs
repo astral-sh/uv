@@ -9,7 +9,6 @@ use toml_edit::{Array, DocumentMut, Formatted, Item, RawString, Table, TomlError
 use uv_fs::PortablePath;
 
 use crate::pyproject::{DependencyType, Source};
-use crate::ProjectWorkspace;
 
 /// Raw and mutable representation of a `pyproject.toml`.
 ///

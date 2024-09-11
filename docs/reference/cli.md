@@ -28,7 +28,9 @@ uv [OPTIONS] <COMMAND>
 </dd>
 <dt><a href="#uv-tree"><code>uv tree</code></a></dt><dd><p>Display the project&#8217;s dependency tree</p>
 </dd>
-<dt><a href="#uv-bump"><code>uv bump</code></a></dt><dt><a href="#uv-tool"><code>uv tool</code></a></dt><dd><p>Run and install commands provided by Python packages</p>
+<dt><a href="#uv-bump"><code>uv bump</code></a></dt><dd><p>Bump, set or show project version</p>
+</dd>
+<dt><a href="#uv-tool"><code>uv tool</code></a></dt><dd><p>Run and install commands provided by Python packages</p>
 </dd>
 <dt><a href="#uv-python"><code>uv python</code></a></dt><dd><p>Manage Python versions and installations</p>
 </dd>
@@ -2278,6 +2280,8 @@ uv tree [OPTIONS]
 </dd></dl>
 
 ## uv bump
+
+Bump, set or show project version
 
 <h3 class="cli-reference">Usage</h3>
 
