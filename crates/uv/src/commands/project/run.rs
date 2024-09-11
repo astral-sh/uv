@@ -160,7 +160,8 @@ pub(crate) async fn run(
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.sources.as_ref())
                 .unwrap_or(&empty);
-            let script_dir = script.path.parent().expect("script path has no parent");
+            let script_path = std::path::absolute(script.path)?;
+            let script_dir = script_path.parent().expect("script path has no parent");
 
             let requirements = dependencies
                 .into_iter()

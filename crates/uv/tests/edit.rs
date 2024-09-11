@@ -3956,6 +3956,60 @@ fn add_script() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn add_script_relative_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        print("Hello, world!")
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("./project").arg("--editable").arg("--script").arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated `script.py`
+    "###);
+
+    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r###"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "project",
+        # ]
+        #
+        # [tool.uv.sources]
+        # project = { path = "project", editable = true }
+        # ///
+        print("Hello, world!")
+        "###
+        );
+    });
+    Ok(())
+}
+
 /// Add to a script without an existing metadata table.
 #[test]
 fn add_script_without_metadata_table() -> Result<()> {

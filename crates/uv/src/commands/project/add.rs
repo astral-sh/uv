@@ -344,15 +344,19 @@ pub(crate) async fn add(
             Target::Script(_, _) | Target::Project(_, _) if raw_sources => {
                 (pep508_rs::Requirement::from(requirement), None)
             }
-            Target::Script(ref script, _) => resolve_requirement(
-                requirement,
-                false,
-                editable,
-                rev.clone(),
-                tag.clone(),
-                branch.clone(),
-                &script.path,
-            )?,
+            Target::Script(ref script, _) => {
+                let script_path = std::path::absolute(&script.path)?;
+                let script_dir = script_path.parent().expect("script path has no parent");
+                resolve_requirement(
+                    requirement,
+                    false,
+                    editable,
+                    rev.clone(),
+                    tag.clone(),
+                    branch.clone(),
+                    script_dir,
+                )?
+            }
             Target::Project(ref project, _) => {
                 let workspace = project
                     .workspace()
