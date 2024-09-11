@@ -50,7 +50,9 @@ pub(crate) async fn list(
                     None
                 }
             }
-        };
+        }
+        // Include pre-release versions
+        .map(|request| request.with_prereleases(true));
 
         let downloads = download_request
             .as_ref()

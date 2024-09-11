@@ -96,6 +96,10 @@ pub struct PythonDownloadRequest {
     arch: Option<Arch>,
     os: Option<Os>,
     libc: Option<Libc>,
+
+    /// Whether to allow pre-releases or not. If not set, defaults to true if [`Self::version`] is
+    /// not None, and false otherwise.
+    prereleases: Option<bool>,
 }
 
 impl PythonDownloadRequest {
@@ -105,6 +109,7 @@ impl PythonDownloadRequest {
         arch: Option<Arch>,
         os: Option<Os>,
         libc: Option<Libc>,
+        prereleases: Option<bool>,
     ) -> Self {
         Self {
             version,
@@ -112,6 +117,7 @@ impl PythonDownloadRequest {
             arch,
             os,
             libc,
+            prereleases,
         }
     }
 
@@ -142,6 +148,12 @@ impl PythonDownloadRequest {
     #[must_use]
     pub fn with_libc(mut self, libc: Libc) -> Self {
         self.libc = Some(libc);
+        self
+    }
+
+    #[must_use]
+    pub fn with_prereleases(mut self, prereleases: bool) -> Self {
+        self.prereleases = Some(prereleases);
         self
     }
 
@@ -196,6 +208,7 @@ impl PythonDownloadRequest {
             Some(Arch::from_env()),
             Some(Os::from_env()),
             Some(Libc::from_env()?),
+            None,
         ))
     }
 
@@ -252,18 +265,20 @@ impl PythonDownloadRequest {
                 return false;
             }
         }
+        // If we don't allow pre-releases, don't match a key with a pre-release tag
+        if !self.allows_prereleases() && !key.prerelease.is_empty() {
+            return false;
+        }
         true
     }
 
     /// Whether this request is satisfied by a Python download.
-    ///
-    /// Note that unlike [`Self::satisfied_by_key`], this method will not match a pre-release
-    /// unless a version is included in the request.
     pub fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
-        if self.version.is_none() && !download.key().prerelease.is_empty() {
-            return false;
-        }
         self.satisfied_by_key(download.key())
+    }
+
+    pub fn allows_prereleases(&self) -> bool {
+        self.prereleases.unwrap_or_else(|| self.version.is_some())
     }
 
     pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
@@ -375,7 +390,7 @@ impl FromStr for PythonDownloadRequest {
 
             return Err(Error::TooManyParts(s.to_string()));
         }
-        Ok(Self::new(version, implementation, arch, os, libc))
+        Ok(Self::new(version, implementation, arch, os, libc, None))
     }
 }
 
