@@ -1222,6 +1222,61 @@ fn no_install_package() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that `--no-build` isn't enforced for projects that aren't installed in the first place.
+#[test]
+fn no_install_project_no_build() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // `--no-build` should raise an error, since we try to install the project.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to validate existing lockfile: distribution project==0.1.0 @ editable+. can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 4 packages in [TIME]
+    error: distribution project==0.1.0 @ editable+. can't be installed because it is marked as `--no-build` but has no binary distribution
+    "###);
+
+    // But it's fine to combine `--no-install-project` with `--no-build`. We shouldn't error, since
+    // we aren't building the project.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project").arg("--no-build"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to validate existing lockfile: distribution project==0.1.0 @ editable+. can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
 /// Convert from a package to a virtual project.
 #[test]
 fn convert_to_virtual() -> Result<()> {

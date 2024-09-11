@@ -30,7 +30,7 @@ use pypi_types::{
     redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
     RequirementSource, ResolverMarkerEnvironment,
 };
-use uv_configuration::{BuildOptions, ExtrasSpecification};
+use uv_configuration::{BuildOptions, ExtrasSpecification, InstallOptions};
 use uv_distribution::DistributionDatabase;
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
@@ -547,6 +547,7 @@ impl Lock {
         extras: &ExtrasSpecification,
         dev: &[GroupName],
         build_options: &BuildOptions,
+        install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
@@ -633,15 +634,21 @@ impl Lock {
                     }
                 }
             }
-            map.insert(
-                dist.id.name.clone(),
-                ResolvedDist::Installable(dist.to_dist(
-                    project.workspace().install_path(),
-                    tags,
-                    build_options,
-                )?),
-            );
-            hashes.insert(dist.id.name.clone(), dist.hashes());
+            if install_options.include_package(
+                &dist.id.name,
+                project.project_name(),
+                &self.manifest.members,
+            ) {
+                map.insert(
+                    dist.id.name.clone(),
+                    ResolvedDist::Installable(dist.to_dist(
+                        project.workspace().install_path(),
+                        tags,
+                        build_options,
+                    )?),
+                );
+                hashes.insert(dist.id.name.clone(), dist.hashes());
+            }
         }
         let diagnostics = vec![];
         Ok(Resolution::new(map, hashes, diagnostics))
