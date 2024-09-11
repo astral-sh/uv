@@ -431,8 +431,12 @@ jobs:
         platform:
           - target: powerpc64le-unknown-linux-gnu
             arch: ppc64le
+            # see https://github.com/astral-sh/uv/issues/6528
+            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: powerpc64-unknown-linux-gnu
             arch: ppc64
+            # see https://github.com/astral-sh/uv/issues/6528
+            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
 
     steps:
       - uses: actions/checkout@v4
@@ -576,6 +580,8 @@ jobs:
             arch: armv7
           - target: powerpc64le-unknown-linux-musl
             arch: ppc64le
+            # see https://github.com/astral-sh/uv/issues/6528
+            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
             toolchain: nightly
       fail-fast: false
 
