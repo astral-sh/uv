@@ -6,7 +6,7 @@ use clap::ValueEnum;
 use pep440_rs::Version;
 use uv_cli::VersionFormat;
 use uv_fs::CWD;
-use uv_workspace::{pyproject::{self, PyProjectToml}, DiscoveryOptions, Workspace};
+use uv_workspace::{pyproject::{self, PyProjectToml}, pyproject_mut::PyProjectTomlMut, DiscoveryOptions, Workspace};
 
 use super::{project, version};
 
@@ -43,6 +43,7 @@ pub(crate) async fn bump(to: Option<BumpInstruction>, buffer: &mut dyn std::io::
     match pyproject_toml.project{
         Some(mut project) => {
                 match project.version {
+                let mut_pyproject = PyProjectTomlMut::
                 Some(mut current_version) => {
                     match to {
                         Some(to) => {
@@ -54,9 +55,8 @@ pub(crate) async fn bump(to: Option<BumpInstruction>, buffer: &mut dyn std::io::
                                 BumpInstruction::String(version) => {
                                     new_version = Version::from_str(&version)?;
                                 }
-                            // Update the project version.
-                            writeln!(buffer, "Updated version: {}", new_version.to_string())?;
                             }
+                            writln!(buffer, "Updated version: {}", new_version.to_string());
                             project.version = Some(new_version);
                         }
                         None => {
@@ -74,10 +74,6 @@ pub(crate) async fn bump(to: Option<BumpInstruction>, buffer: &mut dyn std::io::
             return Err(anyhow!("project version not set"));
         }
     };
-
-
-
-    
     Ok(())
 }
 
