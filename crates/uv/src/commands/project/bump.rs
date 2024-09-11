@@ -1,5 +1,6 @@
 use std::str::FromStr;
 use anyhow::Result;
+use owo_colors::OwoColorize;
 use uv_cli::BumpType;
 use std::fmt::Write;
 
@@ -35,11 +36,13 @@ pub(crate) async fn bump(to: Option<BumpInstruction>, printer: Printer) -> Resul
         pyproject.set_version(&new_version)?;
         let pyproject_path = workspace.install_path().join("pyproject.toml");
         fs_err::write(pyproject_path, &pyproject.to_string())?;
-        writeln!(printer.stdout(), "Bumped from {}  to: {}", current_version.to_string(), new_version)?;
-        return Ok(ExitStatus::Success);
+        writeln!(printer.stdout(), "Bumped from {}  to: {}", current_version.cyan(), new_version.cyan())?;
+    } else {
+        writeln!(printer.stdout(), "Current version: {}", current_version.to_string().cyan())?;
     }
+    Ok(ExitStatus::Success)    
 
-    Ok(ExitStatus::Success)
+
 }
 
 

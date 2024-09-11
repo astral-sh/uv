@@ -1,10 +1,8 @@
-
 use anyhow::{Ok, Result};
 use assert_fs::prelude::*;
 
 use common::{uv_snapshot, TestContext};
 use insta::assert_snapshot;
-use uv_cli::BumpType;
 
 mod common;
 
@@ -37,7 +35,8 @@ fn bump_to_raw_version_string() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(r#"
+    pyproject_toml.write_str(
+        r#"
 [project]
 name = "project"
 version = "0.515.0"
@@ -54,7 +53,7 @@ requires-python = ">=3.12"
     "###);
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
-        pyproject, 
+        pyproject,
     @r###"
     [project]
     name = "project"
@@ -62,7 +61,6 @@ requires-python = ">=3.12"
     requires-python = ">=3.12"
     "###
     );
-
 
     Ok(())
 }
@@ -72,7 +70,8 @@ fn bump_patch_version() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(r#"
+    pyproject_toml.write_str(
+        r#"
 [project]
 name = "project"
 version = "0.515.0"
@@ -89,7 +88,7 @@ requires-python = ">=3.12"
     "###);
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
-        pyproject, 
+        pyproject,
     @r###"
     [project]
     name = "project"
@@ -100,13 +99,13 @@ requires-python = ">=3.12"
     Ok(())
 }
 
-
 #[test]
 fn bump_minor_version() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(r#"
+    pyproject_toml.write_str(
+        r#"
 [project]
 name = "project"
 version = "0.515.3"
@@ -123,7 +122,7 @@ requires-python = ">=3.12"
     "###);
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
-        pyproject, 
+        pyproject,
     @r###"
     [project]
     name = "project"
@@ -139,7 +138,8 @@ fn bump_major_version() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(r#"
+    pyproject_toml.write_str(
+        r#"
 [project]
 name = "project"
 version = "0.515.0"
@@ -156,7 +156,7 @@ requires-python = ">=3.12"
     "###);
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
-        pyproject, 
+        pyproject,
     @r###"
     [project]
     name = "project"
@@ -166,4 +166,3 @@ requires-python = ">=3.12"
     );
     Ok(())
 }
-
