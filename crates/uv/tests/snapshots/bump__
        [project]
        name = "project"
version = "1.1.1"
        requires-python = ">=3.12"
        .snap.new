@@ -1,9 +1,0 @@
----
-source: crates/uv/tests/bump.rs
-assertion_line: 56
-expression: "r#\"\n    [project]\n    name = \"project\"\n    version = \"1.1.1\"\n    requires-python = \">=3.12\"\n    \"#"
----
-    [project]
-    name = "project"
-    version = "1.1.1"
-    requires-python = ">=3.12"
