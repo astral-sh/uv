@@ -481,11 +481,6 @@ impl Lock {
         &self.packages
     }
 
-    /// Returns the owned [`Package`] entries in this lock.
-    pub fn into_packages(self) -> Vec<Package> {
-        self.packages
-    }
-
     /// Returns the supported Python version range for the lockfile, if present.
     pub fn requires_python(&self) -> &RequiresPython {
         &self.requires_python
@@ -1701,6 +1696,10 @@ impl Package {
                 id: self.id.clone(),
             }
             .into()),
+            (true, false) if self.id.source.is_wheel() => Err(LockErrorKind::NoBinaryWheelOnly {
+                id: self.id.clone(),
+            }
+            .into()),
             (true, false) => Err(LockErrorKind::NoBinary {
                 id: self.id.clone(),
             }
@@ -1709,6 +1708,12 @@ impl Package {
                 id: self.id.clone(),
             }
             .into()),
+            (false, false) if self.id.source.is_wheel() => {
+                Err(LockErrorKind::IncompatibleWheelOnly {
+                    id: self.id.clone(),
+                }
+                .into())
+            }
             (false, false) => Err(LockErrorKind::NeitherSourceDistNorWheel {
                 id: self.id.clone(),
             }
@@ -2463,6 +2468,29 @@ impl Source {
     /// We also assume that Git sources are immutable, since a Git source encodes a specific commit.
     fn is_immutable(&self) -> bool {
         matches!(self, Self::Registry(..) | Self::Git(_, _))
+    }
+
+    /// Returns `true` if the source is that of a wheel.
+    fn is_wheel(&self) -> bool {
+        match &self {
+            Source::Path(path) => {
+                matches!(
+                    DistExtension::from_path(path).ok(),
+                    Some(DistExtension::Wheel)
+                )
+            }
+            Source::Direct(url, _) => {
+                matches!(
+                    DistExtension::from_path(url.as_ref()).ok(),
+                    Some(DistExtension::Wheel)
+                )
+            }
+            Source::Directory(..) => false,
+            Source::Editable(..) => false,
+            Source::Virtual(..) => false,
+            Source::Git(..) => false,
+            Source::Registry(..) => false,
+        }
     }
 
     fn to_toml(&self, table: &mut Table) {
@@ -3846,7 +3874,7 @@ enum LockErrorKind {
     /// distribution.
     #[error("distribution {id} can't be installed because it doesn't have a source distribution or wheel for the current platform")]
     NeitherSourceDistNorWheel {
-        /// The ID of the distribution that has a missing base.
+        /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as both `--no-binary` and `--no-build`.
@@ -3855,17 +3883,32 @@ enum LockErrorKind {
         /// The ID of the distribution.
         id: PackageId,
     },
-    /// An error that occurs when a distribution is marked as both `--no-binary`, but no source
+    /// An error that occurs when a distribution is marked as `--no-binary`, but no source
     /// distribution is available.
     #[error("distribution {id} can't be installed because it is marked as `--no-binary` but has no source distribution")]
     NoBinary {
         /// The ID of the distribution.
         id: PackageId,
     },
-    /// An error that occurs when a distribution is marked as both `--no-build`, but no binary
+    /// An error that occurs when a distribution is marked as `--no-build`, but no binary
     /// distribution is available.
     #[error("distribution {id} can't be installed because it is marked as `--no-build` but has no binary distribution")]
     NoBuild {
+        /// The ID of the distribution.
+        id: PackageId,
+    },
+    /// An error that occurs when a wheel-only distribution is incompatible with the current
+    /// platform.
+    #[error(
+        "distribution {id} can't be installed because the binary distribution is incompatible with the current platform"
+    )]
+    IncompatibleWheelOnly {
+        /// The ID of the distribution.
+        id: PackageId,
+    },
+    /// An error that occurs when a wheel-only source is marked as `--no-binary`.
+    #[error("distribution {id} can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
+    NoBinaryWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },
