@@ -124,6 +124,14 @@ uv is available via [winget](https://winstall.app/apps/astral-sh.uv).
 $ winget install --id=astral-sh.uv  -e
 ```
 
+### X-CMD
+
+[x-cmd](https://www.x-cmd.com/) is a **toolbox for Posix Shell**, offering a lightweight package manager built using shell and awk.
+
+```console
+$ x env use uv
+```
+
 ### Docker
 
 uv provides a Docker image at
