@@ -378,6 +378,12 @@ pub enum Commands {
         #[arg(long, value_enum, default_value = "text")]
         output_format: VersionFormat,
     },
+    
+    // bump or show project version
+    #[command(
+        after_help = "Use `uv help bump` for more details.",
+        after_long_help = ""
+    )]
     /// Generate shell completion
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion(GenerateShellCompletionArgs),
@@ -542,6 +548,7 @@ pub enum PipCommand {
         after_long_help = ""
     )]
     Check(PipCheckArgs),
+
 }
 
 #[derive(Subcommand)]
@@ -698,6 +705,8 @@ pub enum ProjectCommand {
     Export(ExportArgs),
     /// Display the project's dependency tree.
     Tree(TreeArgs),
+    // bump / set or show project version.
+    Bump(BumpArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -4220,3 +4229,21 @@ pub struct DisplayTreeArgs {
     #[arg(long, alias = "reverse")]
     pub invert: bool,
 }
+
+
+#[derive(Args)]
+pub struct BumpArgs {
+    /// The version to set
+    pub version: Option<String>,
+    /// The version bump to apply
+    #[arg(short, long)]
+    pub bump: Option<BumpType>,
+}
+
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub enum BumpType {
+    Major,
+    Minor,
+    Patch,
+}
+

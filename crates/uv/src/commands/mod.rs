@@ -30,6 +30,7 @@ pub(crate) use project::remove::remove;
 pub(crate) use project::run::{run, RunCommand};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
+pub(crate) use project::bump::{bump, BumpInstruction};
 pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
 pub(crate) use python::install::install as python_install;
@@ -56,7 +57,6 @@ use uv_resolver::InMemoryIndex;
 use uv_types::InFlight;
 pub(crate) use venv::venv;
 pub(crate) use version::version;
-
 use crate::printer::Printer;
 
 mod cache_clean;
@@ -74,7 +74,6 @@ mod build;
 mod self_update;
 mod venv;
 mod version;
-mod bump;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {
