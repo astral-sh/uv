@@ -6454,7 +6454,7 @@ uv build [OPTIONS] [SRC]
 
 </dd><dt><code>--require-hashes</code></dt><dd><p>Require a matching hash for each build requirement.</p>
 
-<p>Hash-checking mode is all or nothing. If enabled, <em>all</em> build requirements must be provided with a corresponding hash or set of hashes via the <code>--build-constraints</code> argument. Additionally, if enabled, <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
+<p>Hash-checking mode is all or nothing. If enabled, <em>all</em> build requirements must be provided with a corresponding hash or set of hashes via the <code>--build-constraint</code> argument. Additionally, if enabled, <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
 
 <p>Hash-checking mode introduces a number of additional constraints:</p>
 

@@ -1998,7 +1998,7 @@ pub struct BuildArgs {
     /// Require a matching hash for each build requirement.
     ///
     /// Hash-checking mode is all or nothing. If enabled, _all_ build requirements must be provided
-    /// with a corresponding hash or set of hashes via the `--build-constraints` argument.
+    /// with a corresponding hash or set of hashes via the `--build-constraint` argument.
     /// Additionally, if enabled, _all_ requirements must either be pinned to exact versions
     /// (e.g., `==1.0.0`), or be specified via direct URL.
     ///
