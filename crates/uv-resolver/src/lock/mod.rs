@@ -575,6 +575,23 @@ impl Lock {
                     }
                 }
             }
+
+            // Add any dev dependencies.
+            for group in dev {
+                for dep in root.dev_dependencies.get(group).into_iter().flatten() {
+                    if dep.complexified_marker.evaluate(marker_env, &[]) {
+                        let dep_dist = self.find_by_id(&dep.package_id);
+                        if seen.insert((&dep.package_id, None)) {
+                            queue.push_back((dep_dist, None));
+                        }
+                        for extra in &dep.extra {
+                            if seen.insert((&dep.package_id, Some(extra))) {
+                                queue.push_back((dep_dist, Some(extra)));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
@@ -606,16 +623,11 @@ impl Lock {
         let mut map = BTreeMap::default();
         let mut hashes = BTreeMap::default();
         while let Some((dist, extra)) = queue.pop_front() {
-            let deps =
-                if let Some(extra) = extra {
-                    Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
-                } else {
-                    Either::Right(dist.dependencies.iter().chain(
-                        dev.iter().flat_map(|group| {
-                            dist.dev_dependencies.get(group).into_iter().flatten()
-                        }),
-                    ))
-                };
+            let deps = if let Some(extra) = extra {
+                Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
+            } else {
+                Either::Right(dist.dependencies.iter())
+            };
             for dep in deps {
                 if dep.complexified_marker.evaluate(marker_env, &[]) {
                     let dep_dist = self.find_by_id(&dep.package_id);
