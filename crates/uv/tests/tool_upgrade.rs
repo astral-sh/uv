@@ -315,7 +315,7 @@ fn test_tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
      + babel==2.14.0
      - pytz==2018.5
     Installed 1 executable: pybabel
-    `python-dotenv` is missing a valid receipt; run `uv tool install --force python-dotenv` to reinstall
+    Failed to upgrade `python-dotenv`: `python-dotenv` is missing a valid receipt; run `uv tool install --force python-dotenv` to reinstall
     "###);
 
     Ok(())

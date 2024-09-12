@@ -29,7 +29,6 @@ pub(crate) async fn upgrade(
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
-
     printer: Printer,
 ) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
@@ -55,13 +54,14 @@ pub(crate) async fn upgrade(
 
     // Determine whether we applied any upgrades.
     let mut did_upgrade = false;
-    // Determine whether a tool upgrade failed
+
+    // Determine whether any tool upgrade failed.
     let mut failed_upgrade = false;
 
-    for name in names {
+    for name in &names {
         debug!("Upgrading tool: `{name}`");
         let changelog = upgrade_tool(
-            &name,
+            name,
             printer,
             &installed_tools,
             &args,
@@ -75,30 +75,30 @@ pub(crate) async fn upgrade(
 
         match changelog {
             Ok(changelog) => {
-                if let Some(changelog) = changelog {
-                    did_upgrade |= !changelog.is_empty();
-                } else {
-                    failed_upgrade = true;
-                }
+                did_upgrade |= !changelog.is_empty();
             }
-            Err(e) => {
-                writeln!(
-                    printer.stderr(),
-                    "Failed to upgrade `{}` due to `{e}`",
-                    name.cyan(),
-                )?;
-
+            Err(err) => {
+                // If we have a single tool, return the error directly.
+                if names.len() > 1 {
+                    writeln!(
+                        printer.stderr(),
+                        "Failed to upgrade `{}`: {err}",
+                        name.cyan(),
+                    )?;
+                } else {
+                    writeln!(printer.stderr(), "{err}")?;
+                }
                 failed_upgrade = true;
             }
         }
     }
 
-    if !did_upgrade && !failed_upgrade {
-        writeln!(printer.stderr(), "Nothing to upgrade")?;
-    }
-
     if failed_upgrade {
         return Ok(ExitStatus::Failure);
+    }
+
+    if !did_upgrade {
+        writeln!(printer.stderr(), "Nothing to upgrade")?;
     }
 
     Ok(ExitStatus::Success)
@@ -114,29 +114,25 @@ async fn upgrade_tool(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
-) -> anyhow::Result<Option<Changelog>> {
+) -> Result<Changelog> {
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
         Ok(Some(receipt)) => receipt,
         Ok(None) => {
             let install_command = format!("uv tool install {name}");
-            writeln!(
-                printer.stderr(),
+            return Err(anyhow::anyhow!(
                 "`{}` is not installed; run `{}` to install",
                 name.cyan(),
                 install_command.green()
-            )?;
-            return Ok(None);
+            ));
         }
         Err(_) => {
             let install_command = format!("uv tool install --force {name}");
-            writeln!(
-                printer.stderr(),
+            return Err(anyhow::anyhow!(
                 "`{}` is missing a valid receipt; run `{}` to reinstall",
                 name.cyan(),
                 install_command.green()
-            )?;
-            return Ok(None);
+            ));
         }
     };
 
@@ -144,23 +140,19 @@ async fn upgrade_tool(
         Ok(Some(environment)) => environment,
         Ok(None) => {
             let install_command = format!("uv tool install {name}");
-            writeln!(
-                printer.stderr(),
+            return Err(anyhow::anyhow!(
                 "`{}` is not installed; run `{}` to install",
                 name.cyan(),
                 install_command.green()
-            )?;
-            return Ok(None);
+            ));
         }
         Err(_) => {
             let install_command = format!("uv tool install --force {name}");
-            writeln!(
-                printer.stderr(),
+            return Err(anyhow::anyhow!(
                 "`{}` is missing a valid environment; run `{}` to reinstall",
                 name.cyan(),
                 install_command.green()
-            )?;
-            return Ok(None);
+            ));
         }
     };
 
@@ -216,5 +208,5 @@ async fn upgrade_tool(
         )?;
     }
 
-    Ok(Some(changelog))
+    Ok(changelog)
 }
