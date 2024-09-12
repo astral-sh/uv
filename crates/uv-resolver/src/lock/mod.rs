@@ -17,11 +17,10 @@ use url::Url;
 use cache_key::RepositoryUrl;
 use distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use distribution_types::{
-    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
-    DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
-    IndexLocations, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
-    UrlString,
+    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
+    FlatIndexLocation, GitSourceDist, HashPolicy, IndexLocations, IndexUrl, PathBuiltDist,
+    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
+    Resolution, ResolvedDist, ToUrlError, UrlString,
 };
 use pep440_rs::Version;
 use pep508_rs::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
@@ -114,11 +113,7 @@ impl Lock {
             if !dist.is_base() {
                 continue;
             }
-            let fork_markers = graph
-                .fork_markers(dist.name(), &dist.version, dist.dist.version_or_url().url())
-                .cloned()
-                .unwrap_or_default();
-            let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
+            let mut package = Package::from_annotated_dist(dist, root)?;
             Self::remove_unreachable_wheels(graph, &requires_python, node_index, &mut package);
 
             // Add all dependencies
@@ -837,12 +832,7 @@ impl Lock {
         let mut found_dist = None;
         for dist in &self.packages {
             if &dist.id.name == name {
-                if dist.fork_markers.is_empty()
-                    || dist
-                        .fork_markers
-                        .iter()
-                        .any(|marker| marker.evaluate(marker_env, &[]))
-                {
+                if dist.markers.evaluate(marker_env, &[]) {
                     if found_dist.is_some() {
                         return Err(format!("found multiple packages matching `{name}`"));
                     }
@@ -1437,12 +1427,6 @@ pub struct Package {
     pub(crate) id: PackageId,
     sdist: Option<SourceDist>,
     wheels: Vec<Wheel>,
-    /// If there are multiple versions or sources for the same package name, we add the markers of
-    /// the fork(s) that contained this version or source, so we can set the correct preferences in
-    /// the next resolution.
-    ///
-    /// Named `resolution-markers` in `uv.lock`.
-    fork_markers: Vec<MarkerTree>,
     /// The resolved dependencies of the package.
     dependencies: Vec<Dependency>,
     /// The resolved optional dependencies of the package.
@@ -1456,11 +1440,7 @@ pub struct Package {
 }
 
 impl Package {
-    fn from_annotated_dist(
-        annotated_dist: &AnnotatedDist,
-        fork_markers: Vec<MarkerTree>,
-        root: &Path,
-    ) -> Result<Self, LockError> {
+    fn from_annotated_dist(annotated_dist: &AnnotatedDist, root: &Path) -> Result<Self, LockError> {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
@@ -1503,7 +1483,6 @@ impl Package {
             id,
             sdist,
             wheels,
-            fork_markers,
             markers,
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
@@ -1924,16 +1903,6 @@ impl Package {
 
         self.id.to_toml(None, &mut table);
 
-        if !self.fork_markers.is_empty() {
-            let wheels = each_element_on_its_line_array(
-                self.fork_markers
-                    .iter()
-                    .map(|marker| SimplifiedMarkerTree::new(requires_python, marker.clone()))
-                    .filter_map(|marker| marker.try_to_string()),
-            );
-            table.insert("resolution-markers", value(wheels));
-        }
-
         if let Some(markers) =
             SimplifiedMarkerTree::new(requires_python, self.markers.clone()).try_to_string()
         {
@@ -2090,9 +2059,9 @@ impl Package {
         &self.id.version
     }
 
-    /// Return the fork markers for this package, if any.
-    pub fn fork_markers(&self) -> &[MarkerTree] {
-        self.fork_markers.as_slice()
+    /// Returns the [`MarkerTree`] of the package.
+    pub fn markers(&self) -> &MarkerTree {
+        &self.markers
     }
 
     /// Returns all the hashes associated with this [`Package`].
@@ -2147,8 +2116,6 @@ struct PackageWire {
     wheels: Vec<Wheel>,
     #[serde(default)]
     markers: SimplifiedMarkerTree,
-    #[serde(default, rename = "resolution-markers")]
-    fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(default)]
     dependencies: Vec<DependencyWire>,
     #[serde(default)]
@@ -2182,11 +2149,6 @@ impl PackageWire {
             metadata: self.metadata,
             sdist: self.sdist,
             wheels: self.wheels,
-            fork_markers: self
-                .fork_markers
-                .into_iter()
-                .map(|simplified_marker| simplified_marker.into_marker(requires_python))
-                .collect(),
             markers: self.markers.into_marker(requires_python),
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self

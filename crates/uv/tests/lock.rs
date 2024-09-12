@@ -2396,9 +2396,6 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         name = "markupsafe"
         version = "1.1.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform != 'win32'",
-        ]
         markers = "sys_platform != 'win32'"
         sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151 }
 
@@ -2406,9 +2403,6 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         name = "markupsafe"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform == 'win32'",
-        ]
         markers = "sys_platform == 'win32'"
         sdist = { url = "https://files.pythonhosted.org/packages/67/6a/5b3ed5c122e20c33d2562df06faf895a6b91b0a6b96a4626440ffe1d5c8e/MarkupSafe-2.0.0.tar.gz", hash = "sha256:4fae0677f712ee090721d8b17f412f1cbceefbf0dc180fe91bab3232f38b4527", size = 18466 }
 
@@ -5415,9 +5409,6 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "anyio"
         version = "3.0.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform != 'darwin'",
-        ]
         markers = "sys_platform != 'darwin'"
         dependencies = [
             { name = "idna", marker = "sys_platform != 'darwin'" },
@@ -5432,9 +5423,6 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "anyio"
         version = "3.7.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-        ]
         markers = "sys_platform == 'darwin'"
         dependencies = [
             { name = "idna", marker = "sys_platform == 'darwin'" },
@@ -5449,9 +5437,6 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "dependency"
         version = "0.0.1"
         source = { directory = "v1" }
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-        ]
         markers = "sys_platform == 'darwin'"
         dependencies = [
             { name = "anyio", version = "3.7.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
@@ -5464,9 +5449,6 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "dependency"
         version = "0.0.1"
         source = { directory = "v2" }
-        resolution-markers = [
-            "sys_platform != 'darwin'",
-        ]
         markers = "sys_platform != 'darwin'"
         dependencies = [
             { name = "anyio", version = "3.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
@@ -10916,9 +10898,6 @@ fn lock_non_project_fork() -> Result<()> {
         name = "anyio"
         version = "2.2.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.11'",
-        ]
         markers = "python_full_version >= '3.11'"
         dependencies = [
             { name = "idna", marker = "python_full_version >= '3.11'" },
@@ -10933,9 +10912,6 @@ fn lock_non_project_fork() -> Result<()> {
         name = "anyio"
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version < '3.11'",
-        ]
         markers = "python_full_version < '3.11'"
         dependencies = [
             { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
@@ -12300,10 +12276,6 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "numpy"
         version = "1.24.4"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.13'",
-            "python_full_version < '3.9'",
-        ]
         markers = "python_full_version < '3.9'"
         sdist = { url = "https://files.pythonhosted.org/packages/a4/9b/027bec52c633f6556dba6b722d9a0befb40498b9ceddd29cbe67a45a127c/numpy-1.24.4.tar.gz", hash = "sha256:80f5e3a4e498641401868df4208b74581206afbee7cf7b8329daae82676d9463", size = 10911229 }
         wheels = [
@@ -12340,9 +12312,6 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "numpy"
         version = "1.26.4"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.9' and python_full_version < '3.13'",
-        ]
         markers = "python_full_version >= '3.9' and python_full_version < '3.13'"
         sdist = { url = "https://files.pythonhosted.org/packages/65/6e/09db70a523a96d25e115e71cc56a6f9031e7b8cd166c1ac8438307c14058/numpy-1.26.4.tar.gz", hash = "sha256:2a02aba9ed12e4ac4eb3ea9421c420301a0c6460d9830d74a9df87efa4912010", size = 15786129 }
         wheels = [

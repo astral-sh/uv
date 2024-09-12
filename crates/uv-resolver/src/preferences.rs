@@ -27,7 +27,7 @@ pub struct Preference {
     marker: MarkerTree,
     /// If coming from a package with diverging versions, the markers of the forks this preference
     /// is part of, otherwise `None`.
-    fork_markers: Vec<MarkerTree>,
+    resolution_marker: MarkerTree,
     hashes: Vec<HashDigest>,
 }
 
@@ -58,8 +58,7 @@ impl Preference {
             name: requirement.name,
             version: specifier.version().clone(),
             marker: requirement.marker,
-            // requirements.txt doesn't have fork annotations.
-            fork_markers: vec![],
+            resolution_marker: MarkerTree::TRUE,
             hashes: entry
                 .hashes
                 .iter()
@@ -79,8 +78,7 @@ impl Preference {
             name: dist.name().clone(),
             version: version.clone(),
             marker: MarkerTree::TRUE,
-            // Installed distributions don't have fork annotations.
-            fork_markers: vec![],
+            resolution_marker: MarkerTree::TRUE,
             hashes: Vec::new(),
         }
     }
@@ -91,7 +89,7 @@ impl Preference {
             name: package.id.name.clone(),
             version: package.id.version.clone(),
             marker: MarkerTree::TRUE,
-            fork_markers: package.fork_markers().to_vec(),
+            resolution_marker: package.markers().clone(),
             hashes: Vec::new(),
         }
     }
@@ -134,22 +132,14 @@ impl Preferences {
                     continue;
                 }
 
-                if !preference.fork_markers.is_empty() {
-                    if !preference
-                        .fork_markers
-                        .iter()
-                        .any(|marker| marker.evaluate(markers, &[]))
-                    {
-                        trace!(
-                            "Excluding {preference} from preferences due to unmatched fork markers"
-                        );
-                        continue;
-                    }
+                if !preference.resolution_marker.evaluate(markers, &[]) {
+                    trace!("Excluding {preference} from preferences due to unmatched fork markers");
+                    continue;
                 }
             }
 
             // Flatten the list of markers into individual entries.
-            if preference.fork_markers.is_empty() {
+            if preference.resolution_marker.is_true() {
                 slf.insert(
                     preference.name,
                     None,
@@ -159,16 +149,14 @@ impl Preferences {
                     },
                 );
             } else {
-                for fork_marker in preference.fork_markers {
-                    slf.insert(
-                        preference.name.clone(),
-                        Some(fork_marker),
-                        Pin {
-                            version: preference.version.clone(),
-                            hashes: preference.hashes.clone(),
-                        },
-                    );
-                }
+                slf.insert(
+                    preference.name.clone(),
+                    Some(preference.resolution_marker.clone()),
+                    Pin {
+                        version: preference.version.clone(),
+                        hashes: preference.hashes.clone(),
+                    },
+                );
             }
         }
 
