@@ -552,7 +552,9 @@ impl InitProjectKind {
 
         // Create a `py.typed` file
         let py_typed = src_dir.join("py.typed");
-        fs_err::write(py_typed, "")?;
+        if !py_typed.try_exists()? {
+            fs_err::write(py_typed, "")?;
+        }
 
         // Write .python-version if it doesn't exist.
         if let Some(python_request) = python_request {

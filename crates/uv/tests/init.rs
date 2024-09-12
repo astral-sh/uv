@@ -401,6 +401,40 @@ fn init_library() -> Result<()> {
     Ok(())
 }
 
+/// Run `uv init --lib` with an existing py.typed file
+#[test]
+fn init_py_typed_exists() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let foo = child.child("src").child("foo");
+    foo.create_dir_all()?;
+
+    let py_typed = foo.join("py.typed");
+    fs_err::write(&py_typed, "partial")?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let py_typed = fs_err::read_to_string(py_typed)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            py_typed, @"partial"
+        );
+    });
+    Ok(())
+}
+
 /// Using `uv init --lib --no-package` isn't allowed
 #[test]
 fn init_library_no_package() -> Result<()> {
