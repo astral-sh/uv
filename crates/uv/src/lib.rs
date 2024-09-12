@@ -861,6 +861,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.force,
                 args.options,
                 args.settings,
+                args.suffix,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,

@@ -56,6 +56,23 @@ pub enum Error {
     Serialization(#[from] toml_edit::ser::Error),
 }
 
+/// A Tool name
+///
+/// TODO: This representation works for installing, but could be problematic for upgrading and uninstalling
+/// Consider changing it to either a single String (with the resolved name), or an enum with variants for different identifiers
+#[derive(Debug, Clone)]
+pub struct ToolName {
+    pub name: PackageName,
+    pub suffix: Option<String>,
+}
+
+impl fmt::Display for ToolName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO Decide how Tools are displayed
+        write!(f, "{}", self.name)
+    }
+}
+
 /// A collection of uv-managed tools installed on the current system.
 #[derive(Debug, Clone)]
 pub struct InstalledTools {
@@ -87,8 +104,12 @@ impl InstalledTools {
     }
 
     /// Return the expected directory for a tool with the given [`PackageName`].
-    pub fn tool_dir(&self, name: &PackageName) -> PathBuf {
-        self.root.join(name.to_string())
+    pub fn tool_dir(&self, name: &ToolName) -> PathBuf {
+        if let Some(suffix) = &name.suffix {
+            self.root.join(name.name.to_string() + suffix)
+        } else {
+            self.root.join(name.name.to_string())
+        }
     }
 
     /// Return the metadata for all installed tools.
@@ -130,7 +151,7 @@ impl InstalledTools {
     /// error.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    pub fn get_tool_receipt(&self, name: &PackageName) -> Result<Option<Tool>, Error> {
+    pub fn get_tool_receipt(&self, name: &ToolName) -> Result<Option<Tool>, Error> {
         let path = self.tool_dir(name).join("uv-receipt.toml");
         match ToolReceipt::from_path(&path) {
             Ok(tool_receipt) => Ok(Some(tool_receipt.tool)),
@@ -149,7 +170,7 @@ impl InstalledTools {
     /// Any existing receipt will be replaced.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    pub fn add_tool_receipt(&self, name: &PackageName, tool: Tool) -> Result<(), Error> {
+    pub fn add_tool_receipt(&self, name: &ToolName, tool: Tool) -> Result<(), Error> {
         let tool_receipt = ToolReceipt::from(tool);
         let path = self.tool_dir(name).join("uv-receipt.toml");
 
@@ -175,7 +196,7 @@ impl InstalledTools {
     /// # Errors
     ///
     /// If no such environment exists for the tool.
-    pub fn remove_environment(&self, name: &PackageName) -> Result<(), Error> {
+    pub fn remove_environment(&self, name: &ToolName) -> Result<(), Error> {
         let environment_path = self.tool_dir(name);
 
         debug!(
@@ -196,7 +217,7 @@ impl InstalledTools {
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn get_environment(
         &self,
-        name: &PackageName,
+        name: &ToolName,
         cache: &Cache,
     ) -> Result<Option<PythonEnvironment>, Error> {
         let environment_path = self.tool_dir(name);
@@ -228,7 +249,7 @@ impl InstalledTools {
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn create_environment(
         &self,
-        name: &PackageName,
+        name: &ToolName,
         interpreter: Interpreter,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
@@ -271,15 +292,15 @@ impl InstalledTools {
     }
 
     /// Return the [`Version`] of an installed tool.
-    pub fn version(&self, name: &PackageName, cache: &Cache) -> Result<Version, Error> {
+    pub fn version(&self, name: &ToolName, cache: &Cache) -> Result<Version, Error> {
         let environment_path = self.tool_dir(name);
         let environment = PythonEnvironment::from_root(&environment_path, cache)?;
         let site_packages = SitePackages::from_environment(&environment)
             .map_err(|err| Error::EnvironmentRead(environment_path.clone(), err.to_string()))?;
-        let packages = site_packages.get_packages(name);
+        let packages = site_packages.get_packages(&name.name);
         let package = packages
             .first()
-            .ok_or_else(|| Error::MissingToolPackage(name.clone()))?;
+            .ok_or_else(|| Error::MissingToolPackage(name.name.clone()))?;
         Ok(package.version().clone())
     }
 
