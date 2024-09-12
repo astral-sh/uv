@@ -13,6 +13,7 @@ use uv_settings::{Combine, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 
 use crate::commands::pip::loggers::{SummaryResolveLogger, UpgradeInstallLogger};
+use crate::commands::pip::operations::Changelog;
 use crate::commands::project::{update_environment, EnvironmentUpdate};
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
@@ -54,117 +55,166 @@ pub(crate) async fn upgrade(
 
     // Determine whether we applied any upgrades.
     let mut did_upgrade = false;
+    // Determine whether a tool upgrade failed
+    let mut failed_upgrade = false;
 
     for name in names {
         debug!("Upgrading tool: `{name}`");
-
-        // Ensure the tool is installed.
-        let existing_tool_receipt = match installed_tools.get_tool_receipt(&name) {
-            Ok(Some(receipt)) => receipt,
-            Ok(None) => {
-                let install_command = format!("uv tool install {name}");
-                writeln!(
-                    printer.stderr(),
-                    "`{}` is not installed; run `{}` to install",
-                    name.cyan(),
-                    install_command.green()
-                )?;
-                return Ok(ExitStatus::Failure);
-            }
-            Err(_) => {
-                let install_command = format!("uv tool install --force {name}");
-                writeln!(
-                    printer.stderr(),
-                    "`{}` is missing a valid receipt; run `{}` to reinstall",
-                    name.cyan(),
-                    install_command.green()
-                )?;
-                return Ok(ExitStatus::Failure);
-            }
-        };
-
-        let existing_environment = match installed_tools.get_environment(&name, cache) {
-            Ok(Some(environment)) => environment,
-            Ok(None) => {
-                let install_command = format!("uv tool install {name}");
-                writeln!(
-                    printer.stderr(),
-                    "`{}` is not installed; run `{}` to install",
-                    name.cyan(),
-                    install_command.green()
-                )?;
-                return Ok(ExitStatus::Failure);
-            }
-            Err(_) => {
-                let install_command = format!("uv tool install --force {name}");
-                writeln!(
-                    printer.stderr(),
-                    "`{}` is missing a valid environment; run `{}` to reinstall",
-                    name.cyan(),
-                    install_command.green()
-                )?;
-                return Ok(ExitStatus::Failure);
-            }
-        };
-
-        // Resolve the appropriate settings, preferring: CLI > receipt > user.
-        let options = args.clone().combine(
-            ResolverInstallerOptions::from(existing_tool_receipt.options().clone())
-                .combine(filesystem.clone()),
-        );
-        let settings = ResolverInstallerSettings::from(options.clone());
-
-        // Resolve the requirements.
-        let requirements = existing_tool_receipt.requirements();
-        let spec = RequirementsSpecification::from_requirements(requirements.to_vec());
-
-        // Initialize any shared state.
-        let state = SharedState::default();
-
-        // TODO(zanieb): Build the environment in the cache directory then copy into the tool
-        // directory.
-        let EnvironmentUpdate {
-            environment,
-            changelog,
-        } = update_environment(
-            existing_environment,
-            spec,
-            &settings,
-            &state,
-            Box::new(SummaryResolveLogger),
-            Box::new(UpgradeInstallLogger::new(name.clone())),
+        let changelog = upgrade_tool(
+            &name,
+            printer,
+            &installed_tools,
+            &args,
+            cache,
+            &filesystem,
             connectivity,
             concurrency,
             native_tls,
-            cache,
-            printer,
         )
-        .await?;
+        .await;
 
-        did_upgrade |= !changelog.is_empty();
+        match changelog {
+            Ok(changelog) => {
+                if let Some(changelog) = changelog {
+                    did_upgrade |= !changelog.is_empty();
+                } else {
+                    failed_upgrade = true;
+                }
+            }
+            Err(e) => {
+                writeln!(
+                    printer.stderr(),
+                    "Failed to upgrade `{}` due to `{e}`",
+                    name.cyan(),
+                )?;
 
-        // If we modified the target tool, reinstall the entrypoints.
-        if changelog.includes(&name) {
-            // At this point, we updated the existing environment, so we should remove any of its
-            // existing executables.
-            remove_entrypoints(&existing_tool_receipt);
-
-            install_executables(
-                &environment,
-                &name,
-                &installed_tools,
-                ToolOptions::from(options),
-                true,
-                existing_tool_receipt.python().to_owned(),
-                requirements.to_vec(),
-                printer,
-            )?;
+                failed_upgrade = true;
+            }
         }
     }
 
-    if !did_upgrade {
+    if !did_upgrade && !failed_upgrade {
         writeln!(printer.stderr(), "Nothing to upgrade")?;
     }
 
+    if failed_upgrade {
+        return Ok(ExitStatus::Failure);
+    }
+
     Ok(ExitStatus::Success)
+}
+
+async fn upgrade_tool(
+    name: &PackageName,
+    printer: Printer,
+    installed_tools: &InstalledTools,
+    args: &ResolverInstallerOptions,
+    cache: &Cache,
+    filesystem: &ResolverInstallerOptions,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
+) -> anyhow::Result<Option<Changelog>> {
+    // Ensure the tool is installed.
+    let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
+        Ok(Some(receipt)) => receipt,
+        Ok(None) => {
+            let install_command = format!("uv tool install {name}");
+            writeln!(
+                printer.stderr(),
+                "`{}` is not installed; run `{}` to install",
+                name.cyan(),
+                install_command.green()
+            )?;
+            return Ok(None);
+        }
+        Err(_) => {
+            let install_command = format!("uv tool install --force {name}");
+            writeln!(
+                printer.stderr(),
+                "`{}` is missing a valid receipt; run `{}` to reinstall",
+                name.cyan(),
+                install_command.green()
+            )?;
+            return Ok(None);
+        }
+    };
+
+    let existing_environment = match installed_tools.get_environment(name, cache) {
+        Ok(Some(environment)) => environment,
+        Ok(None) => {
+            let install_command = format!("uv tool install {name}");
+            writeln!(
+                printer.stderr(),
+                "`{}` is not installed; run `{}` to install",
+                name.cyan(),
+                install_command.green()
+            )?;
+            return Ok(None);
+        }
+        Err(_) => {
+            let install_command = format!("uv tool install --force {name}");
+            writeln!(
+                printer.stderr(),
+                "`{}` is missing a valid environment; run `{}` to reinstall",
+                name.cyan(),
+                install_command.green()
+            )?;
+            return Ok(None);
+        }
+    };
+
+    // Resolve the appropriate settings, preferring: CLI > receipt > user.
+    let options = args.clone().combine(
+        ResolverInstallerOptions::from(existing_tool_receipt.options().clone())
+            .combine(filesystem.clone()),
+    );
+    let settings = ResolverInstallerSettings::from(options.clone());
+
+    // Resolve the requirements.
+    let requirements = existing_tool_receipt.requirements();
+    let spec = RequirementsSpecification::from_requirements(requirements.to_vec());
+
+    // Initialize any shared state.
+    let state = SharedState::default();
+
+    // TODO(zanieb): Build the environment in the cache directory then copy into the tool
+    // directory.
+    let EnvironmentUpdate {
+        environment,
+        changelog,
+    } = update_environment(
+        existing_environment,
+        spec,
+        &settings,
+        &state,
+        Box::new(SummaryResolveLogger),
+        Box::new(UpgradeInstallLogger::new(name.clone())),
+        connectivity,
+        concurrency,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await?;
+
+    // If we modified the target tool, reinstall the entrypoints.
+    if changelog.includes(name) {
+        // At this point, we updated the existing environment, so we should remove any of its
+        // existing executables.
+        remove_entrypoints(&existing_tool_receipt);
+
+        install_executables(
+            &environment,
+            name,
+            installed_tools,
+            ToolOptions::from(options),
+            true,
+            existing_tool_receipt.python().to_owned(),
+            requirements.to_vec(),
+            printer,
+        )?;
+    }
+
+    Ok(Some(changelog))
 }
