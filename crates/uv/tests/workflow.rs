@@ -40,7 +40,7 @@ fn packse_add_remove_one_package() -> Result<()> {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -306,20 +306,21 @@
+        @@ -310,20 +310,21 @@
          name = "packse"
          version = "0.0.0"
          source = { editable = "." }
@@ -62,7 +62,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "pypiserver" },
              { name = "watchfiles" },
          ]
-        @@ -334,20 +335,21 @@
+        @@ -338,20 +339,21 @@
          [package.metadata]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
@@ -84,7 +84,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
 
-        @@ -601,20 +603,29 @@
+        @@ -608,20 +610,29 @@
              { name = "rfc3986" },
              { name = "rich" },
              { name = "urllib3" },
@@ -128,7 +128,7 @@ fn packse_add_remove_one_package() -> Result<()> {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -306,21 +306,20 @@
+        @@ -310,21 +310,20 @@
          name = "packse"
          version = "0.0.0"
          source = { editable = "." }
@@ -150,7 +150,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "pypiserver" },
              { name = "watchfiles" },
          ]
-        @@ -335,21 +334,20 @@
+        @@ -339,21 +338,20 @@
          [package.metadata]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
@@ -172,7 +172,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
 
-        @@ -600,29 +598,20 @@
+        @@ -607,29 +605,20 @@
              { name = "readme-renderer" },
              { name = "requests" },
              { name = "requests-toolbelt" },
@@ -286,7 +286,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -305,20 +305,21 @@
+        @@ -309,20 +309,21 @@
          [[package]]
          name = "packse"
          version = "0.0.0"
@@ -308,7 +308,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
          serve = [
              { name = "pypiserver" },
              { name = "watchfiles" },
-        @@ -333,20 +334,21 @@
+        @@ -337,20 +338,21 @@
 
          [package.metadata]
          requires-dist = [
@@ -344,7 +344,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -305,21 +305,20 @@
+        @@ -309,21 +309,20 @@
          [[package]]
          name = "packse"
          version = "0.0.0"
@@ -366,7 +366,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
          serve = [
              { name = "pypiserver" },
              { name = "watchfiles" },
-        @@ -334,21 +333,20 @@
+        @@ -338,21 +337,20 @@
 
          [package.metadata]
          requires-dist = [
@@ -445,8 +445,7 @@ fn jax_instability() -> Result<()> {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -8,21 +8,21 @@
-         ]
+        @@ -9,21 +9,21 @@
 
          [options]
          exclude-newer = "2024-03-25T00:00:00Z"
@@ -455,6 +454,7 @@ fn jax_instability() -> Result<()> {
          name = "importlib-metadata"
          version = "7.1.0"
          source = { registry = "https://pypi.org/simple" }
+         markers = "python_full_version < '3.10'"
          dependencies = [
         -    { name = "zipp" },
         +    { name = "zipp", marker = "python_full_version < '3.10'" },
@@ -468,7 +468,7 @@ fn jax_instability() -> Result<()> {
          name = "jax"
          version = "0.4.17"
          source = { registry = "https://pypi.org/simple" }
-        @@ -149,28 +149,41 @@
+        @@ -150,29 +150,42 @@
              { url = "https://files.pythonhosted.org/packages/f3/31/91a2a3c5eb85d2bfa86d7c98f2df5d77dcdefb3d80ca9f9037ad04393acf/scipy-1.12.0-cp312-cp312-win_amd64.whl", hash = "sha256:e646d8571804a304e1da01040d21577685ce8e2db08ac58e543eaca063453e1c", size = 45816713 },
              { url = "https://files.pythonhosted.org/packages/ed/be/49a3f999dc91f1a653847f38c34763dcdeaa8a327f3665bdfe9bf5555109/scipy-1.12.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:913d6e7956c3a671de3b05ccb66b11bc293f56bfdef040583a7221d9e22a2e35", size = 38929252 },
              { url = "https://files.pythonhosted.org/packages/32/48/f605bad3e610efe05a51b56698578f7a98f900513a4bad2c9f12df845cd6/scipy-1.12.0-cp39-cp39-macosx_12_0_arm64.whl", hash = "sha256:bba1b0c7256ad75401c73e4b3cf09d1f176e9bd4248f0d3112170fb2ec4db067", size = 31356374 },
@@ -507,6 +507,7 @@ fn jax_instability() -> Result<()> {
          name = "zipp"
          version = "3.18.1"
          source = { registry = "https://pypi.org/simple" }
+         markers = "python_full_version < '3.10'"
          sdist = { url = "https://files.pythonhosted.org/packages/3e/ef/65da662da6f9991e87f058bc90b91a935ae655a16ae5514660d6460d1298/zipp-3.18.1.tar.gz", hash = "sha256:2884ed22e7d8961de1c9a05142eb69a247f120291bc0206a00a7642f09b5b715", size = 21220 }
          wheels = [
              { url = "https://files.pythonhosted.org/packages/c2/0a/ba9d0ee9536d3ef73a3448e931776e658b36f128d344e175bc32b092a8bf/zipp-3.18.1-py3-none-any.whl", hash = "sha256:206f5a15f2af3dbaee80769fb7dc6f249695e940acca08dfb2a4769fe61e538b", size = 8247 },
@@ -525,7 +526,7 @@ fn jax_instability() -> Result<()> {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -149,41 +149,28 @@
+        @@ -150,42 +150,29 @@
              { url = "https://files.pythonhosted.org/packages/f3/31/91a2a3c5eb85d2bfa86d7c98f2df5d77dcdefb3d80ca9f9037ad04393acf/scipy-1.12.0-cp312-cp312-win_amd64.whl", hash = "sha256:e646d8571804a304e1da01040d21577685ce8e2db08ac58e543eaca063453e1c", size = 45816713 },
              { url = "https://files.pythonhosted.org/packages/ed/be/49a3f999dc91f1a653847f38c34763dcdeaa8a327f3665bdfe9bf5555109/scipy-1.12.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:913d6e7956c3a671de3b05ccb66b11bc293f56bfdef040583a7221d9e22a2e35", size = 38929252 },
              { url = "https://files.pythonhosted.org/packages/32/48/f605bad3e610efe05a51b56698578f7a98f900513a4bad2c9f12df845cd6/scipy-1.12.0-cp39-cp39-macosx_12_0_arm64.whl", hash = "sha256:bba1b0c7256ad75401c73e4b3cf09d1f176e9bd4248f0d3112170fb2ec4db067", size = 31356374 },
@@ -564,6 +565,7 @@ fn jax_instability() -> Result<()> {
          name = "zipp"
          version = "3.18.1"
          source = { registry = "https://pypi.org/simple" }
+         markers = "python_full_version < '3.10'"
          sdist = { url = "https://files.pythonhosted.org/packages/3e/ef/65da662da6f9991e87f058bc90b91a935ae655a16ae5514660d6460d1298/zipp-3.18.1.tar.gz", hash = "sha256:2884ed22e7d8961de1c9a05142eb69a247f120291bc0206a00a7642f09b5b715", size = 21220 }
          wheels = [
              { url = "https://files.pythonhosted.org/packages/c2/0a/ba9d0ee9536d3ef73a3448e931776e658b36f128d344e175bc32b092a8bf/zipp-3.18.1-py3-none-any.whl", hash = "sha256:206f5a15f2af3dbaee80769fb7dc6f249695e940acca08dfb2a4769fe61e538b", size = 8247 },
@@ -586,8 +588,7 @@ fn jax_instability() -> Result<()> {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -8,21 +8,21 @@
-         ]
+        @@ -9,21 +9,21 @@
 
          [options]
          exclude-newer = "2024-03-25T00:00:00Z"
@@ -596,6 +597,7 @@ fn jax_instability() -> Result<()> {
          name = "importlib-metadata"
          version = "7.1.0"
          source = { registry = "https://pypi.org/simple" }
+         markers = "python_full_version < '3.10'"
          dependencies = [
         -    { name = "zipp" },
         +    { name = "zipp", marker = "python_full_version < '3.10'" },

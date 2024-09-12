@@ -1451,6 +1451,8 @@ pub struct Package {
     dev_dependencies: BTreeMap<GroupName, Vec<Dependency>>,
     /// The exact requirements from the package metadata.
     metadata: PackageMetadata,
+    /// The markers under which the package should be included.
+    markers: MarkerTree,
 }
 
 impl Package {
@@ -1496,11 +1498,13 @@ impl Package {
                 })
                 .collect::<Result<_, _>>()?
         };
+        let markers = annotated_dist.marker.clone();
         Ok(Package {
             id,
             sdist,
             wheels,
             fork_markers,
+            markers,
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
             dev_dependencies: BTreeMap::default(),
@@ -1930,6 +1934,12 @@ impl Package {
             table.insert("resolution-markers", value(wheels));
         }
 
+        if let Some(markers) =
+            SimplifiedMarkerTree::new(requires_python, self.markers.clone()).try_to_string()
+        {
+            table.insert("markers", value(markers));
+        }
+
         if !self.dependencies.is_empty() {
             let deps = each_element_on_its_line_array(self.dependencies.iter().map(|dep| {
                 dep.to_toml(requires_python, dist_count_by_name)
@@ -2135,6 +2145,8 @@ struct PackageWire {
     sdist: Option<SourceDist>,
     #[serde(default)]
     wheels: Vec<Wheel>,
+    #[serde(default)]
+    markers: SimplifiedMarkerTree,
     #[serde(default, rename = "resolution-markers")]
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(default)]
@@ -2175,6 +2187,7 @@ impl PackageWire {
                 .into_iter()
                 .map(|simplified_marker| simplified_marker.into_marker(requires_python))
                 .collect(),
+            markers: self.markers.into_marker(requires_python),
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self
                 .optional_dependencies

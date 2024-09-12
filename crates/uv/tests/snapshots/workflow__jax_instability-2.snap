@@ -18,6 +18,7 @@ exclude-newer = "2024-03-25T00:00:00Z"
 name = "importlib-metadata"
 version = "7.1.0"
 source = { registry = "https://pypi.org/simple" }
+markers = "python_full_version < '3.10'"
 dependencies = [
     { name = "zipp" },
 ]
@@ -174,6 +175,7 @@ requires-dist = [{ name = "jax", specifier = "==0.4.17" }]
 name = "zipp"
 version = "3.18.1"
 source = { registry = "https://pypi.org/simple" }
+markers = "python_full_version < '3.10'"
 sdist = { url = "https://files.pythonhosted.org/packages/3e/ef/65da662da6f9991e87f058bc90b91a935ae655a16ae5514660d6460d1298/zipp-3.18.1.tar.gz", hash = "sha256:2884ed22e7d8961de1c9a05142eb69a247f120291bc0206a00a7642f09b5b715", size = 21220 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c2/0a/ba9d0ee9536d3ef73a3448e931776e658b36f128d344e175bc32b092a8bf/zipp-3.18.1-py3-none-any.whl", hash = "sha256:206f5a15f2af3dbaee80769fb7dc6f249695e940acca08dfb2a4769fe61e538b", size = 8247 },

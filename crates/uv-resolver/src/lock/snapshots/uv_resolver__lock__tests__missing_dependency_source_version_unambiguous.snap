@@ -76,6 +76,7 @@ Ok(
                     requires_dist: {},
                     requires_dev: {},
                 },
+                markers: python_full_version >= '3.12',
             },
             Package {
                 id: PackageId {
@@ -141,6 +142,7 @@ Ok(
                     requires_dist: {},
                     requires_dev: {},
                 },
+                markers: python_full_version >= '3.12',
             },
         ],
         by_id: {

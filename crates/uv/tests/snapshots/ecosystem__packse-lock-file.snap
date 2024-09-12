@@ -34,6 +34,7 @@ wheels = [
 name = "cffi"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_python_implementation != 'PyPy' and sys_platform == 'linux'"
 dependencies = [
     { name = "pycparser" },
 ]
@@ -92,6 +93,7 @@ wheels = [
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
+markers = "sys_platform == 'win32'"
 sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
@@ -101,6 +103,7 @@ wheels = [
 name = "cryptography"
 version = "43.0.0"
 source = { registry = "https://pypi.org/simple" }
+markers = "sys_platform == 'linux'"
 dependencies = [
     { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
 ]
@@ -211,6 +214,7 @@ wheels = [
 name = "jeepney"
 version = "0.8.0"
 source = { registry = "https://pypi.org/simple" }
+markers = "sys_platform == 'linux'"
 sdist = { url = "https://files.pythonhosted.org/packages/d6/f4/154cf374c2daf2020e05c3c6a03c91348d59b23c5366e968feb198306fdf/jeepney-0.8.0.tar.gz", hash = "sha256:5efe48d255973902f6badc3ce55e2aa6c5c3b3bc642059ef3a91247bcfcc5806", size = 106005 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ae/72/2a1e2290f1ab1e06f71f3d0f1646c9e4634e70e1d37491535e19266e8dc9/jeepney-0.8.0-py3-none-any.whl", hash = "sha256:c0a454ad016ca575060802ee4d590dd912e35c122fa04e70306de3d076cce755", size = 48435 },
@@ -416,6 +420,7 @@ wheels = [
 name = "pycparser"
 version = "2.22"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_python_implementation != 'PyPy' and sys_platform == 'linux'"
 sdist = { url = "https://files.pythonhosted.org/packages/1d/b2/31537cf4b1ca988837256c910a668b553fceb8f069bedc4b1c826024b52c/pycparser-2.22.tar.gz", hash = "sha256:491c8be9c040f5390f5bf44a5b07752bd07f56edf992381b05c701439eec10f6", size = 172736 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/13/a3/a812df4e2dd5696d1f351d58b8fe16a405b234ad2886a0dab9183fb78109/pycparser-2.22-py3-none-any.whl", hash = "sha256:c3702b6d3dd8c7abc1afa565d7e63d53a1d0bd86cdc24edd75470f4de499cfcc", size = 117552 },
@@ -462,6 +467,7 @@ wheels = [
 name = "pywin32-ctypes"
 version = "0.2.2"
 source = { registry = "https://pypi.org/simple" }
+markers = "sys_platform == 'win32'"
 sdist = { url = "https://files.pythonhosted.org/packages/10/3d/0cfbca45201351fe8c09cca743403e6c2407892e256e25d126ad64dc6bb7/pywin32-ctypes-0.2.2.tar.gz", hash = "sha256:3426e063bdd5fd4df74a14fa3cf80a0b42845a87e1d1e81f6549f9daec593a60", size = 26950 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a4/bc/78b2c00cc64c31dbb3be42a0e8600bcebc123ad338c3b714754d668c7c2d/pywin32_ctypes-0.2.2-py3-none-any.whl", hash = "sha256:bf490a1a709baf35d688fe0ecf980ed4de11d2b3e37b51e5442587a75d9957e7", size = 30152 },
@@ -560,6 +566,7 @@ wheels = [
 name = "secretstorage"
 version = "3.3.3"
 source = { registry = "https://pypi.org/simple" }
+markers = "sys_platform == 'linux'"
 dependencies = [
     { name = "cryptography" },
     { name = "jeepney" },

@@ -1562,6 +1562,7 @@ fn lock_dependency_extra() -> Result<()> {
         name = "colorama"
         version = "0.4.6"
         source = { registry = "https://pypi.org/simple" }
+        markers = "platform_system == 'Windows'"
         sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
@@ -1877,6 +1878,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         name = "pysocks"
         version = "1.7.1"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.10'"
         sdist = { url = "https://files.pythonhosted.org/packages/bd/11/293dd436aea955d45fc4e8a35b6ae7270f5b8e00b53cf6c024c83b657a11/PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0", size = 284429 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/8d/59/b4572118e098ac8e46e399a1dd0f2d85403ce8bbaad9ec79373ed6badaf9/PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5", size = 16725 },
@@ -2049,6 +2051,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         name = "colorama"
         version = "0.4.6"
         source = { registry = "https://pypi.org/simple" }
+        markers = "platform_system == 'Windows'"
         sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
@@ -2396,6 +2399,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         resolution-markers = [
             "sys_platform != 'win32'",
         ]
+        markers = "sys_platform != 'win32'"
         sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151 }
 
         [[package]]
@@ -2405,6 +2409,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'win32'",
         ]
+        markers = "sys_platform == 'win32'"
         sdist = { url = "https://files.pythonhosted.org/packages/67/6a/5b3ed5c122e20c33d2562df06faf895a6b91b0a6b96a4626440ffe1d5c8e/MarkupSafe-2.0.0.tar.gz", hash = "sha256:4fae0677f712ee090721d8b17f412f1cbceefbf0dc180fe91bab3232f38b4527", size = 18466 }
 
         [[package]]
@@ -2923,6 +2928,7 @@ fn lock_requires_python() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 },
@@ -2932,6 +2938,7 @@ fn lock_requires_python() -> Result<()> {
         name = "importlib-metadata"
         version = "6.7.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.8'"
         dependencies = [
             { name = "typing-extensions", marker = "python_full_version < '3.8'" },
             { name = "zipp" },
@@ -2991,6 +2998,7 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.7.1"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/3c/8b/0111dd7d6c1478bf83baa1cab85c686426c7a6274119aceb2bd9d35395ad/typing_extensions-4.7.1.tar.gz", hash = "sha256:b75ddc264f0ba5615db7ba217daeb99701ad295353c45f9e95963337ceeeffb2", size = 72876 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ec/6b/63cc3df74987c36fe26157ee12e09e8f9db4de771e0f3404263117e75b95/typing_extensions-4.7.1-py3-none-any.whl", hash = "sha256:440d5dd3af93b060174bf433bccd69b0babc3b15b1a8dca43789fd7f61514b36", size = 33232 },
@@ -3000,6 +3008,7 @@ fn lock_requires_python() -> Result<()> {
         name = "zipp"
         version = "3.15.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/00/27/f0ac6b846684cecce1ee93d32450c45ab607f65c2e0255f0092032d91f07/zipp-3.15.0.tar.gz", hash = "sha256:112929ad649da941c23de50f356a2b5570c954b65150642bccdd66bf194d224b", size = 18454 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/5b/fa/c9e82bbe1af6266adf08afb563905eb87cab83fde00a0a08963510621047/zipp-3.15.0-py3-none-any.whl", hash = "sha256:48904fc76a60e542af151aded95726c1a5c34ed43ab4134b597665c86d7ad556", size = 6758 },
@@ -3078,6 +3087,7 @@ fn lock_requires_python() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 },
@@ -3087,6 +3097,7 @@ fn lock_requires_python() -> Result<()> {
         name = "importlib-metadata"
         version = "6.7.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.8'"
         dependencies = [
             { name = "typing-extensions", marker = "python_full_version < '3.8'" },
             { name = "zipp" },
@@ -3136,6 +3147,7 @@ fn lock_requires_python() -> Result<()> {
         name = "typing-extensions"
         version = "4.7.1"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/3c/8b/0111dd7d6c1478bf83baa1cab85c686426c7a6274119aceb2bd9d35395ad/typing_extensions-4.7.1.tar.gz", hash = "sha256:b75ddc264f0ba5615db7ba217daeb99701ad295353c45f9e95963337ceeeffb2", size = 72876 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ec/6b/63cc3df74987c36fe26157ee12e09e8f9db4de771e0f3404263117e75b95/typing_extensions-4.7.1-py3-none-any.whl", hash = "sha256:440d5dd3af93b060174bf433bccd69b0babc3b15b1a8dca43789fd7f61514b36", size = 33232 },
@@ -3145,6 +3157,7 @@ fn lock_requires_python() -> Result<()> {
         name = "zipp"
         version = "3.15.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/00/27/f0ac6b846684cecce1ee93d32450c45ab607f65c2e0255f0092032d91f07/zipp-3.15.0.tar.gz", hash = "sha256:112929ad649da941c23de50f356a2b5570c954b65150642bccdd66bf194d224b", size = 18454 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/5b/fa/c9e82bbe1af6266adf08afb563905eb87cab83fde00a0a08963510621047/zipp-3.15.0-py3-none-any.whl", hash = "sha256:48904fc76a60e542af151aded95726c1a5c34ed43ab4134b597665c86d7ad556", size = 6758 },
@@ -4351,6 +4364,7 @@ fn lock_multiple_markers() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "implementation_name == 'cpython'"
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
@@ -5404,6 +5418,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         resolution-markers = [
             "sys_platform != 'darwin'",
         ]
+        markers = "sys_platform != 'darwin'"
         dependencies = [
             { name = "idna", marker = "sys_platform != 'darwin'" },
             { name = "sniffio", marker = "sys_platform != 'darwin'" },
@@ -5420,6 +5435,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'darwin'",
         ]
+        markers = "sys_platform == 'darwin'"
         dependencies = [
             { name = "idna", marker = "sys_platform == 'darwin'" },
             { name = "sniffio", marker = "sys_platform == 'darwin'" },
@@ -5436,6 +5452,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'darwin'",
         ]
+        markers = "sys_platform == 'darwin'"
         dependencies = [
             { name = "anyio", version = "3.7.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
         ]
@@ -5450,6 +5467,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         resolution-markers = [
             "sys_platform != 'darwin'",
         ]
+        markers = "sys_platform != 'darwin'"
         dependencies = [
             { name = "anyio", version = "3.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
         ]
@@ -10310,6 +10328,7 @@ fn lock_narrowed_python_version() -> Result<()> {
         name = "dependency"
         version = "0.1.0"
         source = { directory = "dependency" }
+        markers = "python_full_version < '3.9' or python_full_version >= '3.11'"
         dependencies = [
             { name = "iniconfig", marker = "python_full_version < '3.9' or python_full_version >= '3.11'" },
         ]
@@ -10321,6 +10340,7 @@ fn lock_narrowed_python_version() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.9' or python_full_version >= '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
@@ -10524,6 +10544,7 @@ fn lock_constrained_environment() -> Result<()> {
         name = "black"
         version = "24.3.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "platform_system != 'Windows'"
         dependencies = [
             { name = "click", marker = "platform_system != 'Windows'" },
             { name = "mypy-extensions", marker = "platform_system != 'Windows'" },
@@ -10543,6 +10564,7 @@ fn lock_constrained_environment() -> Result<()> {
         name = "click"
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
+        markers = "platform_system != 'Windows'"
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
@@ -10552,6 +10574,7 @@ fn lock_constrained_environment() -> Result<()> {
         name = "mypy-extensions"
         version = "1.0.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "platform_system != 'Windows'"
         sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782", size = 4433 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d", size = 4695 },
@@ -10561,6 +10584,7 @@ fn lock_constrained_environment() -> Result<()> {
         name = "packaging"
         version = "24.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "platform_system != 'Windows'"
         sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488 },
@@ -10570,6 +10594,7 @@ fn lock_constrained_environment() -> Result<()> {
         name = "pathspec"
         version = "0.12.1"
         source = { registry = "https://pypi.org/simple" }
+        markers = "platform_system != 'Windows'"
         sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191 },
@@ -10579,6 +10604,7 @@ fn lock_constrained_environment() -> Result<()> {
         name = "platformdirs"
         version = "4.2.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "platform_system != 'Windows'"
         sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", hash = "sha256:ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768", size = 20055 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717 },
@@ -10588,6 +10614,7 @@ fn lock_constrained_environment() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+        markers = "platform_system != 'Windows'"
         dependencies = [
             { name = "black", marker = "platform_system != 'Windows'" },
         ]
@@ -10737,6 +10764,7 @@ fn lock_constrained_environment() -> Result<()> {
         name = "colorama"
         version = "0.4.6"
         source = { registry = "https://pypi.org/simple" }
+        markers = "platform_system == 'Windows'"
         sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
@@ -10891,6 +10919,7 @@ fn lock_non_project_fork() -> Result<()> {
         resolution-markers = [
             "python_full_version >= '3.11'",
         ]
+        markers = "python_full_version >= '3.11'"
         dependencies = [
             { name = "idna", marker = "python_full_version >= '3.11'" },
             { name = "sniffio", marker = "python_full_version >= '3.11'" },
@@ -10907,6 +10936,7 @@ fn lock_non_project_fork() -> Result<()> {
         resolution-markers = [
             "python_full_version < '3.11'",
         ]
+        markers = "python_full_version < '3.11'"
         dependencies = [
             { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
             { name = "idna", marker = "python_full_version < '3.11'" },
@@ -10922,6 +10952,7 @@ fn lock_non_project_fork() -> Result<()> {
         name = "exceptiongroup"
         version = "1.2.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/8e/1c/beef724eaf5b01bb44b6338c8c3494eff7cab376fab4904cfbbc3585dc79/exceptiongroup-1.2.0.tar.gz", hash = "sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68", size = 26264 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 },
@@ -10949,6 +10980,7 @@ fn lock_non_project_fork() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.11'"
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
@@ -11071,6 +11103,7 @@ fn lock_non_project_conditional() -> Result<()> {
         name = "anyio"
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "sys_platform == 'linux'"
         dependencies = [
             { name = "idna" },
             { name = "sniffio" },
@@ -11084,6 +11117,7 @@ fn lock_non_project_conditional() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
+        markers = "sys_platform == 'linux'"
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -11093,6 +11127,7 @@ fn lock_non_project_conditional() -> Result<()> {
         name = "sniffio"
         version = "1.3.1"
         source = { registry = "https://pypi.org/simple" }
+        markers = "sys_platform == 'linux'"
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
@@ -11470,6 +11505,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
         name = "colorama"
         version = "0.4.6"
         source = { registry = "https://pypi.org/simple" }
+        markers = "platform_system == 'Windows'"
         sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
@@ -11687,6 +11723,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
         name = "colorama"
         version = "0.4.6"
         source = { registry = "https://pypi.org/simple" }
+        markers = "platform_system == 'Windows'"
         sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
@@ -12074,6 +12111,7 @@ fn lock_split_python_environment() -> Result<()> {
         name = "uv"
         version = "0.1.24"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version >= '3.8'"
         sdist = { url = "https://files.pythonhosted.org/packages/da/dc/73cc9792f5e5362612bb9fadd1b158f941b7bc9d47016416f36d077b995b/uv-0.1.24.tar.gz", hash = "sha256:1f8abf3330570acbf6188da635c4fe9cc936f9f36b49ce4992a2df56b2155421", size = 598670 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c8/0c/f3b9a32eddeb828c525c7d8c4bdfe1e456721e7295d2601d0ded841ec7be/uv-0.1.24-py3-none-linux_armv6l.whl", hash = "sha256:d87a9c4b35a4a1347586ec8f194045d96e314b822a66c48eebb5787d9c49461a", size = 9743060 },
@@ -12174,6 +12212,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "click"
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         dependencies = [
             { name = "colorama", marker = "platform_system == 'Windows'" },
         ]
@@ -12186,6 +12225,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "colorama"
         version = "0.4.6"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13' and platform_system == 'Windows'"
         sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
@@ -12195,6 +12235,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "coloredlogs"
         version = "15.0.1"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         dependencies = [
             { name = "humanfriendly" },
         ]
@@ -12207,6 +12248,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "flatbuffers"
         version = "24.3.7"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         sdist = { url = "https://files.pythonhosted.org/packages/e7/75/b09ca56e5f0e0b04279a6b5ea756f578fe3d46be4a884a0e2fe322877351/flatbuffers-24.3.7.tar.gz", hash = "sha256:0895c22b9a6019ff2f4de2e5e2f7cd15914043e6e7033a94c0c6369422690f22", size = 22137 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/bf/45/c961e3cb6ddad76b325c163d730562bb6deb1ace5acbed0306f5fbefb90e/flatbuffers-24.3.7-py2.py3-none-any.whl", hash = "sha256:80c4f5dcad0ee76b7e349671a0d657f2fbba927a0244f88dd3f5ed6a3694e1fc", size = 26772 },
@@ -12216,6 +12258,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "humanfriendly"
         version = "10.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         dependencies = [
             { name = "pyreadline3", marker = "sys_platform == 'win32'" },
         ]
@@ -12228,6 +12271,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "magika"
         version = "0.5.1"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         dependencies = [
             { name = "click" },
             { name = "numpy", version = "1.24.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
@@ -12246,6 +12290,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "mpmath"
         version = "1.3.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         sdist = { url = "https://files.pythonhosted.org/packages/e0/47/dd32fa426cc72114383ac549964eecb20ecfd886d1e5ccf5340b55b02f57/mpmath-1.3.0.tar.gz", hash = "sha256:7a28eb2a9774d00c7bc92411c19a89209d5da7c4c9a9e227be8330a23a25b91f", size = 508106 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl", hash = "sha256:a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c", size = 536198 },
@@ -12259,6 +12304,7 @@ fn lock_python_upper_bound() -> Result<()> {
             "python_full_version >= '3.13'",
             "python_full_version < '3.9'",
         ]
+        markers = "python_full_version < '3.9'"
         sdist = { url = "https://files.pythonhosted.org/packages/a4/9b/027bec52c633f6556dba6b722d9a0befb40498b9ceddd29cbe67a45a127c/numpy-1.24.4.tar.gz", hash = "sha256:80f5e3a4e498641401868df4208b74581206afbee7cf7b8329daae82676d9463", size = 10911229 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/6b/80/6cdfb3e275d95155a34659163b83c09e3a3ff9f1456880bec6cc63d71083/numpy-1.24.4-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:c0bfb52d2169d58c1cdb8cc1f16989101639b34c7d3ce60ed70b19c63eba0b64", size = 19789140 },
@@ -12297,6 +12343,7 @@ fn lock_python_upper_bound() -> Result<()> {
         resolution-markers = [
             "python_full_version >= '3.9' and python_full_version < '3.13'",
         ]
+        markers = "python_full_version >= '3.9' and python_full_version < '3.13'"
         sdist = { url = "https://files.pythonhosted.org/packages/65/6e/09db70a523a96d25e115e71cc56a6f9031e7b8cd166c1ac8438307c14058/numpy-1.26.4.tar.gz", hash = "sha256:2a02aba9ed12e4ac4eb3ea9421c420301a0c6460d9830d74a9df87efa4912010", size = 15786129 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/a7/94/ace0fdea5241a27d13543ee117cbc65868e82213fb31a8eb7fe9ff23f313/numpy-1.26.4-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:9ff0f4f29c51e2803569d7a51c2304de5554655a60c5d776e35b4a41413830d0", size = 20631468 },
@@ -12340,6 +12387,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "onnxruntime"
         version = "1.17.1"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         dependencies = [
             { name = "coloredlogs" },
             { name = "flatbuffers" },
@@ -12381,6 +12429,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "packaging"
         version = "24.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488 },
@@ -12401,6 +12450,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "protobuf"
         version = "5.26.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         sdist = { url = "https://files.pythonhosted.org/packages/ea/ab/ae590cd71f5a50cd9e0979593e217529b532a001e46c2dd0811c8697f4ad/protobuf-5.26.0.tar.gz", hash = "sha256:82f5870d74c99addfe4152777bdf8168244b9cf0ac65f8eccf045ddfa9d80d9b", size = 393498 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/91/b1/bd8403bf96aae15e814532f14b12c1e7a1acad636876d470e1888ff51c59/protobuf-5.26.0-cp310-abi3-win32.whl", hash = "sha256:f9ecc8eb6f18037e0cbf43256db0325d4723f429bca7ef5cd358b7c29d65f628", size = 400024 },
@@ -12419,6 +12469,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "pyreadline3"
         version = "3.4.1"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13' and sys_platform == 'win32'"
         sdist = { url = "https://files.pythonhosted.org/packages/d7/86/3d61a61f36a0067874a00cb4dceb9028d34b6060e47828f7fc86fb9f7ee9/pyreadline3-3.4.1.tar.gz", hash = "sha256:6f3d1f7b8a31ba32b73917cefc1f28cc660562f39aea8646d30bd6eff21f7bae", size = 86465 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/56/fc/a3c13ded7b3057680c8ae95a9b6cc83e63657c38e0005c400a5d018a33a7/pyreadline3-3.4.1-py3-none-any.whl", hash = "sha256:b0efb6516fd4fb07b45949053826a62fa4cb353db5be2bbb4a7aa1fdd1e345fb", size = 95203 },
@@ -12428,6 +12479,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "python-dotenv"
         version = "1.0.1"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         sdist = { url = "https://files.pythonhosted.org/packages/bc/57/e84d88dfe0aec03b7a2d4327012c1627ab5f03652216c63d49846d7a6c58/python-dotenv-1.0.1.tar.gz", hash = "sha256:e324ee90a023d808f1959c46bcbc04446a10ced277783dc6ee09987c37ec10ca", size = 39115 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/6a/3e/b68c118422ec867fa7ab88444e1274aa40681c606d59ac27de5a5588f082/python_dotenv-1.0.1-py3-none-any.whl", hash = "sha256:f7b63ef50f1b690dddf550d03497b66d609393b40b564ed0d674909a68ebf16a", size = 19863 },
@@ -12437,6 +12489,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "sympy"
         version = "1.12"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         dependencies = [
             { name = "mpmath" },
         ]
@@ -12449,6 +12502,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "tabulate"
         version = "0.9.0"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         sdist = { url = "https://files.pythonhosted.org/packages/ec/fe/802052aecb21e3797b8f7902564ab6ea0d60ff8ca23952079064155d1ae1/tabulate-0.9.0.tar.gz", hash = "sha256:0095b12bf5966de529c0feb1fa08671671b3368eec77d7ef7ab114be2c068b3c", size = 81090 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/40/44/4a5f08c96eb108af5cb50b41f76142f0afa346dfa99d5296fe7202a11854/tabulate-0.9.0-py3-none-any.whl", hash = "sha256:024ca478df22e9340661486f85298cff5f6dcdba14f3813e8830015b9ed1948f", size = 35252 },
@@ -12458,6 +12512,7 @@ fn lock_python_upper_bound() -> Result<()> {
         name = "tqdm"
         version = "4.66.2"
         source = { registry = "https://pypi.org/simple" }
+        markers = "python_full_version < '3.13'"
         dependencies = [
             { name = "colorama", marker = "platform_system == 'Windows'" },
         ]

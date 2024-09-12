@@ -548,6 +548,7 @@ wheels = [
 name = "greenlet"
 version = "3.0.3"
 source = { registry = "https://pypi.org/simple" }
+markers = "(python_full_version < '3.13' and platform_machine == 'AMD64') or (python_full_version < '3.13' and platform_machine == 'WIN32') or (python_full_version < '3.13' and platform_machine == 'aarch64') or (python_full_version < '3.13' and platform_machine == 'amd64') or (python_full_version < '3.13' and platform_machine == 'ppc64le') or (python_full_version < '3.13' and platform_machine == 'win32') or (python_full_version < '3.13' and platform_machine == 'x86_64')"
 sdist = { url = "https://files.pythonhosted.org/packages/17/14/3bddb1298b9a6786539ac609ba4b7c9c0842e12aa73aaa4d8d73ec8f8185/greenlet-3.0.3.tar.gz", hash = "sha256:43374442353259554ce33599da8b692d5aa96f8976d567d4badf263371fbe491", size = 182013 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/2f/461615adc53ba81e99471303b15ac6b2a6daa8d2a0f7f77fd15605e16d5b/greenlet-3.0.3-cp312-cp312-macosx_11_0_universal2.whl", hash = "sha256:70fb482fdf2c707765ab5f0b6655e9cfcf3780d8d87355a063547b41177599be", size = 273085 },
@@ -995,6 +996,7 @@ crypto = [
 name = "pyobjc-core"
 version = "10.3.1"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_system == 'Darwin'"
 sdist = { url = "https://files.pythonhosted.org/packages/b7/40/a38d78627bd882d86c447db5a195ff307001ae02c1892962c656f2fd6b83/pyobjc_core-10.3.1.tar.gz", hash = "sha256:b204a80ccc070f9ab3f8af423a3a25a6fd787e228508d00c4c30f8ac538ba720", size = 935027 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cd/4d/d5d552b209fbca644cf9e0115a4cef8bc5f6726a44303eb7ae8d8a920a9e/pyobjc_core-10.3.1-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:6ff5823d13d0a534cdc17fa4ad47cf5bee4846ce0fd27fc40012e12b46db571b", size = 825968 },
@@ -1005,6 +1007,7 @@ wheels = [
 name = "pyobjc-framework-cocoa"
 version = "10.3.1"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_system == 'Darwin'"
 dependencies = [
     { name = "pyobjc-core" },
 ]
@@ -1018,6 +1021,7 @@ wheels = [
 name = "pyobjc-framework-corebluetooth"
 version = "10.3.1"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_system == 'Darwin'"
 dependencies = [
     { name = "pyobjc-core" },
     { name = "pyobjc-framework-cocoa" },
@@ -1034,6 +1038,7 @@ wheels = [
 name = "pyobjc-framework-libdispatch"
 version = "10.3.1"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_system == 'Darwin'"
 dependencies = [
     { name = "pyobjc-core" },
     { name = "pyobjc-framework-cocoa" },
@@ -1306,6 +1311,7 @@ wheels = [
 name = "winrt-runtime"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_system == 'Windows'"
 sdist = { url = "https://files.pythonhosted.org/packages/b9/49/7635e6cf189dbdf5cb02d297958f43f4c3f9f11bdf5b2ef0f27b2e5f8a8b/winrt_runtime-2.1.0.tar.gz", hash = "sha256:fc9aeea4ab4ddee143fd0aea656040ab7843a440895106314ecaff78a77fd716", size = 13394 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/13/62/a08bdb6bb0c857f5194c8823eaaced8c7065812e279109e5d7ac3ed78390/winrt_runtime-2.1.0-cp312-cp312-win32.whl", hash = "sha256:fd3d29c0d11a4afb46357dca7d8a6be22018c7bc77139c71721f4aa85beadea4", size = 179423 },
@@ -1317,6 +1323,7 @@ wheels = [
 name = "winrt-windows-devices-bluetooth"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_system == 'Windows'"
 dependencies = [
     { name = "winrt-runtime" },
 ]
@@ -1331,6 +1338,7 @@ wheels = [
 name = "winrt-windows-devices-bluetooth-advertisement"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_system == 'Windows'"
 dependencies = [
     { name = "winrt-runtime" },
 ]
@@ -1345,6 +1353,7 @@ wheels = [
 name = "winrt-windows-devices-bluetooth-genericattributeprofile"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_system == 'Windows'"
 dependencies = [
     { name = "winrt-runtime" },
 ]
@@ -1359,6 +1368,7 @@ wheels = [
 name = "winrt-windows-devices-enumeration"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_system == 'Windows'"
 dependencies = [
     { name = "winrt-runtime" },
 ]
@@ -1373,6 +1383,7 @@ wheels = [
 name = "winrt-windows-foundation"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_system == 'Windows'"
 dependencies = [
     { name = "winrt-runtime" },
 ]
@@ -1387,6 +1398,7 @@ wheels = [
 name = "winrt-windows-foundation-collections"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_system == 'Windows'"
 dependencies = [
     { name = "winrt-runtime" },
 ]
@@ -1401,6 +1413,7 @@ wheels = [
 name = "winrt-windows-storage-streams"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
+markers = "platform_system == 'Windows'"
 dependencies = [
     { name = "winrt-runtime" },
 ]
