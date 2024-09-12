@@ -6,7 +6,7 @@ use pep440_rs::Version;
 use pep508_rs::{InvalidNameError, PackageName};
 
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::str::FromStr;
 
 use fs_err::File;
@@ -16,9 +16,9 @@ use tracing::{debug, warn};
 use install_wheel_rs::read_record_file;
 
 pub use receipt::ToolReceipt;
-pub use tool::{Tool, ToolEntrypoint};
+pub use tool::{Tool, ToolEntrypoint, ToolManpage};
 use uv_cache::Cache;
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::{normalize_absolute_path, LockedFile, Simplified};
 use uv_installer::SitePackages;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
@@ -374,6 +374,47 @@ pub fn find_executable_directory() -> Result<PathBuf, Error> {
         .ok_or(Error::NoExecutableDirectory)
 }
 
+/// Find a directory to place manpages in.
+///
+/// This follows, in order:
+///
+/// - `$UV_TOOL_BIN_DIR/../share/man` (only choose this if `$UV_TOOL_BIN_DIR/../share` exists)
+/// - `$XDG_BIN_HOME/../share/man` (only choose this if `$XDG_BIN_HOME/../share` exists)
+/// - `$XDG_DATA_HOME/man`
+/// - `$HOME/.local/share/man`
+///
+/// On all platforms.
+///
+/// Errors if a directory cannot be found.
+pub fn find_manpage_directory() -> Result<PathBuf, Error> {
+    std::env::var_os("UV_TOOL_BIN_DIR")
+        .and_then(dirs_sys::is_absolute_path)
+        .map(|path| path.join("..").join("share").join("man"))
+        .and_then(|path| normalize_absolute_path(&path).ok())
+        .filter(|path| path.is_dir())
+        .or_else(|| {
+            std::env::var_os("XDG_BIN_HOME")
+                .and_then(dirs_sys::is_absolute_path)
+                .map(|path| path.join("..").join("share").join("man"))
+                .and_then(|path| normalize_absolute_path(&path).ok())
+                .filter(|path| path.is_dir())
+        })
+        .or_else(|| {
+            std::env::var_os("XDG_DATA_HOME")
+                .and_then(dirs_sys::is_absolute_path)
+                .map(|path| path.join("man"))
+        })
+        .or_else(|| {
+            // See https://github.com/dirs-dev/dirs-rs/blob/50b50f31f3363b7656e5e63b3fa1060217cbc844/src/win.rs#L5C58-L5C78
+            #[cfg(windows)]
+            let home_dir = dirs_sys::known_folder_profile();
+            #[cfg(not(windows))]
+            let home_dir = dirs_sys::home_dir();
+            home_dir.map(|path| path.join(".local").join("share").join("man"))
+        })
+        .ok_or(Error::NoExecutableDirectory)
+}
+
 /// Find the `.dist-info` directory for a package in an environment.
 fn find_dist_info<'a>(
     site_packages: &'a SitePackages,
@@ -399,6 +440,37 @@ pub fn entrypoint_paths(
     package_name: &PackageName,
     package_version: &Version,
 ) -> Result<Vec<(String, PathBuf)>, Error> {
+    let entrypoints = find_resources(site_packages, package_name, package_version)?
+        .filter_map(|resource| match resource {
+            Resource::Executable(entry) => Some(entry),
+            Resource::Manpage(_) => None,
+        })
+        .collect();
+
+    Ok(entrypoints)
+}
+
+/// Find the paths to the resources (entry points and man pages) provided by a package in an environment.
+///
+/// Entry points can either be true Python entrypoints (defined in `entrypoints.txt`) or scripts in
+/// the `.data` directory.
+///
+/// Returns a list of `Resource<(name, path)>`.
+pub fn resource_paths(
+    site_packages: &SitePackages,
+    package_name: &PackageName,
+    package_version: &Version,
+) -> Result<Vec<Resource<(String, PathBuf)>>, Error> {
+    let entrypoints = find_resources(site_packages, package_name, package_version)?.collect();
+
+    Ok(entrypoints)
+}
+
+pub fn find_resources(
+    site_packages: &SitePackages,
+    package_name: &PackageName,
+    package_version: &Version,
+) -> Result<impl Iterator<Item = Resource<(String, PathBuf)>>, Error> {
     // Find the `.dist-info` directory in the installed environment.
     let dist_info_path = find_dist_info(site_packages, package_name, package_version)?;
     debug!(
@@ -411,34 +483,85 @@ pub fn entrypoint_paths(
 
     // The RECORD file uses relative paths, so we're looking for the relative path to be a prefix.
     let layout = site_packages.interpreter().layout();
+    let error_relative_path = |path: &Path| -> io::Error {
+        io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "Could not find relative path for: {}",
+                path.simplified_display()
+            ),
+        )
+    };
     let script_relative = pathdiff::diff_paths(&layout.scheme.scripts, &layout.scheme.purelib)
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Could not find relative path for: {}",
-                    layout.scheme.scripts.simplified_display()
-                ),
-            )
-        })?;
+        .ok_or_else(|| error_relative_path(&layout.scheme.scripts))?;
+    let data_relative = pathdiff::diff_paths(&layout.scheme.data, &layout.scheme.purelib)
+        .ok_or_else(|| error_relative_path(&layout.scheme.data))?;
 
-    // Identify any installed binaries (both entrypoints and scripts from the `.data` directory).
-    let mut entrypoints = vec![];
-    for entry in record {
+    let mut it = record.into_iter();
+    Ok(std::iter::from_fn(move || loop {
+        let entry = it.next()?;
         let relative_path = PathBuf::from(&entry.path);
-        let Ok(path_in_scripts) = relative_path.strip_prefix(&script_relative) else {
+        let resource = if let Some(path) = executable_from_path(&relative_path, &script_relative) {
+            let script_name = entry
+                .path
+                .rsplit(MAIN_SEPARATOR)
+                .next()
+                .unwrap_or(&entry.path)
+                .to_string();
+            Resource::Executable((script_name, layout.scheme.scripts.join(path)))
+        } else if let Some(path) = manpage_from_path(&relative_path, &data_relative) {
+            let mut it = entry.path.rsplitn(3, MAIN_SEPARATOR);
+            // SAFETY: We know the path has section and filename because we have checked it already
+            let manual_name = it.next().expect("filename");
+            let section = it.next().expect("section");
+            Resource::Manpage((
+                format!("{section}/{manual_name}"),
+                layout.scheme.data.join(path),
+            ))
+        } else {
             continue;
         };
+        return Some(resource);
+    }))
+}
 
-        let absolute_path = layout.scheme.scripts.join(path_in_scripts);
-        let script_name = entry
-            .path
-            .rsplit(std::path::MAIN_SEPARATOR)
-            .next()
-            .unwrap_or(&entry.path)
-            .to_string();
-        entrypoints.push((script_name, absolute_path));
-    }
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+pub enum Resource<T> {
+    Executable(T),
+    Manpage(T),
+}
 
-    Ok(entrypoints)
+fn executable_from_path<'a, P: AsRef<Path>>(
+    relative_path: &'a P,
+    script_relative: &P,
+) -> Option<&'a Path> {
+    relative_path
+        .as_ref()
+        .strip_prefix(script_relative.as_ref())
+        .ok()
+}
+
+// A manpage that should have a suffix path of `/share/man/man[0-9]/filename`
+fn manpage_from_path<'a, P: AsRef<Path>>(
+    relative_path: &'a P,
+    data_relative: &P,
+) -> Option<&'a Path> {
+    let path_in_data = relative_path
+        .as_ref()
+        .strip_prefix(data_relative.as_ref())
+        .ok()?;
+
+    let mut it = path_in_data.components();
+    it.next().filter(|s| s.as_os_str() == "share")?;
+    it.next().filter(|s| s.as_os_str() == "man")?;
+    // section
+    it.next().filter(|s| {
+        let s = s.as_os_str().to_string_lossy();
+        let suffix = s.trim_start_matches("man");
+        suffix.len() == 1 && suffix.as_bytes()[0].is_ascii_digit()
+    })?;
+    // filename
+    it.next()?;
+
+    Some(path_in_data)
 }

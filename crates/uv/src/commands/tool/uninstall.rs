@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::path::Path;
 
 use anyhow::{bail, Result};
 use itertools::Itertools;
@@ -7,7 +8,7 @@ use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_tool::{InstalledTools, Tool, ToolEntrypoint};
+use uv_tool::{InstalledTools, Tool, ToolEntrypoint, ToolManpage};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -95,8 +96,9 @@ async fn do_uninstall(
     printer: Printer,
 ) -> Result<()> {
     let mut dangling = false;
-    let mut entrypoints = if names.is_empty() {
+    let (mut entrypoints, mut manpages) = if names.is_empty() {
         let mut entrypoints = vec![];
+        let mut manpages = vec![];
         for (name, receipt) in installed_tools.tools()? {
             let Ok(receipt) = receipt else {
                 // If the tool is not installed properly, attempt to remove the environment anyway.
@@ -118,11 +120,15 @@ async fn do_uninstall(
                 }
             };
 
-            entrypoints.extend(uninstall_tool(&name, &receipt, installed_tools).await?);
+            let (removed_entrypoitns, removed_manpages) =
+                uninstall_tool(&name, &receipt, installed_tools).await?;
+            entrypoints.extend(removed_entrypoitns);
+            manpages.extend(removed_manpages);
         }
-        entrypoints
+        (entrypoints, manpages)
     } else {
         let mut entrypoints = vec![];
+        let mut manpages = vec![];
         for name in names {
             let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
                 // If the tool is not installed properly, attempt to remove the environment anyway.
@@ -143,9 +149,12 @@ async fn do_uninstall(
                 }
             };
 
-            entrypoints.extend(uninstall_tool(&name, &receipt, installed_tools).await?);
+            let (removed_entrypoints, removed_manpages) =
+                uninstall_tool(&name, &receipt, installed_tools).await?;
+            entrypoints.extend(removed_entrypoints);
+            manpages.extend(removed_manpages);
         }
-        entrypoints
+        (entrypoints, manpages)
     };
     entrypoints.sort_unstable_by(|a, b| a.name.cmp(&b.name));
 
@@ -168,6 +177,20 @@ async fn do_uninstall(
             .join(", ")
     )?;
 
+    if !manpages.is_empty() {
+        manpages.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+        let s = if manpages.len() == 1 { "" } else { "s" };
+        writeln!(
+            printer.stderr(),
+            "Uninstalled {} manpage{s}: {}",
+            manpages.len(),
+            manpages
+                .iter()
+                .map(|manpage| manpage.name.bold())
+                .join(", ")
+        )?;
+    }
+
     Ok(())
 }
 
@@ -176,30 +199,40 @@ async fn uninstall_tool(
     name: &PackageName,
     receipt: &Tool,
     tools: &InstalledTools,
-) -> Result<Vec<ToolEntrypoint>> {
+) -> Result<(Vec<ToolEntrypoint>, Vec<ToolManpage>)> {
     // Remove the tool itself.
     tools.remove_environment(name)?;
 
     // Remove the tool's entrypoints.
     let entrypoints = receipt.entrypoints();
     for entrypoint in entrypoints {
-        debug!(
-            "Removing executable: {}",
-            entrypoint.install_path.user_display()
-        );
-        match fs_err::tokio::remove_file(&entrypoint.install_path).await {
-            Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                debug!(
-                    "Executable not found: {}",
-                    entrypoint.install_path.user_display()
-                );
-            }
-            Err(err) => {
-                return Err(err.into());
-            }
-        }
+        remove_resource(&entrypoint.install_path, "executable").await?;
     }
 
-    Ok(entrypoints.to_vec())
+    // Remove the tool's manpages.
+    let manpages = receipt.manpages();
+    for manpage in manpages {
+        remove_resource(&manpage.install_path, "manpage").await?;
+    }
+
+    Ok((entrypoints.to_vec(), manpages.to_vec()))
+}
+
+async fn remove_resource(target: &Path, resource_type: &str) -> Result<()> {
+    debug!("Removing {resource_type}: {}", target.user_display());
+    match fs_err::tokio::remove_file(target).await {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            debug!(
+                "{}{} not found: {}",
+                &resource_type[0..1].to_uppercase(),
+                &resource_type[1..],
+                target.user_display()
+            );
+        }
+        Err(err) => {
+            return Err(err.into());
+        }
+    };
+    Ok(())
 }
