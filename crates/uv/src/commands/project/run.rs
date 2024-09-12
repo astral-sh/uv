@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::Read;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use anstream::eprint;
@@ -832,6 +833,9 @@ pub(crate) enum RunCommand {
     Python(Vec<OsString>),
     /// Execute a `python` script.
     PythonScript(PathBuf, Vec<OsString>),
+    /// Search `sys.path` for the named module and execute its contents as the `__main__` module.
+    /// Equivalent to `python -m module`.
+    PythonModule(String, Vec<OsString>),
     /// Execute a `pythonw` script (Windows only).
     PythonGuiScript(PathBuf, Vec<OsString>),
     /// Execute a Python package containing a `__main__.py` file.
@@ -856,6 +860,7 @@ impl RunCommand {
             | Self::PythonPackage(..)
             | Self::PythonZipapp(..)
             | Self::Empty => Cow::Borrowed("python"),
+            Self::PythonModule(..) => Cow::Borrowed("python -m"),
             Self::PythonGuiScript(..) => Cow::Borrowed("pythonw"),
             Self::PythonStdin(_) => Cow::Borrowed("python -c"),
             Self::External(executable, _) => executable.to_string_lossy(),
@@ -875,6 +880,13 @@ impl RunCommand {
             | Self::PythonZipapp(target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg(target);
+                process.args(args);
+                process
+            }
+            Self::PythonModule(module, args) => {
+                let mut process = Command::new(interpreter.sys_executable());
+                process.arg("-m");
+                process.arg(module);
                 process.args(args);
                 process
             }
@@ -944,6 +956,13 @@ impl std::fmt::Display for RunCommand {
                 }
                 Ok(())
             }
+            Self::PythonModule(module, args) => {
+                write!(f, "python -m {module}")?;
+                for arg in args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                Ok(())
+            }
             Self::PythonGuiScript(target, args) => {
                 write!(f, "pythonw {}", target.display())?;
                 for arg in args {
@@ -970,12 +989,24 @@ impl std::fmt::Display for RunCommand {
     }
 }
 
-impl TryFrom<&ExternalCommand> for RunCommand {
-    type Error = std::io::Error;
+impl RunCommand {
+    pub(crate) fn from_args(
+        command: &Option<ExternalCommand>,
+        module: Option<String>,
+    ) -> anyhow::Result<Self> {
+        if let Some(module) = module {
+            let args: Vec<OsString> = command
+                .as_ref()
+                .map(|cmd| cmd.deref().clone())
+                .unwrap_or_default();
+            return Ok(Self::PythonModule(module, args));
+        }
 
-    fn try_from(command: &ExternalCommand) -> Result<Self, Self::Error> {
-        let (target, args) = command.split();
-
+        let (target, args) = if let Some(command) = command {
+            command.split()
+        } else {
+            (None, &[][..])
+        };
         let Some(target) = target else {
             return Ok(Self::Empty);
         };
