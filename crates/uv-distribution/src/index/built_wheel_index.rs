@@ -132,8 +132,7 @@ impl<'a> BuiltWheelIndex<'a> {
         };
 
         // If the distribution is stale, omit it from the index.
-        let cache_info =
-            CacheInfo::from_directory(&source_dist.install_path).map_err(Error::CacheRead)?;
+        let cache_info = CacheInfo::from_directory(&source_dist.install_path)?;
 
         if cache_info != *pointer.cache_info() {
             return Ok(None);

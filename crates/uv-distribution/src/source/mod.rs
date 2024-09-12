@@ -1112,8 +1112,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Determine the last-modified time of the source distribution.
-        let cache_info =
-            CacheInfo::from_directory(&resource.install_path).map_err(Error::CacheRead)?;
+        let cache_info = CacheInfo::from_directory(&resource.install_path)?;
 
         // Read the existing metadata from the cache.
         let entry = cache_shard.entry(LOCAL_REVISION);

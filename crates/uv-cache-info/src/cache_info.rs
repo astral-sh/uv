@@ -1,12 +1,18 @@
 use crate::commit_info::CacheCommit;
 use crate::timestamp::Timestamp;
 
-use glob::MatchOptions;
 use serde::Deserialize;
 use std::cmp::max;
-use std::io;
 use std::path::{Path, PathBuf};
 use tracing::{debug, warn};
+
+#[derive(Debug, thiserror::Error)]
+pub enum CacheInfoError {
+    #[error("Failed to parse glob patterns for `cache-keys`: {0}")]
+    Glob(#[from] globwalk::GlobError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
 
 /// The information used to determine whether a built distribution is up-to-date, based on the
 /// timestamps of relevant files, the current commit of a repository, etc.
@@ -33,17 +39,17 @@ impl CacheInfo {
     }
 
     /// Compute the cache info for a given path, which may be a file or a directory.
-    pub fn from_path(path: &Path) -> io::Result<Self> {
+    pub fn from_path(path: &Path) -> Result<Self, CacheInfoError> {
         let metadata = fs_err::metadata(path)?;
         if metadata.is_file() {
-            Self::from_file(path)
+            Ok(Self::from_file(path)?)
         } else {
             Self::from_directory(path)
         }
     }
 
     /// Compute the cache info for a given directory.
-    pub fn from_directory(directory: &Path) -> io::Result<Self> {
+    pub fn from_directory(directory: &Path) -> Result<Self, CacheInfoError> {
         let mut commit = None;
         let mut timestamp = None;
 
@@ -71,75 +77,34 @@ impl CacheInfo {
             ]
         });
 
-        // Incorporate any additional timestamps or VCS information.
+        // Incorporate timestamps from any direct filepaths.
+        let mut globs = vec![];
         for cache_key in &cache_keys {
             match cache_key {
                 CacheKey::Path(file) | CacheKey::File { file } => {
-                    if file.chars().any(|c| matches!(c, '*' | '?' | '[')) {
-                        // Treat the path as a glob.
-                        let path = directory.join(file);
-                        let Some(pattern) = path.to_str() else {
-                            warn!("Failed to convert pattern to string: {}", path.display());
-                            continue;
-                        };
-                        let paths = match glob::glob_with(
-                            pattern,
-                            MatchOptions {
-                                case_sensitive: true,
-                                require_literal_separator: true,
-                                require_literal_leading_dot: false,
-                            },
-                        ) {
-                            Ok(paths) => paths,
-                            Err(err) => {
-                                warn!("Failed to parse glob pattern: {err}");
-                                continue;
-                            }
-                        };
-                        for entry in paths {
-                            let entry = match entry {
-                                Ok(entry) => entry,
-                                Err(err) => {
-                                    warn!("Failed to read glob entry: {err}");
-                                    continue;
-                                }
-                            };
-                            let metadata = match entry.metadata() {
-                                Ok(metadata) => metadata,
-                                Err(err) => {
-                                    warn!("Failed to read metadata for glob entry: {err}");
-                                    continue;
-                                }
-                            };
-                            if metadata.is_file() {
-                                timestamp =
-                                    max(timestamp, Some(Timestamp::from_metadata(&metadata)));
-                            } else {
-                                warn!(
-                                    "Expected file for cache key, but found directory: `{}`",
-                                    entry.display()
-                                );
-                            }
-                        }
-                    } else {
-                        // Treat the path as a file.
-                        let path = directory.join(file);
-                        let metadata = match path.metadata() {
-                            Ok(metadata) => metadata,
-                            Err(err) => {
-                                warn!("Failed to read metadata for file: {err}");
-                                continue;
-                            }
-                        };
-                        if metadata.is_file() {
-                            timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
-                        } else {
-                            warn!(
-                                "Expected file for cache key, but found directory: `{}`",
-                                path.display()
-                            );
-                        }
+                    if file.chars().any(|c| matches!(c, '*' | '?' | '[' | '{')) {
+                        // Defer globs to a separate pass.
+                        globs.push(file);
+                        continue;
                     }
+
+                    // Treat the path as a file.
+                    let path = directory.join(file);
+                    let metadata = match path.metadata() {
+                        Ok(metadata) => metadata,
+                        Err(err) => {
+                            warn!("Failed to read metadata for file: {err}");
+                            continue;
+                        }
+                    };
+                    if !metadata.is_file() {
+                        warn!(
+                            "Expected file for cache key, but found directory: `{}`",
+                            path.display()
+                        );
+                        continue;
+                    }
+                    timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
                 }
                 CacheKey::Git { git: true } => match CacheCommit::from_repository(directory) {
                     Ok(commit_info) => commit = Some(commit_info),
@@ -151,12 +116,43 @@ impl CacheInfo {
             }
         }
 
+        // If we have any globs, process them in a single pass.
+        if !globs.is_empty() {
+            let walker = globwalk::GlobWalkerBuilder::from_patterns(directory, &globs)
+                .file_type(globwalk::FileType::FILE | globwalk::FileType::SYMLINK)
+                .build()?;
+            for entry in walker {
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(err) => {
+                        warn!("Failed to read glob entry: {err}");
+                        continue;
+                    }
+                };
+                let metadata = match entry.metadata() {
+                    Ok(metadata) => metadata,
+                    Err(err) => {
+                        warn!("Failed to read metadata for glob entry: {err}");
+                        continue;
+                    }
+                };
+                if !metadata.is_file() {
+                    warn!(
+                        "Expected file for cache key, but found directory: `{}`",
+                        entry.path().display()
+                    );
+                    continue;
+                }
+                timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
+            }
+        }
+
         Ok(Self { timestamp, commit })
     }
 
     /// Compute the cache info for a given file, assumed to be a binary or source distribution
     /// represented as (e.g.) a `.whl` or `.tar.gz` archive.
-    pub fn from_file(path: impl AsRef<Path>) -> Result<Self, io::Error> {
+    pub fn from_file(path: impl AsRef<Path>) -> std::io::Result<Self> {
         let metadata = fs_err::metadata(path.as_ref())?;
         let timestamp = Timestamp::from_metadata(&metadata);
         Ok(Self {
