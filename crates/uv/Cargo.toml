@@ -55,6 +55,7 @@ ctrlc = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+http = { workspace = true }
 indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
