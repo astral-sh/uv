@@ -46,6 +46,8 @@ pub enum Error {
     CacheEncode(#[from] rmp_serde::encode::Error),
     #[error("Failed to walk the distribution cache")]
     CacheWalk(#[source] walkdir::Error),
+    #[error(transparent)]
+    CacheInfo(#[from] uv_cache_info::CacheInfoError),
 
     // Build error
     #[error(transparent)]
