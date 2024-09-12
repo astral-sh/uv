@@ -585,7 +585,7 @@ You can limit `uv build` to building a source distribution with `uv build --sdis
 distribution with `uv build --wheel`, or build both distributions from source with
 `uv build --sdist --wheel`.
 
-`uv build` accepts `--build-constraints`, which can be used to constrain the versions of any build
+`uv build` accepts `--build-constraint`, which can be used to constrain the versions of any build
 requirements during the build process. When coupled with `--require-hashes`, uv will enforce that
 the requirement used to build the project match specific, known hashes, for reproducibility.
 
@@ -599,7 +599,7 @@ Running the following would build the project with the specified version of `set
 that the downloaded `setuptools` distribution matches the specified hash:
 
 ```console
-$ uv build --build-constraints constraints.txt --require-hashes
+$ uv build --build-constraint constraints.txt --require-hashes
 ```
 
 ## Build isolation

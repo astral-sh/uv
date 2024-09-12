@@ -22,7 +22,7 @@
 
 ### Enhancements
 
-- Accept `--build-constraints` in `uv build` ([#7085](https://github.com/astral-sh/uv/pull/7085))
+- Accept `--build-constraint` in `uv build` ([#7085](https://github.com/astral-sh/uv/pull/7085))
 - Add `--require-hashes` and `--verify-hashes` to `uv build` ([#7094](https://github.com/astral-sh/uv/pull/7094))
 - Add `--show-version-specifiers` to `uv tool list` ([#7050](https://github.com/astral-sh/uv/pull/7050))
 - Respect hashes in constraints files ([#7093](https://github.com/astral-sh/uv/pull/7093))
