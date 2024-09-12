@@ -11,9 +11,17 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Attempt to update the uv binary.
-pub(crate) async fn self_update(version: Option<String>, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn self_update(
+    version: Option<String>,
+    token: Option<String>,
+    printer: Printer,
+) -> Result<ExitStatus> {
     let mut updater = AxoUpdater::new_for("uv");
     updater.disable_installer_output();
+
+    if let Some(ref token) = token {
+        updater.set_github_token(token);
+    }
 
     // Load the "install receipt" for the current binary. If the receipt is not found, then
     // uv was likely installed via a package manager.
@@ -121,11 +129,25 @@ pub(crate) async fn self_update(version: Option<String>, printer: Printer) -> Re
             )?;
         }
         Err(err) => {
-            return Err(if let AxoupdateError::Reqwest(err) = err {
-                WrappedReqwestError::from(err).into()
+            return if let AxoupdateError::Reqwest(err) = err {
+                if err.status() == Some(http::StatusCode::FORBIDDEN) && token.is_none() {
+                    writeln!(
+                        printer.stderr(),
+                        "{}",
+                        format_args!(
+                            "{}{} GitHub API rate limit exceeded. Please provide a GitHub token via the {} option.",
+                            "error".red().bold(),
+                            ":".bold(),
+                            "`--token`".green().bold()
+                        )
+                    )?;
+                    Ok(ExitStatus::Error)
+                } else {
+                    Err(WrappedReqwestError::from(err).into())
+                }
             } else {
-                err.into()
-            });
+                Err(err.into())
+            };
         }
     }
 
