@@ -4240,4 +4240,12 @@ pub fn generate_shell_completion(
     buffer: &mut dyn std::io::Write,
 ) {
     shell.generate(&mut Cli::command(), buffer);
+    // `uvx` completion
+    #[allow(clippy::single_match)] // Hopefully, this will be implemented for other shells as well
+    match shell {
+        clap_complete_command::Shell::Fish => {
+            writeln!(buffer, r#"complete -c uvx --wraps "uv tool run""#).ok();
+        }
+        _ => {}
+    };
 }
