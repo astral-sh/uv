@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use anstream::eprintln;
 use anyhow::Result;
 use clap::error::{ContextKind, ContextValue};
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
 use tracing::{debug, instrument};
@@ -773,7 +773,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             Ok(ExitStatus::Success)
         }
         Commands::GenerateShellCompletion(args) => {
-            args.shell.generate(&mut Cli::command(), &mut stdout());
+            uv_cli::generate_shell_completion(&args.shell, &mut stdout());
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {

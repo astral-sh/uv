@@ -6,7 +6,7 @@ use std::str::FromStr;
 use anyhow::{anyhow, Result};
 use clap::builder::styling::{AnsiColor, Effects, Style};
 use clap::builder::Styles;
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
@@ -4233,4 +4233,11 @@ pub struct DisplayTreeArgs {
     /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
+}
+
+pub fn generate_shell_completion(
+    shell: &clap_complete_command::Shell,
+    buffer: &mut dyn std::io::Write,
+) {
+    shell.generate(&mut Cli::command(), buffer);
 }
