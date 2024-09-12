@@ -1695,6 +1695,21 @@ fn run_zipapp() -> Result<()> {
     Ok(())
 }
 
+/// Run a module equivalent to `python -m foo`.
+#[test]
+fn run_module() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.run().arg("-m").arg("__hello__"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello world!
+
+    ----- stderr -----
+    "#);
+}
+
 /// When the `pyproject.toml` file is invalid.
 #[test]
 fn run_project_toml_error() -> Result<()> {
