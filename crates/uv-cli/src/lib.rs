@@ -428,7 +428,8 @@ pub struct SelfUpdateArgs {
     /// Update to the specified version. If not provided, uv will update to the latest version.
     pub target_version: Option<String>,
 
-    /// Specify a github token for authentication during the update process.
+    /// A GitHub token for authentication.
+    /// A token is not required but can be used to reduce the chance of encountering rate limits.
     #[arg(long, env = "UV_GITHUB_TOKEN")]
     pub token: Option<String>,
 }
