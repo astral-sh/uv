@@ -418,7 +418,7 @@ fn run_pep723_script_requires_python() -> Result<()> {
 
     ----- stderr -----
     Reading inline script metadata from: main.py
-    warning: Python 3.8.[X] does not satisfy the script's `requires-python` specifier: `>=3.11`
+    warning: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the script's Python requirement: `>=3.11`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1774,7 +1774,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The Python request from `.python-version` resolved to Python 3.8.[X], which incompatible with the project's Python requirement: `>=3.12`
+    error: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`
     "###);
 
     // ...even if `--isolated` is provided.
@@ -1784,7 +1784,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The Python request from `.python-version` resolved to Python 3.8.[X], which incompatible with the project's Python requirement: `>=3.12`
+    error: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`
     "###);
 
     Ok(())

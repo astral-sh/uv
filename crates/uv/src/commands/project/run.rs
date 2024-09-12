@@ -34,7 +34,9 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
-use crate::commands::project::{validate_requires_python, ProjectError, WorkspacePython};
+use crate::commands::project::{
+    validate_requires_python, ProjectError, PythonRequestSource, WorkspacePython,
+};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -103,24 +105,27 @@ pub(crate) async fn run(
             script.path.user_display().cyan()
         )?;
 
-        // (1) Explicit request from user
-        let python_request = if let Some(request) = python.as_deref() {
-            Some(PythonRequest::parse(request))
+        let (source, python_request) = if let Some(request) = python.as_deref() {
+            // (1) Explicit request from user
+            let source = PythonRequestSource::UserRequest;
+            let request = Some(PythonRequest::parse(request));
+            (source, request)
+        } else if let Some(file) = PythonVersionFile::discover(&*CWD, false, false).await? {
             // (2) Request from `.python-version`
-        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
-            .await?
-            .and_then(PythonVersionFile::into_version)
-        {
-            Some(request)
-            // (3) `Requires-Python` in the script
+            let source = PythonRequestSource::DotPythonVersion(file.file_name().to_string());
+            let request = file.into_version();
+            (source, request)
         } else {
-            script
+            // (3) `Requires-Python` in the script
+            let request = script
                 .metadata
                 .requires_python
                 .as_ref()
                 .map(|requires_python| {
                     PythonRequest::Version(VersionRequest::Range(requires_python.clone()))
-                })
+                });
+            let source = PythonRequestSource::RequiresPython;
+            (source, request)
         };
 
         let client_builder = BaseClientBuilder::new()
@@ -141,11 +146,28 @@ pub(crate) async fn run(
 
         if let Some(requires_python) = script.metadata.requires_python.as_ref() {
             if !requires_python.contains(interpreter.python_version()) {
-                warn_user!(
-                    "Python {} does not satisfy the script's `requires-python` specifier: `{}`",
-                    interpreter.python_version(),
-                    requires_python
-                );
+                let err = match source {
+                    PythonRequestSource::UserRequest => {
+                        ProjectError::RequestedPythonScriptIncompatibility(
+                            interpreter.python_version().clone(),
+                            requires_python.clone(),
+                        )
+                    }
+                    PythonRequestSource::DotPythonVersion(file) => {
+                        ProjectError::DotPythonVersionScriptIncompatibility(
+                            file,
+                            interpreter.python_version().clone(),
+                            requires_python.clone(),
+                        )
+                    }
+                    PythonRequestSource::RequiresPython => {
+                        ProjectError::RequiresPythonScriptIncompatibility(
+                            interpreter.python_version().clone(),
+                            requires_python.clone(),
+                        )
+                    }
+                };
+                warn_user!("{err}");
             }
         }
 
