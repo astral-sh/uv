@@ -2501,7 +2501,7 @@ pub struct RunArgs {
     #[arg(long)]
     pub with: Vec<String>,
 
-    /// Run with the given packages installed as editables
+    /// Run with the given packages installed as editables.
     ///
     /// When used in a project, these dependencies will be layered on top of
     /// the project environment in a separate, ephemeral environment. These
