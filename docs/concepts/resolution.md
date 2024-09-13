@@ -303,11 +303,13 @@ distributions as gzip tarball (`.tar.gz`) archives. Prior to this specification,
 formats, which need to be supported for backward compatibility, were also allowed. uv supports
 reading and extracting archives in the following formats:
 
-- bzip2 tarball (`.tar.bz2`)
+- bzip2 tarball (`.tar.bz2`, `.tbz`)
 - gzip tarball (`.tar.gz`, `.tgz`)
-- xz tarball (`.tar.xz`)
+- xz tarball (`.tar.xz`, `.txz`)
 - zip (`.zip`)
 - zstd tarball (`.tar.zst`)
+- lzip tarball (`.tar.lz`)
+- lzma tarball (`.tar.lzma`)
 
 ## Learn more
 
