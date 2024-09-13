@@ -1554,10 +1554,10 @@ impl VersionRequest {
                     ));
                 }
             }
-            Self::MajorMinorPrerelease(major, minor, _) => {
+            Self::MajorMinorPrerelease(major, minor, prerelease) => {
                 if (*major, *minor) < (3, 7) {
                     return Err(format!(
-                        "Python <3.7 is not supported but {major}.{minor} was requested."
+                        "Python <3.7 is not supported but {major}.{minor}{prerelease} was requested."
                     ));
                 }
             }
