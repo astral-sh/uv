@@ -2660,6 +2660,12 @@ pub struct RunArgs {
     /// By default, environment modifications are omitted, but enabled under `--verbose`.
     #[arg(long, env = "UV_SHOW_RESOLUTION", value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
     pub show_resolution: bool,
+
+    /// Run the command and load environment variables from the `.env` file in the current project.
+    ///
+    /// By default, the .env file is not loaded.
+    #[arg(long, env = "UV_RUN_LOAD_DOTENV")]
+    pub load_dotenv: bool,
 }
 
 #[derive(Args)]

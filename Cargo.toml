@@ -92,6 +92,7 @@ directories = { version = "5.0.1" }
 dirs-sys = { version = "0.4.1" }
 dunce = { version = "1.0.5" }
 either = { version = "1.13.0" }
+dotenvy = { version = "0.15.7" }
 encoding_rs_io = { version = "0.1.7" }
 etcetera = { version = "0.8.0" }
 flate2 = { version = "1.0.33", default-features = false }

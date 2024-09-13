@@ -75,6 +75,9 @@ uv accepts the following command-line arguments as environment variables:
   set, uv will use this password for publishing.
 - `UV_NO_SYNC`: Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
   the environment.
+- `UV_RUN_LOAD_DOTENV`: Equivalent to the `--load-dotenv` command-line argument. If set, `uv run`
+  will load the .env file from the current project directory (if it exists) to load all ENVs into
+  the current process.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
