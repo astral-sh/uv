@@ -51,34 +51,6 @@ impl DistExtension {
     }
 }
 
-// impl SourceDistExtension {
-//     /// Extract the [`SourceDistExtension`] from a path.
-//     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, ExtensionError> {
-//         /// Returns true if the path is a tar file (e.g., `.tar.gz`).
-//         fn is_tar(path: &Path) -> bool {
-//             path.file_stem().is_some_and(|stem| {
-//                 Path::new(stem)
-//                     .extension()
-//                     .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
-//             })
-//         }
-
-//         let Some(extension) = path.as_ref().extension().and_then(|ext| ext.to_str()) else {
-//             return Err(ExtensionError::SourceDist);
-//         };
-
-//         match extension {
-//             "zip" => Ok(Self::Zip),
-//             "gz" if is_tar(path.as_ref()) => Ok(Self::TarGz),
-//             "tgz" => Ok(Self::TarGz),
-//             "bz2" if is_tar(path.as_ref()) => Ok(Self::TarBz2),
-//             "xz" if is_tar(path.as_ref()) => Ok(Self::TarXz),
-//             "zst" if is_tar(path.as_ref()) => Ok(Self::TarZst),
-//             _ => Err(ExtensionError::SourceDist),
-//         }
-//     }
-// }
-
 impl SourceDistExtension {
     /// Extract the [`SourceDistExtension`] from a path.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, ExtensionError> {
