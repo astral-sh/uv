@@ -1490,7 +1490,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .setup_build(
                 source_root,
                 subdirectory,
-                &source.to_string(),
+                Some(source.to_string()),
                 source.as_dist(),
                 if source.is_editable() {
                     BuildKind::Editable
@@ -1526,13 +1526,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<Option<Metadata23>, Error> {
         debug!("Preparing metadata for: {source}");
 
-        // Setup the builder.
+        // Set up the builder.
         let mut builder = self
             .build_context
             .setup_build(
                 source_root,
                 subdirectory,
-                &source.to_string(),
+                Some(source.to_string()),
                 source.as_dist(),
                 if source.is_editable() {
                     BuildKind::Editable

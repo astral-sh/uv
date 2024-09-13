@@ -348,7 +348,7 @@ async fn build_impl(
 
     // Prepare some common arguments for the build.
     let subdirectory = None;
-    let version_id = src.path().file_name().unwrap().to_string_lossy();
+    let version_id = src.path().file_name().and_then(|name| name.to_str());
     let dist = None;
 
     let assets = match plan {
@@ -360,7 +360,7 @@ async fn build_impl(
                 .setup_build(
                     src.path(),
                     subdirectory,
-                    &version_id,
+                    version_id.map(ToString::to_string),
                     dist,
                     BuildKind::Sdist,
                     BuildOutput::Stderr,
@@ -391,7 +391,7 @@ async fn build_impl(
                 .setup_build(
                     &extracted,
                     subdirectory,
-                    &version_id,
+                    version_id.map(ToString::to_string),
                     dist,
                     BuildKind::Wheel,
                     BuildOutput::Stderr,
@@ -408,7 +408,7 @@ async fn build_impl(
                 .setup_build(
                     src.path(),
                     subdirectory,
-                    &version_id,
+                    version_id.map(ToString::to_string),
                     dist,
                     BuildKind::Sdist,
                     BuildOutput::Stderr,
@@ -425,7 +425,7 @@ async fn build_impl(
                 .setup_build(
                     src.path(),
                     subdirectory,
-                    &version_id,
+                    version_id.map(ToString::to_string),
                     dist,
                     BuildKind::Wheel,
                     BuildOutput::Stderr,
@@ -441,7 +441,7 @@ async fn build_impl(
                 .setup_build(
                     src.path(),
                     subdirectory,
-                    &version_id,
+                    version_id.map(ToString::to_string),
                     dist,
                     BuildKind::Sdist,
                     BuildOutput::Stderr,
@@ -454,7 +454,7 @@ async fn build_impl(
                 .setup_build(
                     src.path(),
                     subdirectory,
-                    &version_id,
+                    version_id.map(ToString::to_string),
                     dist,
                     BuildKind::Wheel,
                     BuildOutput::Stderr,
@@ -487,7 +487,7 @@ async fn build_impl(
                 .setup_build(
                     &extracted,
                     subdirectory,
-                    &version_id,
+                    version_id.map(ToString::to_string),
                     dist,
                     BuildKind::Wheel,
                     BuildOutput::Stderr,
