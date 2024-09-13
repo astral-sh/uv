@@ -1030,6 +1030,18 @@ pub enum WindowsFilters {
     Universal,
 }
 
+/// Helper method to apply filters to a string. Useful when `!uv_snapshot` cannot be used.
+pub fn apply_filters<T: AsRef<str>>(mut snapshot: String, filters: impl AsRef<[(T, T)]>) -> String {
+    for (matcher, replacement) in filters.as_ref() {
+        // TODO(konstin): Cache regex compilation
+        let re = Regex::new(matcher.as_ref()).expect("Do you need to regex::escape your filter?");
+        if re.is_match(&snapshot) {
+            snapshot = re.replace_all(&snapshot, replacement.as_ref()).to_string();
+        }
+    }
+    snapshot
+}
+
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
@@ -1076,21 +1088,16 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
         .output()
         .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"));
 
-    let mut snapshot = format!(
-        "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
-        output.status.success(),
-        output.status.code().unwrap_or(!0),
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+    let mut snapshot = apply_filters(
+        format!(
+            "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
+            output.status.success(),
+            output.status.code().unwrap_or(!0),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ),
+        filters,
     );
-
-    for (matcher, replacement) in filters.as_ref() {
-        // TODO(konstin): Cache regex compilation
-        let re = Regex::new(matcher.as_ref()).expect("Do you need to regex::escape your filter?");
-        if re.is_match(&snapshot) {
-            snapshot = re.replace_all(&snapshot, replacement.as_ref()).to_string();
-        }
-    }
 
     // This is a heuristic filter meant to try and make *most* of our tests
     // pass whether it's on Windows or Unix. In particular, there are some very
