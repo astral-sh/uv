@@ -2780,7 +2780,7 @@ pub struct AddArgs {
     /// Add the dependency to the specified Python script, rather than to a project.
     ///
     /// If provided, uv will add the dependency to the script's inline metadata
-    /// table, in adhere with PEP 723. If no such inline metadata table is present,
+    /// table, in adherence with PEP 723. If no such inline metadata table is present,
     /// a new one will be created and added to the script. When executed via `uv run`,
     /// uv will create a temporary environment for the script with all inline
     /// dependencies installed.
@@ -2849,7 +2849,7 @@ pub struct RemoveArgs {
     /// Remove the dependency from the specified Python script, rather than from a project.
     ///
     /// If provided, uv will remove the dependency from the script's inline metadata
-    /// table, in adhere with PEP 723.
+    /// table, in adherence with PEP 723.
     #[arg(long)]
     pub script: Option<PathBuf>,
 
