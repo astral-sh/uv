@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.4.10
+
+### Enhancements
+
+- Allow `uv tool upgrade --all` to continue on individual upgrade failure ([#7333](https://github.com/astral-sh/uv/pull/7333))
+- Support globs as cache keys in `tool.uv.cache-keys` ([#7268](https://github.com/astral-sh/uv/pull/7268))
+- Add Python package (`__main__.py`) support to `uv run` ([#7281](https://github.com/astral-sh/uv/pull/7281))
+- Add zip application support to `uv run` ([#7289](https://github.com/astral-sh/uv/pull/7289))
+- Add `--token` option to `self update` command ([#7279](https://github.com/astral-sh/uv/pull/7279))
+
+### Performance
+
+- Use `globwalk` for `cache-keys` matching ([#7337](https://github.com/astral-sh/uv/pull/7337))
+
+### Bug fixes
+
+- Always treat archive-like requirements as local files ([#7364](https://github.com/astral-sh/uv/pull/7364))
+- Apply `--no-install` options when constructing resolution ([#7277](https://github.com/astral-sh/uv/pull/7277))
+- Avoid clobbering existing `py.typed` files contents in `uv init` ([#7338](https://github.com/astral-sh/uv/pull/7338))
+- Avoid enforcing platform compatibility when validating lockfile ([#7305](https://github.com/astral-sh/uv/pull/7305))
+- Avoid installing transitive dev dependencies ([#7318](https://github.com/astral-sh/uv/pull/7318))
+- Avoid selecting prerelease Python installations without opt-in ([#7300](https://github.com/astral-sh/uv/pull/7300))
+- Fix PPC64 page size in binary builds. ([#7298](https://github.com/astral-sh/uv/pull/7298))
+- Include pre-release Python versions in `uv python list` ([#7290](https://github.com/astral-sh/uv/pull/7290))
+- Make version ID optional for source builds ([#7362](https://github.com/astral-sh/uv/pull/7362))
+- Support relative paths in `uv add --script` ([#7301](https://github.com/astral-sh/uv/pull/7301))
+
+### Documentation
+
+- Fix documentation typos for `uv build --build-constraint` flag ([#7330](https://github.com/astral-sh/uv/pull/7330))
+- Fix grammatical error in CLI docs ([#7353](https://github.com/astral-sh/uv/pull/7353))
+
+### Error messages
+
+- Add dedicated lock errors for wheel-only distributions ([#7307](https://github.com/astral-sh/uv/pull/7307))
+- Avoid treating `.whl` sources as source distributions ([#7303](https://github.com/astral-sh/uv/pull/7303))
+- Clarify Python requirement source for script incompatibilities ([#7339](https://github.com/astral-sh/uv/pull/7339))
+
 ## 0.4.9
 
 ### Enhancements
