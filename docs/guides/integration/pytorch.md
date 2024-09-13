@@ -12,13 +12,32 @@ please refer to [Getting Help](../../getting-started/help.md).
 
 !!! tip "TL;DR"
 
-    * If want PyTorch on macOS, just run `uv add torch`/`uv pip install torch`.
-    * If want PyTorch on Windows *with CPU support*, just run `uv add torch`/`uv pip install torch`.
-    * If want to install PyTorch on Linux with CPU support, add `--extra-index-url=https://download.pytorch.org/whl/cpu` to the `uv add`/`uv pip install` command.
-    * For Windows and Linux:
-        1. If you need CUDA 11.8, add `--extra-index-url=https://download.pytorch.org/whl/cu118` to the `uv add`/`uv pip install` command.
-        2. If you need CUDA 12.1, add `--extra-index-url=https://download.pytorch.org/whl/cu121` to the `uv add`/`uv pip install` command.
-        3. If you need CUDA 12.4, add `--extra-index-url=https://download.pytorch.org/whl/cu124` to the `uv add`/`uv pip install` command.
+    As of 09/2024:
+
+    * Use `uv add torch` or `uv pip install torch` for:
+        * on macOS (CPU only)
+        * on Linux (CUDA 12.1 only)
+        * on Windows (CPU only)
+    * Use `uv add --extra-index-url=https://download.pytorch.org/whl/cpu torch` or `uv pip install --extra-index-url=https://download.pytorch.org/whl/cpu torch` for:
+        * on Linux (CPU only)
+    * `uv add --extra-index-url=https://download.pytorch.org/whl/cu118 torch` or `uv pip install --extra-index-url=https://download.pytorch.org/whl/cu118 torch` will work:
+        * on Windows and Linux (CUDA 11.8 only)
+    * `uv add --extra-index-url=https://download.pytorch.org/whl/cu121 torch` or `uv pip install --extra-index-url=https://download.pytorch.org/whl/cu121 torch` will work:
+        * on Windows (CUDA 12.1 only)
+    * `uv add --extra-index-url=https://download.pytorch.org/whl/cu124 torch` or `uv pip install --extra-index-url=https://download.pytorch.org/whl/cu124 torch` will work:
+        * on Windows (CUDA 12.4 only)
+        * on Linux (CUDA 12.4 only)
+
+
+!!! info "Why `--extra-index-url`?"
+
+    uv `--extra-index-url` behaves differently than `pip --extra-index-url`. See more [here](https://docs.astral.sh/uv/pip/compatibility/#packages-that-exist-on-multiple-indexes).
+
+!!! warning "About lockfile cross-compatibility"
+
+    Currently, uv does not support pinning a package to a specific index (though progress is tracked [here](https://github.com/astral-sh/uv/issues/171)).
+    In case of PyTorch, this means that the lockfile might not be cross-compatible between different platforms. For example: suppose a Windows user runs `uv add torch` and then a Linux user
+    runs `uv sync` to synchronise the lockfile. The Windows user will get CPU-only PyTorch, while the Linux user will get CUDA 12.1 PyTorch.
 
 ## On macOS
 
@@ -54,12 +73,14 @@ uv pip install --extra-index-url=https://download.pytorch.org/whl/cu118 torch
 
 ### CUDA 12.1 Support
 
+Currently, wheels on PyPI for PyTorch on Linux come with CUDA 12.1.
+
 ```sh
 # in a project
-uv add --extra-index-url=https://download.pytorch.org/whl/cu121 torch
+uv add torch
 
 # make sure there is a virtual environment in the directory
-uv pip install --extra-index-url=https://download.pytorch.org/whl/cu121 torch
+uv pip install torch
 ```
 
 ### CUDA 12.4 Support
