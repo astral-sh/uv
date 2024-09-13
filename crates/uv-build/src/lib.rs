@@ -220,7 +220,7 @@ pub struct SourceBuild {
     package_version: Option<Version>,
     /// Distribution identifier, e.g., `foo-1.2.3`. Used for error reporting if the name and
     /// version are unknown.
-    version_id: String,
+    version_id: Option<String>,
     /// Whether we do a regular PEP 517 build or an PEP 660 editable build
     build_kind: BuildKind,
     /// Whether to send build output to `stderr` or `tracing`, etc.
@@ -246,7 +246,7 @@ impl SourceBuild {
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
-        version_id: String,
+        version_id: Option<String>,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
         build_kind: BuildKind,
@@ -293,7 +293,7 @@ impl SourceBuild {
             )?
         };
 
-        // Setup the build environment. If build isolation is disabled, we assume the build
+        // Set up the build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Resolving build requirements");
@@ -316,10 +316,11 @@ impl SourceBuild {
             debug!("Proceeding without build isolation");
         }
 
-        // Figure out what the modified path should be
-        // Remove the PATH variable from the environment variables if it's there
+        // Figure out what the modified path should be, and remove the PATH variable from the
+        // environment variables if it's there.
         let user_path = environment_variables.remove(&OsString::from("PATH"));
-        // See if there is an OS PATH variable
+
+        // See if there is an OS PATH variable.
         let os_path = env::var_os("PATH");
 
         // Prepend the user supplied PATH to the existing OS PATH
@@ -360,7 +361,7 @@ impl SourceBuild {
                 build_context,
                 package_name.as_ref(),
                 package_version.as_ref(),
-                &version_id,
+                version_id.as_deref(),
                 build_kind,
                 level,
                 &config_settings,
@@ -569,7 +570,7 @@ impl SourceBuild {
                 self.level,
                 self.package_name.as_ref(),
                 self.package_version.as_ref(),
-                &self.version_id,
+                self.version_id.as_deref(),
             ));
         }
 
@@ -701,7 +702,7 @@ impl SourceBuild {
                 self.level,
                 self.package_name.as_ref(),
                 self.package_version.as_ref(),
-                &self.version_id,
+                self.version_id.as_deref(),
             ));
         }
 
@@ -716,7 +717,7 @@ impl SourceBuild {
                 self.level,
                 self.package_name.as_ref(),
                 self.package_version.as_ref(),
-                &self.version_id,
+                self.version_id.as_deref(),
             ));
         }
         Ok(distribution_filename)
@@ -748,7 +749,7 @@ async fn create_pep517_build_environment(
     build_context: &impl BuildContext,
     package_name: Option<&PackageName>,
     package_version: Option<&Version>,
-    version_id: &str,
+    version_id: Option<&str>,
     build_kind: BuildKind,
     level: BuildOutput,
     config_settings: &ConfigSettings,
