@@ -2408,6 +2408,10 @@ pub struct RunArgs {
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
 
+    /// Install the project and any local dependencies as non-editable.
+    #[arg(long)]
+    pub non_editable: bool,
+
     /// The command to run.
     ///
     /// If the path to a Python script (i.e., ending in `.py`), it will be
@@ -2559,6 +2563,10 @@ pub struct SyncArgs {
     /// The project itself will also be omitted.
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
+
+    /// Install the project and any local dependencies as non-editable.
+    #[arg(long)]
+    pub non_editable: bool,
 
     /// Do not remove extraneous packages present in the environment.
     ///
@@ -3001,6 +3009,10 @@ pub struct ExportArgs {
     /// The project itself will also be omitted.
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
+
+    /// Install the project and any local dependencies as non-editable.
+    #[arg(long)]
+    pub non_editable: bool,
 
     /// Include hashes for all dependencies.
     #[arg(long, overrides_with("no_hashes"), hide = true)]
