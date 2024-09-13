@@ -280,7 +280,7 @@ fn dependency_multiple_markers() -> Result<()> {
 
     context.lock().assert().success();
 
-    // Note that the `python_version > '3.11'" markers disappear due to `requires-python = ">=3.12"`
+    // Note that the `python_version > '3.11'` markers disappear due to `requires-python = ">=3.12"`
     uv_snapshot!(context.filters(), context.export(), @r###"
     success: true
     exit_code: 0
