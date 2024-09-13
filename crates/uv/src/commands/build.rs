@@ -22,7 +22,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::RequirementsSource;
-use uv_resolver::{FlatIndex, RequiresPython};
+use uv_resolver::{FlatIndex, RequiresPython, TagPolicy};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
@@ -283,9 +283,10 @@ async fn build_impl(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
+        let tags = TagPolicy::Preferred(interpreter.tags()?);
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, None, &hasher, build_options)
+        FlatIndex::from_entries(entries, &tags, &hasher, build_options)
     };
 
     // Initialize any shared state.

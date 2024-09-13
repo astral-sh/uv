@@ -29,7 +29,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
-use uv_resolver::{FlatIndex, RequiresPython};
+use uv_resolver::{FlatIndex, RequiresPython, TagPolicy};
 use uv_scripts::Pep723Script;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
@@ -41,7 +41,6 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations::Modifications;
-use crate::commands::pip::resolution_environment;
 use crate::commands::project::ProjectError;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, project, ExitStatus, SharedState};
@@ -249,13 +248,11 @@ pub(crate) async fn add(
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let hasher = HashStrategy::default();
-    let python_platform = None;
-    let python_version = None;
     let sources = SourceStrategy::Enabled;
 
     // Determine the environment for the resolution.
-    let (tags, markers) =
-        resolution_environment(python_version, python_platform, target.interpreter())?;
+    let tags = TagPolicy::Required(target.interpreter().tags()?);
+    let markers = target.interpreter().resolver_markers();
 
     // Add all authenticated sources to the cache.
     for url in settings.index_locations.urls() {
@@ -289,7 +286,7 @@ pub(crate) async fn add(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(settings.index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, &settings.build_options)
+        FlatIndex::from_entries(entries, &tags, &hasher, &settings.build_options)
     };
 
     // Create a build dispatch.

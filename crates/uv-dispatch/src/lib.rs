@@ -28,7 +28,7 @@ use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
     ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
-    ResolverMarkers,
+    ResolverMarkers, TagPolicy,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -156,6 +156,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let markers = self.interpreter.resolver_markers();
         let tags = self.interpreter.tags()?;
+        let tags = TagPolicy::Required(tags.clone());
 
         let resolver = Resolver::new(
             Manifest::simple(requirements.to_vec()).with_constraints(self.constraints.clone()),
@@ -165,7 +166,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .build(),
             &python_requirement,
             ResolverMarkers::specific_environment(markers),
-            Some(tags),
+            &tags,
             self.flat_index,
             self.index,
             self.hasher,
@@ -227,7 +228,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.cache(),
             venv,
             &markers,
-            tags,
+            &tags,
         )?;
 
         // Nothing to do.
@@ -254,7 +255,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             // TODO(konstin): Check that there is no endless recursion.
             let preparer = Preparer::new(
                 self.cache,
-                tags,
+                &tags,
                 self.hasher,
                 self.build_options,
                 DistributionDatabase::new(self.client, self, self.concurrency.downloads),

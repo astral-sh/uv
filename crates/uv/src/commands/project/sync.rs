@@ -25,7 +25,7 @@ use uv_fs::CWD;
 use uv_installer::SitePackages;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_resolver::{FlatIndex, Lock};
+use uv_resolver::{FlatIndex, Lock, TagPolicy};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::{Source, ToolUvSources};
@@ -232,13 +232,13 @@ pub(super) async fn do_sync(
     };
 
     // Determine the tags to use for resolution.
-    let tags = venv.interpreter().tags()?;
+    let tags = TagPolicy::Required(venv.interpreter().tags()?);
 
     // Read the lockfile.
     let resolution = lock.to_resolution(
         target,
         &markers,
-        tags,
+        tags.tags(),
         extras,
         dev,
         build_options,
@@ -293,7 +293,7 @@ pub(super) async fn do_sync(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, &tags, &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -334,7 +334,7 @@ pub(super) async fn do_sync(
         config_setting,
         &hasher,
         &markers,
-        tags,
+        &tags.into_tags(),
         &client,
         &state.in_flight,
         concurrency,

@@ -181,7 +181,7 @@ impl Interpreter {
     }
 
     /// Returns the [`Tags`] for this Python executable.
-    pub fn tags(&self) -> Result<&Tags, TagsError> {
+    pub fn tags(&self) -> Result<Tags, TagsError> {
         if self.tags.get().is_none() {
             let tags = Tags::from_env(
                 self.platform(),
@@ -193,7 +193,7 @@ impl Interpreter {
             )?;
             self.tags.set(tags).expect("tags should not be set");
         }
-        Ok(self.tags.get().expect("tags should be set"))
+        Ok(self.tags.get().expect("tags should be set").clone())
     }
 
     /// Returns `true` if the environment is a PEP 405-compliant virtual environment.

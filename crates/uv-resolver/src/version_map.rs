@@ -10,7 +10,7 @@ use distribution_types::{
     RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
 use pep440_rs::Version;
-use platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use platform_tags::{IncompatibleTag, TagCompatibility};
 use pypi_types::{HashDigest, Yanked};
 use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
@@ -19,7 +19,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{yanks::AllowedYanks, ExcludeNewer, RequiresPython};
+use crate::{yanks::AllowedYanks, ExcludeNewer, RequiresPython, TagPolicy};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -43,7 +43,7 @@ impl VersionMap {
         simple_metadata: OwnedArchive<SimpleMetadata>,
         package_name: &PackageName,
         index: &IndexUrl,
-        tags: Option<&Tags>,
+        tags: &TagPolicy,
         requires_python: &RequiresPython,
         allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
@@ -104,7 +104,7 @@ impl VersionMap {
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
                 index: index.clone(),
-                tags: tags.cloned(),
+                tags: tags.clone(),
                 allowed_yanks: allowed_yanks.clone(),
                 hasher: hasher.clone(),
                 requires_python: requires_python.clone(),
@@ -323,7 +323,7 @@ struct VersionMapLazy {
     index: IndexUrl,
     /// The set of compatibility tags that determines whether a wheel is usable
     /// in the current environment.
-    tags: Option<Tags>,
+    tags: TagPolicy,
     /// Whether files newer than this timestamp should be excluded or not.
     exclude_newer: Option<ExcludeNewer>,
     /// Which yanked versions are allowed
@@ -528,17 +528,6 @@ impl VersionMapLazy {
             }
         }
 
-        // Determine a compatibility for the wheel based on tags.
-        let priority = match &self.tags {
-            Some(tags) => match filename.compatibility(tags) {
-                TagCompatibility::Incompatible(tag) => {
-                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
-                }
-                TagCompatibility::Compatible(priority) => Some(priority),
-            },
-            None => None,
-        };
-
         // Check if hashes line up. If hashes aren't required, they're considered matching.
         let hash_policy = self.hasher.get_package(name, version);
         let required_hashes = hash_policy.digests();
@@ -559,6 +548,14 @@ impl VersionMapLazy {
         if !self.requires_python.matches_wheel_tag(filename) {
             return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(IncompatibleTag::Abi));
         }
+
+        // Determine a compatibility for the wheel based on tags.
+        let priority = match filename.compatibility(self.tags.tags()) {
+            TagCompatibility::Incompatible(tag) => {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
+            }
+            TagCompatibility::Compatible(priority) => Some(priority),
+        };
 
         // Break ties with the build tag.
         let build_tag = filename.build_tag.clone();

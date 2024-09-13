@@ -27,6 +27,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph, ResolverMarkers,
+    TagPolicy,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -705,7 +706,7 @@ pub(crate) async fn resolve_environment<'a>(
     } = spec;
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let tags = interpreter.tags()?;
+    let tags = TagPolicy::Required(interpreter.tags()?);
     let markers = interpreter.resolver_markers();
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
@@ -763,7 +764,7 @@ pub(crate) async fn resolve_environment<'a>(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, &tags, &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -804,7 +805,7 @@ pub(crate) async fn resolve_environment<'a>(
         &hasher,
         &reinstall,
         &upgrade,
-        Some(tags),
+        &tags,
         ResolverMarkers::specific_environment(markers),
         python_requirement,
         &client,
@@ -852,7 +853,7 @@ pub(crate) async fn sync_environment(
 
     // Determine the markers tags to use for resolution.
     let interpreter = venv.interpreter();
-    let tags = venv.interpreter().tags()?;
+    let tags = TagPolicy::Required(venv.interpreter().tags()?);
     let markers = interpreter.resolver_markers();
 
     // Add all authenticated sources to the cache.
@@ -892,7 +893,7 @@ pub(crate) async fn sync_environment(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, &tags, &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -931,7 +932,7 @@ pub(crate) async fn sync_environment(
         config_setting,
         &hasher,
         &markers,
-        tags,
+        &tags.into_tags(),
         &client,
         &state.in_flight,
         concurrency,
@@ -1086,14 +1087,14 @@ pub(crate) async fn update_environment(
     let preferences = Vec::default();
 
     // Determine the tags to use for resolution.
-    let tags = venv.interpreter().tags()?;
+    let tags = TagPolicy::Required(venv.interpreter().tags()?);
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, &tags, &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -1134,7 +1135,7 @@ pub(crate) async fn update_environment(
         &hasher,
         reinstall,
         upgrade,
-        Some(tags),
+        &tags,
         ResolverMarkers::specific_environment(markers.clone()),
         python_requirement,
         &client,
@@ -1165,7 +1166,7 @@ pub(crate) async fn update_environment(
         config_setting,
         &hasher,
         &markers,
-        tags,
+        &tags.into_tags(),
         &client,
         &state.in_flight,
         concurrency,

@@ -20,6 +20,7 @@ pub use resolver::{
     Reporter as ResolverReporter, Resolver, ResolverMarkers, ResolverProvider, VersionsResponse,
     WheelMetadataResult,
 };
+pub use tags::TagPolicy;
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
 
@@ -48,5 +49,6 @@ mod requires_python;
 mod resolution;
 mod resolution_mode;
 mod resolver;
+mod tags;
 mod version_map;
 mod yanks;

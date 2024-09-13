@@ -25,7 +25,7 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionRequest,
 };
-use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
+use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython, TagPolicy};
 use uv_shell::Shell;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
@@ -291,7 +291,7 @@ async fn venv_impl(
                 .map_err(VenvError::FlatIndex)?;
             FlatIndex::from_entries(
                 entries,
-                Some(tags),
+                &TagPolicy::Required(tags),
                 &HashStrategy::None,
                 &BuildOptions::new(NoBinary::None, NoBuild::All),
             )

@@ -35,7 +35,7 @@ use uv_requirements::{
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
-    ResolutionMode, ResolverMarkers,
+    ResolutionMode, ResolverMarkers, TagPolicy,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -253,13 +253,16 @@ pub(crate) async fn pip_compile(
     // Determine the environment for the resolution.
     let (tags, markers) = if universal {
         (
-            None,
+            TagPolicy::Preferred(interpreter.tags()?),
             ResolverMarkers::universal(environments.into_markers()),
         )
     } else {
         let (tags, markers) =
             resolution_environment(python_version, python_platform, &interpreter)?;
-        (Some(tags), ResolverMarkers::specific_environment(markers))
+        (
+            TagPolicy::Required(tags),
+            ResolverMarkers::specific_environment(markers),
+        )
     };
 
     // Generate, but don't enforce hashes for the requirements.
@@ -302,7 +305,7 @@ pub(crate) async fn pip_compile(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags.as_deref(), &hasher, &build_options)
+        FlatIndex::from_entries(entries, &tags, &hasher, &build_options)
     };
 
     // Track in-flight downloads, builds, etc., across resolutions.
@@ -373,7 +376,7 @@ pub(crate) async fn pip_compile(
         &hasher,
         &Reinstall::None,
         &upgrade,
-        tags.as_deref(),
+        &tags,
         markers.clone(),
         python_requirement,
         &client,

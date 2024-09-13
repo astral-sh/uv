@@ -28,7 +28,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
-    ResolutionMode, ResolverMarkers,
+    ResolutionMode, ResolverMarkers, TagPolicy,
 };
 use uv_types::{BuildIsolation, HashStrategy};
 
@@ -240,11 +240,11 @@ pub(crate) async fn pip_install(
     };
 
     // Determine the tags to use for the resolution.
-    let tags = resolution_tags(
+    let tags = TagPolicy::Required(resolution_tags(
         python_version.as_ref(),
         python_platform.as_ref(),
         interpreter,
-    )?;
+    )?);
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -294,7 +294,7 @@ pub(crate) async fn pip_install(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
+        FlatIndex::from_entries(entries, &tags, &hasher, &build_options)
     };
 
     // Determine whether to enable build isolation.
@@ -375,7 +375,7 @@ pub(crate) async fn pip_install(
         &hasher,
         &reinstall,
         &upgrade,
-        Some(&tags),
+        &tags,
         ResolverMarkers::specific_environment(markers.clone()),
         python_requirement,
         &client,
@@ -411,7 +411,7 @@ pub(crate) async fn pip_install(
         config_settings,
         &hasher,
         &markers,
-        &tags,
+        &tags.into_tags(),
         &client,
         &state.in_flight,
         concurrency,
