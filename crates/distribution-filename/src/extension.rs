@@ -27,12 +27,16 @@ pub enum DistExtension {
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
+
 pub enum SourceDistExtension {
     Zip,
     TarGz,
     TarBz2,
     TarXz,
+    Tar,
     TarZst,
+    TarLz,
+    TarLzma,
 }
 
 impl DistExtension {
@@ -54,7 +58,7 @@ impl DistExtension {
 impl SourceDistExtension {
     /// Extract the [`SourceDistExtension`] from a path.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, ExtensionError> {
-        /// Returns true if the path is a tar file (e.g., `.tar.gz`, `.tar.xz`, etc.).
+        /// Returns true if the path is a tar file (e.g., `.tar`, `.tar.gz`, etc.).
         fn is_tar(path: &Path) -> bool {
             path.file_stem().is_some_and(|stem| {
                 Path::new(stem)
@@ -68,9 +72,10 @@ impl SourceDistExtension {
         };
 
         match extension {
-            "zip"=> Ok(Self::Zip),
+            "zip" => Ok(Self::Zip),
             "gz" if is_tar(path.as_ref()) => Ok(Self::TarGz),
-            "tgz" | "tar" => Ok(Self::TarGz), // `.tar` included here
+            "tgz" => Ok(Self::TarGz),
+            "tar" => Ok(Self::Tar),
             "bz2" | "tbz" if is_tar(path.as_ref()) => Ok(Self::TarBz2),
             "xz" | "txz" | "tlz" | "tar.lz" | "tar.lzma" if is_tar(path.as_ref()) => Ok(Self::TarXz),
             "zst" if is_tar(path.as_ref()) => Ok(Self::TarZst),
@@ -79,7 +84,6 @@ impl SourceDistExtension {
     }
 }
 
-
 impl Display for SourceDistExtension {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -87,7 +91,10 @@ impl Display for SourceDistExtension {
             Self::TarGz => f.write_str("tar.gz"),
             Self::TarBz2 => f.write_str("tar.bz2"),
             Self::TarXz => f.write_str("tar.xz"),
+            Self::Tar => f.write_str("tar"),
             Self::TarZst => f.write_str("tar.zst"),
+            Self::TarLz => f.write_str("tar.lz"),
+            Self::TarLzma => f.write_str("tar.lzma"),
         }
     }
 }
@@ -96,6 +103,7 @@ impl Display for SourceDistExtension {
 pub enum ExtensionError {
     #[error("`.whl`, `.zip`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz`, `.tar.xz`, `.txz`, `.tar.lz`, `.tar.lzma`, or `.tar.zst`")]
     Dist,
-    #[error("`.zip`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz`, `.tar.xz`, `.txz`, `.tar.lz`, `.tar.lzma`, or `.tar.zst`")]
+    #[error("`.zip`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz`, `.tar.xz`, `.txz`, `.tar.lz`, `.tar.lzma`, `.tar`, or `.tar.zst`")]
     SourceDist,
 }
+
