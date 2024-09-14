@@ -12729,7 +12729,7 @@ fn lock_invalid_project_table() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     error: Failed to build: `b @ file://[TEMP_DIR]/b`
       Caused by: Failed to extract static metadata from `pyproject.toml`
-      Caused by: `pyproject.toml` is using the `[project]` table, but the required `project.name` is not set.
+      Caused by: `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set.
       Caused by: TOML parse error at line 2, column 10
       |
     2 |         [project.urls]

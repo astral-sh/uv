@@ -1,6 +1,8 @@
+use serde::de::IntoDeserializer;
+use serde::Deserialize;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-
+use std::str::FromStr;
 use tracing::{debug, warn};
 
 use uv_fs::Simplified;
@@ -72,10 +74,18 @@ impl FilesystemOptions {
                 Ok(None) => {
                     // Continue traversing the directory tree.
                 }
-                Err(Error::PyprojectToml(file, err)) => {
+                Err(Error::PyprojectTomlSchema(file, err)) => {
                     // If we see an invalid `pyproject.toml`, warn but continue.
                     warn!(
-                        "Failed to parse `{}` during settings discovery:\n{}",
+                        "Failed to parse `{}` during settings discovery due to invalid schema:\n{}",
+                        file.cyan(),
+                        textwrap::indent(&err.to_string(), "  ")
+                    );
+                }
+                Err(Error::PyprojectTomlSyntax(file, err)) => {
+                    // If we see an invalid `pyproject.toml`, warn but continue.
+                    warn!(
+                        "Failed to parse `{}` during settings discovery due to invalid syntax:\n{}",
                         file.cyan(),
                         textwrap::indent(&err.to_string(), "  ")
                     );
@@ -91,20 +101,26 @@ impl FilesystemOptions {
 
     /// Load a [`FilesystemOptions`] from a directory, preferring a `uv.toml` file over a
     /// `pyproject.toml` file.
-    pub fn from_directory(dir: impl AsRef<Path>) -> Result<Option<Self>, Error> {
+    fn from_directory(dir: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         // Read a `uv.toml` file in the current directory.
         let path = dir.as_ref().join("uv.toml");
         match fs_err::read_to_string(&path) {
             Ok(content) => {
-                let options: Options = toml::from_str(&content)
-                    .map_err(|err| Error::UvToml(path.user_display().to_string(), err))?;
+                let options: toml_edit::ImDocument<_> =
+                    toml_edit::ImDocument::from_str(&content)
+                        .map_err(|err| Error::UvTomlSyntax(path.user_display().to_string(), err))?;
+                let options: Options = Options::deserialize(options.into_deserializer())
+                    .map_err(|err| Error::UvTomlSchema(path.user_display().to_string(), err))?;
 
                 // If the directory also contains a `[tool.uv]` table in a `pyproject.toml` file,
                 // warn.
                 let pyproject = dir.as_ref().join("pyproject.toml");
                 if let Some(pyproject) = fs_err::read_to_string(pyproject)
                     .ok()
-                    .and_then(|content| toml::from_str::<PyProjectToml>(&content).ok())
+                    .and_then(|content| toml_edit::ImDocument::from_str(&content).ok())
+                    .and_then(|pyproject| {
+                        PyProjectToml::deserialize(pyproject.into_deserializer()).ok()
+                    })
                 {
                     if pyproject.tool.is_some_and(|tool| tool.uv.is_some()) {
                         warn!(
@@ -125,8 +141,14 @@ impl FilesystemOptions {
         match fs_err::read_to_string(&path) {
             Ok(content) => {
                 // Parse, but skip any `pyproject.toml` that doesn't have a `[tool.uv]` section.
-                let pyproject: PyProjectToml = toml::from_str(&content)
-                    .map_err(|err| Error::PyprojectToml(path.user_display().to_string(), err))?;
+                let pyproject: toml_edit::ImDocument<_> = toml_edit::ImDocument::from_str(&content)
+                    .map_err(|err| {
+                        Error::PyprojectTomlSyntax(path.user_display().to_string(), err)
+                    })?;
+                let pyproject: PyProjectToml =
+                    PyProjectToml::deserialize(pyproject.into_deserializer()).map_err(|err| {
+                        Error::PyprojectTomlSchema(path.user_display().to_string(), err)
+                    })?;
                 let Some(tool) = pyproject.tool else {
                     debug!(
                         "Skipping `pyproject.toml` in `{}` (no `[tool]` section)",
@@ -188,8 +210,10 @@ fn config_dir() -> Option<PathBuf> {
 /// Load [`Options`] from a `uv.toml` file.
 fn read_file(path: &Path) -> Result<Options, Error> {
     let content = fs_err::read_to_string(path)?;
-    let options: Options = toml::from_str(&content)
-        .map_err(|err| Error::UvToml(path.user_display().to_string(), err))?;
+    let options: toml_edit::ImDocument<_> = toml_edit::ImDocument::from_str(&content)
+        .map_err(|err| Error::UvTomlSyntax(path.user_display().to_string(), err))?;
+    let options: Options = Options::deserialize(options.into_deserializer())
+        .map_err(|err| Error::UvTomlSchema(path.user_display().to_string(), err))?;
     Ok(options)
 }
 
@@ -199,8 +223,14 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Failed to parse: `{0}`")]
-    PyprojectToml(String, #[source] toml::de::Error),
+    PyprojectTomlSyntax(String, #[source] toml_edit::TomlError),
 
     #[error("Failed to parse: `{0}`")]
-    UvToml(String, #[source] toml::de::Error),
+    PyprojectTomlSchema(String, #[source] toml_edit::de::Error),
+
+    #[error("Failed to parse: `{0}`")]
+    UvTomlSyntax(String, #[source] toml_edit::TomlError),
+
+    #[error("Failed to parse: `{0}`")]
+    UvTomlSchema(String, #[source] toml_edit::de::Error),
 }
