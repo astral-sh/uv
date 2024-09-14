@@ -468,15 +468,14 @@ impl<'a> CompatibleDist<'a> {
         }
     }
 
-    /// Returns whether the distribution is a source distribution.
-    ///
-    /// Avoid building source distributions we don't need.
-    pub fn prefetchable(&self) -> bool {
-        match *self {
-            CompatibleDist::SourceDist { .. } => false,
-            CompatibleDist::InstalledDist(_)
-            | CompatibleDist::CompatibleWheel { .. }
-            | CompatibleDist::IncompatibleWheel { .. } => true,
+    /// Returns a [`RegistryBuiltWheel`] if the distribution includes a compatible or incompatible
+    /// wheel.
+    pub fn wheel(&self) -> Option<&RegistryBuiltWheel> {
+        match self {
+            CompatibleDist::InstalledDist(_) => None,
+            CompatibleDist::SourceDist { .. } => None,
+            CompatibleDist::CompatibleWheel { wheel, .. } => Some(wheel),
+            CompatibleDist::IncompatibleWheel { wheel, .. } => Some(wheel),
         }
     }
 }

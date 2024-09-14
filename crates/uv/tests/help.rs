@@ -28,6 +28,7 @@ fn help() {
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
       venv                       Create a virtual environment
+      build                      Build Python packages into source distributions and wheels
       cache                      Manage uv's cache
       version                    Display uv's version
       generate-shell-completion  Generate shell completion
@@ -92,6 +93,7 @@ fn help_flag() {
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
+      build    Build Python packages into source distributions and wheels
       cache    Manage uv's cache
       version  Display uv's version
       help     Display documentation for a command
@@ -154,6 +156,7 @@ fn help_short_flag() {
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
+      build    Build Python packages into source distributions and wheels
       cache    Manage uv's cache
       version  Display uv's version
       help     Display documentation for a command
@@ -633,6 +636,7 @@ fn help_unknown_subcommand() {
         python
         pip
         venv
+        build
         cache
         version
         generate-shell-completion
@@ -657,6 +661,7 @@ fn help_unknown_subcommand() {
         python
         pip
         venv
+        build
         cache
         version
         generate-shell-completion
@@ -708,6 +713,7 @@ fn help_with_global_option() {
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
       venv                       Create a virtual environment
+      build                      Build Python packages into source distributions and wheels
       cache                      Manage uv's cache
       version                    Display uv's version
       generate-shell-completion  Generate shell completion
@@ -808,6 +814,7 @@ fn help_with_no_pager() {
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
       venv                       Create a virtual environment
+      build                      Build Python packages into source distributions and wheels
       cache                      Manage uv's cache
       version                    Display uv's version
       generate-shell-completion  Generate shell completion

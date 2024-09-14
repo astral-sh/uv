@@ -1,17 +1,17 @@
+use distribution_filename::{ExtensionError, SourceDistExtension};
+use futures::TryStreamExt;
+use owo_colors::OwoColorize;
+use pypi_types::{HashAlgorithm, HashDigest};
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::task::{Context, Poll};
-
-use distribution_filename::{ExtensionError, SourceDistExtension};
-use futures::TryStreamExt;
-use owo_colors::OwoColorize;
-use pypi_types::{HashAlgorithm, HashDigest};
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 use uv_client::WrappedReqwestError;
@@ -54,6 +54,8 @@ pub enum Error {
     },
     #[error("Invalid download URL")]
     InvalidUrl(#[from] url::ParseError),
+    #[error("Invalid path in file URL: `{0}`")]
+    InvalidFileUrl(String),
     #[error("Failed to create download directory")]
     DownloadDirError(#[source] io::Error),
     #[error("Failed to copy to: {0}", to.user_display())]
@@ -94,6 +96,10 @@ pub struct PythonDownloadRequest {
     arch: Option<Arch>,
     os: Option<Os>,
     libc: Option<Libc>,
+
+    /// Whether to allow pre-releases or not. If not set, defaults to true if [`Self::version`] is
+    /// not None, and false otherwise.
+    prereleases: Option<bool>,
 }
 
 impl PythonDownloadRequest {
@@ -103,6 +109,7 @@ impl PythonDownloadRequest {
         arch: Option<Arch>,
         os: Option<Os>,
         libc: Option<Libc>,
+        prereleases: Option<bool>,
     ) -> Self {
         Self {
             version,
@@ -110,6 +117,7 @@ impl PythonDownloadRequest {
             arch,
             os,
             libc,
+            prereleases,
         }
     }
 
@@ -140,6 +148,12 @@ impl PythonDownloadRequest {
     #[must_use]
     pub fn with_libc(mut self, libc: Libc) -> Self {
         self.libc = Some(libc);
+        self
+    }
+
+    #[must_use]
+    pub fn with_prereleases(mut self, prereleases: bool) -> Self {
+        self.prereleases = Some(prereleases);
         self
     }
 
@@ -194,6 +208,7 @@ impl PythonDownloadRequest {
             Some(Arch::from_env()),
             Some(Os::from_env()),
             Some(Libc::from_env()?),
+            None,
         ))
     }
 
@@ -223,6 +238,7 @@ impl PythonDownloadRequest {
             .filter(move |download| self.satisfied_by_download(download))
     }
 
+    /// Whether this request is satisfied by the key of an existing installation.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
         if let Some(arch) = &self.arch {
             if key.arch != *arch {
@@ -249,11 +265,20 @@ impl PythonDownloadRequest {
                 return false;
             }
         }
+        // If we don't allow pre-releases, don't match a key with a pre-release tag
+        if !self.allows_prereleases() && !key.prerelease.is_empty() {
+            return false;
+        }
         true
     }
 
+    /// Whether this request is satisfied by a Python download.
     pub fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
         self.satisfied_by_key(download.key())
+    }
+
+    pub fn allows_prereleases(&self) -> bool {
+        self.prereleases.unwrap_or_else(|| self.version.is_some())
     }
 
     pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
@@ -365,7 +390,7 @@ impl FromStr for PythonDownloadRequest {
 
             return Err(Error::TooManyParts(s.to_string()));
         }
-        Ok(Self::new(version, implementation, arch, os, libc))
+        Ok(Self::new(version, implementation, arch, os, libc, None))
     }
 }
 
@@ -432,12 +457,8 @@ impl ManagedPythonDownload {
         let filename = url.path_segments().unwrap().last().unwrap();
         let ext = SourceDistExtension::from_path(filename)
             .map_err(|err| Error::MissingExtension(url.to_string(), err))?;
-        let response = client.client().get(url.clone()).send().await?;
+        let (reader, size) = read_url(&url, client).await?;
 
-        // Ensure the request was successful.
-        response.error_for_status_ref()?;
-
-        let size = response.content_length();
         let progress = reporter
             .as_ref()
             .map(|reporter| (reporter, reporter.on_download_start(&self.key, size)));
@@ -450,17 +471,12 @@ impl ManagedPythonDownload {
             temp_dir.path().simplified().display()
         );
 
-        let stream = response
-            .bytes_stream()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
-            .into_async_read();
-
         let mut hashers = self
             .sha256
             .into_iter()
             .map(|_| Hasher::from(HashAlgorithm::Sha256))
             .collect::<Vec<_>>();
-        let mut hasher = uv_extract::hash::HashReader::new(stream.compat(), &mut hashers);
+        let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
         debug!("Extracting {filename}");
 
@@ -638,5 +654,36 @@ where
                 self.reporter
                     .on_download_progress(self.index, buf.filled().len() as u64);
             })
+    }
+}
+
+/// Convert a [`Url`] into an [`AsyncRead`] stream.
+async fn read_url(
+    url: &Url,
+    client: &uv_client::BaseClient,
+) -> Result<(impl AsyncRead + Unpin, Option<u64>), Error> {
+    if url.scheme() == "file" {
+        // Loads downloaded distribution from the given `file://` URL.
+        let path = url
+            .to_file_path()
+            .map_err(|()| Error::InvalidFileUrl(url.to_string()))?;
+
+        let size = fs_err::tokio::metadata(&path).await?.len();
+        let reader = fs_err::tokio::File::open(&path).await?;
+
+        Ok((Either::Left(reader), Some(size)))
+    } else {
+        let response = client.client().get(url.clone()).send().await?;
+
+        // Ensure the request was successful.
+        response.error_for_status_ref()?;
+
+        let size = response.content_length();
+        let stream = response
+            .bytes_stream()
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+            .into_async_read();
+
+        Ok((Either::Right(stream.compat()), size))
     }
 }

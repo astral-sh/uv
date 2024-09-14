@@ -14,7 +14,8 @@ use distribution_types::{Name, UnresolvedRequirementSpecification};
 use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::MarkerTree;
 use pypi_types::{Requirement, RequirementSource};
-use uv_cache::{Cache, Refresh, Timestamp};
+use uv_cache::{Cache, Refresh};
+use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Concurrency;
@@ -80,7 +81,7 @@ pub(crate) async fn run(
 ) -> anyhow::Result<ExitStatus> {
     // treat empty command as `uv tool list`
     let Some(command) = command else {
-        return tool_list(false, &cache, printer).await;
+        return tool_list(false, false, &cache, printer).await;
     };
 
     let (target, args) = command.split();
@@ -221,10 +222,20 @@ pub(crate) async fn run(
     let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command
-    // TODO(zanieb): Do we want to exit with the code of the child process? Probably.
-    if status.success() {
-        Ok(ExitStatus::Success)
+    if let Some(code) = status.code() {
+        debug!("Command exited with code: {code}");
+        if let Ok(code) = u8::try_from(code) {
+            Ok(ExitStatus::External(code))
+        } else {
+            #[allow(clippy::exit)]
+            std::process::exit(code);
+        }
     } else {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            debug!("Command exited with signal: {:?}", status.signal());
+        }
         Ok(ExitStatus::Failure)
     }
 }
@@ -324,7 +335,7 @@ async fn get_or_create_environment(
 
     // Discover an interpreter.
     let interpreter = PythonInstallation::find_or_download(
-        python_request.clone(),
+        python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
@@ -352,7 +363,7 @@ async fn get_or_create_environment(
             origin: None,
         },
         // Ex) `ruff@0.6.0`
-        Target::Version(name, version) => Requirement {
+        Target::Version(name, version) | Target::FromVersion(_, name, version) => Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
             marker: MarkerTree::default(),
@@ -365,7 +376,7 @@ async fn get_or_create_environment(
             origin: None,
         },
         // Ex) `ruff@latest`
-        Target::Latest(name) => Requirement {
+        Target::Latest(name) | Target::FromLatest(_, name) => Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
             marker: MarkerTree::default(),
@@ -376,7 +387,7 @@ async fn get_or_create_environment(
             origin: None,
         },
         // Ex) `ruff>=0.6.0`
-        Target::UserDefined(_, from) => resolve_names(
+        Target::From(_, from) => resolve_names(
             vec![RequirementsSpecification::parse_package(from)?],
             &interpreter,
             settings,

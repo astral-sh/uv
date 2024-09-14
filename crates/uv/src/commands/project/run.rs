@@ -25,8 +25,8 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_scripts::Pep723Script;
-use uv_warnings::warn_user_once;
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
+use uv_warnings::warn_user;
+use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
@@ -34,7 +34,9 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
-use crate::commands::project::{ProjectError, WorkspacePython};
+use crate::commands::project::{
+    validate_requires_python, ProjectError, PythonRequestSource, WorkspacePython,
+};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -49,6 +51,7 @@ pub(crate) async fn run(
     show_resolution: bool,
     locked: bool,
     frozen: bool,
+    no_sync: bool,
     isolated: bool,
     package: Option<PackageName>,
     no_project: bool,
@@ -102,20 +105,27 @@ pub(crate) async fn run(
             script.path.user_display().cyan()
         )?;
 
-        // (1) Explicit request from user
-        let python_request = if let Some(request) = python.as_deref() {
-            Some(PythonRequest::parse(request))
+        let (source, python_request) = if let Some(request) = python.as_deref() {
+            // (1) Explicit request from user
+            let source = PythonRequestSource::UserRequest;
+            let request = Some(PythonRequest::parse(request));
+            (source, request)
+        } else if let Some(file) = PythonVersionFile::discover(&*CWD, false, false).await? {
             // (2) Request from `.python-version`
-        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
-            .await?
-            .and_then(PythonVersionFile::into_version)
-        {
-            Some(request)
-            // (3) `Requires-Python` in `pyproject.toml`
+            let source = PythonRequestSource::DotPythonVersion(file.file_name().to_string());
+            let request = file.into_version();
+            (source, request)
         } else {
-            script.metadata.requires_python.map(|requires_python| {
-                PythonRequest::Version(VersionRequest::Range(requires_python))
-            })
+            // (3) `Requires-Python` in the script
+            let request = script
+                .metadata
+                .requires_python
+                .as_ref()
+                .map(|requires_python| {
+                    PythonRequest::Version(VersionRequest::Range(requires_python.clone()))
+                });
+            let source = PythonRequestSource::RequiresPython;
+            (source, request)
         };
 
         let client_builder = BaseClientBuilder::new()
@@ -123,7 +133,7 @@ pub(crate) async fn run(
             .native_tls(native_tls);
 
         let interpreter = PythonInstallation::find_or_download(
-            python_request,
+            python_request.as_ref(),
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,
@@ -133,6 +143,33 @@ pub(crate) async fn run(
         )
         .await?
         .into_interpreter();
+
+        if let Some(requires_python) = script.metadata.requires_python.as_ref() {
+            if !requires_python.contains(interpreter.python_version()) {
+                let err = match source {
+                    PythonRequestSource::UserRequest => {
+                        ProjectError::RequestedPythonScriptIncompatibility(
+                            interpreter.python_version().clone(),
+                            requires_python.clone(),
+                        )
+                    }
+                    PythonRequestSource::DotPythonVersion(file) => {
+                        ProjectError::DotPythonVersionScriptIncompatibility(
+                            file,
+                            interpreter.python_version().clone(),
+                            requires_python.clone(),
+                        )
+                    }
+                    PythonRequestSource::RequiresPython => {
+                        ProjectError::RequiresPythonScriptIncompatibility(
+                            interpreter.python_version().clone(),
+                            requires_python.clone(),
+                        )
+                    }
+                };
+                warn_user!("{err}");
+            }
+        }
 
         // Install the script requirements, if necessary. Otherwise, use an isolated environment.
         if let Some(dependencies) = script.metadata.dependencies {
@@ -145,7 +182,8 @@ pub(crate) async fn run(
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.sources.as_ref())
                 .unwrap_or(&empty);
-            let script_dir = script.path.parent().expect("script path has no parent");
+            let script_path = std::path::absolute(script.path)?;
+            let script_dir = script_path.parent().expect("script path has no parent");
 
             let requirements = dependencies
                 .into_iter()
@@ -224,28 +262,33 @@ pub(crate) async fn run(
             );
         }
         if !extras.is_empty() {
-            warn_user_once!("Extras are not supported for Python scripts with inline metadata");
+            warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
         if !dev {
-            warn_user_once!("`--no-dev` is not supported for Python scripts with inline metadata");
+            warn_user!("`--no-dev` is not supported for Python scripts with inline metadata");
         }
         if package.is_some() {
-            warn_user_once!(
+            warn_user!(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if locked {
-            warn_user_once!(
+            warn_user!(
                 "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if frozen {
-            warn_user_once!(
+            warn_user!(
                 "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
+        if no_sync {
+            warn_user!(
+                "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
         if isolated {
-            warn_user_once!(
+            warn_user!(
                 "`--isolated` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
@@ -293,30 +336,33 @@ pub(crate) async fn run(
         if no_project {
             // If the user ran with `--no-project` and provided a project-only setting, warn.
             if !extras.is_empty() {
-                warn_user_once!("Extras have no effect when used alongside `--no-project`");
+                warn_user!("Extras have no effect when used alongside `--no-project`");
             }
             if !dev {
-                warn_user_once!("`--no-dev` has no effect when used alongside `--no-project`");
+                warn_user!("`--no-dev` has no effect when used alongside `--no-project`");
             }
             if locked {
-                warn_user_once!("`--locked` has no effect when used alongside `--no-project`");
+                warn_user!("`--locked` has no effect when used alongside `--no-project`");
             }
             if frozen {
-                warn_user_once!("`--frozen` has no effect when used alongside `--no-project`");
+                warn_user!("`--frozen` has no effect when used alongside `--no-project`");
+            }
+            if no_sync {
+                warn_user!("`--no-sync` has no effect when used alongside `--no-project`");
             }
         } else if project.is_none() {
             // If we can't find a project and the user provided a project-only setting, warn.
             if !extras.is_empty() {
-                warn_user_once!("Extras have no effect when used outside of a project");
+                warn_user!("Extras have no effect when used outside of a project");
             }
             if !dev {
-                warn_user_once!("`--no-dev` has no effect when used outside of a project");
+                warn_user!("`--no-dev` has no effect when used outside of a project");
             }
             if locked {
-                warn_user_once!("`--locked` has no effect when used outside of a project");
+                warn_user!("`--locked` has no effect when used outside of a project");
             }
-            if frozen {
-                warn_user_once!("`--frozen` has no effect when used outside of a project");
+            if no_sync {
+                warn_user!("`--no-sync` has no effect when used outside of a project");
             }
         }
 
@@ -338,30 +384,41 @@ pub(crate) async fn run(
 
                 // If we're isolating the environment, use an ephemeral virtual environment as the
                 // base environment for the project.
-                let interpreter = {
-                    let client_builder = BaseClientBuilder::new()
-                        .connectivity(connectivity)
-                        .native_tls(native_tls);
+                let client_builder = BaseClientBuilder::new()
+                    .connectivity(connectivity)
+                    .native_tls(native_tls);
 
-                    // Resolve the Python request and requirement for the workspace.
-                    let WorkspacePython { python_request, .. } = WorkspacePython::from_request(
-                        python.as_deref().map(PythonRequest::parse),
+                // Resolve the Python request and requirement for the workspace.
+                let WorkspacePython {
+                    source,
+                    python_request,
+                    requires_python,
+                } = WorkspacePython::from_request(
+                    python.as_deref().map(PythonRequest::parse),
+                    project.workspace(),
+                )
+                .await?;
+
+                let interpreter = PythonInstallation::find_or_download(
+                    python_request.as_ref(),
+                    EnvironmentPreference::Any,
+                    python_preference,
+                    python_downloads,
+                    &client_builder,
+                    cache,
+                    Some(&download_reporter),
+                )
+                .await?
+                .into_interpreter();
+
+                if let Some(requires_python) = requires_python.as_ref() {
+                    validate_requires_python(
+                        &interpreter,
                         project.workspace(),
-                    )
-                    .await?;
-
-                    PythonInstallation::find_or_download(
-                        python_request,
-                        EnvironmentPreference::Any,
-                        python_preference,
-                        python_downloads,
-                        &client_builder,
-                        cache,
-                        Some(&download_reporter),
-                    )
-                    .await?
-                    .into_interpreter()
-                };
+                        requires_python,
+                        &source,
+                    )?;
+                }
 
                 // Create a virtual environment
                 temp_dir = cache.environment()?;
@@ -389,60 +446,64 @@ pub(crate) async fn run(
                 .await?
             };
 
-            let result = match project::lock::do_safe_lock(
-                locked,
-                frozen,
-                project.workspace(),
-                venv.interpreter(),
-                settings.as_ref().into(),
-                if show_resolution {
-                    Box::new(DefaultResolveLogger)
-                } else {
-                    Box::new(SummaryResolveLogger)
-                },
-                connectivity,
-                concurrency,
-                native_tls,
-                cache,
-                printer,
-            )
-            .await
-            {
-                Ok(result) => result,
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::NoSolution(err),
-                ))) => {
-                    let report = miette::Report::msg(format!("{err}")).context(err.header());
-                    anstream::eprint!("{report:?}");
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(err) => return Err(err.into()),
-            };
+            if no_sync {
+                debug!("Skipping environment synchronization due to `--no-sync`");
+            } else {
+                let result = match project::lock::do_safe_lock(
+                    locked,
+                    frozen,
+                    project.workspace(),
+                    venv.interpreter(),
+                    settings.as_ref().into(),
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    cache,
+                    printer,
+                )
+                .await
+                {
+                    Ok(result) => result,
+                    Err(ProjectError::Operation(operations::Error::Resolve(
+                        uv_resolver::ResolveError::NoSolution(err),
+                    ))) => {
+                        let report = miette::Report::msg(format!("{err}")).context(err.header());
+                        eprint!("{report:?}");
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(err) => return Err(err.into()),
+                };
 
-            let install_options = InstallOptions::default();
+                let install_options = InstallOptions::default();
 
-            project::sync::do_sync(
-                &project,
-                &venv,
-                result.lock(),
-                &extras,
-                dev,
-                install_options,
-                Modifications::Sufficient,
-                settings.as_ref().into(),
-                &state,
-                if show_resolution {
-                    Box::new(DefaultInstallLogger)
-                } else {
-                    Box::new(SummaryInstallLogger)
-                },
-                connectivity,
-                concurrency,
-                native_tls,
-                cache,
-                printer,
-            )
-            .await?;
+                project::sync::do_sync(
+                    InstallTarget::from(&project),
+                    &venv,
+                    result.lock(),
+                    &extras,
+                    dev,
+                    install_options,
+                    Modifications::Sufficient,
+                    settings.as_ref().into(),
+                    &state,
+                    if show_resolution {
+                        Box::new(DefaultInstallLogger)
+                    } else {
+                        Box::new(SummaryInstallLogger)
+                    },
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    cache,
+                    printer,
+                )
+                .await?;
+            }
 
             venv.into_interpreter()
         } else {
@@ -464,7 +525,7 @@ pub(crate) async fn run(
                 };
 
                 let python = PythonInstallation::find_or_download(
-                    python_request,
+                    python_request.as_ref(),
                     // No opt-in is required for system environments, since we are not mutating it.
                     EnvironmentPreference::Any,
                     python_preference,
@@ -593,9 +654,11 @@ pub(crate) async fn run(
         })
     };
 
-    // If we're running in an ephemeral environment, add a `sitecustomize.py` to enable loading of
+    // If we're running in an ephemeral environment, add a path file to enable loading of
     // the base environment's site packages. Setting `PYTHONPATH` is insufficient, as it doesn't
     // resolve `.pth` files in the base environment.
+    // And `sitecustomize.py` would be an alternative but it can be shadowed by an existing such
+    // module in the python installation.
     if let Some(ephemeral_env) = ephemeral_env.as_ref() {
         let ephemeral_site_packages = ephemeral_env
             .site_packages()
@@ -607,7 +670,7 @@ pub(crate) async fn run(
             .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
 
         fs_err::write(
-            ephemeral_site_packages.join("sitecustomize.py"),
+            ephemeral_site_packages.join("_uv_ephemeral_overlay.pth"),
             format!(
                 "import site; site.addsitedir(\"{}\")",
                 base_site_packages.escape_for_python()
@@ -660,10 +723,20 @@ pub(crate) async fn run(
     let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command
-    // TODO(zanieb): Do we want to exit with the code of the child process? Probably.
-    if status.success() {
-        Ok(ExitStatus::Success)
+    if let Some(code) = status.code() {
+        debug!("Command exited with code: {code}");
+        if let Ok(code) = u8::try_from(code) {
+            Ok(ExitStatus::External(code))
+        } else {
+            #[allow(clippy::exit)]
+            std::process::exit(code);
+        }
     } else {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            debug!("Command exited with signal: {:?}", status.signal());
+        }
         Ok(ExitStatus::Failure)
     }
 }
@@ -727,6 +800,11 @@ pub(crate) enum RunCommand {
     PythonScript(PathBuf, Vec<OsString>),
     /// Execute a `pythonw` script (Windows only).
     PythonGuiScript(PathBuf, Vec<OsString>),
+    /// Execute a Python package containing a `__main__.py` file.
+    PythonPackage(PathBuf, Vec<OsString>),
+    /// Execute a Python [zipapp].
+    /// [zipapp]: <https://docs.python.org/3/library/zipapp.html>
+    PythonZipapp(PathBuf, Vec<OsString>),
     /// Execute a `python` script provided via `stdin`.
     PythonStdin(Vec<u8>),
     /// Execute an external command.
@@ -740,8 +818,11 @@ impl RunCommand {
     fn display_executable(&self) -> Cow<'_, str> {
         match self {
             Self::Python(_) => Cow::Borrowed("python"),
-            Self::PythonScript(_, _) | Self::Empty => Cow::Borrowed("python"),
-            Self::PythonGuiScript(_, _) => Cow::Borrowed("pythonw"),
+            Self::PythonScript(..)
+            | Self::PythonPackage(..)
+            | Self::PythonZipapp(..)
+            | Self::Empty => Cow::Borrowed("python"),
+            Self::PythonGuiScript(..) => Cow::Borrowed("pythonw"),
             Self::PythonStdin(_) => Cow::Borrowed("python -c"),
             Self::External(executable, _) => executable.to_string_lossy(),
         }
@@ -755,7 +836,9 @@ impl RunCommand {
                 process.args(args);
                 process
             }
-            Self::PythonScript(target, args) => {
+            Self::PythonScript(target, args)
+            | Self::PythonPackage(target, args)
+            | Self::PythonZipapp(target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg(target);
                 process.args(args);
@@ -818,7 +901,9 @@ impl std::fmt::Display for RunCommand {
                 }
                 Ok(())
             }
-            Self::PythonScript(target, args) => {
+            Self::PythonScript(target, args)
+            | Self::PythonPackage(target, args)
+            | Self::PythonZipapp(target, args) => {
                 write!(f, "python {}", target.display())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
@@ -862,6 +947,10 @@ impl TryFrom<&ExternalCommand> for RunCommand {
         };
 
         let target_path = PathBuf::from(&target);
+        let metadata = target_path.metadata();
+        let is_file = metadata.as_ref().map_or(false, std::fs::Metadata::is_file);
+        let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);
+
         if target.eq_ignore_ascii_case("-") {
             let mut buf = Vec::with_capacity(1024);
             std::io::stdin().read_to_end(&mut buf)?;
@@ -870,17 +959,21 @@ impl TryFrom<&ExternalCommand> for RunCommand {
             Ok(Self::Python(args.to_vec()))
         } else if target_path
             .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
-            && target_path.exists()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyc"))
+            && is_file
         {
             Ok(Self::PythonScript(target_path, args.to_vec()))
         } else if cfg!(windows)
             && target_path
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
-            && target_path.exists()
+            && is_file
         {
             Ok(Self::PythonGuiScript(target_path, args.to_vec()))
+        } else if is_dir && target_path.join("__main__.py").is_file() {
+            Ok(Self::PythonPackage(target_path, args.to_vec()))
+        } else if is_file && is_python_zipapp(&target_path) {
+            Ok(Self::PythonZipapp(target_path, args.to_vec()))
         } else {
             Ok(Self::External(
                 target.clone(),
@@ -888,4 +981,16 @@ impl TryFrom<&ExternalCommand> for RunCommand {
             ))
         }
     }
+}
+
+/// Returns `true` if the target is a ZIP archive containing a `__main__.py` file.
+fn is_python_zipapp(target: &Path) -> bool {
+    if let Ok(file) = fs_err::File::open(target) {
+        if let Ok(mut archive) = zip::ZipArchive::new(file) {
+            return archive
+                .by_name("__main__.py")
+                .map_or(false, |f| f.is_file());
+        }
+    }
+    false
 }

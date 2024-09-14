@@ -61,7 +61,7 @@ Markers allow attaching an expression to requirements that indicate when the dep
 used. For example `bar; python_version<"3.9"` can be used to only require `bar` on Python 3.8 and
 older.
 
-Markers are used to adjust a package's dependencies dependending on the current environment or
+Markers are used to adjust a package's dependencies depending on the current environment or
 platform. For example, markers can be used to change dependencies based on the operating system, the
 CPU architecture, the Python version, the Python implementation, and more.
 
@@ -295,6 +295,19 @@ packages.
 To ensure reproducibility, messages for unsatisfiable resolutions will not mention that
 distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated
 as if they do not exist.
+
+## Source distribution
+
+[PEP 625](https://peps.python.org/pep-0625/) specifies that packages must distribute source
+distributions as gzip tarball (`.tar.gz`) archives. Prior to this specification, other archive
+formats, which need to be supported for backward compatibility, were also allowed. uv supports
+reading and extracting archives in the following formats:
+
+- bzip2 tarball (`.tar.bz2`)
+- gzip tarball (`.tar.gz`, `.tgz`)
+- xz tarball (`.tar.xz`)
+- zip (`.zip`)
+- zstd tarball (`.tar.zst`)
 
 ## Learn more
 

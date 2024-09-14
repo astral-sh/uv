@@ -6,6 +6,7 @@ use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
+use uv_cache_info::CacheKey;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
     TrustedHost,
@@ -41,6 +42,45 @@ pub struct Options {
     pub top_level: ResolverInstallerOptions,
     #[option_group]
     pub pip: Option<PipOptions>,
+
+    /// The keys to consider when caching builds for the project.
+    ///
+    /// Cache keys enable you to specify the files or directories that should trigger a rebuild when
+    /// modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`,
+    /// or `setup.cfg` files in the project directory are modified, i.e.:
+    ///
+    /// ```toml
+    /// cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]
+    /// ```
+    ///
+    /// As an example: if a project uses dynamic metadata to read its dependencies from a
+    /// `requirements.txt` file, you can specify `cache-keys = [{ file = "requirements.txt" }, { file = "pyproject.toml" }]`
+    /// to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in
+    /// addition to watching the `pyproject.toml`).
+    ///
+    /// Globs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html)
+    /// crate. For example, to invalidate the cache whenever a `.toml` file in the project directory
+    /// or any of its subdirectories is modified, you can specify `cache-keys = [{ file = "**/*.toml" }]`.
+    /// Note that the use of globs can be expensive, as uv may need to walk the filesystem to
+    /// determine whether any files have changed.
+    ///
+    /// Cache keys can also include version control information. For example, if a project uses
+    /// `setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }, { file = "pyproject.toml" }]`
+    /// to include the current Git commit hash in the cache key (in addition to the
+    /// `pyproject.toml`).
+    ///
+    /// Cache keys only affect the project defined by the `pyproject.toml` in which they're
+    /// specified (as opposed to, e.g., affecting all members in a workspace), and all paths and
+    /// globs are interpreted as relative to the project directory.
+    #[option(
+        default = r#"[{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]"#,
+        value_type = "list[dict]",
+        example = r#"
+            cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = true }]
+        "#
+    )]
+    #[serde(default, skip_serializing)]
+    cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
@@ -318,7 +358,7 @@ pub struct ResolverInstallerOptions {
     /// indexes.
     ///
     /// If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
-    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    /// source distributions (e.g., `.tar.gz` or `.zip`) at the top level.
     ///
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.
@@ -705,7 +745,7 @@ pub struct PipOptions {
     /// indexes.
     ///
     /// If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
-    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    /// source distributions (e.g., `.tar.gz` or `.zip`) at the top level.
     ///
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.
@@ -1012,7 +1052,7 @@ pub struct PipOptions {
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// `aarch64-apple-darwin`.
     #[option(
         default = "None",
         value_type = "str",

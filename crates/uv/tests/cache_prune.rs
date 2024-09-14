@@ -66,7 +66,7 @@ fn prune_stale_directory() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/simple-v4
+    DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
     Removed 1 directory
     "###);
 
@@ -106,7 +106,7 @@ fn prune_cached_env() {
         .chain([
             // The cache entry does not have a stable key, so we filter it out
             (
-                r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
+                r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
                 "[CACHE_DIR]/$2/[ENTRY]",
             ),
         ])
@@ -120,8 +120,8 @@ fn prune_cached_env() {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/environments-v1/[ENTRY]
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v1/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     "###);
 }
@@ -151,7 +151,7 @@ fn prune_stale_symlink() -> Result<()> {
         .chain([
             // The cache entry does not have a stable key, so we filter it out
             (
-                r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
+                r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
                 "[CACHE_DIR]/$2/[ENTRY]",
             ),
         ])
@@ -165,7 +165,7 @@ fn prune_stale_symlink() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed 44 files ([SIZE])
     "###);
 
@@ -204,7 +204,7 @@ fn prune_unzipped() -> Result<()> {
 
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    Removed 163 files ([SIZE])
+    Removed 162 files ([SIZE])
     "###);
 
     // Reinstalling the source distribution should not require re-downloading the source
@@ -226,28 +226,130 @@ fn prune_unzipped() -> Result<()> {
      ~ source-distribution==0.0.1
     "###);
 
+    // But reinstalling the other package should require a download, since we pruned the wheel.
     requirements_txt.write_str(indoc! { r"
         iniconfig
     " })?;
     uv_snapshot!(context.filters(), context.pip_sync().env_remove("UV_EXCLUDE_NEWER").arg("requirements.txt").arg("--reinstall").arg("--offline"), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of iniconfig are available:
-              iniconfig<=0.1
-              iniconfig>=1.0.0
-          and all of:
-              iniconfig<=0.1
-              iniconfig>=1.0.0
-          need to be downloaded from a registry, we can conclude that iniconfig<1.0.0 cannot be used.
-          And because you require iniconfig, we can conclude that your requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: iniconfig==2.0.0
+      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+    "###);
 
-          hint: Pre-releases are available for iniconfig in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    Ok(())
+}
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+/// `cache prune` should remove any stale source distribution revisions.
+#[test]
+fn prune_stale_revision() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.temp_dir.child("src").child("__init__.py").touch()?;
+    context.temp_dir.child("README").touch()?;
+
+    // Install the same package twice, with `--reinstall`.
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(".")
+        .arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(".")
+        .arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([
+            // The cache entry does not have a stable key, so we filter it out
+            (
+                r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
+                "[CACHE_DIR]/$2/[ENTRY]",
+            ),
+        ])
+        .collect();
+
+    // Pruning should remove the unused revision.
+    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    Pruning cache at: [CACHE_DIR]/
+    DEBUG Removing dangling source revision: [CACHE_DIR]/built-wheels-v3/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
+    Removed 8 files ([SIZE])
+    "###);
+
+    // Uninstall and reinstall the package. We should use the cached version.
+    uv_snapshot!(context.filters(), context
+        .pip_uninstall()
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())

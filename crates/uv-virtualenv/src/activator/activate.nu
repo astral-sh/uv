@@ -38,7 +38,7 @@ export-env {
         } | all {|i| $i == true}
     }
 
-    # Emulates a `test -z`, but btter as it handles e.g 'false'
+    # Emulates a `test -z`, but better as it handles e.g 'false'
     def is-env-true [name: string] {
       if (has-env $name) {
         # Try to parse 'true', '0', '1', and fail if not convertible

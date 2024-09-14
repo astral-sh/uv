@@ -29,7 +29,7 @@ fn run_with_python_version() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -133,7 +133,7 @@ fn run_with_python_version() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.11, <4`
+    error: The requested interpreter resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.11, <4`
     "###);
 
     Ok(())
@@ -152,7 +152,7 @@ fn run_args() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -211,7 +211,7 @@ fn run_pep723_script() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -386,6 +386,68 @@ fn run_pep723_script() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_pep723_script_requires_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.11"]);
+
+    // If we have a `.python-version` that's incompatible with the script, we should error.
+    let python_version = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    python_version.write_str("3.8")?;
+
+    // If the script contains a PEP 723 tag, we should install its requirements.
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import iniconfig
+
+        x: str | int = "hello"
+        print(x)
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from: main.py
+    warning: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the script's Python requirement: `>=3.11`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    Traceback (most recent call last):
+      File "main.py", line 10, in <module>
+        x: str | int = "hello"
+    TypeError: unsupported operand type(s) for |: 'type' and 'type'
+    "###);
+
+    // Delete the `.python-version` file to allow the script to run.
+    fs_err::remove_file(&python_version)?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello
+
+    ----- stderr -----
+    Reading inline script metadata from: main.py
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
 /// Run a `.pyw` script. The script should be executed with `pythonw.exe`.
 #[test]
 #[cfg(windows)]
@@ -401,7 +463,7 @@ fn run_pythonw_script() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -514,7 +576,7 @@ fn run_managed_false() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -547,7 +609,7 @@ fn run_with() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -647,7 +709,7 @@ fn run_with_editable() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -713,7 +775,7 @@ fn run_with_editable() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -777,7 +839,7 @@ fn run_locked() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -807,7 +869,7 @@ fn run_locked() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -863,7 +925,7 @@ fn run_frozen() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -890,7 +952,7 @@ fn run_frozen() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
     )?;
@@ -915,6 +977,62 @@ fn run_frozen() -> Result<()> {
 }
 
 #[test]
+fn run_no_sync() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Running with `--no-sync` should succeed error, even if the lockfile isn't present.
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    "###);
+
+    context.lock().assert().success();
+
+    // Running with `--no-sync` should not install any requirements.
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    "###);
+
+    context.sync().assert().success();
+
+    // But it should have access to the installed packages.
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn run_empty_requirements_txt() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -927,7 +1045,7 @@ fn run_empty_requirements_txt() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -987,7 +1105,7 @@ fn run_requirements_txt() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -1106,7 +1224,7 @@ fn run_requirements_txt_arguments() -> Result<()> {
         dependencies = ["typing_extensions"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -1160,7 +1278,7 @@ fn run_editable() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -1222,7 +1340,7 @@ fn run_from_directory() -> Result<()> {
         main = "main:main"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -1245,6 +1363,7 @@ fn run_from_directory() -> Result<()> {
     3.12.[X]
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 1 package in [TIME]
@@ -1270,7 +1389,7 @@ fn run_without_output() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -1318,7 +1437,7 @@ fn run_isolated_python_version() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -1417,7 +1536,7 @@ fn run_no_project() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#
     })?;
@@ -1515,6 +1634,67 @@ fn run_stdin() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let main_script = context.temp_dir.child("__main__.py");
+    main_script.write_str(indoc! { r#"
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_zipapp() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a zipapp.
+    let child = context.temp_dir.child("app");
+    child.create_dir_all()?;
+
+    let main_script = child.child("__main__.py");
+    main_script.write_str(indoc! { r#"
+        print("Hello, world!")
+       "#
+    })?;
+
+    let zipapp = context.temp_dir.child("app.pyz");
+    let status = context
+        .run()
+        .arg("python")
+        .arg("-m")
+        .arg("zipapp")
+        .arg(child.as_ref())
+        .arg("--output")
+        .arg(zipapp.as_ref())
+        .status()?;
+    assert!(status.success());
+
+    // Run the zipapp.
+    uv_snapshot!(context.filters(), context.run().arg(zipapp.as_ref()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
 /// When the `pyproject.toml` file is invalid.
 #[test]
 fn run_project_toml_error() -> Result<()> {
@@ -1552,6 +1732,181 @@ fn run_project_toml_error() -> Result<()> {
 
     ----- stderr -----
     "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_isolated_incompatible_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.11"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+
+    let python_version = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    python_version.write_str("3.8")?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        import iniconfig
+
+        x: str | int = "hello"
+        print(x)
+       "#
+    })?;
+
+    // We should reject Python 3.8...
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    error: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    "###);
+
+    // ...even if `--isolated` is provided.
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_compiled_python_file() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write a non-PEP 723 script.
+    let test_non_script = context.temp_dir.child("main.py");
+    test_non_script.write_str(indoc! { r#"
+        print("Hello, world!")
+       "#
+    })?;
+
+    // Run a non-PEP 723 script.
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    let compile_output = context
+        .run()
+        .arg("python")
+        .arg("-m")
+        .arg("compileall")
+        .arg(test_non_script.path())
+        .output()?;
+
+    assert!(
+        compile_output.status.success(),
+        "Failed to compile the python script"
+    );
+
+    // Run the compiled non-PEP 723 script.
+    let compiled_non_script = context.temp_dir.child("__pycache__/main.cpython-312.pyc");
+    uv_snapshot!(context.filters(), context.run().arg(compiled_non_script.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    // If the script contains a PEP 723 tag, we should install its requirements.
+    let test_script = context.temp_dir.child("script.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from: script.py
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Compile the PEP 723 script.
+    let compile_output = context
+        .run()
+        .arg("python")
+        .arg("-m")
+        .arg("compileall")
+        .arg(test_script.path())
+        .output()?;
+
+    assert!(
+        compile_output.status.success(),
+        "Failed to compile the python script"
+    );
+
+    // Run the compiled PEP 723 script. This fails, since we can't read the script tag.
+    let compiled_script = context.temp_dir.child("__pycache__/script.cpython-312.pyc");
+    uv_snapshot!(context.filters(), context.run().arg(compiled_script.path()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/script.py", line 7, in <module>
+        import iniconfig
+    ModuleNotFoundError: No module named 'iniconfig'
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_exit_code() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # ///
+
+        exit(42)
+       "#
+    })?;
+
+    context.run().arg("script.py").assert().code(42);
 
     Ok(())
 }

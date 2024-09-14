@@ -1,4 +1,5 @@
 use crate::PythonVersion;
+use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::debug;
@@ -15,7 +16,7 @@ pub(crate) struct WindowsPython {
     pub(crate) version: Option<PythonVersion>,
 }
 
-/// Àdding `windows_registry::Value::into_string()`.
+/// Adding `windows_registry::Value::into_string()`.
 fn value_to_string(value: Value) -> Option<String> {
     match value {
         Value::String(string) => Some(string),
@@ -52,16 +53,17 @@ pub(crate) fn registry_pythons() -> Result<Vec<WindowsPython>, windows_result::E
 
     // The registry has no natural ordering, so we're processing the latest version first.
     registry_pythons.sort_by(|a, b| {
-        // Highest version first (reverse), but entries without version at the bottom (regular
-        // order).
-        if let (Some(version_a), Some(version_b)) = (&a.version, &b.version) {
-            version_a.cmp(version_b).reverse().then(a.path.cmp(&b.path))
-        } else {
-            a.version
-                .as_ref()
-                .map(|version| &***version)
-                .cmp(&b.version.as_ref().map(|version| &***version))
-                .then(a.path.cmp(&b.path))
+        match (&a.version, &b.version) {
+            // Place entries with a version before those without a version.
+            (Some(_), None) => Ordering::Greater,
+            (None, Some(_)) => Ordering::Less,
+            // We want the highest version on top, which is the inverse from the regular order. The
+            // path is an arbitrary but stable tie-breaker.
+            (Some(version_a), Some(version_b)) => {
+                version_a.cmp(version_b).reverse().then(a.path.cmp(&b.path))
+            }
+            // Sort the entries without a version arbitrarily, but stable (by path).
+            (None, None) => a.path.cmp(&b.path),
         }
     });
 

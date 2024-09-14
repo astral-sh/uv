@@ -1,9 +1,9 @@
+use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
@@ -45,27 +45,56 @@ impl From<PythonNotFound> for EnvironmentNotFound {
 
 impl fmt::Display for EnvironmentNotFound {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let environment = match self.preference {
-            EnvironmentPreference::Any => "virtual or system environment",
-            EnvironmentPreference::ExplicitSystem => {
-                if self.request.is_explicit_system() {
-                    "virtual or system environment"
-                } else {
-                    // TODO(zanieb): We could add a hint to use the `--system` flag here
-                    "virtual environment"
+        #[derive(Debug, Copy, Clone)]
+        enum SearchType {
+            /// Only virtual environments were searched.
+            Virtual,
+            /// Only system installations were searched.
+            System,
+            /// Both virtual and system installations were searched.
+            VirtualOrSystem,
+        }
+
+        impl fmt::Display for SearchType {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                match self {
+                    Self::Virtual => write!(f, "virtual environment"),
+                    Self::System => write!(f, "system Python installation"),
+                    Self::VirtualOrSystem => {
+                        write!(f, "virtual environment or system Python installation")
+                    }
                 }
             }
-            EnvironmentPreference::OnlySystem => "system environment",
-            EnvironmentPreference::OnlyVirtual => "virtual environment",
-        };
-        match self.request {
-            PythonRequest::Any => {
-                write!(f, "No {environment} found")
-            }
-            _ => {
-                write!(f, "No {environment} found for {}", self.request)
-            }
         }
+
+        let search_type = match self.preference {
+            EnvironmentPreference::Any => SearchType::VirtualOrSystem,
+            EnvironmentPreference::ExplicitSystem => {
+                if self.request.is_explicit_system() {
+                    SearchType::VirtualOrSystem
+                } else {
+                    SearchType::Virtual
+                }
+            }
+            EnvironmentPreference::OnlySystem => SearchType::System,
+            EnvironmentPreference::OnlyVirtual => SearchType::Virtual,
+        };
+
+        if matches!(self.request, PythonRequest::Any) {
+            write!(f, "No {search_type} found")?;
+        } else {
+            write!(f, "No {search_type} found for {}", self.request)?;
+        }
+
+        match search_type {
+            // This error message assumes that the relevant API accepts the `--system` flag. This
+            // is true of the callsites today, since the project APIs never surface this error.
+            SearchType::Virtual => write!(f, "; run `{}` to create an environment, or pass `{}` to install into a non-virtual environment", "uv venv".green(), "--system".green())?,
+            SearchType::VirtualOrSystem => write!(f, "; run `{}` to create an environment", "uv venv".green())?,
+            SearchType::System => {}
+        }
+
+        Ok(())
     }
 }
 

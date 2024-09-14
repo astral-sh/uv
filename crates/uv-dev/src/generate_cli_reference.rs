@@ -245,6 +245,7 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
                 if let Some(help) = opt.get_long_help().or_else(|| opt.get_help()) {
                     output.push_str("<dd>");
                     output.push_str(&format!("{}\n", markdown::to_html(&help.to_string())));
+                    emit_env_option(opt, output);
                     emit_default_option(opt, output);
                     emit_possible_options(opt, output);
                     output.push_str("</dd>");
@@ -265,6 +266,18 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
     }
 
     parents.pop();
+}
+
+fn emit_env_option(opt: &clap::Arg, output: &mut String) {
+    if opt.is_hide_env_set() {
+        return;
+    }
+    if let Some(env) = opt.get_env() {
+        output.push_str(&markdown::to_html(&format!(
+            "May also be set with the `{}` environment variable.",
+            env.to_string_lossy()
+        )));
+    }
 }
 
 fn emit_default_option(opt: &clap::Arg, output: &mut String) {

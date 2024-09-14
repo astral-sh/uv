@@ -31,12 +31,6 @@ impl FromStr for PythonVersion {
         if version.epoch() != 0 {
             return Err(format!("Python version `{s}` has a non-zero epoch"));
         }
-        if version.version < Version::new([3, 7]) {
-            return Err(format!("Python version `{s}` must be >= 3.7"));
-        }
-        if version.version >= Version::new([4, 0]) {
-            return Err(format!("Python version `{s}` must be < 4.0"));
-        }
 
         Ok(Self(version))
     }

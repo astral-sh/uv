@@ -53,6 +53,16 @@ fn init() -> Result<()> {
     Resolved 1 package in [TIME]
     "###);
 
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join("foo").join(".python-version"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            python_version, @"3.12"
+        );
+    });
+
     Ok(())
 }
 
@@ -116,6 +126,7 @@ fn init_application() -> Result<()> {
     Hello from foo!
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 1 package in [TIME]
@@ -283,7 +294,7 @@ fn init_application_package() -> Result<()> {
     }, {
         assert_snapshot!(
             init, @r###"
-        def hello():
+        def hello() -> None:
             print("Hello from foo!")
         "###
         );
@@ -296,6 +307,7 @@ fn init_application_package() -> Result<()> {
     Hello from foo!
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 1 package in [TIME]
@@ -317,6 +329,7 @@ fn init_library() -> Result<()> {
 
     let pyproject_toml = child.join("pyproject.toml");
     let init_py = child.join("src").join("foo").join("__init__.py");
+    let py_typed = child.join("src").join("foo").join("py.typed");
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib"), @r###"
     success: true
@@ -360,6 +373,15 @@ fn init_library() -> Result<()> {
         );
     });
 
+    let py_typed = fs_err::read_to_string(py_typed)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            py_typed, @""
+        );
+    });
+
     uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
     success: true
     exit_code: 0
@@ -367,6 +389,7 @@ fn init_library() -> Result<()> {
     Hello from foo!
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 1 package in [TIME]
@@ -375,6 +398,40 @@ fn init_library() -> Result<()> {
      + foo==0.1.0 (from file://[TEMP_DIR]/foo)
     "###);
 
+    Ok(())
+}
+
+/// Run `uv init --lib` with an existing py.typed file
+#[test]
+fn init_py_typed_exists() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let foo = child.child("src").child("foo");
+    foo.create_dir_all()?;
+
+    let py_typed = foo.join("py.typed");
+    fs_err::write(&py_typed, "partial")?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let py_typed = fs_err::read_to_string(py_typed)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            py_typed, @"partial"
+        );
+    });
     Ok(())
 }
 
@@ -452,6 +509,40 @@ fn init_no_readme() -> Result<()> {
         );
     });
 
+    Ok(())
+}
+
+#[test]
+fn init_no_pin_python() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-pin-python"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(context.temp_dir.join("foo/pyproject.toml"))?;
+    let _ = fs_err::read_to_string(context.temp_dir.join("foo/.python-version")).unwrap_err();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
     Ok(())
 }
 
@@ -978,7 +1069,7 @@ fn init_normalized_names() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project is already initialized in `[TEMP_DIR]/foo-bar`
+    error: Project is already initialized in `[TEMP_DIR]/foo-bar` (`pyproject.toml` file exists)
     "###);
 
     let child = context.temp_dir.child("foo-bar");
@@ -1618,6 +1709,15 @@ fn init_requires_python_workspace() -> Result<()> {
         );
     });
 
+    let python_version = fs_err::read_to_string(child.join(".python-version"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            python_version, @"3.12"
+        );
+    });
+
     Ok(())
 }
 
@@ -1667,6 +1767,15 @@ fn init_requires_python_version() -> Result<()> {
         );
     });
 
+    let python_version = fs_err::read_to_string(child.join(".python-version"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            python_version, @"3.8"
+        );
+    });
+
     Ok(())
 }
 
@@ -1674,7 +1783,7 @@ fn init_requires_python_version() -> Result<()> {
 /// specifiers verbatim.
 #[test]
 fn init_requires_python_specifiers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -1714,6 +1823,15 @@ fn init_requires_python_specifiers() -> Result<()> {
         requires-python = "==3.8.*"
         dependencies = []
         "###
+        );
+    });
+
+    let python_version = fs_err::read_to_string(child.join(".python-version"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            python_version, @"3.8"
         );
     });
 

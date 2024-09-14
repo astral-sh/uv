@@ -148,8 +148,8 @@ pub enum ErrorKind {
     #[error("Expected an index URL, but received non-base URL: {0}")]
     CannotBeABase(Url),
 
-    #[error(transparent)]
-    DistInfo(#[from] install_wheel_rs::Error),
+    #[error("Failed to read metadata: `{0}`")]
+    Metadata(String, #[source] uv_metadata::Error),
 
     #[error("{0} isn't available locally, but making network requests to registries was banned")]
     NoIndex(String),

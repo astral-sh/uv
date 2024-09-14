@@ -2892,7 +2892,6 @@ fn resolve_both() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The `[tool.uv]` section will be ignored in favor of the `uv.toml` file.
     "###
     );
 

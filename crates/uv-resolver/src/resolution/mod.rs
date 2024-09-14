@@ -5,6 +5,7 @@ use distribution_types::{
     VersionOrUrlRef,
 };
 use pep440_rs::Version;
+use pep508_rs::MarkerTree;
 use pypi_types::HashDigest;
 use uv_distribution::Metadata;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -24,11 +25,13 @@ mod requirements_txt;
 #[derive(Debug, Clone)]
 pub(crate) struct AnnotatedDist {
     pub(crate) dist: ResolvedDist,
+    pub(crate) name: PackageName,
     pub(crate) version: Version,
     pub(crate) extra: Option<ExtraName>,
     pub(crate) dev: Option<GroupName>,
     pub(crate) hashes: Vec<HashDigest>,
-    pub(crate) metadata: Metadata,
+    pub(crate) metadata: Option<Metadata>,
+    pub(crate) marker: MarkerTree,
 }
 
 impl AnnotatedDist {

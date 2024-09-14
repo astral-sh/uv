@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
@@ -78,7 +79,7 @@ impl PythonInstallation {
     ///
     /// Unlike [`PythonInstallation::find`], if the required Python is not installed it will be installed automatically.
     pub async fn find_or_download<'a>(
-        request: Option<PythonRequest>,
+        request: Option<&PythonRequest>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
         python_downloads: PythonDownloads,
@@ -86,10 +87,10 @@ impl PythonInstallation {
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, Error> {
-        let request = request.unwrap_or_default();
+        let request = request.unwrap_or_else(|| &PythonRequest::Any);
 
         // Search for the installation
-        match Self::find(&request, environments, preference, cache) {
+        match Self::find(request, environments, preference, cache) {
             Ok(venv) => Ok(venv),
             // If missing and allowed, perform a fetch
             Err(Error::MissingPython(err))
@@ -97,7 +98,7 @@ impl PythonInstallation {
                     && python_downloads.is_automatic()
                     && client_builder.connectivity.is_online() =>
             {
-                if let Some(request) = PythonDownloadRequest::from_request(&request) {
+                if let Some(request) = PythonDownloadRequest::from_request(request) {
                     debug!("Requested Python not found, checking for available download...");
                     match Self::fetch(request.fill()?, client_builder, cache, reporter).await {
                         Ok(installation) => Ok(installation),
@@ -212,6 +213,7 @@ pub struct PythonInstallationKey {
     pub(crate) major: u8,
     pub(crate) minor: u8,
     pub(crate) patch: u8,
+    pub(crate) prerelease: Cow<'static, str>,
     pub(crate) os: Os,
     pub(crate) arch: Arch,
     pub(crate) libc: Libc,
@@ -223,6 +225,7 @@ impl PythonInstallationKey {
         major: u8,
         minor: u8,
         patch: u8,
+        prerelease: String,
         os: Os,
         arch: Arch,
         libc: Libc,
@@ -232,6 +235,26 @@ impl PythonInstallationKey {
             major,
             minor,
             patch,
+            prerelease: Cow::Owned(prerelease),
+            os,
+            arch,
+            libc,
+        }
+    }
+
+    pub fn new_from_version(
+        implementation: LenientImplementationName,
+        version: &PythonVersion,
+        os: Os,
+        arch: Arch,
+        libc: Libc,
+    ) -> Self {
+        Self {
+            implementation,
+            major: version.major(),
+            minor: version.minor(),
+            patch: version.patch().unwrap_or_default(),
+            prerelease: Cow::Owned(version.pre().map(|pre| pre.to_string()).unwrap_or_default()),
             os,
             arch,
             libc,
@@ -243,8 +266,11 @@ impl PythonInstallationKey {
     }
 
     pub fn version(&self) -> PythonVersion {
-        PythonVersion::from_str(&format!("{}.{}.{}", self.major, self.minor, self.patch))
-            .expect("Python installation keys must have valid Python versions")
+        PythonVersion::from_str(&format!(
+            "{}.{}.{}{}",
+            self.major, self.minor, self.patch, self.prerelease
+        ))
+        .expect("Python installation keys must have valid Python versions")
     }
 
     pub fn arch(&self) -> &Arch {
@@ -264,8 +290,15 @@ impl fmt::Display for PythonInstallationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}-{}.{}.{}-{}-{}-{}",
-            self.implementation, self.major, self.minor, self.patch, self.os, self.arch, self.libc
+            "{}-{}.{}.{}{}-{}-{}-{}",
+            self.implementation,
+            self.major,
+            self.minor,
+            self.patch,
+            self.prerelease,
+            self.os,
+            self.arch,
+            self.libc
         )
     }
 }
@@ -299,28 +332,16 @@ impl FromStr for PythonInstallationKey {
             PythonInstallationKeyError::ParseError(key.to_string(), format!("invalid libc: {err}"))
         })?;
 
-        let [major, minor, patch] = version
-            .splitn(3, '.')
-            .map(str::parse::<u8>)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|err| {
-                PythonInstallationKeyError::ParseError(
-                    key.to_string(),
-                    format!("invalid Python version: {err}"),
-                )
-            })?[..]
-        else {
-            return Err(PythonInstallationKeyError::ParseError(
+        let version = PythonVersion::from_str(version).map_err(|err| {
+            PythonInstallationKeyError::ParseError(
                 key.to_string(),
-                "invalid Python version: expected `<major>.<minor>.<patch>`".to_string(),
-            ));
-        };
+                format!("invalid Python version: {err}"),
+            )
+        })?;
 
-        Ok(Self::new(
+        Ok(Self::new_from_version(
             implementation,
-            major,
-            minor,
-            patch,
+            &version,
             os,
             arch,
             libc,

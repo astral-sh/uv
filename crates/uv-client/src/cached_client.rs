@@ -34,7 +34,7 @@ pub trait Cacheable: Sized {
     /// This associated type permits customizing what the "output" type of
     /// deserialization is. It can be identical to `Self`.
     ///
-    /// Typical use of this is for wrapper types used to proviate blanket trait
+    /// Typical use of this is for wrapper types used to provide blanket trait
     /// impls without hitting overlapping impl problems.
     type Target;
 

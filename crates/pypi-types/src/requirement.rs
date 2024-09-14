@@ -16,8 +16,8 @@ use uv_git::{GitReference, GitSha, GitUrl};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::{
-    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError,
-    VerbatimParsedUrl,
+    Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
+    ParsedUrlError, VerbatimParsedUrl,
 };
 
 #[derive(Debug, Error)]
@@ -113,6 +113,15 @@ impl Requirement {
             source: self.source.relative_to(path)?,
             ..self
         })
+    }
+
+    /// Return the hashes of the requirement, as specified in the URL fragment.
+    pub fn hashes(&self) -> Option<Hashes> {
+        let RequirementSource::Url { ref url, .. } = self.source else {
+            return None;
+        };
+        let fragment = url.fragment()?;
+        Hashes::parse_fragment(fragment).ok()
     }
 }
 

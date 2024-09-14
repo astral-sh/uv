@@ -9,19 +9,20 @@ use std::path::PathBuf;
 use tracing::debug;
 
 use distribution_types::{
-    CachedDist, Diagnostic, InstalledDist, LocalDist, ResolutionDiagnostic,
-    UnresolvedRequirementSpecification,
+    CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification,
+    ResolutionDiagnostic, UnresolvedRequirementSpecification,
 };
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
-use pypi_types::{Requirement, ResolverMarkerEnvironment};
+use pypi_types::ResolverMarkerEnvironment;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, ExtrasSpecification, Overrides, Reinstall, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, Overrides,
+    Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -76,7 +77,7 @@ pub(crate) async fn read_requirements(
 pub(crate) async fn read_constraints(
     constraints: &[RequirementsSource],
     client_builder: &BaseClientBuilder<'_>,
-) -> Result<Vec<Requirement>, Error> {
+) -> Result<Vec<NameRequirementSpecification>, Error> {
     Ok(
         RequirementsSpecification::from_sources(&[], constraints, &[], client_builder)
             .await?
@@ -87,7 +88,7 @@ pub(crate) async fn read_constraints(
 /// Resolve a set of requirements, similar to running `pip compile`.
 pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
-    constraints: Vec<Requirement>,
+    constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
     dev: Vec<GroupName>,
     source_trees: Vec<PathBuf>,
@@ -196,6 +197,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let constraints = Constraints::from_requirements(
         constraints
             .into_iter()
+            .map(|constraint| constraint.requirement)
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
@@ -348,6 +350,7 @@ pub(crate) async fn install(
     link_mode: LinkMode,
     compile: bool,
     index_urls: &IndexLocations,
+    config_settings: &ConfigSettings,
     hasher: &HashStrategy,
     markers: &ResolverMarkerEnvironment,
     tags: &Tags,
@@ -375,6 +378,7 @@ pub(crate) async fn install(
             build_options,
             hasher,
             index_urls,
+            config_settings,
             cache,
             venv,
             markers,
@@ -463,7 +467,15 @@ pub(crate) async fn install(
                     install_wheel_rs::Error::MissingRecord(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing RECORD file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
+                        dist_info.path().user_display().cyan(),
+                    );
+                }
+                Err(uv_installer::UninstallError::Uninstall(
+                    install_wheel_rs::Error::MissingTopLevel(_),
+                )) => {
+                    warn_user!(
+                        "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
                         dist_info.path().user_display().cyan(),
                     );
                 }
@@ -587,7 +599,7 @@ fn report_dry_run(
         )?;
     }
 
-    // TDOO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
+    // TODO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
     for event in reinstalls
         .into_iter()
         .chain(extraneous.into_iter())

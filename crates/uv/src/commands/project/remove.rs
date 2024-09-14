@@ -13,7 +13,7 @@ use uv_scripts::Pep723Script;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -196,7 +196,7 @@ pub(crate) async fn remove(
     let state = SharedState::default();
 
     project::sync::do_sync(
-        &project,
+        InstallTarget::from(&project),
         &venv,
         &lock,
         &extras,

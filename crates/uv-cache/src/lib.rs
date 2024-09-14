@@ -6,21 +6,20 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use fs_err as fs;
 use rustc_hash::FxHashSet;
 use tracing::debug;
 
 pub use archive::ArchiveId;
 use distribution_types::InstalledDist;
 use pypi_types::Metadata23;
+use uv_cache_info::Timestamp;
 use uv_fs::{cachedir, directories};
 use uv_normalize::PackageName;
 
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
-use crate::removal::{rm_rf, Removal};
-pub use crate::timestamp::Timestamp;
+pub use crate::removal::{rm_rf, Removal};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
@@ -29,7 +28,6 @@ mod by_timestamp;
 #[cfg(feature = "clap")]
 mod cli;
 mod removal;
-mod timestamp;
 mod wheel;
 
 /// A [`CacheEntry`] which may or may not exist yet.
@@ -135,14 +133,7 @@ impl Cache {
 
     /// Create a temporary cache directory.
     pub fn temp() -> Result<Self, io::Error> {
-        let temp_dir =
-            if let Ok(test_dir) = std::env::var("UV_INTERNAL__TEST_DIR").map(PathBuf::from) {
-                let uv_cache_dir = test_dir.join("uv-cache");
-                let _ = fs_err::create_dir_all(&uv_cache_dir);
-                tempfile::tempdir_in(uv_cache_dir)?
-            } else {
-                tempfile::tempdir()?
-            };
+        let temp_dir = tempfile::tempdir()?;
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None(Timestamp::now()),
@@ -193,7 +184,7 @@ impl Cache {
 
     /// Create an ephemeral Python environment in the cache.
     pub fn environment(&self) -> io::Result<tempfile::TempDir> {
-        fs::create_dir_all(self.bucket(CacheBucket::Builds))?;
+        fs_err::create_dir_all(self.bucket(CacheBucket::Builds))?;
         tempfile::tempdir_in(self.bucket(CacheBucket::Builds))
     }
 
@@ -228,7 +219,7 @@ impl Cache {
             }
         };
 
-        match fs::metadata(entry.path()) {
+        match fs_err::metadata(entry.path()) {
             Ok(metadata) => {
                 if Timestamp::from_metadata(&metadata) >= *timestamp {
                     Ok(Freshness::Fresh)
@@ -273,13 +264,13 @@ impl Cache {
         let root = &self.root;
 
         // Create the cache directory, if it doesn't exist.
-        fs::create_dir_all(root)?;
+        fs_err::create_dir_all(root)?;
 
         // Add the CACHEDIR.TAG.
         cachedir::ensure_tag(root)?;
 
         // Add the .gitignore.
-        match fs::OpenOptions::new()
+        match fs_err::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(root.join(".gitignore"))
@@ -292,11 +283,14 @@ impl Cache {
         // Add an empty .gitignore to the build bucket, to ensure that the cache's own .gitignore
         // doesn't interfere with source distribution builds. Build backends (like hatchling) will
         // traverse upwards to look for .gitignore files.
-        fs::create_dir_all(root.join(CacheBucket::SourceDistributions.to_str()))?;
-        match fs::OpenOptions::new().write(true).create_new(true).open(
-            root.join(CacheBucket::SourceDistributions.to_str())
-                .join(".gitignore"),
-        ) {
+        fs_err::create_dir_all(root.join(CacheBucket::SourceDistributions.to_str()))?;
+        match fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(
+                root.join(CacheBucket::SourceDistributions.to_str())
+                    .join(".gitignore"),
+            ) {
             Ok(_) => {}
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
             Err(err) => return Err(err),
@@ -309,13 +303,13 @@ impl Cache {
         // We have to put this below the gitignore. Otherwise, if the build backend uses the rust
         // ignore crate it will walk up to the top level .gitignore and ignore its python source
         // files.
-        fs::OpenOptions::new().create(true).write(true).open(
+        fs_err::OpenOptions::new().create(true).write(true).open(
             root.join(CacheBucket::SourceDistributions.to_str())
                 .join(".git"),
         )?;
 
         Ok(Self {
-            root: fs::canonicalize(root)?,
+            root: std::path::absolute(root)?,
             ..self
         })
     }
@@ -329,10 +323,62 @@ impl Cache {
     ///
     /// Returns the number of entries removed from the cache.
     pub fn remove(&self, name: &PackageName) -> Result<Removal, io::Error> {
+        // Collect the set of referenced archives.
+        let before = {
+            let mut references = FxHashSet::default();
+            for bucket in CacheBucket::iter() {
+                let bucket = self.bucket(bucket);
+                if bucket.is_dir() {
+                    for entry in walkdir::WalkDir::new(bucket) {
+                        let entry = entry?;
+                        if entry.file_type().is_symlink() {
+                            if let Ok(target) = fs_err::canonicalize(entry.path()) {
+                                references.insert(target);
+                            }
+                        }
+                    }
+                }
+            }
+            references
+        };
+
+        // Remove any entries for the package from the cache.
         let mut summary = Removal::default();
         for bucket in CacheBucket::iter() {
             summary += bucket.remove(self, name)?;
         }
+
+        // Collect the set of referenced archives after the removal.
+        let after = {
+            let mut references = FxHashSet::default();
+            for bucket in CacheBucket::iter() {
+                let bucket = self.bucket(bucket);
+                if bucket.is_dir() {
+                    for entry in walkdir::WalkDir::new(bucket) {
+                        let entry = entry?;
+                        if entry.file_type().is_symlink() {
+                            if let Ok(target) = fs_err::canonicalize(entry.path()) {
+                                references.insert(target);
+                            }
+                        }
+                    }
+                }
+            }
+            references
+        };
+
+        if before != after {
+            // Remove any archives that are no longer referenced.
+            for entry in fs_err::read_dir(self.bucket(CacheBucket::Archive))? {
+                let entry = entry?;
+                let path = fs_err::canonicalize(entry.path())?;
+                if !after.contains(&path) && before.contains(&path) {
+                    debug!("Removing dangling cache entry: {}", path.display());
+                    summary += rm_rf(path)?;
+                }
+            }
+        }
+
         Ok(summary)
     }
 
@@ -342,7 +388,7 @@ impl Cache {
 
         // First, remove any top-level directories that are unused. These typically represent
         // outdated cache buckets (e.g., `wheels-v0`, when latest is `wheels-v1`).
-        for entry in fs::read_dir(&self.root)? {
+        for entry in fs_err::read_dir(&self.root)? {
             let entry = entry?;
             let metadata = entry.metadata()?;
 
@@ -357,25 +403,25 @@ impl Cache {
                 // If the directory is not a cache bucket, remove it.
                 if CacheBucket::iter().all(|bucket| entry.file_name() != bucket.to_str()) {
                     let path = entry.path();
-                    debug!("Removing dangling cache entry: {}", path.display());
+                    debug!("Removing dangling cache bucket: {}", path.display());
                     summary += rm_rf(path)?;
                 }
             } else {
                 // If the file is not a marker file, remove it.
                 let path = entry.path();
-                debug!("Removing dangling cache entry: {}", path.display());
+                debug!("Removing dangling cache bucket: {}", path.display());
                 summary += rm_rf(path)?;
             }
         }
 
         // Second, remove any cached environments. These are never referenced by symlinks, so we can
         // remove them directly.
-        match fs::read_dir(self.bucket(CacheBucket::Environments)) {
+        match fs_err::read_dir(self.bucket(CacheBucket::Environments)) {
             Ok(entries) => {
                 for entry in entries {
                     let entry = entry?;
                     let path = fs_err::canonicalize(entry.path())?;
-                    debug!("Removing dangling cache entry: {}", path.display());
+                    debug!("Removing dangling cache environment: {}", path.display());
                     summary += rm_rf(path)?;
                 }
             }
@@ -386,7 +432,7 @@ impl Cache {
         // Third, if enabled, remove all unzipped wheels, leaving only the wheel archives.
         if ci {
             // Remove the entire pre-built wheel cache, since every entry is an unzipped wheel.
-            match fs::read_dir(self.bucket(CacheBucket::Wheels)) {
+            match fs_err::read_dir(self.bucket(CacheBucket::Wheels)) {
                 Ok(entries) => {
                     for entry in entries {
                         let entry = entry?;
@@ -411,9 +457,7 @@ impl Cache {
             }
         }
 
-        // Third, remove any unused archives (by searching for archives that are not symlinked).
-        // TODO(charlie): Remove any unused source distributions. This requires introspecting the
-        // cache contents, e.g., reading and deserializing the manifests.
+        // Fourth, remove any unused archives (by searching for archives that are not symlinked).
         let mut references = FxHashSet::default();
 
         for bucket in CacheBucket::iter() {
@@ -430,13 +474,13 @@ impl Cache {
             }
         }
 
-        match fs::read_dir(self.bucket(CacheBucket::Archive)) {
+        match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
             Ok(entries) => {
                 for entry in entries {
                     let entry = entry?;
                     let path = fs_err::canonicalize(entry.path())?;
                     if !references.contains(&path) {
-                        debug!("Removing dangling cache entry: {}", path.display());
+                        debug!("Removing dangling cache archive: {}", path.display());
                         summary += rm_rf(path)?;
                     }
                 }
@@ -852,14 +896,11 @@ impl Display for CacheBucket {
     }
 }
 
+/// A timestamp for an archive, which could be a directory (in which case the modification time is
+/// the latest modification time of the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the
+/// directory) or a single file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ArchiveTimestamp {
-    /// The archive consists of a single file with the given modification time.
-    Exact(Timestamp),
-    /// The archive consists of a directory. The modification time is the latest modification time
-    /// of the `pyproject.toml` or `setup.py` file in the directory.
-    Approximate(Timestamp),
-}
+pub struct ArchiveTimestamp(Timestamp);
 
 impl ArchiveTimestamp {
     /// Return the modification timestamp for an archive, which could be a file (like a wheel or a zip
@@ -870,7 +911,7 @@ impl ArchiveTimestamp {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
         let metadata = fs_err::metadata(path.as_ref())?;
         if metadata.is_file() {
-            Ok(Some(Self::Exact(Timestamp::from_metadata(&metadata))))
+            Ok(Some(Self(Timestamp::from_metadata(&metadata))))
         } else {
             Self::from_source_tree(path)
         }
@@ -879,7 +920,7 @@ impl ArchiveTimestamp {
     /// Return the modification timestamp for a file.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, io::Error> {
         let metadata = fs_err::metadata(path.as_ref())?;
-        Ok(Self::Exact(Timestamp::from_metadata(&metadata)))
+        Ok(Self(Timestamp::from_metadata(&metadata)))
     }
 
     /// Return the modification timestamp for a source tree, i.e., a directory.
@@ -921,15 +962,12 @@ impl ArchiveTimestamp {
             return Ok(None);
         };
 
-        Ok(Some(Self::Approximate(timestamp)))
+        Ok(Some(Self(timestamp)))
     }
 
     /// Return the modification timestamp for an archive.
     pub fn timestamp(&self) -> Timestamp {
-        match self {
-            Self::Exact(timestamp) => *timestamp,
-            Self::Approximate(timestamp) => *timestamp,
-        }
+        self.0
     }
 
     /// Returns `true` if the `target` (an installed or cached distribution) is up-to-date with the

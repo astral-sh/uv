@@ -1,3 +1,4 @@
+use std::ops::Add;
 use std::path::{Path, PathBuf};
 
 use fs_err as fs;
@@ -94,7 +95,7 @@ impl PythonVersionFile {
 
     /// Create a new representation of a version file at the given path.
     ///
-    /// The file will not any versions; see [`PythonVersionFile::with_versions`].
+    /// The file will not any include versions; see [`PythonVersionFile::with_versions`].
     /// The file will not be created; see [`PythonVersionFile::write`].
     pub fn new(path: PathBuf) -> Self {
         Self {
@@ -128,6 +129,12 @@ impl PythonVersionFile {
         &self.path
     }
 
+    /// Return the file name of the version file (guaranteed to be one of `.python-version` or
+    /// `.python-versions`).
+    pub fn file_name(&self) -> &str {
+        self.path.file_name().unwrap().to_str().unwrap()
+    }
+
     /// Set the versions for the file.
     #[must_use]
     pub fn with_versions(self, versions: Vec<PythonRequest>) -> Self {
@@ -146,6 +153,7 @@ impl PythonVersionFile {
                 .iter()
                 .map(PythonRequest::to_canonical_string)
                 .join("\n")
+                .add("\n")
                 .as_bytes(),
         )
         .await

@@ -48,6 +48,14 @@ pub enum ArrayEdit {
     Add(usize),
 }
 
+impl ArrayEdit {
+    pub fn index(&self) -> usize {
+        match self {
+            Self::Update(i) | Self::Add(i) => *i,
+        }
+    }
+}
+
 /// Specifies whether dependencies are added to a script file or a `pyproject.toml` file.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DependencyTarget {
@@ -297,7 +305,7 @@ impl PyProjectTomlMut {
             .doc()?
             .entry("optional-dependencies")
             .or_insert(Item::Table(Table::new()))
-            .as_table_mut()
+            .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
         let group = optional_dependencies

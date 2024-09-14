@@ -8,13 +8,17 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
+use distribution_types::{
+    IndexLocations, NameRequirementSpecification, UnresolvedRequirementSpecification,
+};
 use pep440_rs::Version;
 use pypi_types::{Requirement, SupportedEnvironments};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, Reinstall, Upgrade};
+use uv_configuration::{
+    BuildOptions, Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
@@ -331,7 +335,7 @@ async fn do_lock(
         .into_iter()
         .flatten()
     {
-        if requires_python.markers().is_disjoint(environment) {
+        if requires_python.to_marker_tree().is_disjoint(environment) {
             return if let Some(contents) = environment.contents() {
                 Err(ProjectError::DisjointEnvironment(
                     contents,
@@ -344,7 +348,8 @@ async fn do_lock(
     }
 
     // Determine the Python requirement.
-    let python_requirement = PythonRequirement::from_requires_python(interpreter, &requires_python);
+    let python_requirement =
+        PythonRequirement::from_requires_python(interpreter, requires_python.clone());
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -385,7 +390,8 @@ async fn do_lock(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = [];
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
 
     // Resolve the flat indexes from `--find-links`.
@@ -399,18 +405,20 @@ async fn do_lock(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         interpreter,
         index_locations,
         &flat_index,
         &state.index,
         &state.git,
+        &state.capabilities,
         &state.in_flight,
         index_strategy,
         config_setting,
         build_isolation,
         link_mode,
         build_options,
+        &build_hasher,
         exclude_newer,
         sources,
         concurrency,
@@ -431,6 +439,7 @@ async fn do_lock(
             interpreter,
             &requires_python,
             index_locations,
+            build_options,
             upgrade,
             &options,
             &database,
@@ -503,7 +512,11 @@ async fn do_lock(
                     .chain(requirements.iter().cloned())
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
-                constraints.clone(),
+                constraints
+                    .iter()
+                    .cloned()
+                    .map(NameRequirementSpecification::from)
+                    .collect(),
                 overrides
                     .iter()
                     .cloned()
@@ -581,6 +594,7 @@ impl ValidatedLock {
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
         index_locations: &IndexLocations,
+        build_options: &BuildOptions,
         upgrade: &Upgrade,
         options: &Options,
         database: &DistributionDatabase<'_, Context>,
@@ -636,7 +650,7 @@ impl ValidatedLock {
         }
 
         // If the set of supported environments has changed, we have to perform a clean resolution.
-        if lock.supported_environments()
+        if lock.simplified_supported_environments()
             != environments
                 .map(SupportedEnvironments::as_markers)
                 .unwrap_or_default()
@@ -665,16 +679,14 @@ impl ValidatedLock {
         // If the Requires-Python bound in the lockfile is weaker or equivalent to the
         // Requires-Python bound in the workspace, we should have the necessary wheels to perform
         // a locked resolution.
-        if let Some(locked) = lock.requires_python() {
-            if locked.range() != requires_python.range() {
-                // On the other hand, if the bound in the lockfile is stricter, meaning the
-                // bound has since been weakened, we have to perform a clean resolution to ensure
-                // we fetch the necessary wheels.
-                debug!("Ignoring existing lockfile due to change in `requires-python`");
+        if lock.requires_python().range() != requires_python.range() {
+            // On the other hand, if the bound in the lockfile is stricter, meaning the
+            // bound has since been weakened, we have to perform a clean resolution to ensure
+            // we fetch the necessary wheels.
+            debug!("Ignoring existing lockfile due to change in `requires-python`");
 
-                // It's fine to prefer the existing versions, though.
-                return Ok(Self::Preferable(lock));
-            }
+            // It's fine to prefer the existing versions, though.
+            return Ok(Self::Preferable(lock));
         }
 
         // If the user provided at least one index URL (from the command line, or from a configuration
@@ -699,6 +711,7 @@ impl ValidatedLock {
                 constraints,
                 overrides,
                 indexes,
+                build_options,
                 interpreter.tags()?,
                 database,
             )
@@ -723,6 +736,18 @@ impl ValidatedLock {
                 } else {
                     debug!(
                         "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedVersion(name, expected, actual) => {
+                if let Some(actual) = actual {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched version: `{name}` (expected: `{expected}`, found: `{actual}`)"
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched version: `{name}` (expected: `{expected}`)"
                     );
                 }
                 Ok(Self::Preferable(lock))

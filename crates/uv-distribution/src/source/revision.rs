@@ -63,6 +63,16 @@ impl RevisionId {
     fn new() -> Self {
         Self(nanoid::nanoid!())
     }
+
+    pub(crate) fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl AsRef<str> for RevisionId {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
 }
 
 impl AsRef<Path> for RevisionId {

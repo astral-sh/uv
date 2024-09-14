@@ -93,12 +93,29 @@ pub(crate) fn main(args: &Args) -> Result<()> {
     Ok(())
 }
 
+enum OptionType {
+    Configuration,
+    ProjectMetadata,
+}
+
 fn generate() -> String {
     let mut output = String::new();
 
     generate_set(
         &mut output,
-        Set::Global(CombinedOptions::metadata()),
+        Set::Global {
+            set: WorkspaceOptions::metadata(),
+            option_type: OptionType::ProjectMetadata,
+        },
+        &mut Vec::new(),
+    );
+
+    generate_set(
+        &mut output,
+        Set::Global {
+            set: SettingsOptions::metadata(),
+            option_type: OptionType::Configuration,
+        },
         &mut Vec::new(),
     );
 
@@ -107,8 +124,12 @@ fn generate() -> String {
 
 fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
     match &set {
-        Set::Global(_) => {
-            output.push_str("## Global\n");
+        Set::Global { option_type, .. } => {
+            let header = match option_type {
+                OptionType::Configuration => "## Configuration\n",
+                OptionType::ProjectMetadata => "## Project metadata\n",
+            };
+            output.push_str(header);
         }
         Set::Named { name, .. } => {
             let title = parents
@@ -116,7 +137,7 @@ fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
                 .filter_map(|set| set.name())
                 .chain(std::iter::once(name.as_str()))
                 .join(".");
-            writeln!(output, "## `{title}`\n").unwrap();
+            writeln!(output, "### `{title}`\n").unwrap();
 
             if let Some(documentation) = set.metadata().documentation() {
                 output.push_str(documentation);
@@ -158,28 +179,34 @@ fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
 }
 
 enum Set {
-    Global(OptionSet),
-    Named { name: String, set: OptionSet },
+    Global {
+        option_type: OptionType,
+        set: OptionSet,
+    },
+    Named {
+        name: String,
+        set: OptionSet,
+    },
 }
 
 impl Set {
     fn name(&self) -> Option<&str> {
         match self {
-            Set::Global(_) => None,
+            Set::Global { .. } => None,
             Set::Named { name, .. } => Some(name),
         }
     }
 
     fn metadata(&self) -> &OptionSet {
         match self {
-            Set::Global(set) => set,
+            Set::Global { set, .. } => set,
             Set::Named { set, .. } => set,
         }
     }
 }
 
 fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[Set]) {
-    let header_level = if parents.is_empty() { "###" } else { "####" };
+    let header_level = if parents.len() > 1 { "####" } else { "###" };
     let parents_anchor = parents.iter().filter_map(|parent| parent.name()).join("_");
 
     if parents_anchor.is_empty() {
@@ -233,16 +260,35 @@ fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[S
     }
     output.push('\n');
     output.push_str("**Example usage**:\n\n");
-    output.push_str(&format_tab(
-        "pyproject.toml",
-        &format_header(field.scope, parents, ConfigurationFile::PyprojectToml),
-        field.example,
-    ));
-    output.push_str(&format_tab(
-        "uv.toml",
-        &format_header(field.scope, parents, ConfigurationFile::UvToml),
-        field.example,
-    ));
+
+    match parents[0] {
+        Set::Global {
+            option_type: OptionType::ProjectMetadata,
+            ..
+        } => {
+            output.push_str(&format_code(
+                "pyproject.toml",
+                &format_header(field.scope, parents, ConfigurationFile::PyprojectToml),
+                field.example,
+            ));
+        }
+        Set::Global {
+            option_type: OptionType::Configuration,
+            ..
+        } => {
+            output.push_str(&format_tab(
+                "pyproject.toml",
+                &format_header(field.scope, parents, ConfigurationFile::PyprojectToml),
+                field.example,
+            ));
+            output.push_str(&format_tab(
+                "uv.toml",
+                &format_header(field.scope, parents, ConfigurationFile::UvToml),
+                field.example,
+            ));
+        }
+        _ => {}
+    }
     output.push('\n');
 }
 
@@ -253,6 +299,10 @@ fn format_tab(tab_name: &str, header: &str, content: &str) -> String {
         header,
         textwrap::indent(content, "    ")
     )
+}
+
+fn format_code(file_name: &str, header: &str, content: &str) -> String {
+    format!("```toml title=\"{file_name}\"\n{header}\n{content}\n```\n")
 }
 
 /// Format the TOML header for the example usage for a given option.

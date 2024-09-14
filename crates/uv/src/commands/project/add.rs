@@ -13,7 +13,9 @@ use pypi_types::redact_git_credentials;
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions, SourceStrategy};
+use uv_configuration::{
+    Concurrency, Constraints, ExtrasSpecification, InstallOptions, SourceStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::{Simplified, CWD};
@@ -30,7 +32,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError};
 use uv_workspace::pyproject_mut::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
@@ -41,7 +43,7 @@ use crate::commands::project::ProjectError;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -138,7 +140,7 @@ pub(crate) async fn add(
             };
 
             let interpreter = PythonInstallation::find_or_download(
-                Some(python_request),
+                Some(&python_request),
                 EnvironmentPreference::Any,
                 python_preference,
                 python_downloads,
@@ -175,7 +177,7 @@ pub(crate) async fn add(
         };
 
         let interpreter = PythonInstallation::find_or_download(
-            python_request,
+            python_request.as_ref(),
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,
@@ -241,10 +243,11 @@ pub(crate) async fn add(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let python_version = None;
-    let python_platform = None;
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
     let hasher = HashStrategy::default();
-    let build_constraints = [];
+    let python_platform = None;
+    let python_version = None;
     let sources = SourceStrategy::Enabled;
 
     // Determine the environment for the resolution.
@@ -257,7 +260,7 @@ pub(crate) async fn add(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::from(client_builder)
+    let client = RegistryClientBuilder::try_from(client_builder)?
         .index_urls(settings.index_locations.index_urls())
         .index_strategy(settings.index_strategy)
         .markers(&markers)
@@ -290,18 +293,20 @@ pub(crate) async fn add(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         target.interpreter(),
         &settings.index_locations,
         &flat_index,
         &state.index,
         &state.git,
+        &state.capabilities,
         &state.in_flight,
         settings.index_strategy,
         &settings.config_setting,
         build_isolation,
         settings.link_mode,
         &settings.build_options,
+        &build_hasher,
         settings.exclude_newer,
         sources,
         concurrency,
@@ -328,7 +333,7 @@ pub(crate) async fn add(
             DependencyTarget::PyProjectToml,
         ),
     }?;
-    let mut edits = Vec::with_capacity(requirements.len());
+    let mut edits = Vec::<DependencyEdit>::with_capacity(requirements.len());
     for mut requirement in requirements {
         // Add the specified extras.
         requirement.extras.extend(extras.iter().cloned());
@@ -339,15 +344,19 @@ pub(crate) async fn add(
             Target::Script(_, _) | Target::Project(_, _) if raw_sources => {
                 (pep508_rs::Requirement::from(requirement), None)
             }
-            Target::Script(ref script, _) => resolve_requirement(
-                requirement,
-                false,
-                editable,
-                rev.clone(),
-                tag.clone(),
-                branch.clone(),
-                &script.path,
-            )?,
+            Target::Script(ref script, _) => {
+                let script_path = std::path::absolute(&script.path)?;
+                let script_dir = script_path.parent().expect("script path has no parent");
+                resolve_requirement(
+                    requirement,
+                    false,
+                    editable,
+                    rev.clone(),
+                    tag.clone(),
+                    branch.clone(),
+                    script_dir,
+                )?
+            }
             Target::Project(ref project, _) => {
                 let workspace = project
                     .workspace()
@@ -406,7 +415,26 @@ pub(crate) async fn add(
             }
         };
 
-        // Keep track of the exact location of the edit.
+        // If the edit was inserted before the end of the list, update the existing edits.
+        if let ArrayEdit::Add(index) = &edit {
+            for edit in &mut edits {
+                if *edit.dependency_type == dependency_type {
+                    match &mut edit.edit {
+                        ArrayEdit::Add(existing) => {
+                            if *existing >= *index {
+                                *existing += 1;
+                            }
+                        }
+                        ArrayEdit::Update(existing) => {
+                            if *existing >= *index {
+                                *existing += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         edits.push(DependencyEdit {
             dependency_type: &dependency_type,
             requirement,
@@ -459,22 +487,46 @@ pub(crate) async fn add(
         return Ok(ExitStatus::Success);
     }
 
-    let existing = project.pyproject_toml();
+    // Store the content prior to any modifications.
+    let existing = project.pyproject_toml().as_ref().to_vec();
+    let root = project.root().to_path_buf();
 
     // Update the `pypackage.toml` in-memory.
-    let mut project = project
-        .clone()
-        .with_pyproject_toml(toml::from_str(&content)?)
-        .context("Failed to update `pyproject.toml`")?;
+    let project = project
+        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
+        .ok_or(ProjectError::TomlUpdate)?;
 
-    // Lock and sync the environment, if necessary.
-    let mut lock = match project::lock::do_safe_lock(
+    // Set the Ctrl-C handler to revert changes on exit.
+    let _ = ctrlc::set_handler({
+        let root = root.clone();
+        let existing = existing.clone();
+        move || {
+            // Revert the changes to the `pyproject.toml`, if necessary.
+            if modified {
+                let _ = fs_err::write(root.join("pyproject.toml"), &existing);
+            }
+
+            #[allow(clippy::exit, clippy::cast_possible_wrap)]
+            std::process::exit(if cfg!(windows) {
+                0xC000_013A_u32 as i32
+            } else {
+                130
+            });
+        }
+    });
+
+    match lock_and_sync(
+        project,
+        &mut toml,
+        &edits,
+        &venv,
+        state,
         locked,
         frozen,
-        project.workspace(),
-        venv.interpreter(),
-        settings.as_ref().into(),
-        Box::new(DefaultResolveLogger),
+        no_sync,
+        &dependency_type,
+        raw_sources,
+        settings.as_ref(),
         connectivity,
         concurrency,
         native_tls,
@@ -483,7 +535,7 @@ pub(crate) async fn add(
     )
     .await
     {
-        Ok(result) => result.into_lock(),
+        Ok(()) => Ok(ExitStatus::Success),
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
@@ -493,13 +545,56 @@ pub(crate) async fn add(
 
             // Revert the changes to the `pyproject.toml`, if necessary.
             if modified {
-                fs_err::write(project.root().join("pyproject.toml"), existing)?;
+                fs_err::write(root.join("pyproject.toml"), &existing)?;
             }
 
-            return Ok(ExitStatus::Failure);
+            Ok(ExitStatus::Failure)
         }
-        Err(err) => return Err(err.into()),
-    };
+        Err(err) => {
+            // Revert the changes to the `pyproject.toml`, if necessary.
+            if modified {
+                fs_err::write(root.join("pyproject.toml"), &existing)?;
+            }
+            Err(err.into())
+        }
+    }
+}
+
+/// Re-lock and re-sync the project after a series of edits.
+#[allow(clippy::fn_params_excessive_bools)]
+async fn lock_and_sync(
+    mut project: VirtualProject,
+    toml: &mut PyProjectTomlMut,
+    edits: &[DependencyEdit<'_>],
+    venv: &PythonEnvironment,
+    state: SharedState,
+    locked: bool,
+    frozen: bool,
+    no_sync: bool,
+    dependency_type: &DependencyType,
+    raw_sources: bool,
+    settings: ResolverInstallerSettingsRef<'_>,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<(), ProjectError> {
+    let mut lock = project::lock::do_safe_lock(
+        locked,
+        frozen,
+        project.workspace(),
+        venv.interpreter(),
+        settings.into(),
+        Box::new(DefaultResolveLogger),
+        connectivity,
+        concurrency,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await?
+    .into_lock();
 
     // Avoid modifying the user request further if `--raw-sources` is set.
     if !raw_sources {
@@ -523,7 +618,7 @@ pub(crate) async fn add(
 
         // If any of the requirements were added without version specifiers, add a lower bound.
         let mut modified = false;
-        for edit in &edits {
+        for edit in edits {
             // Only set a minimum version for newly-added dependencies (as opposed to updates).
             let ArrayEdit::Add(index) = &edit.edit else {
                 continue;
@@ -579,18 +674,17 @@ pub(crate) async fn add(
 
             // Update the `pypackage.toml` in-memory.
             project = project
-                .clone()
-                .with_pyproject_toml(toml::from_str(&content)?)
-                .context("Failed to update `pyproject.toml`")?;
+                .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
+                .ok_or(ProjectError::TomlUpdate)?;
 
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
-            lock = match project::lock::do_safe_lock(
+            lock = project::lock::do_safe_lock(
                 locked,
                 frozen,
                 project.workspace(),
                 venv.interpreter(),
-                settings.as_ref().into(),
+                settings.into(),
                 Box::new(SummaryResolveLogger),
                 connectivity,
                 concurrency,
@@ -598,30 +692,13 @@ pub(crate) async fn add(
                 cache,
                 printer,
             )
-            .await
-            {
-                Ok(result) => result.into_lock(),
-                Err(ProjectError::Operation(pip::operations::Error::Resolve(
-                    uv_resolver::ResolveError::NoSolution(err),
-                ))) => {
-                    let header = err.header();
-                    let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If this is intentional, run `uv add --frozen` to skip the lock and sync steps.") });
-                    anstream::eprint!("{report:?}");
-
-                    // Revert the changes to the `pyproject.toml`, if necessary.
-                    if modified {
-                        fs_err::write(project.root().join("pyproject.toml"), existing)?;
-                    }
-
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(err) => return Err(err.into()),
-            };
+            .await?
+            .into_lock();
         }
     }
 
     if no_sync {
-        return Ok(ExitStatus::Success);
+        return Ok(());
     }
 
     // Sync the environment.
@@ -643,19 +720,15 @@ pub(crate) async fn add(
         }
     };
 
-    // Initialize any shared state.
-    let state = SharedState::default();
-    let install_options = InstallOptions::default();
-
-    if let Err(err) = project::sync::do_sync(
-        &project,
-        &venv,
+    project::sync::do_sync(
+        InstallTarget::from(&project),
+        venv,
         &lock,
         &extras,
         dev,
-        install_options,
+        InstallOptions::default(),
         Modifications::Sufficient,
-        settings.as_ref().into(),
+        settings.into(),
         &state,
         Box::new(DefaultInstallLogger),
         connectivity,
@@ -664,16 +737,9 @@ pub(crate) async fn add(
         cache,
         printer,
     )
-    .await
-    {
-        // Revert the changes to the `pyproject.toml`, if necessary.
-        if modified {
-            fs_err::write(project.root().join("pyproject.toml"), existing)?;
-        }
-        return Err(err.into());
-    }
+    .await?;
 
-    Ok(ExitStatus::Success)
+    Ok(())
 }
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.

@@ -10,6 +10,7 @@ use url::Url;
 use distribution_filename::EggInfoFilename;
 use pep440_rs::Version;
 use pypi_types::DirectUrl;
+use uv_cache_info::CacheInfo;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
@@ -35,6 +36,7 @@ pub struct InstalledRegistryDist {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
+    pub cache_info: Option<CacheInfo>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -45,6 +47,7 @@ pub struct InstalledDirectUrlDist {
     pub url: Url,
     pub editable: bool,
     pub path: PathBuf,
+    pub cache_info: Option<CacheInfo>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -90,6 +93,8 @@ impl InstalledDist {
 
             let name = PackageName::from_str(name)?;
             let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
+            let cache_info = Self::cache_info(path)?;
+
             return if let Some(direct_url) = Self::direct_url(path)? {
                 match Url::try_from(&direct_url) {
                     Ok(url) => Ok(Some(Self::Url(InstalledDirectUrlDist {
@@ -99,6 +104,7 @@ impl InstalledDist {
                         direct_url: Box::new(direct_url),
                         url,
                         path: path.to_path_buf(),
+                        cache_info,
                     }))),
                     Err(err) => {
                         warn!("Failed to parse direct URL: {err}");
@@ -106,6 +112,7 @@ impl InstalledDist {
                             name,
                             version,
                             path: path.to_path_buf(),
+                            cache_info,
                         })))
                     }
                 }
@@ -114,6 +121,7 @@ impl InstalledDist {
                     name,
                     version,
                     path: path.to_path_buf(),
+                    cache_info,
                 })))
             };
         }
@@ -255,11 +263,25 @@ impl InstalledDist {
     /// Read the `direct_url.json` file from a `.dist-info` directory.
     pub fn direct_url(path: &Path) -> Result<Option<DirectUrl>> {
         let path = path.join("direct_url.json");
-        let Ok(file) = fs_err::File::open(path) else {
-            return Ok(None);
+        let file = match fs_err::File::open(&path) {
+            Ok(file) => file,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
         };
         let direct_url = serde_json::from_reader::<fs_err::File, DirectUrl>(file)?;
         Ok(Some(direct_url))
+    }
+
+    /// Read the `uv_cache.json` file from a `.dist-info` directory.
+    pub fn cache_info(path: &Path) -> Result<Option<CacheInfo>> {
+        let path = path.join("uv_cache.json");
+        let file = match fs_err::File::open(&path) {
+            Ok(file) => file,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
+        let cache_info = serde_json::from_reader::<fs_err::File, CacheInfo>(file)?;
+        Ok(Some(cache_info))
     }
 
     /// Read the `METADATA` file from a `.dist-info` directory.
