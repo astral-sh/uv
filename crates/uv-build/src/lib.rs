@@ -8,7 +8,7 @@ use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use serde::de::{value, SeqAccess, Visitor};
+use serde::de::{value, IntoDeserializer, SeqAccess, Visitor};
 use serde::{de, Deserialize, Deserializer};
 use std::ffi::OsString;
 use std::fmt::Formatter;
@@ -430,8 +430,12 @@ impl SourceBuild {
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
+                let pyproject_toml: toml_edit::ImDocument<_> =
+                    toml_edit::ImDocument::from_str(&toml)
+                        .map_err(Error::InvalidPyprojectTomlSyntax)?;
                 let pyproject_toml: PyProjectToml =
-                    toml::from_str(&toml).map_err(Error::InvalidPyprojectToml)?;
+                    PyProjectToml::deserialize(pyproject_toml.into_deserializer())
+                        .map_err(Error::InvalidPyprojectTomlSchema)?;
                 let backend = if let Some(build_system) = pyproject_toml.build_system {
                     Pep517Backend {
                         // If `build-backend` is missing, inject the legacy setuptools backend, but

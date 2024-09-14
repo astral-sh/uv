@@ -1910,3 +1910,42 @@ fn run_exit_code() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_lock_invalid_project_table() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12", "3.11", "3.8"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project.urls]
+        repository = 'https://github.com/octocat/octocat-python'
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 1, column 2
+      |
+    1 | [project.urls]
+      |  ^^^^^^^
+    missing field `name`
+
+    "###);
+
+    Ok(())
+}

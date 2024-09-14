@@ -12693,3 +12693,50 @@ fn lock_duplicate_sources() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn lock_invalid_project_table() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("a/pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { path = "../b" }
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("b/pyproject.toml");
+    pyproject_toml.write_str(
+        r"
+        [project.urls]
+        repository = 'https://github.com/octocat/octocat-python'
+        ",
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.join("a")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: Failed to build: `b @ file://[TEMP_DIR]/b`
+      Caused by: Failed to extract static metadata from `pyproject.toml`
+      Caused by: `pyproject.toml` is using the `[project]` table, but the required `project.name` is not set.
+      Caused by: TOML parse error at line 2, column 10
+      |
+    2 |         [project.urls]
+      |          ^^^^^^^
+    missing field `name`
+
+    "###);
+
+    Ok(())
+}

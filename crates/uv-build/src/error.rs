@@ -58,7 +58,9 @@ pub enum Error {
     #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory", _0.simplified_display())]
     InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
-    InvalidPyprojectToml(#[from] toml::de::Error),
+    InvalidPyprojectTomlSyntax(#[from] toml_edit::TomlError),
+    #[error("`pyproject.toml` does not match the required schema. When the `[project]` table is present, `project.name` must be present and non-empty.")]
+    InvalidPyprojectTomlSchema(#[from] toml_edit::de::Error),
     #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
     EditableSetupPy,
     #[error("Failed to install requirements from {0}")]

@@ -37,7 +37,7 @@ pub enum Error {
     #[error("The .dist-info directory name contains invalid characters")]
     InvalidName(#[from] InvalidNameError),
     #[error("The metadata at {0} is invalid")]
-    InvalidMetadata(String, pypi_types::MetadataError),
+    InvalidMetadata(String, Box<pypi_types::MetadataError>),
     #[error("Failed to read from zip file")]
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to read from zip file")]
@@ -285,7 +285,7 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
             reader.read_to_end(&mut contents).await.unwrap();
 
             let metadata = Metadata23::parse_metadata(&contents)
-                .map_err(|err| Error::InvalidMetadata(debug_path.to_string(), err))?;
+                .map_err(|err| Error::InvalidMetadata(debug_path.to_string(), Box::new(err)))?;
             return Ok(metadata);
         }
 
@@ -305,7 +305,10 @@ pub fn read_flat_wheel_metadata(
     let dist_info_prefix = find_flat_dist_info(filename, &wheel)?;
     let metadata = read_dist_info_metadata(&dist_info_prefix, &wheel)?;
     Metadata23::parse_metadata(&metadata).map_err(|err| {
-        Error::InvalidMetadata(format!("{dist_info_prefix}.dist-info/METADATA"), err)
+        Error::InvalidMetadata(
+            format!("{dist_info_prefix}.dist-info/METADATA"),
+            Box::new(err),
+        )
     })
 }
 
