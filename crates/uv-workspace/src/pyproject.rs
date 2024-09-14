@@ -6,12 +6,12 @@
 //!
 //! Then lowers them into a dependency specification.
 
+use glob::Pattern;
+use serde::{de::IntoDeserializer, Deserialize, Serialize};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::{collections::BTreeMap, mem};
-
-use glob::Pattern;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
@@ -21,6 +21,16 @@ use uv_fs::relative_to;
 use uv_git::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, PackageName};
+
+#[derive(Error, Debug)]
+pub enum PyprojectTomlError {
+    #[error(transparent)]
+    TomlSyntax(#[from] toml_edit::TomlError),
+    #[error(transparent)]
+    TomlSchema(#[from] toml_edit::de::Error),
+    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set")]
+    MissingName(#[source] toml_edit::de::Error),
+}
 
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -41,8 +51,18 @@ pub struct PyProjectToml {
 
 impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
-    pub fn from_string(raw: String) -> Result<Self, toml::de::Error> {
-        let pyproject = toml::from_str(&raw)?;
+    pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
+        let pyproject: toml_edit::ImDocument<_> =
+            toml_edit::ImDocument::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
+        let pyproject =
+            PyProjectToml::deserialize(pyproject.into_deserializer()).map_err(|err| {
+                // TODO(konsti): A typed error would be nicer, this can break on toml upgrades.
+                if err.message().contains("missing field `name`") {
+                    PyprojectTomlError::MissingName(err)
+                } else {
+                    PyprojectTomlError::TomlSchema(err)
+                }
+            })?;
         Ok(PyProjectToml { raw, ..pyproject })
     }
 

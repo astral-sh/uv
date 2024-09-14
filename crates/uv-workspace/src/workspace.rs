@@ -3,11 +3,8 @@
 use either::Either;
 use glob::{glob, GlobError, PatternError};
 use rustc_hash::FxHashSet;
-use serde::de::IntoDeserializer;
-use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use tracing::{debug, trace, warn};
 
 use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
@@ -16,7 +13,9 @@ use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::{warn_user, warn_user_once};
 
-use crate::pyproject::{Project, PyProjectToml, Source, ToolUvSources, ToolUvWorkspace};
+use crate::pyproject::{
+    Project, PyProjectToml, PyprojectTomlError, Source, ToolUvSources, ToolUvWorkspace,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum WorkspaceError {
@@ -40,12 +39,8 @@ pub enum WorkspaceError {
     Glob(String, #[source] GlobError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error("Failed to abc: `{}`", _0.user_display())]
-    TomlSyntax(PathBuf, #[source] Box<toml_edit::TomlError>),
-    #[error("Failed to def: `{}`", _0.user_display())]
-    TomlSchema(PathBuf, #[source] Box<toml_edit::de::Error>),
-    #[error("`{}` is using the `[project]` table, but the required `project.name` field is not set", _0.user_display())]
-    MissingName(PathBuf, #[source] Box<toml_edit::de::Error>),
+    #[error("Failed to parse: `{}`", _0.user_display())]
+    Toml(PathBuf, #[source] Box<PyprojectTomlError>),
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
 }
@@ -126,7 +121,8 @@ impl Workspace {
 
         let pyproject_path = project_path.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = parse_pyproject_toml(&pyproject_path, &contents)?;
+        let pyproject_toml = PyProjectToml::from_string(contents)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // Check if the project is explicitly marked as unmanaged.
         if pyproject_toml
@@ -592,7 +588,8 @@ impl Workspace {
             if let Some(project) = &workspace_pyproject_toml.project {
                 let pyproject_path = workspace_root.join("pyproject.toml");
                 let contents = fs_err::read_to_string(&pyproject_path)?;
-                let pyproject_toml = parse_pyproject_toml(&pyproject_path, &contents)?;
+                let pyproject_toml = PyProjectToml::from_string(contents)
+                    .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
                 debug!(
                     "Adding root workspace member: `{}`",
@@ -703,7 +700,8 @@ impl Workspace {
                     }
                     Err(err) => return Err(err.into()),
                 };
-                let pyproject_toml = parse_pyproject_toml(&pyproject_path, &contents)?;
+                let pyproject_toml = PyProjectToml::from_string(contents)
+                    .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
                 // Check if the current project is explicitly marked as unmanaged.
                 if pyproject_toml
@@ -912,7 +910,8 @@ impl ProjectWorkspace {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = parse_pyproject_toml(&pyproject_path, &contents)?;
+        let pyproject_toml = PyProjectToml::from_string(contents)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // It must have a `[project]` table.
         let project = pyproject_toml
@@ -935,7 +934,8 @@ impl ProjectWorkspace {
             // No `pyproject.toml`, but there may still be a `setup.py` or `setup.cfg`.
             return Ok(None);
         };
-        let pyproject_toml = parse_pyproject_toml(&pyproject_path, &contents)?;
+        let pyproject_toml = PyProjectToml::from_string(contents)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // Extract the `[project]` metadata.
         let Some(project) = pyproject_toml.project.clone() else {
@@ -1105,7 +1105,8 @@ async fn find_workspace(
 
         // Read the `pyproject.toml`.
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = parse_pyproject_toml(&pyproject_path, &contents)?;
+        let pyproject_toml = PyProjectToml::from_string(contents)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         return if let Some(workspace) = pyproject_toml
             .tool
@@ -1310,23 +1311,6 @@ fn is_included_in_workspace(
     Ok(false)
 }
 
-/// Parse the `pyproject.toml` at the given path.
-fn parse_pyproject_toml(
-    pyproject_path: &Path,
-    contents: &str,
-) -> Result<PyProjectToml, WorkspaceError> {
-    let pyproject_toml: toml_edit::ImDocument<_> = toml_edit::ImDocument::from_str(&contents)
-        .map_err(|err| WorkspaceError::TomlSyntax(pyproject_path.to_path_buf(), Box::new(err)))?;
-    PyProjectToml::deserialize(pyproject_toml.into_deserializer()).map_err(|err| {
-        // TODO(konsti): A typed error would be nicer, this can break on toml upgrades.
-        if err.message().contains("missing field `name`") {
-            WorkspaceError::MissingName(pyproject_path.to_path_buf(), Box::new(err))
-        } else {
-            WorkspaceError::TomlSchema(pyproject_path.to_path_buf(), Box::new(err))
-        }
-    })
-}
-
 /// A project that can be discovered.
 ///
 /// The project could be a package within a workspace, a real workspace root, or a (legacy)
@@ -1375,7 +1359,8 @@ impl VirtualProject {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = parse_pyproject_toml(&pyproject_path, &contents)?;
+        let pyproject_toml = PyProjectToml::from_string(contents)
+            .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         if let Some(project) = pyproject_toml.project.as_ref() {
             // If the `pyproject.toml` contains a `[project]` table, it's a project.

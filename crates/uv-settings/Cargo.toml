@@ -34,7 +34,7 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
-toml_edit = { workspace = true }
+toml = { workspace = true }
 tracing = { workspace = true }
 
 [package.metadata.cargo-shear]

@@ -5157,7 +5157,7 @@ dependencies = [
  "serde",
  "textwrap",
  "thiserror",
- "toml_edit",
+ "toml",
  "tracing",
  "uv-cache-info",
  "uv-configuration",
