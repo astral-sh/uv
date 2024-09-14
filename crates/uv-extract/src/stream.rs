@@ -250,6 +250,16 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
         SourceDistExtension::TarZst => {
             untar_zst(reader, target).await?;
         }
+        SourceDistExtension::Tar => {
+            untar_tar(reader, target).await?;
+        }
+        SourceDistExtension::TarLz => {
+            untar_lz(reader, target).await?;
+        }
+        SourceDistExtension::TarLzma => {
+            untar_lzma(reader, target).await?;
+        }
     }
     Ok(())
 }
+
