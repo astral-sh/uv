@@ -1494,12 +1494,12 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @r#"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 3
-            Expected direct URL (`https://localhost:8080/`) to end in a supported file extension: `.whl`, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`
+            Expected direct URL (`https://localhost:8080/`) to end in a supported file extension: `.whl`, `.zip`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz`, `.tar.xz`, `.txz`, `.tar.lz`, `.tar.lzma`, `.tar.zst`
             https://localhost:8080/
             ^^^^^^^^^^^^^^^^^^^^^^^
-            "###);
+            "#);
         });
 
         Ok(())
