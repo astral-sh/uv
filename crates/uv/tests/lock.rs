@@ -12695,7 +12695,7 @@ fn lock_duplicate_sources() -> Result<()> {
 }
 
 #[test]
-fn lock_invalid_project_table_dep() -> Result<()> {
+fn lock_invalid_project_table() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("a/pyproject.toml");
@@ -12706,6 +12706,7 @@ fn lock_invalid_project_table_dep() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["b"]
+
         [tool.uv.sources]
         b = { path = "../b" }
         "#,
