@@ -31,13 +31,15 @@ please refer to [Getting Help](../../getting-started/help.md).
 
 !!! info "Why `--extra-index-url`?"
 
-    uv `--extra-index-url` behaves differently than `pip --extra-index-url`. See more [here](https://docs.astral.sh/uv/pip/compatibility/#packages-that-exist-on-multiple-indexes).
+    uv `--extra-index-url` behaves slightly differently from `pip --extra-index-url`. See more [here](https://docs.astral.sh/uv/pip/compatibility/#packages-that-exist-on-multiple-indexes).
 
 !!! warning "About lockfile cross-compatibility"
 
-    Currently, uv does not support pinning a package to a specific index (though progress is tracked [here](https://github.com/astral-sh/uv/issues/171)).
-    In case of PyTorch, this means that the lockfile might not be cross-compatible between different platforms. For example: suppose a Windows user runs `uv add torch` and then a Linux user
-    runs `uv sync` to synchronise the lockfile. The Windows user will get CPU-only PyTorch, while the Linux user will get CUDA 12.1 PyTorch.
+    Currently, uv does not support pinning a package to a specific index (though progress is tracked [here](https://github.com/astral-sh/uv/issues/171)). As a result,
+    the lockfiles are not guaranteed to be cross-compatible between different platforms. For example: suppose a Windows user runs `uv add torch` and then a Linux user runs
+    `uv sync` to synchronise the lockfile. The Windows user will get CPU-only PyTorch, while the Linux user will get CUDA 12.1 PyTorch.
+
+    If you specify the `[tool.uv.sources]` section in your `pyproject.toml`, users from different platform might not be able to solve for the package dependencies.
 
 ## On macOS
 
