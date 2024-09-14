@@ -1912,7 +1912,7 @@ fn run_exit_code() -> Result<()> {
 }
 
 #[test]
-fn run_lock_invalid_project_table() -> Result<()> {
+fn run_invalid_project_table() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12", "3.11", "3.8"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1939,6 +1939,7 @@ fn run_lock_invalid_project_table() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
+      Caused by: `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
       Caused by: TOML parse error at line 1, column 2
       |
     1 | [project.urls]

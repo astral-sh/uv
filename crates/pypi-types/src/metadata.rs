@@ -47,7 +47,7 @@ pub enum MetadataError {
     MailParse(#[from] MailParseError),
     #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectTomlSyntax(#[source] toml_edit::TomlError),
-    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` is not set.")]
+    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set.")]
     InvalidPyprojectTomlMissingName(#[source] toml_edit::de::Error),
     #[error(transparent)]
     InvalidPyprojectTomlSchema(toml_edit::de::Error),
