@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use uv_configuration::SourceStrategy;
-use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
-use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
-
 use crate::metadata::{LoweredRequirement, MetadataError};
 use crate::Metadata;
+use uv_configuration::SourceStrategy;
+use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_workspace::pyproject::ToolUvSources;
+use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
@@ -71,6 +71,7 @@ impl RequiresDist {
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.sources.as_ref())
+            .map(ToolUvSources::inner)
             .unwrap_or(&empty);
 
         let dev_dependencies = {

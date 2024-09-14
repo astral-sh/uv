@@ -14,7 +14,7 @@ use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::{warn_user, warn_user_once};
 
-use crate::pyproject::{Project, PyProjectToml, Source, ToolUvWorkspace};
+use crate::pyproject::{Project, PyProjectToml, Source, ToolUvSources, ToolUvWorkspace};
 
 #[derive(thiserror::Error, Debug)]
 pub enum WorkspaceError {
@@ -234,6 +234,7 @@ impl Workspace {
                 .clone()
                 .and_then(|tool| tool.uv)
                 .and_then(|uv| uv.sources)
+                .map(ToolUvSources::into_inner)
                 .unwrap_or_default();
 
             // Set the `pyproject.toml` for the member.
@@ -741,6 +742,7 @@ impl Workspace {
             .clone()
             .and_then(|tool| tool.uv)
             .and_then(|uv| uv.sources)
+            .map(ToolUvSources::into_inner)
             .unwrap_or_default();
 
         Ok(Workspace {

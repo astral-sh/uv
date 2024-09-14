@@ -109,7 +109,7 @@ pub struct Tool {
 pub struct ToolUv {
     /// The sources to use (e.g., workspace members, Git repositories, local paths) when resolving
     /// dependencies.
-    pub sources: Option<BTreeMap<PackageName, Source>>,
+    pub sources: Option<ToolUvSources>,
     /// The workspace definition for the project, if any.
     #[option_group]
     pub workspace: Option<ToolUvWorkspace>,
@@ -243,6 +243,65 @@ pub struct ToolUv {
         "#
     )]
     pub constraint_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
+}
+
+#[derive(Serialize, Default, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct ToolUvSources(BTreeMap<PackageName, Source>);
+
+impl ToolUvSources {
+    /// Returns the underlying `BTreeMap` of package names to sources.
+    pub fn inner(&self) -> &BTreeMap<PackageName, Source> {
+        &self.0
+    }
+
+    /// Convert the [`ToolUvSources`] into its inner `BTreeMap`.
+    #[must_use]
+    pub fn into_inner(self) -> BTreeMap<PackageName, Source> {
+        self.0
+    }
+}
+
+/// Ensure that all keys in the TOML table are unique.
+impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct SourcesVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for SourcesVisitor {
+            type Value = ToolUvSources;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a map with unique keys")
+            }
+
+            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                let mut sources = BTreeMap::new();
+                while let Some((key, value)) = access.next_entry::<PackageName, Source>()? {
+                    match sources.entry(key) {
+                        std::collections::btree_map::Entry::Occupied(entry) => {
+                            return Err(serde::de::Error::custom(format!(
+                                "duplicate sources for package `{}`",
+                                entry.key()
+                            )));
+                        }
+                        std::collections::btree_map::Entry::Vacant(entry) => {
+                            entry.insert(value);
+                        }
+                    }
+                }
+                Ok(ToolUvSources(sources))
+            }
+        }
+
+        deserializer.deserialize_map(SourcesVisitor)
+    }
 }
 
 #[derive(Serialize, Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]

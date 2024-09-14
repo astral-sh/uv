@@ -372,13 +372,14 @@
     },
     "sources": {
       "description": "The sources to use (e.g., workspace members, Git repositories, local paths) when resolving dependencies.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "additionalProperties": {
-        "$ref": "#/definitions/Source"
-      }
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ToolUvSources"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "upgrade": {
       "description": "Allow package upgrades, ignoring pinned versions in any existing output file.",
@@ -1472,6 +1473,12 @@
           ]
         }
       ]
+    },
+    "ToolUvSources": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/Source"
+      }
     },
     "ToolUvWorkspace": {
       "type": "object",
