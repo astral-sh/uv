@@ -40,7 +40,7 @@ pub enum SourceDistExtension {
 }
 
 impl DistExtension {
-    /// Extract the [`DistExtension`] from a path.
+    // Extract the [`DistExtension`] from a path.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, ExtensionError> {
         let Some(extension) = path.as_ref().extension().and_then(|ext| ext.to_str()) else {
             return Err(ExtensionError::Dist);
@@ -77,7 +77,9 @@ impl SourceDistExtension {
             "tgz" => Ok(Self::TarGz),
             "tar" => Ok(Self::Tar),
             "bz2" | "tbz" if is_tar(path.as_ref()) => Ok(Self::TarBz2),
-            "xz" | "txz" | "tlz" | "tar.lz" | "tar.lzma" if is_tar(path.as_ref()) => Ok(Self::TarXz),
+            "xz" | "txz" | "tlz" | "tar.lz" | "tar.lzma" if is_tar(path.as_ref()) => {
+                Ok(Self::TarXz)
+            }
             "zst" if is_tar(path.as_ref()) => Ok(Self::TarZst),
             _ => Err(ExtensionError::SourceDist),
         }
@@ -99,11 +101,10 @@ impl Display for SourceDistExtension {
     }
 }
 
-#[derive(Error, Debug)]
+// #[derive(Error, Debug)]
 pub enum ExtensionError {
-    #[error("`.whl`, `.zip`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz`, `.tar.xz`, `.txz`, `.tar.lz`, `.tar.lzma`, or `.tar.zst`")]
+    #[error("`.whl`, `.zip`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz`, `.tar.xz`, `.txz`, `.tar.lz`, `.tar.lzma`, `.tar.zst`")]
     Dist,
-    #[error("`.zip`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz`, `.tar.xz`, `.txz`, `.tar.lz`, `.tar.lzma`, `.tar`, or `.tar.zst`")]
+    #[error("`.zip`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz`, `.tar.xz`, `.txz`, `.tar.lz`, `.tar.lzma`, `.tar.zst`")]
     SourceDist,
 }
-
