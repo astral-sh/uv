@@ -59,7 +59,7 @@ pub enum Error {
     InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectTomlSyntax(#[from] toml_edit::TomlError),
-    #[error("`pyproject.toml` does not match required schema. Note: When using any `[project]` field, at least `project.name` needs to be set.")]
+    #[error("`pyproject.toml` does not match the required schema. When the `[project]` table is present, `project.name` must be present and non-empty.")]
     InvalidPyprojectTomlSchema(#[from] toml_edit::de::Error),
     #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
     EditableSetupPy,

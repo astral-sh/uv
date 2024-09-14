@@ -12695,7 +12695,7 @@ fn lock_duplicate_sources() -> Result<()> {
 }
 
 #[test]
-fn invalid_project_table_dep() -> Result<()> {
+fn lock_invalid_project_table_dep() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("a/pyproject.toml");
@@ -12723,6 +12723,7 @@ fn invalid_project_table_dep() -> Result<()> {
     success: false
     exit_code: 2
     ----- stdout -----
+
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     error: Failed to build: `b @ file://[TEMP_DIR]/b`
@@ -12733,6 +12734,7 @@ fn invalid_project_table_dep() -> Result<()> {
     2 |         [project.urls]
       |          ^^^^^^^
     missing field `name`
+
     "###);
 
     Ok(())
