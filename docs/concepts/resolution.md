@@ -310,7 +310,6 @@ reading and extracting archives in the following formats:
 - zstd tarball (`.tar.zst`)
 - lzip tarball (`.tar.lz`)
 - lzma tarball (`.tar.lzma`)
-- uncompressed tarball (`.tar`)
 
 ## Learn more
 

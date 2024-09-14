@@ -227,6 +227,25 @@ pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
     Ok(())
 }
 
+// pub async fn untar_tar<R: tokio::io::AsyncRead + Unpin>(
+//     reader: R,
+//     target: impl AsRef<Path>,
+// ) -> Result<(), Error> {
+//     // Buffer the reader for efficient I/O
+//     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
+
+//     // Box the reader as a trait object to match the expected type
+//     let mut boxed_reader: Box<dyn tokio::io::AsyncRead + Unpin> = Box::new(reader);
+
+//     // Create the tar archive using the dereferenced boxed reader
+//     let archive = tokio_tar::ArchiveBuilder::new(&mut *boxed_reader)
+//         .set_preserve_mtime(false)
+//         .build();
+
+//     // Extract the tar archive to the target path
+//     Ok(untar_in(archive, target.as_ref()).await?)
+// }
+
 /// Unzip a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
 /// without requiring `Seek`.
 pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
@@ -244,22 +263,12 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
         SourceDistExtension::TarBz2 => {
             untar_bz2(reader, target).await?;
         }
-        SourceDistExtension::TarXz => {
+        SourceDistExtension::TarXz | SourceDistExtension::TarLz | SourceDistExtension::TarLzma => {
             untar_xz(reader, target).await?;
         }
         SourceDistExtension::TarZst => {
             untar_zst(reader, target).await?;
         }
-        SourceDistExtension::Tar => {
-            untar_tar(reader, target).await?;
-        }
-        SourceDistExtension::TarLz => {
-            untar_lz(reader, target).await?;
-        }
-        SourceDistExtension::TarLzma => {
-            untar_lzma(reader, target).await?;
-        }
     }
     Ok(())
 }
-

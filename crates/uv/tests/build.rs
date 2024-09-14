@@ -816,7 +816,7 @@ fn wheel_from_sdist() -> Result<()> {
 
     ----- stderr -----
     Building wheel from source distribution...
-    error: `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.zip`, `.tar`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz`, `.tar.xz`, `.txz`, `.tar.lz`, `.tar.lzma`, or `.tar.zst`.
+    error: `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.zip`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz`, `.tar.xz`, `.txz`, `.tar.lz`, `.tar.lzma`, or `.tar.zst`.
     "###);
 
     Ok(())
