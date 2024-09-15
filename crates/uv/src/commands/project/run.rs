@@ -14,7 +14,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions};
+use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions, SourceStrategy};
 use uv_distribution::LoweredRequirement;
 use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -175,13 +175,16 @@ pub(crate) async fn run(
         if let Some(dependencies) = script.metadata.dependencies {
             // // Collect any `tool.uv.sources` from the script.
             let empty = BTreeMap::default();
-            let script_sources = script
-                .metadata
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.sources.as_ref())
-                .unwrap_or(&empty);
+            let script_sources = match settings.sources {
+                SourceStrategy::Enabled => script
+                    .metadata
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.sources.as_ref())
+                    .unwrap_or(&empty),
+                SourceStrategy::Disabled => &empty,
+            };
             let script_path = std::path::absolute(script.path)?;
             let script_dir = script_path.parent().expect("script path has no parent");
 
