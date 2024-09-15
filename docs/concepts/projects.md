@@ -237,7 +237,7 @@ def hello() -> None:
 
 And the `pyproject.toml` includes a script entrypoint:
 
-```python title="pyproject.toml" hl_lines="9 10"
+```toml title="pyproject.toml" hl_lines="9 10"
 [project]
 name = "example-packaged-app"
 version = "0.1.0"
@@ -485,6 +485,38 @@ To add a dependency source, e.g., to use `httpx` from GitHub during development:
 ```console
 $ uv add git+https://github.com/encode/httpx
 ```
+
+### Platform-specific dependencies
+
+To ensure that a dependency is only installed on a specific platform or on specific Python versions,
+use Python's standardized
+[environment markers](https://peps.python.org/pep-0508/#environment-markers) syntax.
+
+For example, to install `jax` on Linux, but not on Windows or macOS:
+
+```console
+$ uv add 'jax; sys_platform == "linux"'
+```
+
+The resulting `pyproject.toml` will then include the environment marker in the dependency
+definition:
+
+```toml title="pyproject.toml" hl_lines="6"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["jax; sys_platform == 'linux'"]
+```
+
+Similarly, to include `numpy` on Python 3.11 and later:
+
+```console
+$ uv add 'numpy; python_version >= "3.11"'
+```
+
+See Python's [environment marker](https://peps.python.org/pep-0508/#environment-markers)
+documentation for a complete enumeration of the available markers and operators.
 
 ## Running commands
 
