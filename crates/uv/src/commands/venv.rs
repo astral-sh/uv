@@ -255,6 +255,7 @@ async fn venv_impl(
         system_site_packages,
         allow_existing,
         relocatable,
+        seed,
     )
     .map_err(VenvError::Creation)?;
 

@@ -5536,3 +5536,76 @@ fn compatible_build_constraint() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn sync_seed() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==1.2")?;
+
+    // Add `pip` to the environment.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("pip"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pip==24.0
+    "###
+    );
+
+    // Syncing should remove the seed packages.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - pip==24.0
+     + requests==1.2.0
+    "###
+    );
+
+    // Re-create the environment with seed packages.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--seed"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    Creating virtualenv with seed packages at: .venv
+     + pip==24.0
+     + setuptools==69.2.0
+     + wheel==0.43.0
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // Syncing should retain the seed packages.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "###
+    );
+
+    Ok(())
+}

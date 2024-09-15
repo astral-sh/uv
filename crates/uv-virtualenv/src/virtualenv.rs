@@ -43,6 +43,7 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
 }
 
 /// Create a [`VirtualEnvironment`] at the given location.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) fn create(
     location: &Path,
     interpreter: &Interpreter,
@@ -50,6 +51,7 @@ pub(crate) fn create(
     system_site_packages: bool,
     allow_existing: bool,
     relocatable: bool,
+    seed: bool,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment. This is typically the Python executable
@@ -350,15 +352,15 @@ pub(crate) fn create(
                 "false".to_string()
             },
         ),
-        (
-            "relocatable".to_string(),
-            if relocatable {
-                "true".to_string()
-            } else {
-                "false".to_string()
-            },
-        ),
     ];
+
+    if relocatable {
+        pyvenv_cfg_data.push(("relocatable".to_string(), "true".to_string()));
+    }
+
+    if seed {
+        pyvenv_cfg_data.push(("seed".to_string(), "true".to_string()));
+    }
 
     if let Some(prompt) = prompt {
         pyvenv_cfg_data.push(("prompt".to_string(), prompt));
