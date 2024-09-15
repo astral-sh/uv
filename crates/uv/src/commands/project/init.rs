@@ -87,7 +87,7 @@ pub(crate) async fn init(
     .await?;
 
     // Create the `README.md` if it does not already exist.
-    if !no_readme {
+    if !no_readme && project_kind != InitProjectKind::Script {
         let readme = path.join("README.md");
         if !readme.exists() {
             fs_err::write(readme, String::new())?;
@@ -387,11 +387,12 @@ async fn init_project(
     Ok(())
 }
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub(crate) enum InitProjectKind {
     #[default]
     Application,
     Library,
+    Script,
 }
 
 impl InitProjectKind {
@@ -427,6 +428,10 @@ impl InitProjectKind {
                     package,
                 )
                 .await
+            }
+            InitProjectKind::Script => {
+                self.init_script(name, path, requires_python, python_request, no_readme)
+                    .await
             }
         }
     }
@@ -571,6 +576,36 @@ impl InitProjectKind {
 
         Ok(())
     }
+
+    async fn init_script(
+        self,
+        name: &PackageName,
+        path: &Path,
+        requires_python: &RequiresPython,
+        python_request: Option<&PythonRequest>,
+        no_readme: bool,
+    ) -> Result<()> {
+        // Create the `pyproject.toml`
+        let pyproject = pyproject_script(name, requires_python, no_readme);
+
+        // Create the script
+        if !path.try_exists()? {
+            fs_err::write(
+                path,
+                indoc::formatdoc! {r#"
+                {pyproject}
+                def main():
+                    print("Hello from {name}!")
+
+
+                if __name__ == "__main__":
+                    main()
+                "#},
+            )?;
+        }
+
+        Ok(())
+    }
 }
 
 /// Generate the `[project]` section of a `pyproject.toml`.
@@ -588,6 +623,34 @@ fn pyproject_project(
             dependencies = []
             "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
+        requires_python = requires_python.specifiers(),
+    }
+}
+
+fn pyproject_script(
+    name: &PackageName,
+    requires_python: &RequiresPython,
+    no_readme: bool,
+) -> String {
+    let readme_txt = indoc::formatdoc! {r#"
+        # /// readme
+        # You can execute this file with any tool compliant with inline script metadata. E.g.:
+        # $ uv run {name}
+        # ///
+        "#,
+        name = name,
+    };
+
+    indoc::formatdoc! {r#"{readme}
+            # /// script
+            # name = "{name}"
+            # version = "0.1.0"
+            # description = "Add your description here"
+            # requires-python = "{requires_python}"
+            # dependencies = []
+            # ///
+            "#,
+        readme = if no_readme { "" } else { &readme_txt },
         requires_python = requires_python.specifiers(),
     }
 }

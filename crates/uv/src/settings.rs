@@ -174,17 +174,19 @@ impl InitSettings {
             no_package,
             app,
             lib,
+            script,
             no_readme,
             no_pin_python,
             no_workspace,
             python,
         } = args;
 
-        let kind = match (app, lib) {
-            (true, false) => InitProjectKind::Application,
-            (false, true) => InitProjectKind::Library,
-            (false, false) => InitProjectKind::default(),
-            (true, true) => unreachable!("`app` and `lib` are mutually exclusive"),
+        let kind = match (app, lib, script) {
+            (true, false, false) => InitProjectKind::Application,
+            (false, true, false) => InitProjectKind::Library,
+            (false, false, true) => InitProjectKind::Script,
+            (false, false, false) => InitProjectKind::default(),
+            _ => unreachable!("`app`, `lib` and `script` are mutually exclusive"),
         };
 
         let package = flag(package || r#virtual, no_package).unwrap_or(kind.packaged_by_default());

@@ -2313,14 +2313,35 @@ pub struct InitArgs {
     /// By default, an application is not intended to be built and distributed as a Python package.
     /// The `--package` option can be used to create an application that is distributable, e.g., if
     /// you want to distribute a command-line interface via PyPI.
-    #[arg(long, alias = "application", conflicts_with = "lib")]
+    #[arg(
+        long,
+        alias = "application",
+        conflicts_with = "lib",
+        conflicts_with = "script"
+    )]
     pub r#app: bool,
 
     /// Create a project for a library.
     ///
     /// A library is a project that is intended to be built and distributed as a Python package.
-    #[arg(long, alias = "library", conflicts_with = "app")]
+    #[arg(
+        long,
+        alias = "library",
+        conflicts_with = "app",
+        conflicts_with = "script"
+    )]
     pub r#lib: bool,
+
+    /// Create a script with inline metadata.
+    ///
+    /// A Python script is a file intended for standalone execution with or without dependencies.
+    #[arg(
+        long,
+        conflicts_with = "app",
+        conflicts_with = "lib",
+        conflicts_with = "package"
+    )]
+    pub r#script: bool,
 
     /// Do not create a `README.md` file.
     #[arg(long)]
