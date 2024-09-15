@@ -5,7 +5,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{Resolution, UnresolvedRequirementSpecification};
+use distribution_types::{Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification};
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::MarkerTreeContents;
 use pypi_types::Requirement;
@@ -548,6 +548,22 @@ pub(crate) async fn resolve_names(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<Vec<Requirement>> {
+    // Partition the requirements into named and unnamed requirements.
+    let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
+        requirements
+            .into_iter()
+            .partition_map(|spec| match spec.requirement {
+                UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
+                UnresolvedRequirement::Unnamed(requirement) => {
+                    itertools::Either::Right(requirement)
+                }
+            });
+
+    // Short-circuit if there are no unnamed requirements.
+    if unnamed.is_empty() {
+        return Ok(requirements);
+    }
+
     // Extract the project settings.
     let ResolverInstallerSettings {
         index_locations,
@@ -627,16 +643,20 @@ pub(crate) async fn resolve_names(
         concurrency,
     );
 
-    // Initialize the resolver.
-    let resolver = NamedRequirementsResolver::new(
-        requirements,
-        &hasher,
-        &state.index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
-    )
-    .with_reporter(ResolverReporter::from(printer));
+    // Resolve the unnamed requirements.
+    requirements.extend(
+        NamedRequirementsResolver::new(
+            unnamed,
+            &hasher,
+            &state.index,
+            DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+        )
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve()
+        .await?,
+    );
 
-    Ok(resolver.resolve().await?)
+    Ok(requirements)
 }
 
 /// Run dependency resolution for an interpreter, returning the [`ResolutionGraph`].

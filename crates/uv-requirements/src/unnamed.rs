@@ -12,7 +12,7 @@ use url::Host;
 use distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use distribution_types::{
     BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
-    RemoteSource, SourceUrl, UnresolvedRequirement, UnresolvedRequirementSpecification, VersionId,
+    RemoteSource, SourceUrl, VersionId,
 };
 use pep508_rs::{UnnamedRequirement, VersionOrUrl};
 use pypi_types::Requirement;
@@ -37,7 +37,7 @@ pub enum NamedRequirementsError {
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
 pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
     /// The requirements for the project.
-    requirements: Vec<UnresolvedRequirementSpecification>,
+    requirements: Vec<UnnamedRequirement<VerbatimParsedUrl>>,
     /// Whether to check hashes for distributions.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -49,7 +49,7 @@ pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
 impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
     /// Instantiate a new [`NamedRequirementsResolver`] for a given set of requirements.
     pub fn new(
-        requirements: Vec<UnresolvedRequirementSpecification>,
+        requirements: Vec<UnnamedRequirement<VerbatimParsedUrl>>,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
@@ -81,13 +81,10 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
         } = self;
         requirements
             .into_iter()
-            .map(|entry| async {
-                match entry.requirement {
-                    UnresolvedRequirement::Named(requirement) => Ok(requirement),
-                    UnresolvedRequirement::Unnamed(requirement) => Ok(Requirement::from(
-                        Self::resolve_requirement(requirement, hasher, index, &database).await?,
-                    )),
-                }
+            .map(|requirement| async {
+                Self::resolve_requirement(requirement, hasher, index, &database)
+                    .await
+                    .map(Requirement::from)
             })
             .collect::<FuturesOrdered<_>>()
             .try_collect()
