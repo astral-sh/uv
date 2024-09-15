@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use owo_colors::OwoColorize;
@@ -14,6 +14,8 @@ use uv_python::{
     PythonVersionFile, VersionRequest,
 };
 use uv_resolver::RequiresPython;
+use uv_scripts::Pep723Script;
+use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
 
@@ -25,6 +27,7 @@ use crate::printer::Printer;
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
+    script_file_path: Option<String>,
     explicit_path: Option<String>,
     name: Option<PackageName>,
     package: bool,
@@ -40,6 +43,30 @@ pub(crate) async fn init(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    // If user seeks to initialize a new script, process the request immediately
+    if let InitProjectKind::Script = project_kind {
+        if let Some(file) = script_file_path {
+            project_kind
+                .init_script(
+                    &PathBuf::from(file),
+                    python,
+                    connectivity,
+                    python_preference,
+                    python_downloads,
+                    cache,
+                    printer,
+                    no_workspace,
+                    no_readme,
+                    package,
+                    native_tls,
+                )
+                .await?;
+            return Ok(ExitStatus::Success);
+        } else {
+            anyhow::bail!("Filename not provided for script");
+        }
+    }
+
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
         None => CWD.to_path_buf(),
@@ -392,6 +419,7 @@ pub(crate) enum InitProjectKind {
     #[default]
     Application,
     Library,
+    Script,
 }
 
 impl InitProjectKind {
@@ -427,6 +455,10 @@ impl InitProjectKind {
                     package,
                 )
                 .await
+            }
+            InitProjectKind::Script => {
+                dbg!("Script should be initialized directly via init_script");
+                anyhow::bail!("Error during script initialization")
             }
         }
     }
@@ -568,6 +600,77 @@ impl InitProjectKind {
                     .await?;
             }
         }
+
+        Ok(())
+    }
+
+    async fn init_script(
+        self,
+        file: &PathBuf,
+        python: Option<String>,
+        connectivity: Connectivity,
+        python_preference: PythonPreference,
+        python_downloads: PythonDownloads,
+        cache: &Cache,
+        printer: Printer,
+        no_workspace: bool,
+        no_readme: bool,
+        package: bool,
+        native_tls: bool,
+    ) -> Result<()> {
+        if no_workspace {
+            warn_user_once!("`--no_workspace` is a no-op for Python scripts, which are standalone");
+        }
+        if no_readme {
+            warn_user_once!("`--no_readme` is a no-op for Python scripts, which are standalone");
+        }
+        if package {
+            warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
+        }
+
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
+
+        let reporter = PythonDownloadReporter::single(printer);
+
+        if let Ok(_) = fs_err::metadata(file) {
+            anyhow::bail!("Script {} already exists", file.to_str().unwrap());
+        }
+
+        let python_request = if let Some(request) = python.as_deref() {
+            // (1) Explicit request from user
+            PythonRequest::parse(request)
+        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
+            .await?
+            .and_then(PythonVersionFile::into_version)
+        {
+            // (2) Request from `.python-version`
+            request
+        } else {
+            // (3) Assume any Python version
+            PythonRequest::Any
+        };
+
+        let interpreter = PythonInstallation::find_or_download(
+            Some(&python_request),
+            EnvironmentPreference::Any,
+            python_preference,
+            python_downloads,
+            &client_builder,
+            cache,
+            Some(&reporter),
+        )
+        .await?
+        .into_interpreter();
+
+        let requires_python =
+            RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
+
+        if let Some(path) = file.parent() {
+            fs_err::create_dir_all(path)?;
+        }
+        Pep723Script::create_new_script(file, requires_python.specifiers()).await?;
 
         Ok(())
     }

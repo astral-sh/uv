@@ -95,6 +95,35 @@ impl Pep723Script {
         })
     }
 
+    pub async fn create_new_script(
+        script_path: impl AsRef<Path>,
+        requires_python: &VersionSpecifiers,
+    ) -> Result<(), Pep723Error> {
+        let script_name = script_path
+            .as_ref()
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| Pep723Error::InvalidFilename)?;
+
+        let script = indoc::formatdoc! {r#"
+            # /// script
+            # requires-python = "{requires_python}"
+            # dependencies = []
+            # ///
+
+            def main():
+                print("Hello from {name}!")
+
+            if __name__ == "__main__":
+                main()
+        "#,
+            requires_python = requires_python,
+            name = script_name,
+        };
+
+        Ok(fs_err::tokio::write(script_path, script).await?)
+    }
+
     /// Replace the existing metadata in the file with new metadata and write the updated content.
     pub async fn write(&self, metadata: &str) -> Result<(), Pep723Error> {
         let content = format!(
@@ -161,6 +190,8 @@ pub enum Pep723Error {
     Utf8(#[from] std::str::Utf8Error),
     #[error(transparent)]
     Toml(#[from] toml::de::Error),
+    #[error("Invalid filename supplied")]
+    InvalidFilename,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

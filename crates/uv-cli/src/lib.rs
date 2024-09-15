@@ -2263,6 +2263,9 @@ impl ExternalCommand {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct InitArgs {
+    #[arg(required_if_eq("script", "true"))]
+    pub script_file_path: Option<String>,
+
     /// The path to use for the project.
     ///
     /// Defaults to the current working directory. Accepts relative and absolute
@@ -2271,12 +2274,13 @@ pub struct InitArgs {
     /// If a `pyproject.toml` is found in any of the parent directories of the
     /// target path, the project will be added as a workspace member of the
     /// parent, unless `--no-workspace` is provided.
+    #[arg(conflicts_with = "script")]
     pub path: Option<String>,
 
     /// The name of the project.
     ///
     /// Defaults to the name of the directory.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "script")]
     pub name: Option<PackageName>,
 
     /// Create a virtual project, rather than a package.
@@ -2313,17 +2317,23 @@ pub struct InitArgs {
     /// By default, an application is not intended to be built and distributed as a Python package.
     /// The `--package` option can be used to create an application that is distributable, e.g., if
     /// you want to distribute a command-line interface via PyPI.
-    #[arg(long, alias = "application", conflicts_with = "lib")]
+    #[arg(long, alias = "application", conflicts_with_all = ["lib", "script"])]
     pub r#app: bool,
 
     /// Create a project for a library.
     ///
     /// A library is a project that is intended to be built and distributed as a Python package.
-    #[arg(long, alias = "library", conflicts_with = "app")]
+    #[arg(long, alias = "library", conflicts_with_all=["app", "script"])]
     pub r#lib: bool,
 
+    /// Create a script.
+    ///
+    /// A script is a standalone file which adheres to the PEP-723 specification.
+    #[arg(long, alias="script", conflicts_with_all=["app", "lib"])]
+    pub r#script: bool,
+
     /// Do not create a `README.md` file.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "script")]
     pub no_readme: bool,
 
     /// Do not create a `.python-version` file for the project.
@@ -2331,14 +2341,14 @@ pub struct InitArgs {
     /// By default, uv will create a `.python-version` file containing the minor version of
     /// the discovered Python interpreter, which will cause subsequent uv commands to use that
     /// version.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "script")]
     pub no_pin_python: bool,
 
     /// Avoid discovering a workspace and create a standalone project.
     ///
     /// By default, uv searches for workspaces in the current directory or any
     /// parent directory.
-    #[arg(long, alias = "no-project")]
+    #[arg(long, alias = "no-project", conflicts_with = "script")]
     pub no_workspace: bool,
 
     /// The Python interpreter to use to determine the minimum supported Python version.

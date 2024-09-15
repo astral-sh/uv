@@ -1072,6 +1072,7 @@ async fn run_project(
             let cache = cache.init()?;
 
             commands::init(
+                args.script_file_path,
                 args.path,
                 args.name,
                 args.package,

@@ -152,6 +152,7 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct InitSettings {
+    pub(crate) script_file_path: Option<String>,
     pub(crate) path: Option<String>,
     pub(crate) name: Option<PackageName>,
     pub(crate) package: bool,
@@ -167,6 +168,7 @@ impl InitSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: InitArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let InitArgs {
+            script_file_path,
             path,
             name,
             r#virtual,
@@ -174,22 +176,29 @@ impl InitSettings {
             no_package,
             app,
             lib,
+            script,
             no_readme,
             no_pin_python,
             no_workspace,
             python,
         } = args;
 
-        let kind = match (app, lib) {
-            (true, false) => InitProjectKind::Application,
-            (false, true) => InitProjectKind::Library,
-            (false, false) => InitProjectKind::default(),
-            (true, true) => unreachable!("`app` and `lib` are mutually exclusive"),
+        let kind = match (app, lib, script) {
+            (true, false, false) => InitProjectKind::Application,
+            (false, true, false) => InitProjectKind::Library,
+            (false, false, true) => InitProjectKind::Script,
+            (false, false, false) => InitProjectKind::default(),
+            // We can enumerate these, or combine into a single catch all
+            (true, true, false) => unreachable!("`app` and `lib` are mutually exclusive"),
+            (true, false, true) => unreachable!("`app` and `script` are mutually exclusive"),
+            (false, true, true) => unreachable!("`lib` and `script` are mutually exclusive"),
+            (true, true, true) => unreachable!("`app`, `lib`, and `script` are mutually exclusive"),
         };
 
         let package = flag(package || r#virtual, no_package).unwrap_or(kind.packaged_by_default());
 
         Self {
+            script_file_path,
             path,
             name,
             package,
