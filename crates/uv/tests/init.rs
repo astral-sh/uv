@@ -459,6 +459,71 @@ fn init_library_no_package() -> Result<()> {
     Ok(())
 }
 
+/// Run `uv init --script myapp.py` to create an application project
+#[test]
+fn init_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let myapp_py = child.join("myapp.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("myapp.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `myapp-py` at `[TEMP_DIR]/foo/myapp.py`
+    "###);
+
+
+    let myapp = fs_err::read_to_string(myapp_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            myapp, @r###"
+        # /// readme
+        # You can execute this file with any tool compliant with inline script metadata. E.g.:
+        # $ uv run myapp-py
+        # ///
+
+        # /// script
+        # name = "myapp-py"
+        # version = "0.1.0"
+        # description = "Add your description here"
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        def main():
+            print("Hello from myapp-py!")
+
+
+        if __name__ == "__main__":
+            main()
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("myapp.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from myapp-py!
+
+    ----- stderr -----
+    Reading inline script metadata from: myapp.py
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    Ok(())
+}
+
+
 /// Ensure that `uv init` initializes the cache.
 #[test]
 fn init_cache() -> Result<()> {

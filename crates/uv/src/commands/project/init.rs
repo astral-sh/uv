@@ -585,7 +585,7 @@ impl InitProjectKind {
         python_request: Option<&PythonRequest>,
         no_readme: bool,
     ) -> Result<()> {
-        // Create the `pyproject.toml`
+        // Create the embedded `pyproject.toml`
         let pyproject = pyproject_script(name, requires_python, no_readme);
 
         // Create the script
