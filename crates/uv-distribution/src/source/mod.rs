@@ -19,7 +19,6 @@ use distribution_types::{
 };
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
-use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
 use pypi_types::{HashDigest, Metadata12, Metadata23, RequiresTxt};
 use reqwest::Response;
@@ -34,6 +33,7 @@ use uv_client::{
 use uv_configuration::{BuildKind, BuildOutput};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
+use uv_metadata::read_archive_metadata;
 use uv_types::{BuildContext, SourceBuildTrait};
 use zip::ZipArchive;
 
@@ -1112,8 +1112,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Determine the last-modified time of the source distribution.
-        let cache_info =
-            CacheInfo::from_directory(&resource.install_path).map_err(Error::CacheRead)?;
+        let cache_info = CacheInfo::from_directory(&resource.install_path)?;
 
         // Read the existing metadata from the cache.
         let entry = cache_shard.entry(LOCAL_REVISION);
@@ -1491,7 +1490,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .setup_build(
                 source_root,
                 subdirectory,
-                &source.to_string(),
+                Some(source.to_string()),
                 source.as_dist(),
                 if source.is_editable() {
                     BuildKind::Editable
@@ -1508,7 +1507,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
-        let metadata = read_wheel_metadata(&filename, cache_shard.join(&disk_filename))?;
+        let metadata = read_wheel_metadata(&filename, &cache_shard.join(&disk_filename))?;
 
         // Validate the metadata.
         validate(source, &metadata)?;
@@ -1527,13 +1526,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<Option<Metadata23>, Error> {
         debug!("Preparing metadata for: {source}");
 
-        // Setup the builder.
+        // Set up the builder.
         let mut builder = self
             .build_context
             .setup_build(
                 source_root,
                 subdirectory,
-                &source.to_string(),
+                Some(source.to_string()),
                 source.as_dist(),
                 if source.is_editable() {
                     BuildKind::Editable
@@ -2019,14 +2018,12 @@ async fn read_cached_metadata(cache_entry: &CacheEntry) -> Result<Option<Metadat
 }
 
 /// Read the [`Metadata23`] from a built wheel.
-fn read_wheel_metadata(
-    filename: &WheelFilename,
-    wheel: impl Into<PathBuf>,
-) -> Result<Metadata23, Error> {
+fn read_wheel_metadata(filename: &WheelFilename, wheel: &Path) -> Result<Metadata23, Error> {
     let file = fs_err::File::open(wheel).map_err(Error::CacheRead)?;
     let reader = std::io::BufReader::new(file);
     let mut archive = ZipArchive::new(reader)?;
-    let dist_info = read_archive_metadata(filename, &mut archive)?;
+    let dist_info = read_archive_metadata(filename, &mut archive)
+        .map_err(|err| Error::WheelMetadata(wheel.to_path_buf(), Box::new(err)))?;
     Ok(Metadata23::parse_metadata(&dist_info)?)
 }
 

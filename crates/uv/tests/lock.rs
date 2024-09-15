@@ -12623,7 +12623,119 @@ fn lock_request_requires_python() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: The Python request from `.python-version` resolved to Python 3.12.[X], which incompatible with the project's Python requirement: `>=3.8, <=3.10`
+    error: The Python request from `.python-version` resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.8, <=3.10`
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_duplicate_sources() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "projeect"
+        version = "0.1.0"
+        dependencies = ["python-multipart"]
+
+        [tool.uv.sources]
+        python-multipart = { url = "https://files.pythonhosted.org/packages/3d/47/444768600d9e0ebc82f8e347775d24aef8f6348cf00e9fa0e81910814e6d/python_multipart-0.0.9-py3-none-any.whl" }
+        python-multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 9, column 9
+      |
+    9 |         python-multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
+      |         ^
+    duplicate key `python-multipart` in table `tool.uv.sources`
+
+    "###);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = ["python-multipart"]
+
+        [tool.uv.sources]
+        python-multipart = { url = "https://files.pythonhosted.org/packages/3d/47/444768600d9e0ebc82f8e347775d24aef8f6348cf00e9fa0e81910814e6d/python_multipart-0.0.9-py3-none-any.whl" }
+        python_multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 7, column 9
+      |
+    7 |         [tool.uv.sources]
+      |         ^^^^^^^^^^^^^^^^^
+    duplicate sources for package `python-multipart`
+
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_invalid_project_table() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("a/pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { path = "../b" }
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("b/pyproject.toml");
+    pyproject_toml.write_str(
+        r"
+        [project.urls]
+        repository = 'https://github.com/octocat/octocat-python'
+        ",
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.join("a")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: Failed to build: `b @ file://[TEMP_DIR]/b`
+      Caused by: Failed to extract static metadata from `pyproject.toml`
+      Caused by: `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set.
+      Caused by: TOML parse error at line 2, column 10
+      |
+    2 |         [project.urls]
+      |          ^^^^^^^
+    missing field `name`
+
     "###);
 
     Ok(())

@@ -4,7 +4,6 @@ use std::fmt::Write;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
-use tracing::warn;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
@@ -51,7 +50,9 @@ pub(crate) async fn list(
                     None
                 }
             }
-        };
+        }
+        // Include pre-release versions
+        .map(|request| request.with_prereleases(true));
 
         let downloads = download_request
             .as_ref()
@@ -107,17 +108,9 @@ pub(crate) async fn list(
             }
         }
 
-        let version = match key.version() {
-            Err(err) => {
-                warn!("Excluding {key} due to invalid Python version: {err}");
-                continue;
-            }
-            Ok(version) => version,
-        };
-
         // Only show the latest patch version for each download unless all were requested
         if !matches!(kind, Kind::System) {
-            if let [major, minor, ..] = version.release() {
+            if let [major, minor, ..] = key.version().release() {
                 if !seen_minor.insert((
                     *key.os(),
                     *major,
@@ -131,7 +124,7 @@ pub(crate) async fn list(
                     }
                 }
             }
-            if let [major, minor, patch] = version.release() {
+            if let [major, minor, patch] = key.version().release() {
                 if !seen_patch.insert((
                     *key.os(),
                     *major,

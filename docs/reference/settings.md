@@ -1,5 +1,203 @@
-## Global
-#### [`allow-insecure-host`](#allow-insecure-host) {: #allow-insecure-host }
+## Project metadata
+### [`constraint-dependencies`](#constraint-dependencies) {: #constraint-dependencies }
+
+Constraints to apply when resolving the project's dependencies.
+
+Constraints are used to restrict the versions of dependencies that are selected during
+resolution.
+
+Including a package as a constraint will _not_ trigger installation of the package on its
+own; instead, the package must be requested elsewhere in the project's first-party or
+transitive dependencies.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `constraint-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Ensure that the grpcio version is always less than 1.65, if it's requested by a
+# transitive dependency.
+constraint-dependencies = ["grpcio<1.65"]
+```
+
+---
+
+### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
+
+The project's development dependencies. Development dependencies will be installed by
+default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+dev-dependencies = ["ruff==0.5.0"]
+```
+
+---
+
+### [`environments`](#environments) {: #environments }
+
+A list of supported environments against which to resolve dependencies.
+
+By default, uv will resolve for all possible environments during a `uv lock` operation.
+However, you can restrict the set of supported environments to improve performance and avoid
+unsatisfiable branches in the solution space.
+
+These environments will also respected when `uv pip compile` is invoked with the
+`--universal` flag.
+
+**Default value**: `[]`
+
+**Type**: `str | list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Resolve for macOS, but not for Linux or Windows.
+environments = ["sys_platform == 'darwin'"]
+```
+
+---
+
+### [`managed`](#managed) {: #managed }
+
+Whether the project is managed by uv. If `false`, uv will ignore the project when
+`uv run` is invoked.
+
+**Default value**: `true`
+
+**Type**: `bool`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+managed = false
+```
+
+---
+
+### [`override-dependencies`](#override-dependencies) {: #override-dependencies }
+
+Overrides to apply when resolving the project's dependencies.
+
+Overrides are used to force selection of a specific version of a package, regardless of the
+version requested by any other package, and regardless of whether choosing that version
+would typically constitute an invalid resolution.
+
+While constraints are _additive_, in that they're combined with the requirements of the
+constituent packages, overrides are _absolute_, in that they completely replace the
+requirements of any constituent packages.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
+# a different version.
+override-dependencies = ["werkzeug==2.3.0"]
+```
+
+---
+
+### [`package`](#package) {: #package }
+
+Whether the project should be considered a Python package, or a non-package ("virtual")
+project.
+
+Packages are built and installed into the virtual environment in editable mode and thus
+require a build backend, while virtual projects are _not_ built or installed; instead, only
+their dependencies are included in the virtual environment.
+
+Creating a package requires that a `build-system` is present in the `pyproject.toml`, and
+that the project adheres to a structure that adheres to the build backend's expectations
+(e.g., a `src` layout).
+
+**Default value**: `true`
+
+**Type**: `bool`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+package = false
+```
+
+---
+
+### `workspace`
+
+#### [`exclude`](#workspace_exclude) {: #workspace_exclude }
+<span id="exclude"></span>
+
+Packages to exclude as workspace members. If a package matches both `members` and
+`exclude`, it will be excluded.
+
+Supports both globs and explicit paths.
+
+For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.workspace]
+exclude = ["member1", "path/to/member2", "libs/*"]
+```
+
+---
+
+#### [`members`](#workspace_members) {: #workspace_members }
+<span id="members"></span>
+
+Packages to include as workspace members.
+
+Supports both globs and explicit paths.
+
+For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.workspace]
+members = ["member1", "path/to/member2", "libs/*"]
+```
+
+---
+
+## Configuration
+### [`allow-insecure-host`](#allow-insecure-host) {: #allow-insecure-host }
 
 Allow insecure connections to host.
 
@@ -31,7 +229,7 @@ bypasses SSL verification and could expose you to MITM attacks.
 
 ---
 
-#### [`cache-dir`](#cache-dir) {: #cache-dir }
+### [`cache-dir`](#cache-dir) {: #cache-dir }
 
 Path to the cache directory.
 
@@ -59,7 +257,7 @@ Linux, and `%LOCALAPPDATA%\uv\cache` on Windows.
 
 ---
 
-#### [`cache-keys`](#cache-keys) {: #cache-keys }
+### [`cache-keys`](#cache-keys) {: #cache-keys }
 
 The keys to consider when caching builds for the project.
 
@@ -76,13 +274,20 @@ As an example: if a project uses dynamic metadata to read its dependencies from 
 to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in
 addition to watching the `pyproject.toml`).
 
+Globs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html)
+crate. For example, to invalidate the cache whenever a `.toml` file in the project directory
+or any of its subdirectories is modified, you can specify `cache-keys = [{ file = "**/*.toml" }]`.
+Note that the use of globs can be expensive, as uv may need to walk the filesystem to
+determine whether any files have changed.
+
 Cache keys can also include version control information. For example, if a project uses
 `setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }, { file = "pyproject.toml" }]`
 to include the current Git commit hash in the cache key (in addition to the
 `pyproject.toml`).
 
 Cache keys only affect the project defined by the `pyproject.toml` in which they're
-specified (as opposed to, e.g., affecting all members in a workspace).
+specified (as opposed to, e.g., affecting all members in a workspace), and all paths and
+globs are interpreted as relative to the project directory.
 
 **Default value**: `[{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]`
 
@@ -105,7 +310,7 @@ specified (as opposed to, e.g., affecting all members in a workspace).
 
 ---
 
-#### [`compile-bytecode`](#compile-bytecode) {: #compile-bytecode }
+### [`compile-bytecode`](#compile-bytecode) {: #compile-bytecode }
 
 Compile Python files to bytecode after installation.
 
@@ -139,7 +344,7 @@ ignore errors.
 
 ---
 
-#### [`concurrent-builds`](#concurrent-builds) {: #concurrent-builds }
+### [`concurrent-builds`](#concurrent-builds) {: #concurrent-builds }
 
 The maximum number of source distributions that uv will build concurrently at any given
 time.
@@ -167,7 +372,7 @@ Defaults to the number of available CPU cores.
 
 ---
 
-#### [`concurrent-downloads`](#concurrent-downloads) {: #concurrent-downloads }
+### [`concurrent-downloads`](#concurrent-downloads) {: #concurrent-downloads }
 
 The maximum number of in-flight concurrent downloads that uv will perform at any given
 time.
@@ -193,7 +398,7 @@ time.
 
 ---
 
-#### [`concurrent-installs`](#concurrent-installs) {: #concurrent-installs }
+### [`concurrent-installs`](#concurrent-installs) {: #concurrent-installs }
 
 The number of threads used when installing and unzipping packages.
 
@@ -220,7 +425,7 @@ Defaults to the number of available CPU cores.
 
 ---
 
-#### [`config-settings`](#config-settings) {: #config-settings }
+### [`config-settings`](#config-settings) {: #config-settings }
 
 Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend,
 specified as `KEY=VALUE` pairs.
@@ -246,108 +451,7 @@ specified as `KEY=VALUE` pairs.
 
 ---
 
-#### [`constraint-dependencies`](#constraint-dependencies) {: #constraint-dependencies }
-
-Constraints to apply when resolving the project's dependencies.
-
-Constraints are used to restrict the versions of dependencies that are selected during
-resolution.
-
-Including a package as a constraint will _not_ trigger installation of the package on its
-own; instead, the package must be requested elsewhere in the project's first-party or
-transitive dependencies.
-
-!!! note
-    In `uv lock`, `uv sync`, and `uv run`, uv will only read `constraint-dependencies` from
-    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
-    workspace members or `uv.toml` files.
-
-**Default value**: `[]`
-
-**Type**: `list[str]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv]
-    # Ensure that the grpcio version is always less than 1.65, if it's requested by a
-    # transitive dependency.
-    constraint-dependencies = ["grpcio<1.65"]
-    ```
-=== "uv.toml"
-
-    ```toml
-    
-    # Ensure that the grpcio version is always less than 1.65, if it's requested by a
-    # transitive dependency.
-    constraint-dependencies = ["grpcio<1.65"]
-    ```
-
----
-
-#### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
-
-The project's development dependencies. Development dependencies will be installed by
-default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
-
-**Default value**: `[]`
-
-**Type**: `list[str]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv]
-    dev-dependencies = ["ruff==0.5.0"]
-    ```
-=== "uv.toml"
-
-    ```toml
-    
-    dev-dependencies = ["ruff==0.5.0"]
-    ```
-
----
-
-#### [`environments`](#environments) {: #environments }
-
-A list of supported environments against which to resolve dependencies.
-
-By default, uv will resolve for all possible environments during a `uv lock` operation.
-However, you can restrict the set of supported environments to improve performance and avoid
-unsatisfiable branches in the solution space.
-
-These environments will also respected when `uv pip compile` is invoked with the
-`--universal` flag.
-
-**Default value**: `[]`
-
-**Type**: `str | list[str]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv]
-    # Resolve for macOS, but not for Linux or Windows.
-    environments = ["sys_platform == 'darwin'"]
-    ```
-=== "uv.toml"
-
-    ```toml
-    
-    # Resolve for macOS, but not for Linux or Windows.
-    environments = ["sys_platform == 'darwin'"]
-    ```
-
----
-
-#### [`exclude-newer`](#exclude-newer) {: #exclude-newer }
+### [`exclude-newer`](#exclude-newer) {: #exclude-newer }
 
 Limit candidate packages to those that were uploaded prior to the given date.
 
@@ -376,7 +480,7 @@ system's configured time zone.
 
 ---
 
-#### [`extra-index-url`](#extra-index-url) {: #extra-index-url }
+### [`extra-index-url`](#extra-index-url) {: #extra-index-url }
 
 Extra URLs of package indexes to use, in addition to `--index-url`.
 
@@ -410,7 +514,7 @@ To control uv's resolution strategy when multiple indexes are present, see
 
 ---
 
-#### [`find-links`](#find-links) {: #find-links }
+### [`find-links`](#find-links) {: #find-links }
 
 Locations to search for candidate distributions, in addition to those found in the registry
 indexes.
@@ -442,7 +546,7 @@ formats described above.
 
 ---
 
-#### [`index-strategy`](#index-strategy) {: #index-strategy }
+### [`index-strategy`](#index-strategy) {: #index-strategy }
 
 The strategy to use when resolving against multiple index URLs.
 
@@ -476,7 +580,7 @@ same name to a secondary.
 
 ---
 
-#### [`index-url`](#index-url) {: #index-url }
+### [`index-url`](#index-url) {: #index-url }
 
 The URL of the Python package index (by default: <https://pypi.org/simple>).
 
@@ -507,7 +611,7 @@ The index provided by this setting is given lower priority than any indexes spec
 
 ---
 
-#### [`keyring-provider`](#keyring-provider) {: #keyring-provider }
+### [`keyring-provider`](#keyring-provider) {: #keyring-provider }
 
 Attempt to use `keyring` for authentication for index URLs.
 
@@ -535,7 +639,7 @@ use the `keyring` CLI to handle authentication.
 
 ---
 
-#### [`link-mode`](#link-mode) {: #link-mode }
+### [`link-mode`](#link-mode) {: #link-mode }
 
 The method to use when installing packages from the global cache.
 
@@ -568,33 +672,7 @@ Windows.
 
 ---
 
-#### [`managed`](#managed) {: #managed }
-
-Whether the project is managed by uv. If `false`, uv will ignore the project when
-`uv run` is invoked.
-
-**Default value**: `true`
-
-**Type**: `bool`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv]
-    managed = false
-    ```
-=== "uv.toml"
-
-    ```toml
-    
-    managed = false
-    ```
-
----
-
-#### [`native-tls`](#native-tls) {: #native-tls }
+### [`native-tls`](#native-tls) {: #native-tls }
 
 Whether to load TLS certificates from the platform's native certificate store.
 
@@ -627,7 +705,7 @@ included in your system's certificate store.
 
 ---
 
-#### [`no-binary`](#no-binary) {: #no-binary }
+### [`no-binary`](#no-binary) {: #no-binary }
 
 Don't install pre-built wheels.
 
@@ -655,7 +733,7 @@ pre-built wheels to extract package metadata, if available.
 
 ---
 
-#### [`no-binary-package`](#no-binary-package) {: #no-binary-package }
+### [`no-binary-package`](#no-binary-package) {: #no-binary-package }
 
 Don't install pre-built wheels for a specific package.
 
@@ -680,7 +758,7 @@ Don't install pre-built wheels for a specific package.
 
 ---
 
-#### [`no-build`](#no-build) {: #no-build }
+### [`no-build`](#no-build) {: #no-build }
 
 Don't build source distributions.
 
@@ -709,7 +787,7 @@ distributions will exit with an error.
 
 ---
 
-#### [`no-build-isolation`](#no-build-isolation) {: #no-build-isolation }
+### [`no-build-isolation`](#no-build-isolation) {: #no-build-isolation }
 
 Disable isolation when building source distributions.
 
@@ -737,7 +815,7 @@ are already installed.
 
 ---
 
-#### [`no-build-isolation-package`](#no-build-isolation-package) {: #no-build-isolation-package }
+### [`no-build-isolation-package`](#no-build-isolation-package) {: #no-build-isolation-package }
 
 Disable isolation when building source distributions for a specific package.
 
@@ -765,7 +843,7 @@ are already installed.
 
 ---
 
-#### [`no-build-package`](#no-build-package) {: #no-build-package }
+### [`no-build-package`](#no-build-package) {: #no-build-package }
 
 Don't build source distributions for a specific package.
 
@@ -790,7 +868,7 @@ Don't build source distributions for a specific package.
 
 ---
 
-#### [`no-cache`](#no-cache) {: #no-cache }
+### [`no-cache`](#no-cache) {: #no-cache }
 
 Avoid reading from or writing to the cache, instead using a temporary directory for the
 duration of the operation.
@@ -816,7 +894,7 @@ duration of the operation.
 
 ---
 
-#### [`no-index`](#no-index) {: #no-index }
+### [`no-index`](#no-index) {: #no-index }
 
 Ignore all registry indexes (e.g., PyPI), instead relying on direct URL dependencies and
 those provided via `--find-links`.
@@ -842,7 +920,7 @@ those provided via `--find-links`.
 
 ---
 
-#### [`no-sources`](#no-sources) {: #no-sources }
+### [`no-sources`](#no-sources) {: #no-sources }
 
 Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
 standards-compliant, publishable package metadata, as opposed to using any local or Git
@@ -869,7 +947,7 @@ sources.
 
 ---
 
-#### [`offline`](#offline) {: #offline }
+### [`offline`](#offline) {: #offline }
 
 Disable network access, relying only on locally cached data and locally available files.
 
@@ -894,83 +972,7 @@ Disable network access, relying only on locally cached data and locally availabl
 
 ---
 
-#### [`override-dependencies`](#override-dependencies) {: #override-dependencies }
-
-Overrides to apply when resolving the project's dependencies.
-
-Overrides are used to force selection of a specific version of a package, regardless of the
-version requested by any other package, and regardless of whether choosing that version
-would typically constitute an invalid resolution.
-
-While constraints are _additive_, in that they're combined with the requirements of the
-constituent packages, overrides are _absolute_, in that they completely replace the
-requirements of any constituent packages.
-
-!!! note
-    In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from
-    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
-    workspace members or `uv.toml` files.
-
-**Default value**: `[]`
-
-**Type**: `list[str]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv]
-    # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
-    # a different version.
-    override-dependencies = ["werkzeug==2.3.0"]
-    ```
-=== "uv.toml"
-
-    ```toml
-    
-    # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
-    # a different version.
-    override-dependencies = ["werkzeug==2.3.0"]
-    ```
-
----
-
-#### [`package`](#package) {: #package }
-
-Whether the project should be considered a Python package, or a non-package ("virtual")
-project.
-
-Packages are built and installed into the virtual environment in editable mode and thus
-require a build backend, while virtual projects are _not_ built or installed; instead, only
-their dependencies are included in the virtual environment.
-
-Creating a package requires that a `build-system` is present in the `pyproject.toml`, and
-that the project adheres to a structure that adheres to the build backend's expectations
-(e.g., a `src` layout).
-
-**Default value**: `true`
-
-**Type**: `bool`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv]
-    package = false
-    ```
-=== "uv.toml"
-
-    ```toml
-    
-    package = false
-    ```
-
----
-
-#### [`prerelease`](#prerelease) {: #prerelease }
+### [`prerelease`](#prerelease) {: #prerelease }
 
 The strategy to use when considering pre-release versions.
 
@@ -1005,7 +1007,7 @@ declared specifiers (`if-necessary-or-explicit`).
 
 ---
 
-#### [`preview`](#preview) {: #preview }
+### [`preview`](#preview) {: #preview }
 
 Whether to enable experimental, preview features.
 
@@ -1030,7 +1032,7 @@ Whether to enable experimental, preview features.
 
 ---
 
-#### [`python-downloads`](#python-downloads) {: #python-downloads }
+### [`python-downloads`](#python-downloads) {: #python-downloads }
 
 Whether to allow Python downloads.
 
@@ -1059,7 +1061,7 @@ Whether to allow Python downloads.
 
 ---
 
-#### [`python-preference`](#python-preference) {: #python-preference }
+### [`python-preference`](#python-preference) {: #python-preference }
 
 Whether to prefer using Python installations that are already present on the system, or
 those that are downloaded and installed by uv.
@@ -1090,7 +1092,7 @@ those that are downloaded and installed by uv.
 
 ---
 
-#### [`reinstall`](#reinstall) {: #reinstall }
+### [`reinstall`](#reinstall) {: #reinstall }
 
 Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.
 
@@ -1115,7 +1117,7 @@ Reinstall all packages, regardless of whether they're already installed. Implies
 
 ---
 
-#### [`reinstall-package`](#reinstall-package) {: #reinstall-package }
+### [`reinstall-package`](#reinstall-package) {: #reinstall-package }
 
 Reinstall a specific package, regardless of whether it's already installed. Implies
 `refresh-package`.
@@ -1141,7 +1143,7 @@ Reinstall a specific package, regardless of whether it's already installed. Impl
 
 ---
 
-#### [`resolution`](#resolution) {: #resolution }
+### [`resolution`](#resolution) {: #resolution }
 
 The strategy to use when selecting between the different compatible versions for a given
 package requirement.
@@ -1173,7 +1175,7 @@ By default, uv will use the latest compatible version of each package (`highest`
 
 ---
 
-#### [`upgrade`](#upgrade) {: #upgrade }
+### [`upgrade`](#upgrade) {: #upgrade }
 
 Allow package upgrades, ignoring pinned versions in any existing output file.
 
@@ -1198,7 +1200,7 @@ Allow package upgrades, ignoring pinned versions in any existing output file.
 
 ---
 
-#### [`upgrade-package`](#upgrade-package) {: #upgrade-package }
+### [`upgrade-package`](#upgrade-package) {: #upgrade-package }
 
 Allow upgrades for a specific package, ignoring pinned versions in any existing output
 file.
@@ -1226,7 +1228,7 @@ Accepts both standalone package names (`ruff`) and version specifiers (`ruff<0.5
 
 ---
 
-## `pip`
+### `pip`
 
 Settings that are specific to the `uv pip` command-line interface.
 
@@ -2783,69 +2785,6 @@ include them.
     ```toml
     [pip]
     verify-hashes = true
-    ```
-
----
-
-## `workspace`
-
-#### [`exclude`](#workspace_exclude) {: #workspace_exclude }
-<span id="exclude"></span>
-
-Packages to exclude as workspace members. If a package matches both `members` and
-`exclude`, it will be excluded.
-
-Supports both globs and explicit paths.
-
-For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
-
-**Default value**: `[]`
-
-**Type**: `list[str]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.workspace]
-    exclude = ["member1", "path/to/member2", "libs/*"]
-    ```
-=== "uv.toml"
-
-    ```toml
-    [workspace]
-    exclude = ["member1", "path/to/member2", "libs/*"]
-    ```
-
----
-
-#### [`members`](#workspace_members) {: #workspace_members }
-<span id="members"></span>
-
-Packages to include as workspace members.
-
-Supports both globs and explicit paths.
-
-For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
-
-**Default value**: `[]`
-
-**Type**: `list[str]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.workspace]
-    members = ["member1", "path/to/member2", "libs/*"]
-    ```
-=== "uv.toml"
-
-    ```toml
-    [workspace]
-    members = ["member1", "path/to/member2", "libs/*"]
     ```
 
 ---

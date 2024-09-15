@@ -1496,7 +1496,7 @@ mod test {
         }, {
             insta::assert_snapshot!(errors, @r###"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 3
-            Expected direct URL (`https://localhost:8080/`) to end in a supported file extension: `.whl`, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`
+            Expected direct URL (`https://localhost:8080/`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
             https://localhost:8080/
             ^^^^^^^^^^^^^^^^^^^^^^^
             "###);
@@ -2155,6 +2155,364 @@ mod test {
                 find_links: [],
                 no_index: false,
                 no_binary: All,
+                only_binary: None,
+            }
+            "###);
+        });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[cfg(not(windows))]
+    async fn archive_requirement() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {r"
+            # Archive name that's also a valid Python package name.
+            importlib_metadata-8.3.0-py3-none-any.whl
+
+            # Archive name that's also a valid Python package name, with markers.
+            importlib_metadata-8.2.0-py3-none-any.whl ; sys_platform == 'win32'
+
+            # Archive name that's also a valid Python package name, with extras.
+            importlib_metadata-8.2.0-py3-none-any.whl[extra]
+
+            # Archive name that's not a valid Python package name.
+            importlib_metadata-8.2.0+local-py3-none-any.whl
+
+            # Archive name that's not a valid Python package name, with markers.
+            importlib_metadata-8.2.0+local-py3-none-any.whl ; sys_platform == 'win32'
+
+            # Archive name that's not a valid Python package name, with extras.
+            importlib_metadata-8.2.0+local-py3-none-any.whl[extra]
+        "})?;
+
+        let requirements = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            &BaseClientBuilder::new(),
+        )
+        .await
+        .unwrap();
+
+        insta::with_settings!({
+            filters => path_filters(&path_filter(temp_dir.path())),
+        }, {
+            insta::assert_debug_snapshot!(requirements, @r###"
+            RequirementsTxt {
+                requirements: [
+                    RequirementEntry {
+                        requirement: Unnamed(
+                            UnnamedRequirement {
+                                url: VerbatimParsedUrl {
+                                    parsed_url: Path(
+                                        ParsedPathUrl {
+                                            url: Url {
+                                                scheme: "file",
+                                                cannot_be_a_base: false,
+                                                username: "",
+                                                password: None,
+                                                host: None,
+                                                port: None,
+                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl",
+                                                query: None,
+                                                fragment: None,
+                                            },
+                                            install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl",
+                                            ext: Wheel,
+                                        },
+                                    ),
+                                    verbatim: VerbatimUrl {
+                                        url: Url {
+                                            scheme: "file",
+                                            cannot_be_a_base: false,
+                                            username: "",
+                                            password: None,
+                                            host: None,
+                                            port: None,
+                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl",
+                                            query: None,
+                                            fragment: None,
+                                        },
+                                        given: Some(
+                                            "importlib_metadata-8.3.0-py3-none-any.whl",
+                                        ),
+                                    },
+                                },
+                                extras: [],
+                                marker: true,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                    },
+                    RequirementEntry {
+                        requirement: Unnamed(
+                            UnnamedRequirement {
+                                url: VerbatimParsedUrl {
+                                    parsed_url: Path(
+                                        ParsedPathUrl {
+                                            url: Url {
+                                                scheme: "file",
+                                                cannot_be_a_base: false,
+                                                username: "",
+                                                password: None,
+                                                host: None,
+                                                port: None,
+                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
+                                                query: None,
+                                                fragment: None,
+                                            },
+                                            install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
+                                            ext: Wheel,
+                                        },
+                                    ),
+                                    verbatim: VerbatimUrl {
+                                        url: Url {
+                                            scheme: "file",
+                                            cannot_be_a_base: false,
+                                            username: "",
+                                            password: None,
+                                            host: None,
+                                            port: None,
+                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
+                                            query: None,
+                                            fragment: None,
+                                        },
+                                        given: Some(
+                                            "importlib_metadata-8.2.0-py3-none-any.whl",
+                                        ),
+                                    },
+                                },
+                                extras: [],
+                                marker: sys_platform == 'win32',
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                    },
+                    RequirementEntry {
+                        requirement: Unnamed(
+                            UnnamedRequirement {
+                                url: VerbatimParsedUrl {
+                                    parsed_url: Path(
+                                        ParsedPathUrl {
+                                            url: Url {
+                                                scheme: "file",
+                                                cannot_be_a_base: false,
+                                                username: "",
+                                                password: None,
+                                                host: None,
+                                                port: None,
+                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
+                                                query: None,
+                                                fragment: None,
+                                            },
+                                            install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
+                                            ext: Wheel,
+                                        },
+                                    ),
+                                    verbatim: VerbatimUrl {
+                                        url: Url {
+                                            scheme: "file",
+                                            cannot_be_a_base: false,
+                                            username: "",
+                                            password: None,
+                                            host: None,
+                                            port: None,
+                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
+                                            query: None,
+                                            fragment: None,
+                                        },
+                                        given: Some(
+                                            "importlib_metadata-8.2.0-py3-none-any.whl",
+                                        ),
+                                    },
+                                },
+                                extras: [
+                                    ExtraName(
+                                        "extra",
+                                    ),
+                                ],
+                                marker: true,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                    },
+                    RequirementEntry {
+                        requirement: Unnamed(
+                            UnnamedRequirement {
+                                url: VerbatimParsedUrl {
+                                    parsed_url: Path(
+                                        ParsedPathUrl {
+                                            url: Url {
+                                                scheme: "file",
+                                                cannot_be_a_base: false,
+                                                username: "",
+                                                password: None,
+                                                host: None,
+                                                port: None,
+                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
+                                                query: None,
+                                                fragment: None,
+                                            },
+                                            install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
+                                            ext: Wheel,
+                                        },
+                                    ),
+                                    verbatim: VerbatimUrl {
+                                        url: Url {
+                                            scheme: "file",
+                                            cannot_be_a_base: false,
+                                            username: "",
+                                            password: None,
+                                            host: None,
+                                            port: None,
+                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
+                                            query: None,
+                                            fragment: None,
+                                        },
+                                        given: Some(
+                                            "importlib_metadata-8.2.0+local-py3-none-any.whl",
+                                        ),
+                                    },
+                                },
+                                extras: [],
+                                marker: true,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                    },
+                    RequirementEntry {
+                        requirement: Unnamed(
+                            UnnamedRequirement {
+                                url: VerbatimParsedUrl {
+                                    parsed_url: Path(
+                                        ParsedPathUrl {
+                                            url: Url {
+                                                scheme: "file",
+                                                cannot_be_a_base: false,
+                                                username: "",
+                                                password: None,
+                                                host: None,
+                                                port: None,
+                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
+                                                query: None,
+                                                fragment: None,
+                                            },
+                                            install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
+                                            ext: Wheel,
+                                        },
+                                    ),
+                                    verbatim: VerbatimUrl {
+                                        url: Url {
+                                            scheme: "file",
+                                            cannot_be_a_base: false,
+                                            username: "",
+                                            password: None,
+                                            host: None,
+                                            port: None,
+                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
+                                            query: None,
+                                            fragment: None,
+                                        },
+                                        given: Some(
+                                            "importlib_metadata-8.2.0+local-py3-none-any.whl",
+                                        ),
+                                    },
+                                },
+                                extras: [],
+                                marker: sys_platform == 'win32',
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                    },
+                    RequirementEntry {
+                        requirement: Unnamed(
+                            UnnamedRequirement {
+                                url: VerbatimParsedUrl {
+                                    parsed_url: Path(
+                                        ParsedPathUrl {
+                                            url: Url {
+                                                scheme: "file",
+                                                cannot_be_a_base: false,
+                                                username: "",
+                                                password: None,
+                                                host: None,
+                                                port: None,
+                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
+                                                query: None,
+                                                fragment: None,
+                                            },
+                                            install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
+                                            ext: Wheel,
+                                        },
+                                    ),
+                                    verbatim: VerbatimUrl {
+                                        url: Url {
+                                            scheme: "file",
+                                            cannot_be_a_base: false,
+                                            username: "",
+                                            password: None,
+                                            host: None,
+                                            port: None,
+                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
+                                            query: None,
+                                            fragment: None,
+                                        },
+                                        given: Some(
+                                            "importlib_metadata-8.2.0+local-py3-none-any.whl",
+                                        ),
+                                    },
+                                },
+                                extras: [
+                                    ExtraName(
+                                        "extra",
+                                    ),
+                                ],
+                                marker: true,
+                                origin: Some(
+                                    File(
+                                        "<REQUIREMENTS_DIR>/requirements.txt",
+                                    ),
+                                ),
+                            },
+                        ),
+                        hashes: [],
+                    },
+                ],
+                constraints: [],
+                editables: [],
+                index_url: None,
+                extra_index_urls: [],
+                find_links: [],
+                no_index: false,
+                no_binary: None,
                 only_binary: None,
             }
             "###);

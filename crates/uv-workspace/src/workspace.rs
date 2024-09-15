@@ -1,11 +1,10 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
-use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-
 use either::Either;
 use glob::{glob, GlobError, PatternError};
 use rustc_hash::FxHashSet;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use tracing::{debug, trace, warn};
 
 use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
@@ -14,7 +13,9 @@ use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::{warn_user, warn_user_once};
 
-use crate::pyproject::{Project, PyProjectToml, Source, ToolUvWorkspace};
+use crate::pyproject::{
+    Project, PyProjectToml, PyprojectTomlError, Source, ToolUvSources, ToolUvWorkspace,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum WorkspaceError {
@@ -39,7 +40,7 @@ pub enum WorkspaceError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Failed to parse: `{}`", _0.user_display())]
-    Toml(PathBuf, #[source] Box<toml::de::Error>),
+    Toml(PathBuf, #[source] Box<PyprojectTomlError>),
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
 }
@@ -120,7 +121,7 @@ impl Workspace {
 
         let pyproject_path = project_path.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents.clone())
+        let pyproject_toml = PyProjectToml::from_string(contents)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // Check if the project is explicitly marked as unmanaged.
@@ -234,6 +235,7 @@ impl Workspace {
                 .clone()
                 .and_then(|tool| tool.uv)
                 .and_then(|uv| uv.sources)
+                .map(ToolUvSources::into_inner)
                 .unwrap_or_default();
 
             // Set the `pyproject.toml` for the member.
@@ -587,7 +589,7 @@ impl Workspace {
                 let pyproject_path = workspace_root.join("pyproject.toml");
                 let contents = fs_err::read_to_string(&pyproject_path)?;
                 let pyproject_toml = PyProjectToml::from_string(contents)
-                    .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
+                    .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
                 debug!(
                     "Adding root workspace member: `{}`",
@@ -698,7 +700,6 @@ impl Workspace {
                     }
                     Err(err) => return Err(err.into()),
                 };
-
                 let pyproject_toml = PyProjectToml::from_string(contents)
                     .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
@@ -741,6 +742,7 @@ impl Workspace {
             .clone()
             .and_then(|tool| tool.uv)
             .and_then(|uv| uv.sources)
+            .map(ToolUvSources::into_inner)
             .unwrap_or_default();
 
         Ok(Workspace {

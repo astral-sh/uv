@@ -219,14 +219,18 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(target, &markers, tags, extras, &dev, build_options)?;
+    let resolution = lock.to_resolution(
+        target,
+        &markers,
+        tags,
+        extras,
+        &dev,
+        build_options,
+        &install_options,
+    )?;
 
     // Always skip virtual projects, which shouldn't be built or installed.
     let resolution = apply_no_virtual_project(resolution);
-
-    // Filter resolution based on install-specific options.
-    let resolution =
-        install_options.filter_resolution(resolution, target.project_name(), lock.members());
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {

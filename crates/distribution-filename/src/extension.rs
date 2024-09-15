@@ -33,6 +33,8 @@ pub enum SourceDistExtension {
     TarBz2,
     TarXz,
     TarZst,
+    TarLzma,
+    Tar,
 }
 
 impl DistExtension {
@@ -69,10 +71,15 @@ impl SourceDistExtension {
 
         match extension {
             "zip" => Ok(Self::Zip),
-            "gz" if is_tar(path.as_ref()) => Ok(Self::TarGz),
+            "tar" => Ok(Self::Tar),
             "tgz" => Ok(Self::TarGz),
+            "tbz" => Ok(Self::TarBz2),
+            "txz" => Ok(Self::TarXz),
+            "tlz" => Ok(Self::TarLzma),
+            "gz" if is_tar(path.as_ref()) => Ok(Self::TarGz),
             "bz2" if is_tar(path.as_ref()) => Ok(Self::TarBz2),
             "xz" if is_tar(path.as_ref()) => Ok(Self::TarXz),
+            "lz" | "lzma" if is_tar(path.as_ref()) => Ok(Self::TarLzma),
             "zst" if is_tar(path.as_ref()) => Ok(Self::TarZst),
             _ => Err(ExtensionError::SourceDist),
         }
@@ -87,14 +94,16 @@ impl Display for SourceDistExtension {
             Self::TarBz2 => f.write_str("tar.bz2"),
             Self::TarXz => f.write_str("tar.xz"),
             Self::TarZst => f.write_str("tar.zst"),
+            Self::TarLzma => f.write_str("tar.lzma"),
+            Self::Tar => f.write_str("tar"),
         }
     }
 }
 
 #[derive(Error, Debug)]
 pub enum ExtensionError {
-    #[error("`.whl`, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`")]
+    #[error("`.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`")]
     Dist,
-    #[error("`.zip`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`")]
+    #[error("`.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`")]
     SourceDist,
 }

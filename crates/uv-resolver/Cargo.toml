@@ -16,7 +16,6 @@ workspace = true
 cache-key = { workspace = true }
 distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
-install-wheel-rs = { workspace = true }
 once-map = { workspace = true }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
@@ -28,6 +27,7 @@ uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
 uv-fs = { workspace = true, features = ["serde"] }
 uv-git = { workspace = true }
+uv-metadata = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pubgrub = { workspace = true }
 uv-python = { workspace = true }

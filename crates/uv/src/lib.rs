@@ -19,7 +19,7 @@ use uv_cli::{
 };
 use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace};
 #[cfg(feature = "self-update")]
-use uv_cli::{SelfCommand, SelfNamespace};
+use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_scripts::Pep723Script;
@@ -767,8 +767,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
-            command: SelfCommand::Update,
-        }) => commands::self_update(printer).await,
+            command:
+                SelfCommand::Update(SelfUpdateArgs {
+                    target_version,
+                    token,
+                }),
+        }) => commands::self_update(target_version, token, printer).await,
         Commands::Version { output_format } => {
             commands::version(output_format, &mut stdout())?;
             Ok(ExitStatus::Success)
@@ -1124,6 +1128,7 @@ async fn run_project(
                 args.show_resolution || globals.verbose > 0,
                 args.locked,
                 args.frozen,
+                args.no_sync,
                 args.isolated,
                 args.package,
                 args.no_project,

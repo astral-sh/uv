@@ -102,7 +102,7 @@ pub trait BuildContext {
         &'a self,
         source: &'a Path,
         subdirectory: Option<&'a Path>,
-        version_id: &'a str,
+        version_id: Option<String>,
         dist: Option<&'a SourceDist>,
         build_kind: BuildKind,
         build_output: BuildOutput,

@@ -31,5 +31,5 @@ pathdiff = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
-toml_edit = { workspace = true, features = ["serde"] }
+toml_edit = { workspace = true }
 tracing = { workspace = true }

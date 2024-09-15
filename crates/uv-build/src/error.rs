@@ -58,7 +58,9 @@ pub enum Error {
     #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory", _0.simplified_display())]
     InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
-    InvalidPyprojectToml(#[from] toml::de::Error),
+    InvalidPyprojectTomlSyntax(#[from] toml_edit::TomlError),
+    #[error("`pyproject.toml` does not match the required schema. When the `[project]` table is present, `project.name` must be present and non-empty.")]
+    InvalidPyprojectTomlSchema(#[from] toml_edit::de::Error),
     #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
     EditableSetupPy,
     #[error("Failed to install requirements from {0}")]
@@ -113,7 +115,7 @@ pub struct MissingHeaderCause {
     missing_library: MissingLibrary,
     package_name: Option<PackageName>,
     package_version: Option<Version>,
-    version_id: String,
+    version_id: Option<String>,
 }
 
 impl Display for MissingHeaderCause {
@@ -127,11 +129,15 @@ impl Display for MissingHeaderCause {
                         f,
                         "This error likely indicates that you need to install a library that provides \"{header}\" for {package_name}@{package_version}",
                     )
+                } else if let Some(version_id) = &self.version_id {
+                    write!(
+                        f,
+                        "This error likely indicates that you need to install a library that provides \"{header}\" for {version_id}",
+                    )
                 } else {
                     write!(
                         f,
-                        "This error likely indicates that you need to install a library that provides \"{header}\" for {}",
-                        self.version_id
+                        "This error likely indicates that you need to install a library that provides \"{header}\"",
                     )
                 }
             }
@@ -143,11 +149,15 @@ impl Display for MissingHeaderCause {
                         f,
                         "This error likely indicates that you need to install the library that provides a shared library for {library} for {package_name}@{package_version} (e.g., lib{library}-dev)",
                     )
-                } else {
+                } else if let Some(version_id) = &self.version_id {
                     write!(
                         f,
                         "This error likely indicates that you need to install the library that provides a shared library for {library} for {version_id} (e.g., lib{library}-dev)",
-                        version_id = self.version_id
+                    )
+                } else {
+                    write!(
+                        f,
+                        "This error likely indicates that you need to install the library that provides a shared library for {library} (e.g., lib{library}-dev)",
                     )
                 }
             }
@@ -159,11 +169,15 @@ impl Display for MissingHeaderCause {
                         f,
                         "This error likely indicates that {package_name}@{package_version} depends on {package}, but doesn't declare it as a build dependency. If {package_name} is a first-party package, consider adding {package} to its `build-system.requires`. Otherwise, `uv pip install {package}` into the environment and re-run with `--no-build-isolation`."
                     )
-                } else {
+                } else if let Some(version_id) = &self.version_id {
                     write!(
                         f,
                         "This error likely indicates that {version_id} depends on {package}, but doesn't declare it as a build dependency. If {version_id} is a first-party package, consider adding {package} to its `build-system.requires`. Otherwise, `uv pip install {package}` into the environment and re-run with `--no-build-isolation`.",
-                        version_id = self.version_id
+                    )
+                } else {
+                    write!(
+                        f,
+                        "This error likely indicates that a package depends on {package}, but doesn't declare it as a build dependency. If the package is a first-party package, consider adding {package} to its `build-system.requires`. Otherwise, `uv pip install {package}` into the environment and re-run with `--no-build-isolation`.",
                     )
                 }
             }
@@ -194,7 +208,7 @@ impl Error {
         level: BuildOutput,
         name: Option<&PackageName>,
         version: Option<&Version>,
-        version_id: impl Into<String>,
+        version_id: Option<&str>,
     ) -> Self {
         // In the cases I've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff.
         let missing_library = output.stderr.iter().rev().take(10).find_map(|line| {
@@ -232,7 +246,7 @@ impl Error {
                         missing_library,
                         package_name: name.cloned(),
                         package_version: version.cloned(),
-                        version_id: version_id.into(),
+                        version_id: version_id.map(ToString::to_string),
                     },
                 },
                 BuildOutput::Debug => Self::MissingHeaderOutput {
@@ -244,7 +258,7 @@ impl Error {
                         missing_library,
                         package_name: name.cloned(),
                         package_version: version.cloned(),
-                        version_id: version_id.into(),
+                        version_id: version_id.map(ToString::to_string),
                     },
                 },
             };
@@ -307,7 +321,7 @@ mod test {
             BuildOutput::Debug,
             None,
             None,
-            "pygraphviz-1.11",
+            Some("pygraphviz-1.11"),
         );
         assert!(matches!(err, Error::MissingHeaderOutput { .. }));
         // Unix uses exit status, Windows uses exit code.
@@ -362,7 +376,7 @@ mod test {
             BuildOutput::Debug,
             None,
             None,
-            "pygraphviz-1.11",
+            Some("pygraphviz-1.11"),
         );
         assert!(matches!(err, Error::MissingHeaderOutput { .. }));
         // Unix uses exit status, Windows uses exit code.
@@ -410,7 +424,7 @@ mod test {
             BuildOutput::Debug,
             None,
             None,
-            "pygraphviz-1.11",
+            Some("pygraphviz-1.11"),
         );
         assert!(matches!(err, Error::MissingHeaderOutput { .. }));
         // Unix uses exit status, Windows uses exit code.
@@ -456,7 +470,7 @@ mod test {
             BuildOutput::Debug,
             Some(&PackageName::from_str("pygraphviz").unwrap()),
             Some(&Version::new([1, 11])),
-            "pygraphviz-1.11",
+            Some("pygraphviz-1.11"),
         );
         assert!(matches!(err, Error::MissingHeaderOutput { .. }));
         // Unix uses exit status, Windows uses exit code.

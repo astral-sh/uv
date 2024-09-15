@@ -1,7 +1,8 @@
+use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::VecDeque;
 use std::fmt::Formatter;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use either::Either;
 use petgraph::visit::IntoNodeReferences;
@@ -134,7 +135,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         let mut nodes: Vec<Node> = petgraph
             .node_references()
             .filter(|(_index, package)| {
-                install_options.include_package(&package.id.name, root_name, lock.members())
+                install_options.include_package(&package.id.name, Some(root_name), lock.members())
             })
             .map(|(index, package)| Node {
                 package,
@@ -191,20 +192,14 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     write!(f, "{} @ {}", package.id.name, url)?;
                 }
                 Source::Path(path) | Source::Directory(path) => {
-                    if path.as_os_str().is_empty() {
-                        write!(f, ".")?;
-                    } else if path.is_absolute() {
+                    if path.is_absolute() {
                         write!(f, "{}", Url::from_file_path(path).unwrap())?;
                     } else {
-                        write!(f, "{}", path.portable_display())?;
+                        write!(f, "{}", anchor(path).portable_display())?;
                     }
                 }
                 Source::Editable(path) => {
-                    if path.as_os_str().is_empty() {
-                        write!(f, "-e .")?;
-                    } else {
-                        write!(f, "-e {}", path.portable_display())?;
-                    }
+                    write!(f, "-e {}", anchor(path).portable_display())?;
                 }
                 Source::Virtual(_) => {
                     continue;
@@ -250,5 +245,16 @@ impl<'lock> From<&'lock Package> for NodeComparator<'lock> {
             Source::Editable(path) => Self::Editable(path),
             _ => Self::Package(&value.id),
         }
+    }
+}
+
+/// Modify a relative [`Path`] to anchor it at the current working directory.
+///
+/// For example, given `foo/bar`, returns `./foo/bar`.
+fn anchor(path: &Path) -> Cow<'_, Path> {
+    match path.components().next() {
+        None => Cow::Owned(PathBuf::from(".")),
+        Some(Component::CurDir | Component::ParentDir) => Cow::Borrowed(path),
+        _ => Cow::Owned(PathBuf::from("./").join(path)),
     }
 }

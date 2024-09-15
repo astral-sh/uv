@@ -344,15 +344,19 @@ pub(crate) async fn add(
             Target::Script(_, _) | Target::Project(_, _) if raw_sources => {
                 (pep508_rs::Requirement::from(requirement), None)
             }
-            Target::Script(ref script, _) => resolve_requirement(
-                requirement,
-                false,
-                editable,
-                rev.clone(),
-                tag.clone(),
-                branch.clone(),
-                &script.path,
-            )?,
+            Target::Script(ref script, _) => {
+                let script_path = std::path::absolute(&script.path)?;
+                let script_dir = script_path.parent().expect("script path has no parent");
+                resolve_requirement(
+                    requirement,
+                    false,
+                    editable,
+                    rev.clone(),
+                    tag.clone(),
+                    branch.clone(),
+                    script_dir,
+                )?
+            }
             Target::Project(ref project, _) => {
                 let workspace = project
                     .workspace()
@@ -411,21 +415,20 @@ pub(crate) async fn add(
             }
         };
 
-        // Keep track of the exact location of the edit.
-        let index = edit.index();
-
         // If the edit was inserted before the end of the list, update the existing edits.
-        for edit in &mut edits {
-            if *edit.dependency_type == dependency_type {
-                match &mut edit.edit {
-                    ArrayEdit::Add(existing) => {
-                        if *existing >= index {
-                            *existing += 1;
+        if let ArrayEdit::Add(index) = &edit {
+            for edit in &mut edits {
+                if *edit.dependency_type == dependency_type {
+                    match &mut edit.edit {
+                        ArrayEdit::Add(existing) => {
+                            if *existing >= *index {
+                                *existing += 1;
+                            }
                         }
-                    }
-                    ArrayEdit::Update(existing) => {
-                        if *existing >= index {
-                            *existing += 1;
+                        ArrayEdit::Update(existing) => {
+                            if *existing >= *index {
+                                *existing += 1;
+                            }
                         }
                     }
                 }

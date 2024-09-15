@@ -30,7 +30,7 @@ use pypi_types::{
     redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
     RequirementSource, ResolverMarkerEnvironment,
 };
-use uv_configuration::{BuildOptions, ExtrasSpecification};
+use uv_configuration::{BuildOptions, ExtrasSpecification, InstallOptions};
 use uv_distribution::DistributionDatabase;
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
@@ -481,11 +481,6 @@ impl Lock {
         &self.packages
     }
 
-    /// Returns the owned [`Package`] entries in this lock.
-    pub fn into_packages(self) -> Vec<Package> {
-        self.packages
-    }
-
     /// Returns the supported Python version range for the lockfile, if present.
     pub fn requires_python(&self) -> &RequiresPython {
         &self.requires_python
@@ -547,6 +542,7 @@ impl Lock {
         extras: &ExtrasSpecification,
         dev: &[GroupName],
         build_options: &BuildOptions,
+        install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
@@ -576,6 +572,23 @@ impl Lock {
                 ExtrasSpecification::Some(extras) => {
                     for extra in extras {
                         queue.push_back((root, Some(extra)));
+                    }
+                }
+            }
+
+            // Add any dev dependencies.
+            for group in dev {
+                for dep in root.dev_dependencies.get(group).into_iter().flatten() {
+                    if dep.complexified_marker.evaluate(marker_env, &[]) {
+                        let dep_dist = self.find_by_id(&dep.package_id);
+                        if seen.insert((&dep.package_id, None)) {
+                            queue.push_back((dep_dist, None));
+                        }
+                        for extra in &dep.extra {
+                            if seen.insert((&dep.package_id, Some(extra))) {
+                                queue.push_back((dep_dist, Some(extra)));
+                            }
+                        }
                     }
                 }
             }
@@ -610,16 +623,11 @@ impl Lock {
         let mut map = BTreeMap::default();
         let mut hashes = BTreeMap::default();
         while let Some((dist, extra)) = queue.pop_front() {
-            let deps =
-                if let Some(extra) = extra {
-                    Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
-                } else {
-                    Either::Right(dist.dependencies.iter().chain(
-                        dev.iter().flat_map(|group| {
-                            dist.dev_dependencies.get(group).into_iter().flatten()
-                        }),
-                    ))
-                };
+            let deps = if let Some(extra) = extra {
+                Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
+            } else {
+                Either::Right(dist.dependencies.iter())
+            };
             for dep in deps {
                 if dep.complexified_marker.evaluate(marker_env, &[]) {
                     let dep_dist = self.find_by_id(&dep.package_id);
@@ -633,15 +641,21 @@ impl Lock {
                     }
                 }
             }
-            map.insert(
-                dist.id.name.clone(),
-                ResolvedDist::Installable(dist.to_dist(
-                    project.workspace().install_path(),
-                    tags,
-                    build_options,
-                )?),
-            );
-            hashes.insert(dist.id.name.clone(), dist.hashes());
+            if install_options.include_package(
+                &dist.id.name,
+                project.project_name(),
+                &self.manifest.members,
+            ) {
+                map.insert(
+                    dist.id.name.clone(),
+                    ResolvedDist::Installable(dist.to_dist(
+                        project.workspace().install_path(),
+                        TagPolicy::Required(tags),
+                        build_options,
+                    )?),
+                );
+                hashes.insert(dist.id.name.clone(), dist.hashes());
+            }
         }
         let diagnostics = vec![];
         Ok(Resolution::new(map, hashes, diagnostics))
@@ -1081,7 +1095,11 @@ impl Lock {
             }
 
             // Get the metadata for the distribution.
-            let dist = package.to_dist(workspace.install_path(), tags, build_options)?;
+            let dist = package.to_dist(
+                workspace.install_path(),
+                TagPolicy::Preferred(tags),
+                build_options,
+            )?;
 
             let Ok(archive) = database
                 .get_or_build_wheel_metadata(&dist, HashPolicy::None)
@@ -1191,6 +1209,24 @@ impl Lock {
         }
 
         Ok(SatisfiesResult::Satisfied)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+enum TagPolicy<'tags> {
+    /// Exclusively consider wheels that match the specified platform tags.
+    Required(&'tags Tags),
+    /// Prefer wheels that match the specified platform tags, but fall back to incompatible wheels
+    /// if  necessary.
+    Preferred(&'tags Tags),
+}
+
+impl<'tags> TagPolicy<'tags> {
+    /// Returns the platform tags to consider.
+    fn tags(&self) -> &'tags Tags {
+        match self {
+            TagPolicy::Required(tags) | TagPolicy::Preferred(tags) => tags,
+        }
     }
 }
 
@@ -1392,7 +1428,6 @@ impl TryFrom<LockWire> for Lock {
                         continue;
                     }
                     if !marker1.is_disjoint(marker2) {
-                        eprintln!("{}", lock.to_toml().unwrap());
                         assert!(
                             false,
                             "[{marker1:?}] (for version {version1}) is not disjoint with \
@@ -1589,14 +1624,14 @@ impl Package {
     fn to_dist(
         &self,
         workspace_root: &Path,
-        tags: &Tags,
+        tag_policy: TagPolicy<'_>,
         build_options: &BuildOptions,
     ) -> Result<Dist, LockError> {
         let no_binary = build_options.no_binary_package(&self.id.name);
         let no_build = build_options.no_build_package(&self.id.name);
 
         if !no_binary {
-            if let Some(best_wheel_index) = self.find_best_wheel(tags) {
+            if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
                 return match &self.id.source {
                     Source::Registry(source) => {
                         let wheels = self
@@ -1673,6 +1708,10 @@ impl Package {
                 id: self.id.clone(),
             }
             .into()),
+            (true, false) if self.id.source.is_wheel() => Err(LockErrorKind::NoBinaryWheelOnly {
+                id: self.id.clone(),
+            }
+            .into()),
             (true, false) => Err(LockErrorKind::NoBinary {
                 id: self.id.clone(),
             }
@@ -1681,6 +1720,12 @@ impl Package {
                 id: self.id.clone(),
             }
             .into()),
+            (false, false) if self.id.source.is_wheel() => {
+                Err(LockErrorKind::IncompatibleWheelOnly {
+                    id: self.id.clone(),
+                }
+                .into())
+            }
             (false, false) => Err(LockErrorKind::NeitherSourceDistNorWheel {
                 id: self.id.clone(),
             }
@@ -1698,11 +1743,15 @@ impl Package {
     ) -> Result<Option<distribution_types::SourceDist>, LockError> {
         let sdist = match &self.id.source {
             Source::Path(path) => {
+                // A direct path source can also be a wheel, so validate the extension.
+                let DistExtension::Source(ext) = DistExtension::from_path(path)? else {
+                    return Ok(None);
+                };
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
-                    ext: SourceDistExtension::from_path(path)?,
+                    ext,
                 };
                 distribution_types::SourceDist::Path(path_dist)
             }
@@ -1765,7 +1814,10 @@ impl Package {
                 distribution_types::SourceDist::Git(git_dist)
             }
             Source::Direct(url, direct) => {
-                let ext = SourceDistExtension::from_path(url.as_ref())?;
+                // A direct URL source can also be a wheel, so validate the extension.
+                let DistExtension::Source(ext) = DistExtension::from_path(url.as_ref())? else {
+                    return Ok(None);
+                };
                 let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                 let url = Url::from(ParsedArchiveUrl {
                     url: url.to_url(),
@@ -2003,10 +2055,12 @@ impl Package {
         Ok(table)
     }
 
-    fn find_best_wheel(&self, tags: &Tags) -> Option<usize> {
+    fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
         let mut best: Option<(TagPriority, usize)> = None;
         for (i, wheel) in self.wheels.iter().enumerate() {
-            let TagCompatibility::Compatible(priority) = wheel.filename.compatibility(tags) else {
+            let TagCompatibility::Compatible(priority) =
+                wheel.filename.compatibility(tag_policy.tags())
+            else {
                 continue;
             };
             match best {
@@ -2020,7 +2074,12 @@ impl Package {
                 }
             }
         }
-        best.map(|(_, i)| i)
+
+        let best = best.map(|(_, i)| i);
+        match tag_policy {
+            TagPolicy::Required(_) => best,
+            TagPolicy::Preferred(_) => best.or_else(|| self.wheels.first().map(|_| 0)),
+        }
     }
 
     /// Returns the [`PackageName`] of the package.
@@ -2421,6 +2480,29 @@ impl Source {
     /// We also assume that Git sources are immutable, since a Git source encodes a specific commit.
     fn is_immutable(&self) -> bool {
         matches!(self, Self::Registry(..) | Self::Git(_, _))
+    }
+
+    /// Returns `true` if the source is that of a wheel.
+    fn is_wheel(&self) -> bool {
+        match &self {
+            Source::Path(path) => {
+                matches!(
+                    DistExtension::from_path(path).ok(),
+                    Some(DistExtension::Wheel)
+                )
+            }
+            Source::Direct(url, _) => {
+                matches!(
+                    DistExtension::from_path(url.as_ref()).ok(),
+                    Some(DistExtension::Wheel)
+                )
+            }
+            Source::Directory(..) => false,
+            Source::Editable(..) => false,
+            Source::Virtual(..) => false,
+            Source::Git(..) => false,
+            Source::Registry(..) => false,
+        }
     }
 
     fn to_toml(&self, table: &mut Table) {
@@ -3804,7 +3886,7 @@ enum LockErrorKind {
     /// distribution.
     #[error("distribution {id} can't be installed because it doesn't have a source distribution or wheel for the current platform")]
     NeitherSourceDistNorWheel {
-        /// The ID of the distribution that has a missing base.
+        /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as both `--no-binary` and `--no-build`.
@@ -3813,17 +3895,32 @@ enum LockErrorKind {
         /// The ID of the distribution.
         id: PackageId,
     },
-    /// An error that occurs when a distribution is marked as both `--no-binary`, but no source
+    /// An error that occurs when a distribution is marked as `--no-binary`, but no source
     /// distribution is available.
     #[error("distribution {id} can't be installed because it is marked as `--no-binary` but has no source distribution")]
     NoBinary {
         /// The ID of the distribution.
         id: PackageId,
     },
-    /// An error that occurs when a distribution is marked as both `--no-build`, but no binary
+    /// An error that occurs when a distribution is marked as `--no-build`, but no binary
     /// distribution is available.
     #[error("distribution {id} can't be installed because it is marked as `--no-build` but has no binary distribution")]
     NoBuild {
+        /// The ID of the distribution.
+        id: PackageId,
+    },
+    /// An error that occurs when a wheel-only distribution is incompatible with the current
+    /// platform.
+    #[error(
+        "distribution {id} can't be installed because the binary distribution is incompatible with the current platform"
+    )]
+    IncompatibleWheelOnly {
+        /// The ID of the distribution.
+        id: PackageId,
+    },
+    /// An error that occurs when a wheel-only source is marked as `--no-binary`.
+    #[error("distribution {id} can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
+    NoBinaryWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },

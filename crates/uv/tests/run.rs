@@ -418,7 +418,7 @@ fn run_pep723_script_requires_python() -> Result<()> {
 
     ----- stderr -----
     Reading inline script metadata from: main.py
-    warning: Python 3.8.[X] does not satisfy the script's `requires-python` specifier: `>=3.11`
+    warning: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the script's Python requirement: `>=3.11`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -971,6 +971,62 @@ fn run_frozen() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_no_sync() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Running with `--no-sync` should succeed error, even if the lockfile isn't present.
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    "###);
+
+    context.lock().assert().success();
+
+    // Running with `--no-sync` should not install any requirements.
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    "###);
+
+    context.sync().assert().success();
+
+    // But it should have access to the installed packages.
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio
+
+    ----- stderr -----
     "###);
 
     Ok(())
@@ -1578,6 +1634,67 @@ fn run_stdin() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let main_script = context.temp_dir.child("__main__.py");
+    main_script.write_str(indoc! { r#"
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_zipapp() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a zipapp.
+    let child = context.temp_dir.child("app");
+    child.create_dir_all()?;
+
+    let main_script = child.child("__main__.py");
+    main_script.write_str(indoc! { r#"
+        print("Hello, world!")
+       "#
+    })?;
+
+    let zipapp = context.temp_dir.child("app.pyz");
+    let status = context
+        .run()
+        .arg("python")
+        .arg("-m")
+        .arg("zipapp")
+        .arg(child.as_ref())
+        .arg("--output")
+        .arg(zipapp.as_ref())
+        .status()?;
+    assert!(status.success());
+
+    // Run the zipapp.
+    uv_snapshot!(context.filters(), context.run().arg(zipapp.as_ref()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
 /// When the `pyproject.toml` file is invalid.
 #[test]
 fn run_project_toml_error() -> Result<()> {
@@ -1657,7 +1774,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The Python request from `.python-version` resolved to Python 3.8.[X], which incompatible with the project's Python requirement: `>=3.12`
+    error: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`
     "###);
 
     // ...even if `--isolated` is provided.
@@ -1667,7 +1784,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The Python request from `.python-version` resolved to Python 3.8.[X], which incompatible with the project's Python requirement: `>=3.12`
+    error: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`
     "###);
 
     Ok(())
@@ -1790,6 +1907,46 @@ fn run_exit_code() -> Result<()> {
     })?;
 
     context.run().arg("script.py").assert().code(42);
+
+    Ok(())
+}
+
+#[test]
+fn run_invalid_project_table() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12", "3.11", "3.8"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project.urls]
+        repository = 'https://github.com/octocat/octocat-python'
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+      Caused by: TOML parse error at line 1, column 2
+      |
+    1 | [project.urls]
+      |  ^^^^^^^
+    missing field `name`
+
+    "###);
 
     Ok(())
 }

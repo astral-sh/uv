@@ -418,8 +418,20 @@ pub struct SelfNamespace {
 #[derive(Subcommand)]
 #[cfg(feature = "self-update")]
 pub enum SelfCommand {
-    /// Update uv to the latest version.
-    Update,
+    /// Update uv.
+    Update(SelfUpdateArgs),
+}
+
+#[derive(Args, Debug)]
+#[cfg(feature = "self-update")]
+pub struct SelfUpdateArgs {
+    /// Update to the specified version. If not provided, uv will update to the latest version.
+    pub target_version: Option<String>,
+
+    /// A GitHub token for authentication.
+    /// A token is not required but can be used to reduce the chance of encountering rate limits.
+    #[arg(long, env = "UV_GITHUB_TOKEN")]
+    pub token: Option<String>,
 }
 
 #[derive(Args)]
@@ -1993,7 +2005,7 @@ pub struct BuildArgs {
     /// Require a matching hash for each build requirement.
     ///
     /// Hash-checking mode is all or nothing. If enabled, _all_ build requirements must be provided
-    /// with a corresponding hash or set of hashes via the `--build-constraints` argument.
+    /// with a corresponding hash or set of hashes via the `--build-constraint` argument.
     /// Additionally, if enabled, _all_ requirements must either be pinned to exact versions
     /// (e.g., `==1.0.0`), or be specified via direct URL.
     ///
@@ -2429,6 +2441,13 @@ pub struct RunArgs {
     #[arg(long)]
     pub isolated: bool,
 
+    /// Avoid syncing the virtual environment.
+    ///
+    /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
+    /// be updated, since the environment will not be synced regardless).
+    #[arg(long, conflicts_with = "frozen")]
+    pub no_sync: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or
@@ -2730,7 +2749,7 @@ pub struct AddArgs {
     #[arg(long)]
     pub extra: Option<Vec<ExtraName>>,
 
-    /// Avoid syncing the virtual environment after re-locking the project.
+    /// Avoid syncing the virtual environment.
     #[arg(long, conflicts_with = "frozen")]
     pub no_sync: bool,
 
@@ -2763,7 +2782,7 @@ pub struct AddArgs {
     /// Add the dependency to the specified Python script, rather than to a project.
     ///
     /// If provided, uv will add the dependency to the script's inline metadata
-    /// table, in adhere with PEP 723. If no such inline metadata table is present,
+    /// table, in adherence with PEP 723. If no such inline metadata table is present,
     /// a new one will be created and added to the script. When executed via `uv run`,
     /// uv will create a temporary environment for the script with all inline
     /// dependencies installed.
@@ -2832,7 +2851,7 @@ pub struct RemoveArgs {
     /// Remove the dependency from the specified Python script, rather than from a project.
     ///
     /// If provided, uv will remove the dependency from the script's inline metadata
-    /// table, in adhere with PEP 723.
+    /// table, in adherence with PEP 723.
     #[arg(long)]
     pub script: Option<PathBuf>,
 

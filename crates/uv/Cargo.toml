@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.4.8"
+version = "0.4.10"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -55,6 +55,7 @@ ctrlc = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+http = { workspace = true }
 indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
@@ -79,6 +80,7 @@ tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
+zip = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = { version = "0.1.39" }
