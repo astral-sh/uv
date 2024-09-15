@@ -478,7 +478,6 @@ fn init_script() -> Result<()> {
     Initialized project `myapp-py` at `[TEMP_DIR]/foo/myapp.py`
     "###);
 
-
     let myapp = fs_err::read_to_string(myapp_py)?;
     insta::with_settings!({
         filters => context.filters(),
@@ -522,7 +521,6 @@ fn init_script() -> Result<()> {
 
     Ok(())
 }
-
 
 /// Ensure that `uv init` initializes the cache.
 #[test]
