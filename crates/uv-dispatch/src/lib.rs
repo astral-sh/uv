@@ -11,9 +11,7 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{
-    CachedDist, IndexCapabilities, IndexLocations, Name, Resolution, SourceDist, VersionOrUrlRef,
-};
+use distribution_types::{CachedDist, IndexCapabilities, IndexLocations, Name, Resolution, SourceDist, StaticMetadata, VersionOrUrlRef};
 use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
@@ -45,6 +43,7 @@ pub struct BuildDispatch<'a> {
     index: &'a InMemoryIndex,
     git: &'a GitResolver,
     capabilities: &'a IndexCapabilities,
+    static_metadata: &'a StaticMetadata,
     in_flight: &'a InFlight,
     build_isolation: BuildIsolation<'a>,
     link_mode: install_wheel_rs::linker::LinkMode,
@@ -69,6 +68,7 @@ impl<'a> BuildDispatch<'a> {
         index: &'a InMemoryIndex,
         git: &'a GitResolver,
         capabilities: &'a IndexCapabilities,
+        static_metadata: &'a StaticMetadata,
         in_flight: &'a InFlight,
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
@@ -90,6 +90,7 @@ impl<'a> BuildDispatch<'a> {
             index,
             git,
             capabilities,
+            static_metadata,
             in_flight,
             index_strategy,
             config_settings,
@@ -134,6 +135,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     fn capabilities(&self) -> &IndexCapabilities {
         self.capabilities
+    }
+
+    fn static_metadata(&self) -> &StaticMetadata {
+        self.static_metadata
     }
 
     fn build_options(&self) -> &BuildOptions {

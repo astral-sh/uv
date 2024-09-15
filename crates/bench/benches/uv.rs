@@ -83,7 +83,7 @@ mod resolver {
 
     use anyhow::Result;
 
-    use distribution_types::{IndexCapabilities, IndexLocations};
+    use distribution_types::{IndexCapabilities, IndexLocations, StaticMetadata};
     use install_wheel_rs::linker::LinkMode;
     use pep440_rs::Version;
     use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
@@ -139,7 +139,7 @@ mod resolver {
         interpreter: &Interpreter,
         universal: bool,
     ) -> Result<ResolutionGraph> {
-        let build_isolation = BuildIsolation::Isolated;
+        let build_isolation = BuildIsolation::default();
         let build_options = BuildOptions::default();
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
@@ -153,7 +153,8 @@ mod resolver {
         let flat_index = FlatIndex::default();
         let git = GitResolver::default();
         let capabilities = IndexCapabilities::default();
-        let hashes = HashStrategy::None;
+        let static_metadata = StaticMetadata::default();
+        let hashes = HashStrategy::default();
         let in_flight = InFlight::default();
         let index = InMemoryIndex::default();
         let index_locations = IndexLocations::default();
@@ -181,6 +182,7 @@ mod resolver {
             &index,
             &git,
             &capabilities,
+            &static_metadata,
             &in_flight,
             IndexStrategy::default(),
             &config_settings,

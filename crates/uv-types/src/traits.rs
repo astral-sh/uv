@@ -3,9 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::{
-    CachedDist, IndexCapabilities, IndexLocations, InstalledDist, Resolution, SourceDist,
-};
+use distribution_types::{CachedDist, IndexCapabilities, IndexLocations, InstalledDist, Resolution, SourceDist, StaticMetadata};
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
 use uv_cache::Cache;
@@ -61,6 +59,9 @@ pub trait BuildContext {
 
     /// Return a reference to the discovered registry capabilities.
     fn capabilities(&self) -> &IndexCapabilities;
+
+    /// Return a reference to any pre-defined static metadata.
+    fn static_metadata(&self) -> &StaticMetadata;
 
     /// Whether source distribution building or pre-built wheels is disabled.
     ///

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
 
-use distribution_types::IndexLocations;
+use distribution_types::{IndexLocations, StaticMetadata};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{ExtraName, RequirementOrigin};
 use pypi_types::{Requirement, SupportedEnvironments};
@@ -1815,6 +1815,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) link_mode: LinkMode,
     pub(crate) upgrade: Upgrade,
     pub(crate) build_options: BuildOptions,
+    pub(crate) static_metadata: StaticMetadata,
     pub(crate) sources: SourceStrategy,
 }
 

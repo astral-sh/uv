@@ -615,6 +615,18 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub no_binary_package: Option<Vec<PackageName>>,
+    /// Pre-defined static metadata for dependencies of the project (direct or transitive).
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[dict]",
+        example = r#"
+            static-metadata = [
+                { name = "author", value = "Jane Doe" },
+                { name = "license", value = "MIT" },
+            ]
+        "#
+    )]
+    pub static_metadata: Option<Vec<Metadata23>>,
 }
 
 /// Settings that are specific to the `uv pip` command-line interface.
@@ -1365,6 +1377,7 @@ pub struct ToolOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+    pub static_metadata: Option<Vec<Metadata23>>,
 }
 
 impl From<ResolverInstallerOptions> for ToolOptions {
@@ -1390,6 +1403,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
+            static_metadata: value.static_metadata,
         }
     }
 }
@@ -1421,6 +1435,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
+            static_metadata: value.static_metadata,
         }
     }
 }
