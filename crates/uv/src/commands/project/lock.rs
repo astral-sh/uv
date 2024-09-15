@@ -255,6 +255,7 @@ async fn do_lock(
     let requirements = workspace.non_project_requirements().collect::<Vec<_>>();
     let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
     let constraints = workspace.constraints();
+    let static_metadata = workspace.static_metadata();
     let dev = vec![DEV_DEPENDENCIES.clone()];
     let source_trees = vec![];
 

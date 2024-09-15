@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
-use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
+use pypi_types::{Metadata23, SupportedEnvironments, VerbatimParsedUrl};
 use uv_cache_info::CacheKey;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
@@ -92,6 +92,9 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub static_metadata: Option<Vec<Metadata23>>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`.

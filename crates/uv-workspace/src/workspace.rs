@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, trace, warn};
 
 use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
-use pypi_types::{Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
+use pypi_types::{
+    Metadata23, Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl,
+};
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::{warn_user, warn_user_once};
@@ -396,6 +398,21 @@ impl Workspace {
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.environments.as_ref())
+    }
+
+    /// Returns the static package metadata for the workspace.
+    pub fn static_metadata(&self) -> Option<&[Metadata23]> {
+        let workspace_package = self
+            .packages
+            .values()
+            .find(|workspace_package| workspace_package.root() == self.install_path())?;
+
+        workspace_package
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.static_metadata.as_deref())
     }
 
     /// Returns the set of constraints for the workspace.
