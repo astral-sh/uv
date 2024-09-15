@@ -13,7 +13,7 @@ use uv_workspace::{
     DiscoveryOptions, Workspace,
 };
 
-/// Display version information
+/// Bump set or view project version
 pub(crate) async fn bump(to: Option<BumpInstruction>, printer: Printer) -> Result<ExitStatus> {
     // Find the project version.
     let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
