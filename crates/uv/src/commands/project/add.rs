@@ -3,11 +3,13 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
 use cache_key::RepositoryUrl;
+use distribution_types::UnresolvedRequirement;
 use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
 use pypi_types::redact_git_credentials;
 use uv_auth::{store_credentials_from_url, Credentials};
@@ -313,15 +315,37 @@ pub(crate) async fn add(
     );
 
     // Resolve any unnamed requirements.
-    let requirements = NamedRequirementsResolver::new(
-        requirements,
-        &hasher,
-        &state.index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve()
-    .await?;
+    let requirements = {
+        // Partition the requirements into named and unnamed requirements.
+        let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
+            requirements
+                .into_iter()
+                .partition_map(|spec| match spec.requirement {
+                    UnresolvedRequirement::Named(requirement) => {
+                        itertools::Either::Left(requirement)
+                    }
+                    UnresolvedRequirement::Unnamed(requirement) => {
+                        itertools::Either::Right(requirement)
+                    }
+                });
+
+        // Resolve any unnamed requirements.
+        if !unnamed.is_empty() {
+            requirements.extend(
+                NamedRequirementsResolver::new(
+                    unnamed,
+                    &hasher,
+                    &state.index,
+                    DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+                )
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?,
+            );
+        }
+
+        requirements
+    };
 
     // Add the requirements to the `pyproject.toml` or script.
     let mut toml = match &target {
