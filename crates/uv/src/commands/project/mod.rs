@@ -531,6 +531,7 @@ pub(crate) async fn get_or_init_environment(
                 false,
                 false,
                 false,
+                false,
             )?)
         }
     }

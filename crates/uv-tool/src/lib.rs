@@ -258,6 +258,7 @@ impl InstalledTools {
             false,
             false,
             false,
+            false,
         )?;
 
         Ok(venv)

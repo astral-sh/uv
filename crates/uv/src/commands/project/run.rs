@@ -247,6 +247,7 @@ pub(crate) async fn run(
                 false,
                 false,
                 false,
+                false,
             )?;
 
             Some(environment.into_interpreter())
@@ -432,6 +433,7 @@ pub(crate) async fn run(
                     false,
                     false,
                     false,
+                    false,
                 )?
             } else {
                 // If we're not isolating the environment, reuse the base environment for the
@@ -554,6 +556,7 @@ pub(crate) async fn run(
                     false,
                     false,
                     false,
+                    false,
                 )?;
                 venv.into_interpreter()
             } else {
@@ -599,6 +602,7 @@ pub(crate) async fn run(
                     temp_dir.path(),
                     base_interpreter.clone(),
                     uv_virtualenv::Prompt::None,
+                    false,
                     false,
                     false,
                     false,
