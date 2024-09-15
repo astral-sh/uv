@@ -6238,6 +6238,9 @@ fn lock_no_sources() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
+        [tool.uv]
+        dev-dependencies = ["typing-extensions>4"]
+
         [tool.uv.sources]
         anyio = { path = "./anyio" }
         "#,
@@ -6268,7 +6271,7 @@ fn lock_no_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -6312,8 +6315,25 @@ fn lock_no_sources() -> Result<()> {
             { name = "anyio" },
         ]
 
+        [package.dev-dependencies]
+        dev = [
+            { name = "typing-extensions" },
+        ]
+
         [package.metadata]
         requires-dist = [{ name = "anyio", directory = "anyio" }]
+
+        [package.metadata.requires-dev]
+        dev = [{ name = "typing-extensions", specifier = ">4" }]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
+        ]
         "###
         );
     });
@@ -6325,7 +6345,7 @@ fn lock_no_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     "###);
 
     // Lock the root package with `tool.uv.sources` disabled.
@@ -6335,7 +6355,7 @@ fn lock_no_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     Updated anyio v0.1.0 -> v4.3.0
     Added idna v3.6
     Removed iniconfig v2.0.0
@@ -6385,8 +6405,16 @@ fn lock_no_sources() -> Result<()> {
             { name = "anyio" },
         ]
 
+        [package.dev-dependencies]
+        dev = [
+            { name = "typing-extensions" },
+        ]
+
         [package.metadata]
         requires-dist = [{ name = "anyio" }]
+
+        [package.metadata.requires-dev]
+        dev = [{ name = "typing-extensions", specifier = ">4" }]
 
         [[package]]
         name = "sniffio"
@@ -6395,6 +6423,15 @@ fn lock_no_sources() -> Result<()> {
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
         "###
         );
@@ -6407,7 +6444,7 @@ fn lock_no_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     "###);
 
     Ok(())
