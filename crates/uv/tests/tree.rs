@@ -26,7 +26,7 @@ fn nested_dependencies() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -39,8 +39,9 @@ fn nested_dependencies() -> Result<()> {
         └── threadpoolctl v3.4.0
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###
+    "#
     );
 
     // `uv tree` should update the lockfile
@@ -68,7 +69,7 @@ fn invert() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--invert"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -84,11 +85,12 @@ fn invert() -> Result<()> {
     (*) Package tree already displayed
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###
+    "#
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--no-dedupe"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--no-dedupe"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -106,8 +108,9 @@ fn invert() -> Result<()> {
         └── project v0.1.0
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###
+    "#
     );
 
     Ok(())
@@ -129,7 +132,7 @@ fn frozen() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -139,8 +142,9 @@ fn frozen() -> Result<()> {
         └── sniffio v1.3.1
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###
+    "#
     );
 
     // `uv tree` should update the lockfile
@@ -161,7 +165,7 @@ fn frozen() -> Result<()> {
     )?;
 
     // Running with `--frozen` should show the stale tree.
-    uv_snapshot!(context.filters(), context.tree().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -171,7 +175,8 @@ fn frozen() -> Result<()> {
         └── sniffio v1.3.1
 
     ----- stderr -----
-    "###
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
+    "#
     );
 
     Ok(())
@@ -197,7 +202,7 @@ fn platform_dependencies() -> Result<()> {
 
     // When `--universal` is _not_ provided, `colorama` should _not_ be included.
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.tree(), @r###"
+    uv_snapshot!(context.filters(), context.tree(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -210,11 +215,12 @@ fn platform_dependencies() -> Result<()> {
         └── platformdirs v4.2.0
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
-    "###);
+    "#);
 
     // Unless `--python-platform` is set to `windows`, in which case it should be included.
-    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("windows"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("windows"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -228,12 +234,13 @@ fn platform_dependencies() -> Result<()> {
         └── platformdirs v4.2.0
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
-    "###);
+    "#);
 
     // When `--universal` is _not_ provided, should include `colorama`, even though it's only
     // included on Windows.
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -247,8 +254,9 @@ fn platform_dependencies() -> Result<()> {
         └── platformdirs v4.2.0
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
-    "###
+    "#
     );
 
     // `uv tree` should update the lockfile
@@ -278,7 +286,7 @@ fn repeated_dependencies() -> Result<()> {
     )?;
 
     // Should include both versions of `anyio`, which have different dependencies.
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -292,8 +300,9 @@ fn repeated_dependencies() -> Result<()> {
         └── sniffio v1.3.1
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###
+    "#
     );
 
     // `uv tree` should update the lockfile
@@ -351,7 +360,7 @@ fn repeated_version() -> Result<()> {
         Url::from_file_path(context.temp_dir.join("v2")).unwrap(),
     })?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -366,8 +375,9 @@ fn repeated_version() -> Result<()> {
             └── sniffio v1.3.1
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 7 packages in [TIME]
-    "###
+    "#
     );
 
     // `uv tree` should update the lockfile
@@ -396,7 +406,7 @@ fn dev_dependencies() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -407,8 +417,9 @@ fn dev_dependencies() -> Result<()> {
         └── sniffio v1.3.1
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     // `uv tree` should update the lockfile
@@ -436,7 +447,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -450,8 +461,9 @@ fn dev_dependencies_inverted() -> Result<()> {
     (*) Package tree already displayed
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     // `uv tree` should update the lockfile
@@ -480,7 +492,7 @@ fn optional_dependencies() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -501,8 +513,9 @@ fn optional_dependencies() -> Result<()> {
         └── sniffio v1.3.1
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 14 packages in [TIME]
-    "###
+    "#
     );
 
     // `uv tree` should update the lockfile
@@ -531,7 +544,7 @@ fn optional_dependencies_inverted() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -560,8 +573,9 @@ fn optional_dependencies_inverted() -> Result<()> {
     (*) Package tree already displayed
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 14 packages in [TIME]
-    "###
+    "#
     );
 
     // `uv tree` should update the lockfile

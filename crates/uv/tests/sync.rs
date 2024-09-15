@@ -31,18 +31,19 @@ fn sync() -> Result<()> {
     )?;
 
     // Running `uv sync` should generate a lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -69,14 +70,15 @@ fn locked() -> Result<()> {
     )?;
 
     // Running with `--locked` should error, if no lockfile is present.
-    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
-    "###);
+    "#);
 
     // Lock the initial requirements.
     context.lock().assert().success();
@@ -99,15 +101,16 @@ fn locked() -> Result<()> {
     )?;
 
     // Running with `--locked` should error.
-    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    "#);
 
     let updated = fs_err::read_to_string(context.temp_dir.child("uv.lock"))?;
 
@@ -137,14 +140,15 @@ fn frozen() -> Result<()> {
     )?;
 
     // Running with `--frozen` should error, if no lockfile is present.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
-    "###);
+    "#);
 
     context.lock().assert().success();
 
@@ -164,19 +168,20 @@ fn frozen() -> Result<()> {
     )?;
 
     // Running with `--frozen` should install the stale lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     Ok(())
 }
@@ -194,30 +199,32 @@ fn empty() -> Result<()> {
     )?;
 
     // Running `uv sync` should generate an empty lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
     Audited in [TIME]
-    "###);
+    "#);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
     // Running `uv sync` again should succeed.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
     Audited in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -278,18 +285,19 @@ fn package() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + child==0.1.0 (from file://[TEMP_DIR]/child)
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     Ok(())
 }
@@ -352,12 +360,13 @@ fn mixed_requires_python() -> Result<()> {
     )?;
 
     // Running `uv sync` should succeed, locking for Python 3.12.
-    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 5 packages in [TIME]
@@ -368,18 +377,19 @@ fn mixed_requires_python() -> Result<()> {
      + bird-feeder==0.1.0 (from file://[TEMP_DIR]/packages/bird-feeder)
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    "#);
 
     // Running `uv sync` again should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.8"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.8"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
     error: The requested interpreter resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.8. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.8.[X]` followed by `uv pip install -e .`.
-    "###);
+    "#);
 
     Ok(())
 }
@@ -431,27 +441,29 @@ fn virtual_workspace_dev_dependencies() -> Result<()> {
     init.touch()?;
 
     // Syncing with `--no-dev` should omit all dependencies except `iniconfig`.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 11 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + child==0.1.0 (from file://[TEMP_DIR]/child)
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     // Syncing without `--no-dev` should include `anyio`, `requests`, `pysocks`, and their
     // dependencies, but not `typing-extensions`.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 11 packages in [TIME]
     Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -463,7 +475,7 @@ fn virtual_workspace_dev_dependencies() -> Result<()> {
      + requests==2.31.0
      + sniffio==1.3.1
      + urllib3==2.2.1
-    "###);
+    "#);
 
     Ok(())
 }
@@ -516,12 +528,13 @@ fn sync_build_isolation() -> Result<()> {
     "###);
 
     // Running `uv sync` should succeed.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 7 packages in [TIME]
@@ -535,7 +548,7 @@ fn sync_build_isolation() -> Result<()> {
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
      - trove-classifiers==2024.3.3
      - wheel==0.43.0
-    "###);
+    "#);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -568,12 +581,13 @@ fn sync_build_isolation_package() -> Result<()> {
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r###"
+    uv_snapshot!(filters, context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
@@ -585,7 +599,7 @@ fn sync_build_isolation_package() -> Result<()> {
       File "<string>", line 8, in <module>
     ModuleNotFoundError: No module named 'hatchling'
     ---
-    "###);
+    "#);
 
     // Install `hatchling` for `source-distribution`.
     uv_snapshot!(context.filters(), context.pip_install().arg("hatchling"), @r###"
@@ -605,12 +619,13 @@ fn sync_build_isolation_package() -> Result<()> {
     "###);
 
     // Running `uv sync` should succeed.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 5 packages in [TIME]
@@ -622,7 +637,7 @@ fn sync_build_isolation_package() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
      - trove-classifiers==2024.3.3
-    "###);
+    "#);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -660,12 +675,13 @@ fn sync_build_isolation_extra() -> Result<()> {
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(&filters, context.sync().arg("--extra").arg("compile"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--extra").arg("compile"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 7 packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
@@ -677,15 +693,16 @@ fn sync_build_isolation_extra() -> Result<()> {
       File "<string>", line 8, in <module>
     ModuleNotFoundError: No module named 'hatchling'
     ---
-    "###);
+    "#);
 
     // Running `uv sync` with `--all-extras` should also fail.
-    uv_snapshot!(&filters, context.sync().arg("--all-extras"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--all-extras"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 7 packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
@@ -697,15 +714,16 @@ fn sync_build_isolation_extra() -> Result<()> {
       File "<string>", line 8, in <module>
     ModuleNotFoundError: No module named 'hatchling'
     ---
-    "###);
+    "#);
 
     // Install the build dependencies.
-    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("build"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("build"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 7 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -715,15 +733,16 @@ fn sync_build_isolation_extra() -> Result<()> {
      + pluggy==1.4.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + trove-classifiers==2024.3.3
-    "###);
+    "#);
 
     // Running `uv sync` for the `compile` extra should succeed, and remove the build dependencies.
-    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("compile"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("compile"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 7 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 5 packages in [TIME]
@@ -734,7 +753,7 @@ fn sync_build_isolation_extra() -> Result<()> {
      - pluggy==1.4.0
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
      - trove-classifiers==2024.3.3
-    "###);
+    "#);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -788,19 +807,20 @@ fn sync_reset_state() -> Result<()> {
     init.touch()?;
 
     // Running `uv sync` should succeed.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + pydantic-core==2.17.0
      + typing-extensions==4.10.0
-    "###);
+    "#);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -842,18 +862,19 @@ fn sync_relative_wheel() -> Result<()> {
         context.temp_dir.join("wheels/ok-1.0.0-py3-none-any.whl"),
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
      + ok==1.0.0 (from file://[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl)
      + relative-wheel==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
 
@@ -894,15 +915,16 @@ fn sync_relative_wheel() -> Result<()> {
     );
 
     // Check that we can re-read the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Audited 2 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -930,15 +952,16 @@ fn sync_environment() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     error: The current Python platform is not compatible with the lockfile's supported environments: `python_full_version < '3.11'`
-    "###);
+    "#);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -1008,19 +1031,20 @@ fn no_install_project() -> Result<()> {
     context.lock().assert().success();
 
     // Running with `--no-install-project` should install `anyio`, but not `project`.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    "#);
 
     // However, we do require the `pyproject.toml`.
     fs_err::remove_file(pyproject_toml)?;
@@ -1090,12 +1114,13 @@ fn no_install_workspace() -> Result<()> {
 
     // Running with `--no-install-workspace` should install `anyio` and `iniconfig`, but not
     // `project` or `child`.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -1103,7 +1128,7 @@ fn no_install_workspace() -> Result<()> {
      + idna==3.6
      + iniconfig==2.0.0
      + sniffio==1.3.1
-    "###);
+    "#);
 
     // Remove the virtual environment.
     fs_err::remove_dir_all(&context.venv)?;
@@ -1111,12 +1136,13 @@ fn no_install_workspace() -> Result<()> {
     // We don't require the `pyproject.toml` for non-root members, if `--frozen` is provided.
     fs_err::remove_file(child.join("pyproject.toml"))?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace").arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace").arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Prepared 4 packages in [TIME]
@@ -1125,30 +1151,32 @@ fn no_install_workspace() -> Result<()> {
      + idna==3.6
      + iniconfig==2.0.0
      + sniffio==1.3.1
-    "###);
+    "#);
 
     // Even if `--package` is used.
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--no-install-workspace").arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--no-install-workspace").arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Uninstalled 3 packages in [TIME]
      - anyio==3.7.0
      - idna==3.6
      - sniffio==1.3.1
-    "###);
+    "#);
 
     // Unless the package doesn't exist.
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("fake").arg("--no-install-workspace").arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("fake").arg("--no-install-workspace").arg("--frozen"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     error: could not find root package `fake`
-    "###);
+    "#);
 
     // But we do require the root `pyproject.toml`.
     fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
@@ -1189,35 +1217,37 @@ fn no_install_package() -> Result<()> {
     context.lock().assert().success();
 
     // Running with `--no-install-package anyio` should skip anyio but include everything else
-    uv_snapshot!(context.filters(), context.sync().arg("--no-install-package").arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-package").arg("anyio"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     // Running with `--no-install-package project` should skip the project itself (not as a special
     // case, that's just the name of the project)
-    uv_snapshot!(context.filters(), context.sync().arg("--no-install-package").arg("project"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-package").arg("project"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==3.7.0
      - project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1246,25 +1276,27 @@ fn no_install_project_no_build() -> Result<()> {
     context.lock().assert().success();
 
     // `--no-build` should raise an error, since we try to install the project.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     warning: Failed to validate existing lockfile: distribution project==0.1.0 @ editable+. can't be installed because it is marked as `--no-build` but has no binary distribution
     Resolved 4 packages in [TIME]
     error: distribution project==0.1.0 @ editable+. can't be installed because it is marked as `--no-build` but has no binary distribution
-    "###);
+    "#);
 
     // But it's fine to combine `--no-install-project` with `--no-build`. We shouldn't error, since
     // we aren't building the project.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project").arg("--no-build"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project").arg("--no-build"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     warning: Failed to validate existing lockfile: distribution project==0.1.0 @ editable+. can't be installed because it is marked as `--no-build` but has no binary distribution
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -1272,7 +1304,7 @@ fn no_install_project_no_build() -> Result<()> {
      + anyio==3.7.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1298,18 +1330,19 @@ fn convert_to_virtual() -> Result<()> {
     )?;
 
     // Running `uv sync` should install the project itself.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -1359,16 +1392,17 @@ fn convert_to_virtual() -> Result<()> {
     )?;
 
     // Running `uv sync` should remove the project itself.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
      - project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -1426,17 +1460,18 @@ fn convert_to_package() -> Result<()> {
     )?;
 
     // Running `uv sync` should not install the project itself.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -1490,17 +1525,18 @@ fn convert_to_package() -> Result<()> {
     )?;
 
     // Running `uv sync` should install the project itself.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -1557,17 +1593,18 @@ fn sync_custom_environment_path() -> Result<()> {
     )?;
 
     // Running `uv sync` should create `.venv` by default
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     context
         .temp_dir
@@ -1575,19 +1612,21 @@ fn sync_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // Running `uv sync` should create `foo` in the project directory when customized
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `foo` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foo
     Resolved 2 packages in [TIME]
+    Installing to environment at foo/bin/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     context
         .temp_dir
@@ -1601,19 +1640,21 @@ fn sync_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // An absolute path can be provided
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foobar/.venv"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foobar/.venv"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `foobar/.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foobar/.venv
     Resolved 2 packages in [TIME]
+    Installing to environment at foobar/.venv/bin/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     context
         .temp_dir
@@ -1627,19 +1668,21 @@ fn sync_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // An absolute path can be provided
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", context.temp_dir.join("bar")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", context.temp_dir.join("bar")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `bar` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: bar
     Resolved 2 packages in [TIME]
+    Installing to environment at bar/bin/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     context
         .temp_dir
@@ -1649,19 +1692,21 @@ fn sync_custom_environment_path() -> Result<()> {
     // And, it can be outside the project
     let tempdir = tempdir_in(TestContext::test_bucket_dir())?;
     context = context.with_filtered_path(tempdir.path(), "OTHER_TEMPDIR");
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", tempdir.path().join(".venv")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", tempdir.path().join(".venv")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `[OTHER_TEMPDIR]/.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: [OTHER_TEMPDIR]/.venv
     Resolved 2 packages in [TIME]
+    Installing to environment at [OTHER_TEMPDIR]/.venv/bin/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     ChildPath::new(tempdir.path())
         .child(".venv")
@@ -1689,17 +1734,18 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
     context.init().arg("child").assert().success();
 
     // Running `uv sync` should create `.venv` in the workspace root
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     context
         .temp_dir
@@ -1707,16 +1753,18 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // Similarly, `uv sync` from the child project uses `.venv` in the workspace root
-    uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.join("child")), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.join("child")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `[VENV]/` and will be ignored
     Resolved 3 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
-    "###);
+    "#);
 
     context
         .temp_dir
@@ -1730,19 +1778,21 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Running `uv sync` should create `foo` in the workspace root when customized
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `foo` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foo
     Resolved 3 packages in [TIME]
+    Installing to environment at foo/bin/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     context
         .temp_dir
@@ -1756,16 +1806,18 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // Similarly, `uv sync` from the child project uses `foo` relative to  the workspace root
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(context.temp_dir.join("child")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(context.temp_dir.join("child")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored
     Resolved 3 packages in [TIME]
+    Installing to environment at [TEMP_DIR]/foo/bin/python3
     Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
-    "###);
+    "#);
 
     context
         .temp_dir
@@ -1779,15 +1831,17 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
         .assert(predicate::path::missing());
 
     // And, `uv sync --package child` uses `foo` relative to  the workspace root
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").env("UV_PROJECT_ENVIRONMENT", "foo"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `foo` and will be ignored
     Resolved 3 packages in [TIME]
+    Installing to environment at foo/bin/python3
     Audited in [TIME]
-    "###);
+    "#);
 
     context
         .temp_dir
@@ -1887,7 +1941,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     "###);
 
     // We should not warn if the project environment has been customized and matches
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "foo"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1896,13 +1950,14 @@ fn sync_virtual_env_warning() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foo
     Resolved 2 packages in [TIME]
+    Installing to environment at foo/bin/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     // But we should warn if they don't match still
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "bar"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "bar"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1912,17 +1967,18 @@ fn sync_virtual_env_warning() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: bar
     Resolved 2 packages in [TIME]
+    Installing to environment at bar/bin/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     let child = context.temp_dir.child("child");
     child.create_dir_all()?;
 
     // And `VIRTUAL_ENV` is resolved relative to the project root so with relative paths we should
     // warn from a child too
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(&child), @r###"
+    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(&child), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1930,19 +1986,21 @@ fn sync_virtual_env_warning() -> Result<()> {
     ----- stderr -----
     warning: `VIRTUAL_ENV=foo` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored
     Resolved 2 packages in [TIME]
+    Installing to environment at [TEMP_DIR]/foo/bin/python3
     Audited 1 package in [TIME]
-    "###);
+    "#);
 
     // But, a matching absolute path shouldn't warn
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", context.temp_dir.join("foo")).env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(&child), @r###"
+    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", context.temp_dir.join("foo")).env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(&child), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Installing to environment at [TEMP_DIR]/foo/bin/python3
     Audited 1 package in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1966,12 +2024,13 @@ fn sync_update_project() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 2 packages in [TIME]
@@ -1979,7 +2038,7 @@ fn sync_update_project() -> Result<()> {
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + my-project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     // Bump the project version.
     pyproject_toml.write_str(
@@ -1996,19 +2055,20 @@ fn sync_update_project() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - my-project==0.1.0 (from file://[TEMP_DIR]/)
      + my-project==0.2.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     Ok(())
 }
@@ -2029,19 +2089,20 @@ fn sync_environment_prompt() -> Result<()> {
     )?;
 
     // Running `uv sync` should create `.venv`
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     // The `pyvenv.cfg` should contain the prompt matching the project name
     let pyvenv_cfg =
@@ -2071,18 +2132,19 @@ fn no_binary() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("iniconfig"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -2110,15 +2172,16 @@ fn no_binary_error() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("django-allauth"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("django-allauth"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 19 packages in [TIME]
     error: distribution django-allauth==0.51.0 @ registry+https://pypi.org/simple can't be installed because it is marked as `--no-build` but has no binary distribution
-    "###);
+    "#);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -2144,18 +2207,19 @@ fn no_build() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("iniconfig"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -2179,24 +2243,26 @@ fn sync_wheel_url_source_error() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
     error: distribution cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because the binary distribution is incompatible with the current platform
-    "###);
+    "#);
 
     Ok(())
 }
@@ -2227,24 +2293,26 @@ fn sync_wheel_path_source_error() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
     error: distribution cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because the binary distribution is incompatible with the current platform
-    "###);
+    "#);
 
     Ok(())
 }
@@ -2310,12 +2378,13 @@ fn transitive_dev() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--dev"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
@@ -2324,7 +2393,7 @@ fn transitive_dev() -> Result<()> {
      + idna==3.6
      + root==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     Ok(())
 }

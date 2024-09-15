@@ -13,14 +13,15 @@ fn packse_add_remove_one_package() -> Result<()> {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 49 packages in [TIME]
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     insta::with_settings!({
@@ -222,14 +223,15 @@ fn packse_add_remove_existing_package_noop() -> Result<()> {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 49 packages in [TIME]
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     insta::with_settings!({
@@ -259,14 +261,15 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 49 packages in [TIME]
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     insta::with_settings!({
@@ -418,14 +421,15 @@ fn jax_instability() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     insta::with_settings!({

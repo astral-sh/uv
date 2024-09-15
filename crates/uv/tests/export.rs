@@ -30,7 +30,7 @@ fn dependency() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -48,8 +48,9 @@ fn dependency() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###);
+    "##);
 
     Ok(())
 }
@@ -75,7 +76,7 @@ fn dependency_extra() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -120,8 +121,9 @@ fn dependency_extra() -> Result<()> {
         --hash=sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 10 packages in [TIME]
-    "###);
+    "##);
 
     Ok(())
 }
@@ -151,7 +153,7 @@ fn project_extra() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -163,10 +165,11 @@ fn project_extra() -> Result<()> {
         --hash=sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###);
+    "##);
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("pytest"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("pytest"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -181,10 +184,11 @@ fn project_extra() -> Result<()> {
         --hash=sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###);
+    "##);
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-extras"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-extras"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -208,8 +212,9 @@ fn project_extra() -> Result<()> {
         --hash=sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###);
+    "##);
 
     Ok(())
 }
@@ -235,7 +240,7 @@ fn dependency_marker() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -256,8 +261,9 @@ fn dependency_marker() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###);
+    "##);
 
     Ok(())
 }
@@ -287,7 +293,7 @@ fn dependency_multiple_markers() -> Result<()> {
     context.lock().assert().success();
 
     // Note that the `python_version > '3.11'` markers disappear due to `requires-python = ">=3.12"`
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -328,8 +334,9 @@ fn dependency_multiple_markers() -> Result<()> {
         --hash=sha256:e6458efe29cc543e557a91e614e2b51710eba2961669329ce9c862d50c6e8e81
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 10 packages in [TIME]
-    "###);
+    "##);
 
     Ok(())
 }
@@ -358,7 +365,7 @@ fn dependency_conflicting_markers() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -397,8 +404,9 @@ fn dependency_conflicting_markers() -> Result<()> {
         --hash=sha256:e6458efe29cc543e557a91e614e2b51710eba2961669329ce9c862d50c6e8e81
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 11 packages in [TIME]
-    "###);
+    "##);
 
     Ok(())
 }
@@ -445,7 +453,7 @@ fn non_root() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--package").arg("child"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--package").arg("child"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -457,8 +465,9 @@ fn non_root() -> Result<()> {
         --hash=sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###);
+    "##);
 
     Ok(())
 }
@@ -505,15 +514,16 @@ fn relative_path() -> Result<()> {
     // Pipe the output to requirements.txt.
     let file = std::fs::File::create(project.child("requirements.txt")).unwrap();
 
-    uv_snapshot!(context.filters(), context.export().stdout(Stdio::from(file)).current_dir(&project), @r###"
+    uv_snapshot!(context.filters(), context.export().stdout(Stdio::from(file)).current_dir(&project), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###);
+    "#);
 
     // Read the file contents.
     let contents = apply_filters(
@@ -531,19 +541,20 @@ fn relative_path() -> Result<()> {
     "###);
 
     // Install the dependencies.
-    uv_snapshot!(context.filters(), context.pip_install().arg("--requirement").arg("requirements.txt").current_dir(&project), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("--requirement").arg("requirements.txt").current_dir(&project), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/project)
-    "###);
+    "#);
 
     Ok(())
 }
@@ -572,7 +583,7 @@ fn dev() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -593,10 +604,11 @@ fn dev() -> Result<()> {
         --hash=sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###);
+    "##);
 
-    uv_snapshot!(context.filters(), context.export().arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-dev"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -608,8 +620,9 @@ fn dev() -> Result<()> {
         --hash=sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###);
+    "##);
 
     Ok(())
 }
@@ -635,7 +648,7 @@ fn no_hashes() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--no-hashes"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-hashes"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -647,8 +660,9 @@ fn no_hashes() -> Result<()> {
     sniffio==1.3.1
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###);
+    "##);
 
     Ok(())
 }
@@ -674,7 +688,7 @@ fn output_file() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--output-file").arg("requirements.txt"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--output-file").arg("requirements.txt"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -692,8 +706,9 @@ fn output_file() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###);
+    "##);
 
     let contents = apply_filters(
         fs_err::read_to_string(context.temp_dir.child("requirements.txt")).unwrap(),
@@ -760,7 +775,7 @@ fn no_emit() -> Result<()> {
     context.lock().assert().success();
 
     // Exclude `anyio`.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-package").arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-package").arg("anyio"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -779,11 +794,12 @@ fn no_emit() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###);
+    "##);
 
     // Exclude `project`.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-project"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-project"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -804,11 +820,12 @@ fn no_emit() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###);
+    "##);
 
     // Exclude `child`.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-project").arg("--package").arg("child"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-project").arg("--package").arg("child"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -819,11 +836,12 @@ fn no_emit() -> Result<()> {
         --hash=sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###);
+    "##);
 
     // Exclude the workspace.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -843,8 +861,9 @@ fn no_emit() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###);
+    "##);
 
     // Remove the member.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -863,7 +882,7 @@ fn no_emit() -> Result<()> {
     )?;
 
     // Exclude the workspace.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -880,8 +899,9 @@ fn no_emit() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###);
+    "##);
 
     Ok(())
 }

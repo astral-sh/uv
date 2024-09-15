@@ -1048,17 +1048,18 @@ fn install_editable_bare_cli() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg("black_editable")
-        .current_dir(&packages_dir), @r###"
+        .current_dir(&packages_dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
-    "###
+    "#
     );
 }
 
@@ -1074,17 +1075,18 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
-        .current_dir(&packages_dir), @r###"
+        .current_dir(&packages_dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
-    "###
+    "#
     );
 
     Ok(())
@@ -3072,20 +3074,21 @@ requires-python = ">=3.8"
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .current_dir(editable_dir.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "#
     );
 
     // Installing again should be a no-op.
@@ -3116,20 +3119,21 @@ requires-python = ">=3.8"
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .current_dir(editable_dir.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
      ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
-    "###
+    "#
     );
 
     Ok(())
@@ -3163,20 +3167,21 @@ fn invalidate_path_on_cache_key() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .current_dir(editable_dir.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "#
     );
 
     // Installing again should be a no-op.
@@ -3198,18 +3203,19 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .current_dir(editable_dir.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
-    "###
+    "#
     );
 
     // Modify the requirements file.
@@ -3218,18 +3224,19 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .current_dir(editable_dir.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
-    "###
+    "#
     );
 
     // Modify the `pyproject.toml` file (but not in a meaningful way).
@@ -3280,18 +3287,19 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .current_dir(editable_dir.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
-    "###
+    "#
     );
 
     // Write a new file in the current directory.
@@ -3300,18 +3308,19 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .current_dir(editable_dir.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
-    "###
+    "#
     );
 
     Ok(())
@@ -3355,20 +3364,21 @@ fn invalidate_path_on_commit() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .current_dir(editable_dir.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "#
     );
 
     // Installing again should be a no-op.
@@ -3396,18 +3406,19 @@ fn invalidate_path_on_commit() -> Result<()> {
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .current_dir(editable_dir.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
-    "###
+    "#
     );
 
     Ok(())
@@ -4495,19 +4506,20 @@ fn deptry_gitignore() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(format!("deptry_reproducer @ {}", source_dist_dir.join("deptry_reproducer-0.1.0.tar.gz").simplified_display()))
         .arg("--strict")
-        .current_dir(source_dist_dir), @r###"
+        .current_dir(source_dist_dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + cffi==1.16.0
      + deptry-reproducer==0.1.0 (from file://[WORKSPACE]/scripts/packages/deptry_reproducer/deptry_reproducer-0.1.0.tar.gz)
      + pycparser==2.21
-    "###
+    "#
     );
 
     // Check that we packed the python source files

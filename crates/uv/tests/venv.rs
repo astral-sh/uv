@@ -86,16 +86,17 @@ fn create_venv_project_environment() -> Result<()> {
     )?;
 
     // But, if we're in a project we'll respect it
-    uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `foo` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foo
     Activate with: source foo/bin/activate
-    "###
+    "#
     );
 
     context
@@ -124,16 +125,17 @@ fn create_venv_project_environment() -> Result<()> {
     child.child(".venv").assert(predicates::path::is_dir());
 
     // Or, if a name is provided
-    uv_snapshot!(context.filters(), context.venv().arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("bar"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: bar
     Activate with: source bar/bin/activate
-    "###
+    "#
     );
 
     context
@@ -314,16 +316,17 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
-    "###
+    "#
     );
 
     // With `requires-python = "==3.11.*"`, we prefer exact version (3.11)
@@ -343,6 +346,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
@@ -366,6 +370,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
@@ -400,6 +405,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
@@ -423,6 +429,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
@@ -446,6 +453,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate

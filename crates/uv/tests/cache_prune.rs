@@ -84,7 +84,7 @@ fn prune_cached_env() {
         .arg("pytest@8.0.0")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -92,13 +92,14 @@ fn prune_cached_env() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.0.0
-    "###);
+    "#);
 
     let filters: Vec<_> = context
         .filters()

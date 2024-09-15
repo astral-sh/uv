@@ -67,14 +67,15 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -184,14 +185,15 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -283,14 +285,15 @@ fn fork_basic() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -417,12 +420,13 @@ fn conflict_in_fork() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
       × No solution found when resolving dependencies for split (sys_platform == 'darwin'):
       ╰─▶ Because only package-b==1.0.0 is available and package-b==1.0.0 depends on package-d==1, we can conclude that all versions of package-b depend on package-d==1.
           And because package-c==1.0.0 depends on package-d==2 and only package-c==1.0.0 is available, we can conclude that all versions of package-b and all versions of package-c are incompatible.
@@ -431,7 +435,7 @@ fn conflict_in_fork() -> Result<()> {
               package-a{sys_platform == 'darwin'}==1.0.0
               package-a{sys_platform == 'darwin'}>2
           and your project depends on package-a{sys_platform == 'darwin'}<2, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -485,15 +489,16 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on package-a>=2 and package-a<2, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -568,14 +573,15 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 7 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -746,14 +752,15 @@ fn fork_upgrade() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -866,14 +873,15 @@ fn fork_incomplete_markers() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1019,14 +1027,15 @@ fn fork_marker_accrue() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1152,15 +1161,16 @@ fn fork_marker_disjoint() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
       × No solution found when resolving dependencies for split (sys_platform == 'linux'):
       ╰─▶ Because your project depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -1222,14 +1232,15 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1402,14 +1413,15 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1571,14 +1583,15 @@ fn fork_marker_inherit_combined() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1733,14 +1746,15 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1881,14 +1895,15 @@ fn fork_marker_inherit_transitive() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -2037,14 +2052,15 @@ fn fork_marker_inherit() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -2175,14 +2191,15 @@ fn fork_marker_limited_inherit() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -2330,14 +2347,15 @@ fn fork_marker_selection() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -2485,14 +2503,15 @@ fn fork_marker_track() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -2637,14 +2656,15 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -2771,16 +2791,17 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
       × No solution found when resolving dependencies:
       ╰─▶ Because package-b{sys_platform == 'darwin'}==1.0.0 depends on package-c>=2.0.0 and package-a{sys_platform == 'linux'}==1.0.0 depends on package-c<2.0.0, we can conclude that package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
           And because your project depends on package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -2843,12 +2864,13 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
       × No solution found when resolving dependencies:
       ╰─▶ Because package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}>=2.0.0 and only package-c{sys_platform == 'darwin'}<=2.0.0 is available, we can conclude that package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}==2.0.0.
           And because only the following versions of package-c{sys_platform == 'linux'} are available:
@@ -2856,7 +2878,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
               package-c{sys_platform == 'linux'}>2.0.0
           and package-a==1.0.0 depends on package-c{sys_platform == 'linux'}<2.0.0, we can conclude that package-a==1.0.0 and package-b==1.0.0 are incompatible.
           And because your project depends on package-a==1.0.0 and package-b==1.0.0, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -2936,14 +2958,15 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -3103,14 +3126,15 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -3339,14 +3363,15 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###
+    "#
     );
 
     Ok(())
@@ -3481,14 +3506,15 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 11 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -3764,14 +3790,15 @@ fn preferences_dependent_forking() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -3938,14 +3965,15 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -4090,14 +4118,15 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 1 package in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -4174,14 +4203,15 @@ fn fork_requires_python_full() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 1 package in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -4262,14 +4292,15 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -4355,14 +4386,15 @@ fn fork_requires_python() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 1 package in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -4438,14 +4470,15 @@ fn unreachable_package() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -4539,14 +4572,15 @@ fn unreachable_wheels() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -4656,14 +4690,15 @@ fn requires_python_wheels() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;

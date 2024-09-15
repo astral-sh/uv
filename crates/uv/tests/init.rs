@@ -43,15 +43,16 @@ fn init() -> Result<()> {
     });
 
     // Run `uv lock` in the new project.
-    uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.join("foo")), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.join("foo")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
-    "###);
+    "#);
 
     let python_version =
         fs_err::read_to_string(context.temp_dir.join("foo").join(".python-version"))?;
@@ -598,15 +599,16 @@ fn init_library_current_dir() -> Result<()> {
     });
 
     // Run `uv lock` in the new project.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -662,15 +664,16 @@ fn init_application_current_dir() -> Result<()> {
     });
 
     // Run `uv lock` in the new project.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -727,15 +730,16 @@ fn init_dot_args() -> Result<()> {
     });
 
     // Run `uv lock` in the new project.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -823,14 +827,15 @@ fn init_workspace() -> Result<()> {
     });
 
     // Run `uv lock` in the workspace.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -917,14 +922,15 @@ fn init_workspace_relative_sub_package() -> Result<()> {
     });
 
     // Run `uv lock` in the workspace.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1012,14 +1018,15 @@ fn init_workspace_outside() -> Result<()> {
     });
 
     // Run `uv lock` in the workspace.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }

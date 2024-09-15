@@ -594,13 +594,14 @@ fn test_uv_run_isolate() -> Result<()> {
         .arg("--package")
         .arg("bird-feeder")
         .arg("check_installed_albatross.py")
-        .current_dir(&work_dir), @r###"
+        .current_dir(&work_dir), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 3 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -612,7 +613,7 @@ fn test_uv_run_isolate() -> Result<()> {
       File "[TEMP_DIR]/albatross-root-workspace/check_installed_albatross.py", line 1, in <module>
         from albatross import fly
     ModuleNotFoundError: No module named 'albatross'
-    "###
+    "#
     );
 
     Ok(())
@@ -757,15 +758,16 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
     "#};
     make_project(&other_workspace.join("packages").join("e"), "e", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&main_workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&main_workspace), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
-    "###
+    "#
     );
 
     let lock: SourceLock =
@@ -862,15 +864,16 @@ fn workspace_hidden_files() -> Result<()> {
     // ... and a hidden c.
     fs_err::create_dir_all(workspace.join("packages").join(".c"))?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
@@ -925,15 +928,16 @@ fn workspace_hidden_member() -> Result<()> {
     "};
     make_project(&workspace.join("packages").join(".c"), "c", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
@@ -989,15 +993,16 @@ fn workspace_non_included_member() -> Result<()> {
     make_project(&workspace.join("c"), "c", deps)?;
 
     // Locking from `c` should not include any workspace members.
-    uv_snapshot!(context.filters(), context.lock().current_dir(workspace.join("c")), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(workspace.join("c")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
-    "###
+    "#
     );
 
     let lock: SourceLock = toml::from_str(&fs_err::read_to_string(
@@ -1070,19 +1075,20 @@ fn workspace_inherit_sources() -> Result<()> {
     library.child("src/__init__.py").touch()?;
 
     // As-is, resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
       ╰─▶ Because library was not found in the cache and leaf depends on library, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
-    "###
+    "#
     );
 
     // Update the leaf to include the source.
@@ -1102,15 +1108,16 @@ fn workspace_inherit_sources() -> Result<()> {
     leaf.child("src/__init__.py").touch()?;
 
     // Resolving should succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     // Revert that change.
@@ -1145,15 +1152,16 @@ fn workspace_inherit_sources() -> Result<()> {
     "#})?;
 
     // Resolving should succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
@@ -1236,15 +1244,16 @@ fn workspace_inherit_sources() -> Result<()> {
 
     // Resolving should succeed; the member should still use the root's source, despite defining
     // some of its own
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     Ok(())
@@ -1289,17 +1298,18 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     leaf.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
       ╰─▶ Because only httpx<=1.0.0b0 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -1357,17 +1367,18 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
       ╰─▶ Because bar depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
           And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -1440,17 +1451,18 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
     bird.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
       ╰─▶ Because bird depends on anyio==4.3.0 and knot depends on anyio==4.2.0, we can conclude that bird and knot are incompatible.
           And because your workspace requires bird and knot, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -1510,17 +1522,18 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
       ╰─▶ Because bar[some-extra] depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar[some-extra] are incompatible.
           And because your workspace requires bar[some-extra] and foo, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -1580,18 +1593,19 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
       ╰─▶ Because bar depends on bar:dev and bar:dev depends on anyio==4.2.0, we can conclude that bar depends on anyio==4.2.0.
           And because foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
           And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -1652,17 +1666,18 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
 
     // We should fail
     // TODO(zanieb): This error message is bad?
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     error: Failed to build: `foo @ file://[TEMP_DIR]/workspace/packages/foo`
       Caused by: Failed to parse entry for: `anyio`
       Caused by: Package is not included as workspace package in `tool.uv.workspace`
-    "###
+    "#
     );
 
     Ok(())
@@ -1696,15 +1711,16 @@ fn test_path_hopping() -> Result<()> {
     // ... that depends on bar, a stub project.
     make_project(&context.temp_dir.join("libs").join("bar"), "bar", "")?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&main_project_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&main_project_dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     let lock: SourceLock =

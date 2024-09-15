@@ -50,13 +50,14 @@ fn tool_uninstall() {
         .arg("black==24.2.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed 6 packages in [TIME]
      + black==24.2.0
      + click==8.1.7
@@ -65,7 +66,7 @@ fn tool_uninstall() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 }
 
 #[test]

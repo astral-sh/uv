@@ -7,4 +7,5 @@ exit_code: 0
 ----- stdout -----
 
 ----- stderr -----
+warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
 Resolved 39 packages in [TIME]

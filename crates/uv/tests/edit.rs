@@ -2288,14 +2288,15 @@ fn update() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 8 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -2467,18 +2468,19 @@ fn add_update_marker() -> Result<()> {
     });
 
     // Restrict the `requests` version on Windows
-    uv_snapshot!(context.filters(), context.add().arg("requests>=2.10 ; sys_platform == 'win32'"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.10 ; sys_platform == 'win32'"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -2508,12 +2510,13 @@ fn add_update_marker() -> Result<()> {
     });
 
     // Remove `requests`
-    uv_snapshot!(context.filters(), context.remove().arg("requests"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("requests"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 6 packages in [TIME]
@@ -2524,7 +2527,7 @@ fn add_update_marker() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - requests==2.31.0
      - urllib3==1.23
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
