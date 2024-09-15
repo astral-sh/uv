@@ -29,12 +29,13 @@ fn add_registry() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -42,7 +43,7 @@ fn add_registry() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -125,14 +126,15 @@ fn add_registry() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 4 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -156,56 +158,60 @@ fn add_git() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     // Adding with an ambiguous Git reference should treat it as a revision.
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -301,14 +307,15 @@ fn add_git() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 5 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -334,18 +341,19 @@ fn add_git_private_source() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")), @r###"
+    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -405,14 +413,15 @@ fn add_git_private_source() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 2 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -438,18 +447,19 @@ fn add_git_private_raw() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")).arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")).arg("--raw-sources"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -511,14 +521,15 @@ fn add_git_private_raw() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 2 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -541,45 +552,49 @@ fn add_git_error() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 1 package in [TIME]
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add().arg("flask").arg("--tag").arg("0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("flask").arg("--tag").arg("0.0.1"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     error: `flask` did not resolve to a Git repository, but a Git reference (`--tag 0.0.1`) was provided.
-    "###);
+    "#);
 
     // Provide a tag with a non-Git source.
-    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     error: `flask` did not resolve to a Git repository, but a Git reference (`--branch 0.0.1`) was provided.
-    "###);
+    "#);
 
     Ok(())
 }
@@ -603,43 +618,46 @@ fn add_git_raw() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     // Use an ambiguous tag reference, which would otherwise not resolve.
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1").arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1").arg("--raw-sources"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -732,14 +750,15 @@ fn add_git_raw() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 5 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -763,43 +782,46 @@ fn add_git_implicit() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     // Omit the `git+` prefix.
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
-    "###);
+    "#);
 
     Ok(())
 }
@@ -859,18 +881,19 @@ fn add_unnamed() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -930,14 +953,15 @@ fn add_unnamed() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 2 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -960,12 +984,13 @@ fn add_remove_dev() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--dev"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -973,7 +998,7 @@ fn add_remove_dev() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -1064,14 +1089,15 @@ fn add_remove_dev() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 4 packages in [TIME]
-    "###);
+    "#);
 
     // This should fail without --dev.
     uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
@@ -1085,12 +1111,13 @@ fn add_remove_dev() -> Result<()> {
     "###);
 
     // Remove the dependency.
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -1099,7 +1126,7 @@ fn add_remove_dev() -> Result<()> {
      - idna==3.6
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - sniffio==1.3.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -1146,14 +1173,15 @@ fn add_remove_dev() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 1 package in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1176,12 +1204,13 @@ fn add_remove_optional() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--optional=io"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--optional=io"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -1189,7 +1218,7 @@ fn add_remove_optional() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -1279,17 +1308,18 @@ fn add_remove_optional() -> Result<()> {
 
     // Install from the lockfile. At present, this will _uninstall_ the packages since `sync` does
     // not include extras by default.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Uninstalled 3 packages in [TIME]
      - anyio==3.7.0
      - idna==3.6
      - sniffio==1.3.1
-    "###);
+    "#);
 
     // This should fail without --optional.
     uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
@@ -1303,18 +1333,19 @@ fn add_remove_optional() -> Result<()> {
     "###);
 
     // Remove the dependency.
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional=io"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional=io"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -1361,14 +1392,15 @@ fn add_remove_optional() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 1 package in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1393,18 +1425,19 @@ fn add_remove_inline_optional() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--optional=types"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--optional=types"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 5 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + typing-extensions==4.10.0
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -1431,12 +1464,13 @@ fn add_remove_inline_optional() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions").arg("--optional=types"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions").arg("--optional=types"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -1446,7 +1480,7 @@ fn add_remove_inline_optional() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
      - typing-extensions==4.10.0
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -1519,14 +1553,15 @@ fn add_remove_workspace() -> Result<()> {
         .arg("child1")
         .current_dir(&context.temp_dir);
 
-    uv_snapshot!(context.filters(), add_cmd, @r###"
+    uv_snapshot!(context.filters(), add_cmd, @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     error: Workspace dependency `child2` must refer to local directory, not a Git repository
-    "###);
+    "#);
 
     // Workspace packages should be detected automatically.
     let child1 = context.temp_dir.join("child1");
@@ -1537,18 +1572,19 @@ fn add_remove_workspace() -> Result<()> {
         .arg("child1")
         .current_dir(&context.temp_dir);
 
-    uv_snapshot!(context.filters(), add_cmd, @r###"
+    uv_snapshot!(context.filters(), add_cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + child1==0.1.0 (from file://[TEMP_DIR]/child1)
      + child2==0.1.0 (from file://[TEMP_DIR]/child2)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
 
@@ -1615,29 +1651,33 @@ fn add_remove_workspace() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&child1), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&child1), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `[VENV]/` and will be ignored
+    Installing to environment at [VENV]/bin/python3
     Audited 2 packages in [TIME]
-    "###);
+    "#);
 
     // Remove the dependency.
-    uv_snapshot!(context.filters(), context.remove().arg("child2").current_dir(&child1), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("child2").current_dir(&child1), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `[VENV]/` and will be ignored
     Resolved 2 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      ~ child1==0.1.0 (from file://[TEMP_DIR]/child1)
      - child2==0.1.0 (from file://[TEMP_DIR]/child2)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
 
@@ -1694,14 +1734,16 @@ fn add_remove_workspace() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&child1), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&child1), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `[VENV]/` and will be ignored
+    Installing to environment at [VENV]/bin/python3
     Audited 1 package in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1747,18 +1789,20 @@ fn add_workspace_editable() -> Result<()> {
     let mut add_cmd = context.add();
     add_cmd.arg("child2").arg("--editable").current_dir(&child1);
 
-    uv_snapshot!(context.filters(), add_cmd, @r###"
+    uv_snapshot!(context.filters(), add_cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `[VENV]/` and will be ignored
     Resolved 2 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + child1==0.1.0 (from file://[TEMP_DIR]/child1)
      + child2==0.1.0 (from file://[TEMP_DIR]/child2)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
 
@@ -1825,14 +1869,16 @@ fn add_workspace_editable() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&child1), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&child1), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `[VENV]/` and will be ignored
+    Installing to environment at [VENV]/bin/python3
     Audited 2 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1868,12 +1914,13 @@ fn add_path() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("./child").current_dir(workspace.path()), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("./child").current_dir(workspace.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 2 packages in [TIME]
@@ -1881,7 +1928,7 @@ fn add_path() -> Result<()> {
     Installed 2 packages in [TIME]
      + child==0.1.0 (from file://[TEMP_DIR]/workspace/child)
      + parent==0.1.0 (from file://[TEMP_DIR]/workspace)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(workspace.join("pyproject.toml"))?;
 
@@ -1942,14 +1989,15 @@ fn add_path() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(workspace.path()), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(workspace.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 2 packages in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1973,21 +2021,23 @@ fn update() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + certifi==2024.2.2
@@ -1996,21 +2046,22 @@ fn update() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + requests==2.31.0
      + urllib3==2.2.1
-    "###);
+    "#);
 
     // Enable an extra (note the version specifier should be preserved).
-    uv_snapshot!(context.filters(), context.add().arg("requests[security]"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests[security]"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -2035,12 +2086,13 @@ fn update() -> Result<()> {
     });
 
     // Enable extras using the CLI flag and add a marker.
-    uv_snapshot!(context.filters(), context.add().arg("requests; python_version > '3.7'").args(["--extra=use_chardet_on_py3", "--extra=socks"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests; python_version > '3.7'").args(["--extra=use_chardet_on_py3", "--extra=socks"]), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Prepared 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -2048,7 +2100,7 @@ fn update() -> Result<()> {
      + chardet==5.2.0
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + pysocks==1.7.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -2075,12 +2127,13 @@ fn update() -> Result<()> {
 
     // Change the source by specifying a version (note the extras, markers, and version should be
     // preserved).
-    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.3"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.3"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -2088,7 +2141,7 @@ fn update() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - requests==2.31.0
      + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -2264,21 +2317,23 @@ fn add_update_marker() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + certifi==2024.2.2
@@ -2287,21 +2342,22 @@ fn add_update_marker() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + requests==2.31.0
      + urllib3==2.2.1
-    "###);
+    "#);
 
     // Restrict the `requests` version for Python <3.11
-    uv_snapshot!(context.filters(), context.add().arg("requests>=2.0,<2.29; python_version < '3.11'"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.0,<2.29; python_version < '3.11'"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -2328,18 +2384,19 @@ fn add_update_marker() -> Result<()> {
     });
 
     // Change the restricted `requests` version for Python <3.11
-    uv_snapshot!(context.filters(), context.add().arg("requests>=2.0,<2.20; python_version < '3.11'"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.0,<2.20; python_version < '3.11'"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 10 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -2366,12 +2423,13 @@ fn add_update_marker() -> Result<()> {
     });
 
     // Restrict the `requests` version on Windows and Python >3.11
-    uv_snapshot!(context.filters(), context.add().arg("requests>=2.31 ; sys_platform == 'win32' and python_version > '3.11'"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.31 ; sys_platform == 'win32' and python_version > '3.11'"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Prepared 3 packages in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -2381,7 +2439,7 @@ fn add_update_marker() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - urllib3==2.2.1
      + urllib3==1.23
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -2513,12 +2571,13 @@ fn update_source_replace_url() -> Result<()> {
     "#})?;
 
     // Change the source. The existing URL should be removed.
-    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.3"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.3"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -2528,7 +2587,7 @@ fn update_source_replace_url() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068)
      + urllib3==2.2.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -2576,28 +2635,30 @@ fn add_inexact() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     // Manually remove a dependency.
     pyproject_toml.write_str(indoc! {r#"
@@ -2612,19 +2673,20 @@ fn add_inexact() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -2685,27 +2747,29 @@ fn add_inexact() -> Result<()> {
     });
 
     // Install from the lockfile without removing extraneous packages from the environment.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--inexact"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--inexact"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 2 packages in [TIME]
-    "###);
+    "#);
 
     // Install from the lockfile, performing an exact sync.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Uninstalled 3 packages in [TIME]
      - anyio==3.7.0
      - idna==3.6
      - sniffio==1.3.1
-    "###);
+    "#);
 
     Ok(())
 }
@@ -2728,35 +2792,38 @@ fn remove_registry() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -2765,7 +2832,7 @@ fn remove_registry() -> Result<()> {
      - idna==3.6
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - sniffio==1.3.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -2809,14 +2876,15 @@ fn remove_registry() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Audited 1 package in [TIME]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -2838,12 +2906,13 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -2855,7 +2924,7 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
      + requests==2.31.0
      + sniffio==1.3.1
      + urllib3==2.2.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -2899,12 +2968,13 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -2916,7 +2986,7 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
      + requests==2.31.0
      + sniffio==1.3.1
      + urllib3==2.2.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -2961,13 +3031,14 @@ fn add_frozen() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -3014,14 +3085,15 @@ fn add_no_sync() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--no-sync"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--no-sync"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -3136,24 +3208,26 @@ fn add_error() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("xyz"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("xyz"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
-    "###);
+    "#);
 
-    uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
+    "#);
 
     let lock = context.temp_dir.join("uv.lock");
     assert!(!lock.exists());
@@ -3180,12 +3254,13 @@ fn add_lower_bound() -> Result<()> {
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3193,7 +3268,7 @@ fn add_lower_bound() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -3240,12 +3315,13 @@ fn add_lower_bound_existing() -> Result<()> {
 
     // Adding `anyio` should _not_ set a lower-bound, since it's already present (even if
     // unconstrained).
-    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3253,7 +3329,7 @@ fn add_lower_bound_existing() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -3299,12 +3375,13 @@ fn add_lower_bound_raw() -> Result<()> {
     "#})?;
 
     // Adding `anyio` should _not_ set a lower-bound when using `--raw-sources`.
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw-sources"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3312,7 +3389,7 @@ fn add_lower_bound_raw() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -3358,12 +3435,13 @@ fn add_lower_bound_dev() -> Result<()> {
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--dev"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3371,7 +3449,7 @@ fn add_lower_bound_dev() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -3420,12 +3498,13 @@ fn add_lower_bound_optional() -> Result<()> {
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--optional=io"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--optional=io"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3433,7 +3512,7 @@ fn add_lower_bound_optional() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -3542,18 +3621,19 @@ fn add_lower_bound_local() -> Result<()> {
     "#})?;
 
     // Adding `torch` should include a lower-bound, but no local segment.
-    uv_snapshot!(context.filters(), context.add().arg("local-simple-a").arg("--extra-index-url").arg(packse_index_url()).env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("local-simple-a").arg("--extra-index-url").arg(packse_index_url()).env_remove("UV_EXCLUDE_NEWER"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + local-simple-a==1.2.3+foo
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -3647,18 +3727,19 @@ fn add_non_project() -> Result<()> {
     "###);
 
     // Adding `iniconfig` as a dev dependency should succeed.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--dev"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -3726,12 +3807,13 @@ fn add_repeat() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3739,7 +3821,7 @@ fn add_repeat() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -3763,15 +3845,16 @@ fn add_repeat() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 4 packages in [TIME]
     Audited 4 packages in [TIME]
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -3820,12 +3903,13 @@ fn add_requirements_file() -> Result<()> {
     requirements_txt
         .write_str("Flask==2.3.2\nanyio @ git+https://github.com/agronholm/anyio.git@4.4.0")?;
 
-    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -3840,7 +3924,7 @@ fn add_requirements_file() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
      + werkzeug==3.0.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -4420,12 +4504,13 @@ fn fail_to_add_revert_project() -> Result<()> {
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.add().arg("pytorch==1.0.2"), @r###"
+    uv_snapshot!(filters, context.add().arg("pytorch==1.0.2"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 2 packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: pytorch==1.0.2
@@ -4447,7 +4532,7 @@ fn fail_to_add_revert_project() -> Result<()> {
       File "<string>", line 15, in <module>
     Exception: You tried to install "pytorch". The package named for PyTorch is "torch"
     ---
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -4491,12 +4576,13 @@ fn sorted_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "anyio"]), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 13 packages in [TIME]
     Prepared 12 packages in [TIME]
     Installed 12 packages in [TIME]
@@ -4512,7 +4598,7 @@ fn sorted_dependencies() -> Result<()> {
      + sniffio==1.3.1
      + typing-extensions==4.10.0
      + urllib3==2.2.1
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -4560,13 +4646,14 @@ fn custom_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("pydantic").arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("pydantic").arg("--frozen"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -4610,18 +4697,19 @@ fn update_offset() -> Result<()> {
         ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "iniconfig"]), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "iniconfig"]), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + typing-extensions==4.10.0
-    "###);
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 

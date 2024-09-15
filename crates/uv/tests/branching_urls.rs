@@ -28,14 +28,15 @@ fn branching_urls_disjoint() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     Ok(())
@@ -61,16 +62,17 @@ fn branching_urls_overlapping() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     error: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version == '3.11.*'`:
     - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
     - https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
-    "###
+    "#
     );
 
     Ok(())
@@ -127,16 +129,17 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     error: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version < '3.12'`:
     - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
     - https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
-    "###
+    "#
     );
 
     Ok(())
@@ -195,14 +198,15 @@ fn root_package_splits_transitive_too() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 10 packages in [TIME]
-    "###
+    "#
     );
 
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
@@ -390,14 +394,15 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 9 packages in [TIME]
-    "###
+    "#
     );
 
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
@@ -550,14 +555,15 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
@@ -635,14 +641,15 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
@@ -717,16 +724,17 @@ fn branching_urls_of_different_sources_conflict() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     error: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version == '3.11.*'`:
     - git+https://github.com/pytest-dev/iniconfig@93f5930e668c0d1ddf4597e38dd0dea4e2665e7a
     - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
-    "###
+    "#
     );
 
     Ok(())
@@ -763,14 +771,15 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     " };
     make_project(&context.temp_dir.join("c"), "c", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&context.temp_dir), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"

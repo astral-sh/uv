@@ -1244,7 +1244,7 @@ fn sha() -> Result<()> {
     let constraints = project.child("constraints.txt");
     constraints.write_str("setuptools==68.2.2 --hash=sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2")?;
 
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1312,7 +1312,7 @@ fn sha() -> Result<()> {
     creating build/bdist.linux-x86_64/wheel
     copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
     running install_egg_info
-    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.8.egg-info
+    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.12.egg-info
     running install_scripts
     creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
     creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
@@ -1323,7 +1323,7 @@ fn sha() -> Result<()> {
     adding 'project-0.1.0.dist-info/RECORD'
     removing build/bdist.linux-x86_64/wheel
     Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
-    "###);
+    "#);
 
     project
         .child("dist")
