@@ -70,7 +70,12 @@ impl PyProjectToml {
     /// non-package ("virtual") project.
     pub fn is_package(&self) -> bool {
         // If `tool.uv.package` is set, defer to that explicit setting.
-        if let Some(is_package) = self.uv_package() {
+        if let Some(is_package) = self
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.package)
+        {
             return is_package;
         }
 
@@ -78,34 +83,13 @@ impl PyProjectToml {
         self.build_system.is_some()
     }
 
-    /// Returns whether the project should be considered a package with scripts.
-    ///
-    /// This detects if a project is declared as a uv package, or if it has
-    /// a scripts-related section defined.
-    pub fn is_packaged_script(&self) -> bool {
-        if let Some(is_package) = self.uv_package() {
-            return is_package;
-        };
-
+    /// Returns whether the project manifest contains any script table.
+    pub fn has_scripts(&self) -> bool {
         if let Some(ref project) = self.project {
-            let is_script = project.gui_scripts.is_some() || project.scripts.is_some();
-            return is_script;
-        };
-
-        false
-    }
-
-    /// Returns whether the project has a `build-system` section.
-    pub fn has_build_system(&self) -> bool {
-        self.build_system.is_some()
-    }
-
-    /// Returns the value of `tool.uv.package`, if explicitly set.
-    fn uv_package(&self) -> Option<bool> {
-        self.tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.package)
+            project.gui_scripts.is_some() || project.scripts.is_some()
+        } else {
+            false
+        }
     }
 }
 

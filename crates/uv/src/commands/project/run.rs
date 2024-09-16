@@ -451,10 +451,10 @@ pub(crate) async fn run(
                 .await?
             };
 
-            if project.workspace().pyproject_toml().is_packaged_script()
-                && !project.workspace().pyproject_toml().has_build_system()
+            if project.workspace().pyproject_toml().has_scripts()
+                && !project.workspace().pyproject_toml().is_package()
             {
-                warn_user!("No `build-system` section found for the package; consider adding one to correctly build the project");
+                warn_user!("Skipping scripts installation because this project is not a package. To install them, consider setting `tool.uv.package = true` or configuring a custom `build-system`.");
             }
 
             if no_sync {
