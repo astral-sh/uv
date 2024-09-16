@@ -1,7 +1,9 @@
-use anyhow::{Context, Result};
-use itertools::Itertools;
+use std::fmt::Write;
 
-use distribution_types::{Dist, ResolvedDist, SourceDist};
+use anyhow::{Context, Result};
+use distribution_types::{Diagnostic, Dist, ResolvedDist, SourceDist};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
 use pep508_rs::MarkerTree;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -135,6 +137,18 @@ pub(crate) async fn sync(
         printer,
     )
     .await?;
+
+    let markers = venv.interpreter().resolver_markers();
+    let site_packages = SitePackages::from_environment(&venv)?;
+    for diagnostic in site_packages.diagnostics(&markers)? {
+        writeln!(
+            printer.stderr(),
+            "{}{} {}",
+            "warning".yellow().bold(),
+            ":".bold(),
+            diagnostic.message().bold()
+        )?;
+    }
 
     Ok(ExitStatus::Success)
 }

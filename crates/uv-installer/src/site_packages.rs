@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use tracing::instrument;
 use url::Url;
 
 use distribution_types::{
@@ -46,6 +47,7 @@ impl SitePackages {
     }
 
     /// Build an index of installed packages from the given Python executable.
+    #[instrument(skip_all)]
     pub fn from_interpreter(interpreter: &Interpreter) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name = FxHashMap::default();
@@ -182,6 +184,7 @@ impl SitePackages {
     }
 
     /// Validate the installed packages in the virtual environment.
+    #[instrument(skip_all)]
     pub fn diagnostics(
         &self,
         markers: &ResolverMarkerEnvironment,
