@@ -47,7 +47,7 @@ pub(crate) async fn init(
         if let Some(script_path) = explicit_path {
             project_kind
                 .init_script(
-                    &PathBuf::from(script_path),
+                    &PathBuf::from(&script_path),
                     python,
                     connectivity,
                     python_preference,
@@ -61,6 +61,12 @@ pub(crate) async fn init(
                     native_tls,
                 )
                 .await?;
+
+            writeln!(
+                printer.stderr(),
+                "Initialized script `{}`",
+                script_path.cyan()
+            )?;
             return Ok(ExitStatus::Success);
         } else {
             anyhow::bail!("Filename not provided for script");
@@ -631,7 +637,7 @@ impl InitProjectKind {
 
         if let Some(path) = script_path.to_str() {
             if !path.ends_with(".py") {
-                anyhow::bail!("Script must end with .py extension");
+                anyhow::bail!("Script name must end in .py extension");
             }
         }
 

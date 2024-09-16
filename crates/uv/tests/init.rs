@@ -401,6 +401,179 @@ fn init_library() -> Result<()> {
     Ok(())
 }
 
+// General init --script correctness test
+#[test]
+fn init_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let script = child.join("hello.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("hello.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script `hello.py`
+    "###);
+
+    let script = fs_err::read_to_string(&script)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script, @r###"
+            # /// script
+            # requires-python = ">=3.12"
+            # dependencies = []
+            # ///
+
+            def main():
+                print("Hello from hello.py!")
+
+            if __name__ == "__main__":
+                main()
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("python").arg("hello.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from hello.py!
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+// Ensure python versions passed as arguments are present in file metadata
+#[test]
+fn init_script_python_version() -> Result<()> {
+    let context = TestContext::new("3.11");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let script = child.join("version.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("version.py").arg("--python").arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script `version.py`
+    "###);
+
+    let script = fs_err::read_to_string(&script)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script, @r###"
+            # /// script
+            # requires-python = ">=3.11"
+            # dependencies = []
+            # ///
+
+            def main():
+                print("Hello from version.py!")
+
+            if __name__ == "__main__":
+                main()
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+// Init script should create parent directories if they don't exist
+#[test]
+fn init_script_create_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let script = child.join("test").join("dir.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("test/dir.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script `test/dir.py`
+    "###);
+
+    let script = fs_err::read_to_string(&script)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script, @r###"
+            # /// script
+            # requires-python = ">=3.12"
+            # dependencies = []
+            # ///
+
+            def main():
+                print("Hello from dir.py!")
+
+            if __name__ == "__main__":
+                main()
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+// Init script should fail if file path exists or doesn't end with .py
+#[test]
+fn init_script_file_conflicts() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("name_conflict.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script `name_conflict.py`
+    "###);
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("name_conflict.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Script name_conflict.py already exists
+    "###);
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("new_issue"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Script name must end in .py extension
+    "###);
+
+    Ok(())
+}
+
 /// Run `uv init --lib` with an existing py.typed file
 #[test]
 fn init_py_typed_exists() -> Result<()> {
