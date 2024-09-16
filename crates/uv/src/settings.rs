@@ -186,7 +186,6 @@ impl InitSettings {
             (false, true, false) => InitProjectKind::Library,
             (false, false, true) => InitProjectKind::Script,
             (false, false, false) => InitProjectKind::default(),
-            // We can enumerate these, or combine into a single catch all
             (true, true, false) => unreachable!("`app` and `lib` are mutually exclusive"),
             (true, false, true) => unreachable!("`app` and `script` are mutually exclusive"),
             (false, true, true) => unreachable!("`lib` and `script` are mutually exclusive"),
