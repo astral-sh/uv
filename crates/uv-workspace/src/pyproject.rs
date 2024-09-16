@@ -16,7 +16,7 @@ use thiserror::Error;
 use url::Url;
 
 use pep440_rs::{Version, VersionSpecifiers};
-use pypi_types::{Metadata23, RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
+use pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 use uv_fs::relative_to;
 use uv_git::GitReference;
 use uv_macros::OptionsMetadata;
@@ -281,18 +281,6 @@ pub struct ToolUv {
         "#
     )]
     pub constraint_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
-    /// Pre-defined static metadata for dependencies of the project (direct or transitive).
-    #[option(
-        default = r#"[]"#,
-        value_type = "list[dict]",
-        example = r#"
-            static-metadata = [
-                { name = "author", value = "Jane Doe" },
-                { name = "license", value = "MIT" },
-            ]
-        "#
-    )]
-    pub static_metadata: Option<Vec<Metadata23>>,
 }
 
 #[derive(Serialize, Default, Debug, Clone, PartialEq, Eq)]

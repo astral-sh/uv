@@ -305,7 +305,7 @@ pub(super) async fn do_sync(
         venv.interpreter(),
         index_locations,
         &flat_index,
-        &static_metadata,
+        static_metadata,
         &state.index,
         &state.git,
         &state.capabilities,

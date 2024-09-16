@@ -93,9 +93,6 @@ pub struct Options {
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
 
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub static_metadata: Option<Vec<Metadata23>>,
-
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`.
     #[serde(default, skip_serializing)]
@@ -445,13 +442,21 @@ pub struct ResolverInstallerOptions {
     )]
     pub prerelease: Option<PrereleaseMode>,
     /// Pre-defined static metadata for dependencies of the project (direct or transitive).
+    ///
+    /// Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
+    /// standard, though only the following fields are respected:
+    ///
+    /// - `name`
+    /// - `version`
+    /// - `requires-dist`
+    /// - `requires-python`
+    /// - `provides-extras`
     #[option(
         default = r#"[]"#,
         value_type = "list[dict]",
         example = r#"
             static-metadata = [
-                { name = "author", value = "Jane Doe" },
-                { name = "license", value = "MIT" },
+                { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
             ]
         "#
     )]
@@ -966,13 +971,21 @@ pub struct PipOptions {
     )]
     pub prerelease: Option<PrereleaseMode>,
     /// Pre-defined static metadata for dependencies of the project (direct or transitive).
+    ///
+    /// Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
+    /// standard, though only the following fields are respected:
+    ///
+    /// - `name`
+    /// - `version`
+    /// - `requires-dist`
+    /// - `requires-python`
+    /// - `provides-extras`
     #[option(
         default = r#"[]"#,
         value_type = "list[dict]",
         example = r#"
             static-metadata = [
-                { name = "author", value = "Jane Doe" },
-                { name = "license", value = "MIT" },
+                { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
             ]
         "#
     )]

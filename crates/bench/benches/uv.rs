@@ -150,18 +150,18 @@ mod resolver {
                 .timestamp()
                 .into(),
         );
+        let build_constraints = Constraints::default();
+        let capabilities = IndexCapabilities::default();
         let flat_index = FlatIndex::default();
         let git = GitResolver::default();
-        let capabilities = IndexCapabilities::default();
-        let static_metadata = StaticMetadata::default();
         let hashes = HashStrategy::default();
         let in_flight = InFlight::default();
         let index = InMemoryIndex::default();
         let index_locations = IndexLocations::default();
         let installed_packages = EmptyInstalledPackages;
-        let sources = SourceStrategy::default();
         let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
-        let build_constraints = Constraints::default();
+        let sources = SourceStrategy::default();
+        let static_metadata = StaticMetadata::default();
 
         let python_requirement = if universal {
             PythonRequirement::from_requires_python(
@@ -179,10 +179,10 @@ mod resolver {
             interpreter,
             &index_locations,
             &flat_index,
+            &static_metadata,
             &index,
             &git,
             &capabilities,
-            &static_metadata,
             &in_flight,
             IndexStrategy::default(),
             &config_settings,

@@ -26,7 +26,7 @@ use crate::{LenientVersionSpecifiers, VerbatimParsedUrl};
 /// fields that are relevant to dependency resolution.
 ///
 /// At present, we support up to version 2.3 of the metadata specification.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata23 {
@@ -41,6 +41,7 @@ pub struct Metadata23 {
     )]
     pub version: Version,
     // Optional fields
+    #[serde(default)]
     pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
     #[cfg_attr(
         feature = "schemars",
@@ -50,6 +51,7 @@ pub struct Metadata23 {
         )
     )]
     pub requires_python: Option<VersionSpecifiers>,
+    #[serde(default)]
     pub provides_extras: Vec<ExtraName>,
 }
 

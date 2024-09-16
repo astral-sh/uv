@@ -9,7 +9,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
 use distribution_types::{
-    IndexLocations, NameRequirementSpecification, UnresolvedRequirementSpecification,
+    IndexLocations, NameRequirementSpecification, StaticMetadata,
+    UnresolvedRequirementSpecification,
 };
 use pep440_rs::Version;
 use pypi_types::{Requirement, SupportedEnvironments};
@@ -410,7 +411,7 @@ async fn do_lock(
         interpreter,
         index_locations,
         &flat_index,
-        &static_metadata,
+        static_metadata,
         &state.index,
         &state.git,
         &state.capabilities,
@@ -438,6 +439,7 @@ async fn do_lock(
             &constraints,
             &overrides,
             environments,
+            static_metadata,
             interpreter,
             &requires_python,
             index_locations,
@@ -554,8 +556,14 @@ async fn do_lock(
             // Notify the user of any resolution diagnostics.
             pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-            let manifest = ResolverManifest::new(members, requirements, constraints, overrides)
-                .relative_to(workspace)?;
+            let manifest = ResolverManifest::new(
+                members,
+                requirements,
+                constraints,
+                overrides,
+                static_metadata.values().cloned(),
+            )
+            .relative_to(workspace)?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
             let lock = Lock::from_resolution_graph(&resolution, workspace.install_path())?
@@ -593,6 +601,7 @@ impl ValidatedLock {
         constraints: &[Requirement],
         overrides: &[Requirement],
         environments: Option<&SupportedEnvironments>,
+        static_metadata: &StaticMetadata,
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
         index_locations: &IndexLocations,
@@ -712,6 +721,7 @@ impl ValidatedLock {
                 requirements,
                 constraints,
                 overrides,
+                static_metadata,
                 indexes,
                 build_options,
                 interpreter.tags()?,
@@ -771,6 +781,13 @@ impl ValidatedLock {
             SatisfiesResult::MismatchedOverrides(expected, actual) => {
                 debug!(
                     "Ignoring existing lockfile due to mismatched overrides:\n  Expected: {:?}\n  Actual: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedStaticMetadata(expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched static metadata:\n  Expected: {:?}\n  Actual: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))

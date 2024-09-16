@@ -381,6 +381,16 @@
         }
       ]
     },
+    "static-metadata": {
+      "description": "Pre-defined static metadata for dependencies of the project (direct or transitive).\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) standard, though only the following fields are respected:\n\n- `name` - `version` - `requires-dist` - `requires-python` - `provides-extras`",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/Metadata23"
+      }
+    },
     "upgrade": {
       "description": "Allow package upgrades, ignoring pinned versions in any existing output file.",
       "type": [
@@ -596,6 +606,44 @@
           ]
         }
       ]
+    },
+    "Metadata23": {
+      "description": "Python Package Metadata 2.3 as specified in <https://packaging.python.org/specifications/core-metadata/>.\n\nThis is a subset of the full metadata specification, and only includes the fields that are relevant to dependency resolution.\n\nAt present, we support up to version 2.3 of the metadata specification.",
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/PackageName"
+        },
+        "provides-extras": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ExtraName"
+          }
+        },
+        "requires-dist": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Requirement"
+          }
+        },
+        "requires-python": {
+          "description": "PEP 508-style Python requirement, e.g., `>=3.10`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "description": "PEP 440-style package version, e.g., `1.2.3`",
+          "type": "string"
+        }
+      }
     },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`. For example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
@@ -996,6 +1044,16 @@
             }
           ]
         },
+        "static-metadata": {
+          "description": "Pre-defined static metadata for dependencies of the project (direct or transitive).\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) standard, though only the following fields are respected:\n\n- `name` - `version` - `requires-dist` - `requires-python` - `provides-extras`",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/Metadata23"
+          }
+        },
         "strict": {
           "description": "Validate the Python environment, to detect packages with missing dependencies and other issues.",
           "type": [
@@ -1153,7 +1211,7 @@
       "pattern": "^3\\.\\d+(\\.\\d+)?$"
     },
     "Requirement": {
-      "description": "A PEP 508 dependency specifier",
+      "description": "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`",
       "type": "string"
     },
     "ResolutionMode": {

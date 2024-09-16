@@ -2239,8 +2239,7 @@ impl PipSettings {
             static_metadata: StaticMetadata::from_entries(
                 args.static_metadata
                     .combine(static_metadata)
-                    .unwrap_or_default()
-                    .into_iter(),
+                    .unwrap_or_default(),
             ),
             output_file: args.output_file.combine(output_file),
             no_strip_extras: args

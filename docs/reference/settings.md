@@ -1175,6 +1175,44 @@ By default, uv will use the latest compatible version of each package (`highest`
 
 ---
 
+### [`static-metadata`](#static-metadata) {: #static-metadata }
+
+Pre-defined static metadata for dependencies of the project (direct or transitive).
+
+Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
+standard, though only the following fields are respected:
+
+- `name`
+- `version`
+- `requires-dist`
+- `requires-python`
+- `provides-extras`
+
+**Default value**: `[]`
+
+**Type**: `list[dict]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    static-metadata = [
+        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+    ]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    static-metadata = [
+        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+    ]
+    ```
+
+---
+
 ### [`upgrade`](#upgrade) {: #upgrade }
 
 Allow package upgrades, ignoring pinned versions in any existing output file.
@@ -2581,6 +2619,45 @@ By default, uv will use the latest compatible version of each package (`highest`
     ```toml
     [pip]
     resolution = "lowest-direct"
+    ```
+
+---
+
+#### [`static-metadata`](#pip_static-metadata) {: #pip_static-metadata }
+<span id="static-metadata"></span>
+
+Pre-defined static metadata for dependencies of the project (direct or transitive).
+
+Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
+standard, though only the following fields are respected:
+
+- `name`
+- `version`
+- `requires-dist`
+- `requires-python`
+- `provides-extras`
+
+**Default value**: `[]`
+
+**Type**: `list[dict]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    static-metadata = [
+        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+    ]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    static-metadata = [
+        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+    ]
     ```
 
 ---

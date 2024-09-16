@@ -300,7 +300,7 @@ async fn build_impl(
         &interpreter,
         index_locations,
         &flat_index,
-        &static_metadata,
+        static_metadata,
         &state.index,
         &state.git,
         &state.capabilities,
