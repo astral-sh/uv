@@ -1976,7 +1976,7 @@ fn run_script_without_build_system() -> Result<()> {
     })?;
 
     // TODO(lucab): this should match `entry` and warn
-    // https://github.com/astral-sh/uv/issues/7428
+    // <https://github.com/astral-sh/uv/issues/7428>
     uv_snapshot!(context.filters(), context.run().arg("entry"), @r###"
     success: false
     exit_code: 2

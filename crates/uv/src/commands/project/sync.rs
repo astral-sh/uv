@@ -76,7 +76,7 @@ pub(crate) async fn sync(
     };
 
     // TODO(lucab): improve warning content
-    // https://github.com/astral-sh/uv/issues/7428
+    // <https://github.com/astral-sh/uv/issues/7428>
     if project.workspace().pyproject_toml().has_scripts()
         && !project.workspace().pyproject_toml().is_package()
     {

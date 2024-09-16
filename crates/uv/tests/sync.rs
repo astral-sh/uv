@@ -2330,7 +2330,7 @@ fn transitive_dev() -> Result<()> {
 }
 
 #[test]
-/// Check warning message for https://github.com/astral-sh/uv/issues/6998
+/// Check warning message for <https://github.com/astral-sh/uv/issues/6998>
 /// if no `build-system` section is defined.
 fn sync_scripts_without_build_system() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2372,7 +2372,7 @@ fn sync_scripts_without_build_system() -> Result<()> {
 }
 
 #[test]
-/// Check warning message for https://github.com/astral-sh/uv/issues/6998
+/// Check warning message for <https://github.com/astral-sh/uv/issues/6998>
 /// if the project is marked as `package = false`.
 fn sync_scripts_project_not_packaged() -> Result<()> {
     let context = TestContext::new("3.12");
