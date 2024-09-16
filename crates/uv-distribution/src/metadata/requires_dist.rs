@@ -39,40 +39,37 @@ impl RequiresDist {
         install_path: &Path,
         sources: SourceStrategy,
     ) -> Result<Self, MetadataError> {
-        match sources {
-            SourceStrategy::Enabled => {
-                // TODO(konsti): Limit discovery for Git checkouts to Git root.
-                // TODO(konsti): Cache workspace discovery.
-                let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
-                    install_path,
-                    &DiscoveryOptions::default(),
-                )
+        // TODO(konsti): Limit discovery for Git checkouts to Git root.
+        // TODO(konsti): Cache workspace discovery.
+        let Some(project_workspace) =
+            ProjectWorkspace::from_maybe_project_root(install_path, &DiscoveryOptions::default())
                 .await?
-                else {
-                    return Ok(Self::from_metadata23(metadata));
-                };
+        else {
+            return Ok(Self::from_metadata23(metadata));
+        };
 
-                Self::from_project_workspace(metadata, &project_workspace)
-            }
-            SourceStrategy::Disabled => Ok(Self::from_metadata23(metadata)),
-        }
+        Self::from_project_workspace(metadata, &project_workspace, sources)
     }
 
     fn from_project_workspace(
         metadata: pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
+        sources: SourceStrategy,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
-        let sources = project_workspace
-            .current_project()
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.sources.as_ref())
-            .map(ToolUvSources::inner)
-            .unwrap_or(&empty);
+        let sources = match sources {
+            SourceStrategy::Enabled => project_workspace
+                .current_project()
+                .pyproject_toml()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.sources.as_ref())
+                .map(ToolUvSources::inner)
+                .unwrap_or(&empty),
+            SourceStrategy::Disabled => &empty,
+        };
 
         let dev_dependencies = {
             let dev_dependencies = project_workspace
@@ -149,7 +146,7 @@ mod test {
     use anyhow::Context;
     use indoc::indoc;
     use insta::assert_snapshot;
-
+    use uv_configuration::SourceStrategy;
     use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
@@ -175,6 +172,7 @@ mod test {
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
+            SourceStrategy::Enabled,
         )?)
     }
 
