@@ -16,6 +16,7 @@ use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
@@ -73,6 +74,14 @@ pub(crate) async fn sync(
     } else {
         InstallTarget::from(&project)
     };
+
+    // TODO(lucab): improve warning content
+    // <https://github.com/astral-sh/uv/issues/7428>
+    if project.workspace().pyproject_toml().has_scripts()
+        && !project.workspace().pyproject_toml().is_package()
+    {
+        warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
+    }
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(

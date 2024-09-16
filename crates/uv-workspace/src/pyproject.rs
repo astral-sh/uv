@@ -44,7 +44,7 @@ pub struct PyProjectToml {
     #[serde(skip)]
     pub raw: String,
 
-    /// Used to determine whether a `build-system` is present.
+    /// Used to determine whether a `build-system` section is present.
     #[serde(default, skip_serializing)]
     build_system: Option<serde::de::IgnoredAny>,
 }
@@ -82,6 +82,15 @@ impl PyProjectToml {
         // Otherwise, a project is assumed to be a package if `build-system` is present.
         self.build_system.is_some()
     }
+
+    /// Returns whether the project manifest contains any script table.
+    pub fn has_scripts(&self) -> bool {
+        if let Some(ref project) = self.project {
+            project.gui_scripts.is_some() || project.scripts.is_some()
+        } else {
+            false
+        }
+    }
 }
 
 // Ignore raw document in comparison.
@@ -102,7 +111,7 @@ impl AsRef<[u8]> for PyProjectToml {
 /// PEP 621 project metadata (`project`).
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct Project {
     /// The name of the project
@@ -113,6 +122,13 @@ pub struct Project {
     pub requires_python: Option<VersionSpecifiers>,
     /// The optional dependencies of the project.
     pub optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
+
+    /// Used to determine whether a `gui-scripts` section is present.
+    #[serde(default, skip_serializing)]
+    pub(crate) gui_scripts: Option<serde::de::IgnoredAny>,
+    /// Used to determine whether a `scripts` section is present.
+    #[serde(default, skip_serializing)]
+    pub(crate) scripts: Option<serde::de::IgnoredAny>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
