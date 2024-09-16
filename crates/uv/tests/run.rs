@@ -108,7 +108,7 @@ fn run_with_python_version() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtualenv at: .venv
     Resolved 5 packages in [TIME]
-    Prepared 3 packages in [TIME]
+    Prepared 1 package in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.6.0
      + foo==1.0.0 (from file://[TEMP_DIR]/)
@@ -1186,7 +1186,6 @@ fn run_requirements_txt() -> Result<()> {
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + sniffio==1.3.1
@@ -1484,7 +1483,6 @@ fn run_isolated_python_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Prepared 5 packages in [TIME]
     Installed 6 packages in [TIME]
      + anyio==4.3.0
      + exceptiongroup==1.2.0
@@ -1508,7 +1506,6 @@ fn run_isolated_python_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Prepared 3 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + foo==1.0.0 (from file://[TEMP_DIR]/)

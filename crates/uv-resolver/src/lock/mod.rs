@@ -1863,7 +1863,7 @@ impl Package {
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
-                let index = IndexUrl::Url(VerbatimUrl::from_url(url.to_url()));
+                let index = IndexUrl::from(VerbatimUrl::from_url(url.to_url()));
 
                 let reg_dist = RegistrySourceDist {
                     name: self.id.name.clone(),
@@ -1905,7 +1905,7 @@ impl Package {
                     url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
                     yanked: None,
                 });
-                let index = IndexUrl::Path(
+                let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(workspace_root.join(path))
                         .map_err(LockErrorKind::RegistryVerbatimUrl)?,
                 );
@@ -3284,7 +3284,7 @@ impl Wheel {
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
-                let index = IndexUrl::Url(VerbatimUrl::from_url(index_url.to_url()));
+                let index = IndexUrl::from(VerbatimUrl::from_url(index_url.to_url()));
                 Ok(RegistryBuiltWheel {
                     filename,
                     file,
@@ -3314,7 +3314,7 @@ impl Wheel {
                     url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
                     yanked: None,
                 });
-                let index = IndexUrl::Path(
+                let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(root.join(index_path))
                         .map_err(LockErrorKind::RegistryVerbatimUrl)?,
                 );

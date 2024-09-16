@@ -601,7 +601,6 @@ fn test_uv_run_isolate() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 3 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder)

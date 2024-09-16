@@ -1007,7 +1007,6 @@ fn sync_dev() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
@@ -1191,7 +1190,6 @@ fn no_install_workspace() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
-    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
@@ -1656,7 +1654,6 @@ fn sync_custom_environment_path() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foo
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1682,7 +1679,6 @@ fn sync_custom_environment_path() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foobar/.venv
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1708,7 +1704,6 @@ fn sync_custom_environment_path() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: bar
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1730,7 +1725,6 @@ fn sync_custom_environment_path() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: [OTHER_TEMPDIR]/.venv
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1811,7 +1805,6 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foo
     Resolved 3 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1968,7 +1961,6 @@ fn sync_virtual_env_warning() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foo
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1984,7 +1976,6 @@ fn sync_virtual_env_warning() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: bar
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
