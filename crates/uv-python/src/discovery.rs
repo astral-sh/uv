@@ -3,7 +3,7 @@ use regex::Regex;
 use same_file::is_same_file;
 use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
-use std::fmt::{self, Debug, Formatter};
+use std::fmt::{self, Debug, Formatter, Write};
 use std::{env, io, iter};
 use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
@@ -137,6 +137,7 @@ pub enum VersionRequest {
     MajorMinor(u8, u8),
     MajorMinorPatch(u8, u8, u8),
     MajorMinorPrerelease(u8, u8, Prerelease),
+    FreeThreaded(Box<VersionRequest>),
     Range(VersionSpecifiers),
 }
 
@@ -487,14 +488,14 @@ fn find_all_minor(
         VersionRequest::Any | VersionRequest::Major(_) | VersionRequest::Range(_) => {
             let regex = if let Some(implementation) = implementation {
                 Regex::new(&format!(
-                    r"^({}|python3)\.(?<minor>\d\d?){}$",
+                    r"^({}|python3)\.(?<minor>\d\d?)t?{}$",
                     regex::escape(&implementation.to_string()),
                     regex::escape(EXE_SUFFIX)
                 ))
                 .unwrap()
             } else {
                 Regex::new(&format!(
-                    r"^python3\.(?<minor>\d\d?){}$",
+                    r"^python3\.(?<minor>\d\d?)t?{}$",
                     regex::escape(EXE_SUFFIX)
                 ))
                 .unwrap()
@@ -536,6 +537,7 @@ fn find_all_minor(
         VersionRequest::MajorMinor(_, _)
         | VersionRequest::MajorMinorPatch(_, _, _)
         | VersionRequest::MajorMinorPrerelease(_, _, _) => Either::Right(iter::empty()),
+        VersionRequest::FreeThreaded(inner) => find_all_minor(implementation, inner, dir),
     }
 }
 
@@ -1477,6 +1479,25 @@ impl VersionRequest {
                 Some(python),
                 None,
             ],
+            Self::FreeThreaded(version) => version
+                .default_names()
+                .into_iter()
+                .map(|name| {
+                    if let Some(name) = name {
+                        let base = if cfg!(windows) {
+                            name.strip_suffix(".exe").unwrap()
+                        } else {
+                            name.as_ref()
+                        };
+
+                        Some(Cow::Owned(format!("{base}t{extension}")))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap(),
         }
     }
 
@@ -1499,7 +1520,9 @@ impl VersionRequest {
                 };
 
                 match self {
-                    Self::Any | Self::Range(_) => [Some(python3), Some(python), None, None],
+                    Self::Any | Self::Range(_) | Self::FreeThreaded(_) => {
+                        [Some(python3), Some(python), None, None]
+                    }
                     Self::Major(major) => [
                         Some(Cow::Owned(format!("{name}{major}{extension}"))),
                         Some(python),
@@ -1565,6 +1588,15 @@ impl VersionRequest {
                     ));
                 }
             }
+            Self::FreeThreaded(version) => {
+                if let Self::MajorMinor(major, minor) = version.clone().without_patch() {
+                    if (major, minor) < (3, 13) {
+                        return Err(format!(
+                            "Python <3.13 does not support free-threading but {self} was requested."
+                         ));
+                    }
+                }
+            }
             // TODO(zanieb): We could do some checking here to see if the range can be satisfied
             Self::Range(_) => (),
         }
@@ -1602,6 +1634,9 @@ impl VersionRequest {
                     interpreter_prerelease,
                 ) == (*major, *minor, *prerelease)
             }
+            Self::FreeThreaded(subversion) => {
+                interpreter.gil_disabled() && subversion.matches_interpreter(interpreter)
+            }
         }
     }
 
@@ -1621,6 +1656,7 @@ impl VersionRequest {
                 (version.major(), version.minor(), version.pre())
                     == (*major, *minor, Some(*prerelease))
             }
+            Self::FreeThreaded(subversion) => subversion.matches_version(version),
         }
     }
 
@@ -1640,6 +1676,7 @@ impl VersionRequest {
             Self::MajorMinorPrerelease(self_major, self_minor, _) => {
                 (*self_major, *self_minor) == (major, minor)
             }
+            Self::FreeThreaded(subversion) => subversion.matches_major_minor(major, minor),
         }
     }
 
@@ -1662,6 +1699,7 @@ impl VersionRequest {
                 // Pre-releases of Python versions are always for the zero patch version
                 (*self_major, *self_minor, 0) == (major, minor, patch)
             }
+            Self::FreeThreaded(version) => version.matches_major_minor_patch(major, minor, patch),
         }
     }
 
@@ -1673,6 +1711,7 @@ impl VersionRequest {
             Self::MajorMinor(..) => false,
             Self::MajorMinorPatch(..) => true,
             Self::MajorMinorPrerelease(..) => false,
+            Self::FreeThreaded(version) => version.has_patch(),
             Self::Range(_) => false,
         }
     }
@@ -1690,6 +1729,7 @@ impl VersionRequest {
             Self::MajorMinorPrerelease(major, minor, prerelease) => {
                 Self::MajorMinorPrerelease(major, minor, prerelease)
             }
+            Self::FreeThreaded(version) => Self::FreeThreaded(version.without_patch().into()),
             Self::Range(_) => self,
         }
     }
@@ -1702,6 +1742,7 @@ impl VersionRequest {
             Self::MajorMinor(..) => true,
             Self::MajorMinorPatch(..) => true,
             Self::MajorMinorPrerelease(..) => true,
+            Self::FreeThreaded(version) => version.allows_prereleases(),
             Self::Range(specifiers) => specifiers.iter().any(VersionSpecifier::any_prerelease),
         }
     }
@@ -1711,6 +1752,17 @@ impl FromStr for VersionRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Check if the version request is for a free-threaded Python version
+        if let Some(version_string) = s.strip_suffix('t') {
+            if version_string.ends_with('t') {
+                // More than one trailing "t" is not allowed
+                return Err(Error::InvalidVersionRequest(s.to_string()));
+            }
+            return Ok(Self::FreeThreaded(
+                VersionRequest::from_str(version_string)?.into(),
+            ));
+        }
+
         let Ok(version) = Version::from_str(s) else {
             return parse_version_specifiers_request(s);
         };
@@ -1793,6 +1845,10 @@ impl fmt::Display for VersionRequest {
                 write!(f, "{major}.{minor}{prerelease}")
             }
             Self::Range(specifiers) => write!(f, "{specifiers}"),
+            Self::FreeThreaded(version) => {
+                fmt::Display::fmt(&version, f)?;
+                f.write_char('t')
+            }
         }
     }
 }
@@ -2009,7 +2065,7 @@ mod tests {
             PythonRequest::parse("cpython3.12.2"),
             PythonRequest::ImplementationVersion(
                 ImplementationName::CPython,
-                VersionRequest::from_str("3.12.2").unwrap()
+                VersionRequest::from_str("3.12.2").unwrap(),
             )
         );
         assert_eq!(
@@ -2036,63 +2092,63 @@ mod tests {
             PythonRequest::parse("pypy3.10"),
             PythonRequest::ImplementationVersion(
                 ImplementationName::PyPy,
-                VersionRequest::from_str("3.10").unwrap()
+                VersionRequest::from_str("3.10").unwrap(),
             )
         );
         assert_eq!(
             PythonRequest::parse("pp310"),
             PythonRequest::ImplementationVersion(
                 ImplementationName::PyPy,
-                VersionRequest::from_str("3.10").unwrap()
+                VersionRequest::from_str("3.10").unwrap(),
             )
         );
         assert_eq!(
             PythonRequest::parse("graalpy3.10"),
             PythonRequest::ImplementationVersion(
                 ImplementationName::GraalPy,
-                VersionRequest::from_str("3.10").unwrap()
+                VersionRequest::from_str("3.10").unwrap(),
             )
         );
         assert_eq!(
             PythonRequest::parse("gp310"),
             PythonRequest::ImplementationVersion(
                 ImplementationName::GraalPy,
-                VersionRequest::from_str("3.10").unwrap()
+                VersionRequest::from_str("3.10").unwrap(),
             )
         );
         assert_eq!(
             PythonRequest::parse("cp38"),
             PythonRequest::ImplementationVersion(
                 ImplementationName::CPython,
-                VersionRequest::from_str("3.8").unwrap()
+                VersionRequest::from_str("3.8").unwrap(),
             )
         );
         assert_eq!(
             PythonRequest::parse("pypy@3.10"),
             PythonRequest::ImplementationVersion(
                 ImplementationName::PyPy,
-                VersionRequest::from_str("3.10").unwrap()
+                VersionRequest::from_str("3.10").unwrap(),
             )
         );
         assert_eq!(
             PythonRequest::parse("pypy310"),
             PythonRequest::ImplementationVersion(
                 ImplementationName::PyPy,
-                VersionRequest::from_str("3.10").unwrap()
+                VersionRequest::from_str("3.10").unwrap(),
             )
         );
         assert_eq!(
             PythonRequest::parse("graalpy@3.10"),
             PythonRequest::ImplementationVersion(
                 ImplementationName::GraalPy,
-                VersionRequest::from_str("3.10").unwrap()
+                VersionRequest::from_str("3.10").unwrap(),
             )
         );
         assert_eq!(
             PythonRequest::parse("graalpy310"),
             PythonRequest::ImplementationVersion(
                 ImplementationName::GraalPy,
-                VersionRequest::from_str("3.10").unwrap()
+                VersionRequest::from_str("3.10").unwrap(),
             )
         );
 
@@ -2117,6 +2173,10 @@ mod tests {
             PythonRequest::parse("./foo"),
             PythonRequest::File(PathBuf::from_str("./foo").unwrap()),
             "A string with a file system separator is treated as a file"
+        );
+        assert_eq!(
+            PythonRequest::parse("3.13t"),
+            PythonRequest::Version(VersionRequest::from_str("3.13t").unwrap())
         );
     }
 
@@ -2173,7 +2233,7 @@ mod tests {
         assert_eq!(
             PythonRequest::ImplementationVersion(
                 ImplementationName::CPython,
-                VersionRequest::from_str("3.12.2").unwrap()
+                VersionRequest::from_str("3.12.2").unwrap(),
             )
             .to_canonical_string(),
             "cpython@3.12.2"
@@ -2185,7 +2245,7 @@ mod tests {
         assert_eq!(
             PythonRequest::ImplementationVersion(
                 ImplementationName::PyPy,
-                VersionRequest::from_str("3.10").unwrap()
+                VersionRequest::from_str("3.10").unwrap(),
             )
             .to_canonical_string(),
             "pypy@3.10"
@@ -2197,7 +2257,7 @@ mod tests {
         assert_eq!(
             PythonRequest::ImplementationVersion(
                 ImplementationName::GraalPy,
-                VersionRequest::from_str("3.10").unwrap()
+                VersionRequest::from_str("3.10").unwrap(),
             )
             .to_canonical_string(),
             "graalpy@3.10"
@@ -2343,6 +2403,14 @@ mod tests {
                 VersionRequest::from_str("31000"),
                 Err(Error::InvalidVersionRequest(_))
             )
+        );
+        assert_eq!(
+            VersionRequest::from_str("3t").unwrap(),
+            VersionRequest::FreeThreaded(VersionRequest::Major(3).into())
+        );
+        assert_eq!(
+            VersionRequest::from_str("313t").unwrap(),
+            VersionRequest::FreeThreaded(VersionRequest::MajorMinor(3, 13).into())
         );
     }
 }
