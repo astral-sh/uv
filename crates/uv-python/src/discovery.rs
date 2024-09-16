@@ -211,7 +211,6 @@ pub enum Error {
 ///
 /// The following sources are supported:
 ///
-/// - Spawning interpreter (via `UV_INTERNAL__PARENT_INTERPRETER`)
 /// - Active virtual environment (via `VIRTUAL_ENV`)
 /// - Active conda environment (via `CONDA_PREFIX`)
 /// - Discovered virtual environment (e.g. `.venv` in a parent directory)
@@ -219,13 +218,6 @@ pub enum Error {
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
 fn python_executables_from_environments<'a>(
 ) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
-    let from_parent_interpreter = std::iter::once_with(|| {
-        std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER")
-            .into_iter()
-            .map(|path| Ok((PythonSource::ParentInterpreter, PathBuf::from(path))))
-    })
-    .flatten();
-
     let from_virtual_environment = std::iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
@@ -253,8 +245,7 @@ fn python_executables_from_environments<'a>(
     })
     .flatten_ok();
 
-    from_parent_interpreter
-        .chain(from_virtual_environment)
+    from_virtual_environment
         .chain(from_conda_environment)
         .chain(from_discovered_environment)
 }
@@ -383,15 +374,31 @@ fn python_executables<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
+    // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
+    let from_parent_interpreter = std::iter::once_with(|| {
+        std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER")
+            .into_iter()
+            .map(|path| Ok((PythonSource::ParentInterpreter, PathBuf::from(path))))
+    })
+    .flatten();
+
     let from_environments = python_executables_from_environments();
     let from_installed = python_executables_from_installed(version, implementation, preference);
 
+    // Limit the search to the relevant environment preference; we later validate that they match
+    // the preference but queries are expensive and we query less interpreters this way.
     match environments {
-        EnvironmentPreference::OnlyVirtual => Box::new(from_environments),
-        EnvironmentPreference::ExplicitSystem | EnvironmentPreference::Any => {
-            Box::new(from_environments.chain(from_installed))
+        EnvironmentPreference::OnlyVirtual => {
+            Box::new(from_parent_interpreter.chain(from_environments))
         }
-        EnvironmentPreference::OnlySystem => Box::new(from_installed),
+        EnvironmentPreference::ExplicitSystem | EnvironmentPreference::Any => Box::new(
+            from_parent_interpreter
+                .chain(from_environments)
+                .chain(from_installed),
+        ),
+        EnvironmentPreference::OnlySystem => {
+            Box::new(from_parent_interpreter.chain(from_installed))
+        }
     }
 }
 

@@ -1247,8 +1247,8 @@ mod tests {
         )??;
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
-            "3.12.3",
-            "We should prefer the system interpreter"
+            "3.12.0",
+            "We should prefer the parent interpreter since it's not virtual"
         );
 
         // Test with `EnvironmentPreference::OnlyVirtual`
