@@ -131,8 +131,8 @@ the project's dependencies. To opt-out of this behavior, use the `--no-project` 
 
 Python recently added a standard format for
 [inline script metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata).
-It allows for selecting python versions and defining dependencies. Use `uv init --script` to initialize
-scripts with the inline metadata:
+It allows for selecting python versions and defining dependencies. Use `uv init --script` to
+initialize scripts with the inline metadata:
 
 ```console
 $ uv init --script example.py --python 3.12
