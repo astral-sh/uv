@@ -2263,18 +2263,15 @@ impl ExternalCommand {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct InitArgs {
-    #[arg(required_if_eq("script", "true"))]
-    pub script_file_path: Option<String>,
-
-    /// The path to use for the project.
+    /// The path to use for the project/script.
     ///
-    /// Defaults to the current working directory. Accepts relative and absolute
-    /// paths.
+    /// Defaults to the current working directory when initializing an app or library;
+    /// required when initializing a script. Accepts relative and absolute paths.
     ///
     /// If a `pyproject.toml` is found in any of the parent directories of the
     /// target path, the project will be added as a workspace member of the
     /// parent, unless `--no-workspace` is provided.
-    #[arg(conflicts_with = "script")]
+    #[arg(required_if_eq("script", "true"))]
     pub path: Option<String>,
 
     /// The name of the project.
@@ -2333,7 +2330,7 @@ pub struct InitArgs {
     pub r#script: bool,
 
     /// Do not create a `README.md` file.
-    #[arg(long, conflicts_with = "script")]
+    #[arg(long)]
     pub no_readme: bool,
 
     /// Do not create a `.python-version` file for the project.
@@ -2341,14 +2338,14 @@ pub struct InitArgs {
     /// By default, uv will create a `.python-version` file containing the minor version of
     /// the discovered Python interpreter, which will cause subsequent uv commands to use that
     /// version.
-    #[arg(long, conflicts_with = "script")]
+    #[arg(long)]
     pub no_pin_python: bool,
 
     /// Avoid discovering a workspace and create a standalone project.
     ///
     /// By default, uv searches for workspaces in the current directory or any
     /// parent directory.
-    #[arg(long, alias = "no-project", conflicts_with = "script")]
+    #[arg(long, alias = "no-project")]
     pub no_workspace: bool,
 
     /// The Python interpreter to use to determine the minimum supported Python version.

@@ -152,7 +152,6 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct InitSettings {
-    pub(crate) script_file_path: Option<String>,
     pub(crate) path: Option<String>,
     pub(crate) name: Option<PackageName>,
     pub(crate) package: bool,
@@ -168,7 +167,6 @@ impl InitSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: InitArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let InitArgs {
-            script_file_path,
             path,
             name,
             r#virtual,
@@ -198,7 +196,6 @@ impl InitSettings {
         let package = flag(package || r#virtual, no_package).unwrap_or(kind.packaged_by_default());
 
         Self {
-            script_file_path,
             path,
             name,
             package,

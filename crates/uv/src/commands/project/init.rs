@@ -27,7 +27,6 @@ use crate::printer::Printer;
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
-    script_file_path: Option<String>,
     explicit_path: Option<String>,
     name: Option<PackageName>,
     package: bool,
@@ -45,10 +44,10 @@ pub(crate) async fn init(
 ) -> Result<ExitStatus> {
     // If user seeks to initialize a new script, process the request immediately
     if let InitProjectKind::Script = project_kind {
-        if let Some(file) = script_file_path {
+        if let Some(script_path) = explicit_path {
             project_kind
                 .init_script(
-                    &PathBuf::from(file),
+                    &PathBuf::from(script_path),
                     python,
                     connectivity,
                     python_preference,
@@ -57,6 +56,7 @@ pub(crate) async fn init(
                     printer,
                     no_workspace,
                     no_readme,
+                    no_pin_python,
                     package,
                     native_tls,
                 )
@@ -606,7 +606,7 @@ impl InitProjectKind {
 
     async fn init_script(
         self,
-        file: &PathBuf,
+        script_path: &PathBuf,
         python: Option<String>,
         connectivity: Connectivity,
         python_preference: PythonPreference,
@@ -615,6 +615,7 @@ impl InitProjectKind {
         printer: Printer,
         no_workspace: bool,
         no_readme: bool,
+        no_pin_python: bool,
         package: bool,
         native_tls: bool,
     ) -> Result<()> {
@@ -628,52 +629,82 @@ impl InitProjectKind {
             warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
         }
 
+        if let Some(path) = script_path.to_str() {
+            if !path.ends_with(".py") {
+                anyhow::bail!("Script must end with .py extension");
+            }
+        }
+
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
             .native_tls(native_tls);
 
         let reporter = PythonDownloadReporter::single(printer);
 
-        if let Ok(_) = fs_err::metadata(file) {
-            anyhow::bail!("Script {} already exists", file.to_str().unwrap());
+        if let Ok(_) = fs_err::tokio::metadata(script_path).await {
+            anyhow::bail!("Script {} already exists", script_path.to_str().unwrap());
         }
 
-        let python_request = if let Some(request) = python.as_deref() {
-            // (1) Explicit request from user
-            PythonRequest::parse(request)
-        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
-            .await?
-            .and_then(PythonVersionFile::into_version)
-        {
-            // (2) Request from `.python-version`
-            request
-        } else {
-            // (3) Assume any Python version
-            PythonRequest::Any
-        };
-
-        let interpreter = PythonInstallation::find_or_download(
-            Some(&python_request),
-            EnvironmentPreference::Any,
+        let requires_python = get_python_requirement_for_new_script(
+            &python,
+            no_pin_python,
             python_preference,
             python_downloads,
             &client_builder,
             cache,
-            Some(&reporter),
+            &reporter,
         )
-        .await?
-        .into_interpreter();
+        .await?;
 
-        let requires_python =
-            RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-
-        if let Some(path) = file.parent() {
-            fs_err::create_dir_all(path)?;
+        if let Some(path) = script_path.parent() {
+            fs_err::tokio::create_dir_all(path).await?;
         }
-        Pep723Script::create_new_script(file, requires_python.specifiers()).await?;
+        Pep723Script::create_new_script(script_path, requires_python.specifiers()).await?;
 
         Ok(())
     }
+}
+
+pub(crate) async fn get_python_requirement_for_new_script(
+    python: &Option<String>,
+    no_pin_python: bool,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    client_builder: &BaseClientBuilder<'_>,
+    cache: &Cache,
+    reporter: &PythonDownloadReporter,
+) -> Result<RequiresPython> {
+    let python_request = if let Some(request) = python.as_deref() {
+        // (1) Explicit request from user
+        PythonRequest::parse(request)
+    } else if let (false, Some(request)) = (
+        no_pin_python,
+        PythonVersionFile::discover(&*CWD, false, false)
+            .await?
+            .and_then(PythonVersionFile::into_version),
+    ) {
+        // (2) Request from `.python-version`
+        request
+    } else {
+        // (3) Assume any Python version
+        PythonRequest::Any
+    };
+
+    let interpreter = PythonInstallation::find_or_download(
+        Some(&python_request),
+        EnvironmentPreference::Any,
+        python_preference,
+        python_downloads,
+        client_builder,
+        cache,
+        Some(reporter),
+    )
+    .await?
+    .into_interpreter();
+
+    Ok(RequiresPython::greater_than_equal_version(
+        &interpreter.python_minor_version(),
+    ))
 }
 
 /// Generate the `[project]` section of a `pyproject.toml`.

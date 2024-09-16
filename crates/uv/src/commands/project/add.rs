@@ -28,7 +28,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
-use uv_resolver::{FlatIndex, RequiresPython};
+use uv_resolver::FlatIndex;
 use uv_scripts::Pep723Script;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
@@ -46,6 +46,8 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
+
+use super::init::get_python_requirement_for_new_script;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -127,34 +129,16 @@ pub(crate) async fn add(
         let script = if let Some(script) = Pep723Script::read(&script).await? {
             script
         } else {
-            let python_request = if let Some(request) = python.as_deref() {
-                // (1) Explicit request from user
-                PythonRequest::parse(request)
-            } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
-                .await?
-                .and_then(PythonVersionFile::into_version)
-            {
-                // (2) Request from `.python-version`
-                request
-            } else {
-                // (3) Assume any Python version
-                PythonRequest::Any
-            };
-
-            let interpreter = PythonInstallation::find_or_download(
-                Some(&python_request),
-                EnvironmentPreference::Any,
+            let requires_python = get_python_requirement_for_new_script(
+                &python,
+                false,
                 python_preference,
                 python_downloads,
                 &client_builder,
                 cache,
-                Some(&reporter),
+                &reporter,
             )
-            .await?
-            .into_interpreter();
-
-            let requires_python =
-                RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
+            .await?;
             Pep723Script::create(&script, requires_python.specifiers()).await?
         };
 

@@ -105,19 +105,23 @@ impl Pep723Script {
             .and_then(|name| name.to_str())
             .ok_or_else(|| Pep723Error::InvalidFilename)?;
 
-        let script = indoc::formatdoc! {r#"
-            # /// script
-            # requires-python = "{requires_python}"
-            # dependencies = []
-            # ///
+        let default_metadata = indoc::formatdoc! {r#"
+            requires-python = "{requires_python}"
+            dependencies = []
+            "#,
+            requires_python = requires_python,
+        };
+        let metadata = serialize_metadata(&default_metadata);
 
+        let script = indoc::formatdoc! {r#"
+            {metadata}
             def main():
                 print("Hello from {name}!")
 
             if __name__ == "__main__":
                 main()
         "#,
-            requires_python = requires_python,
+            metadata = metadata,
             name = script_name,
         };
 
