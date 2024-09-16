@@ -1205,6 +1205,27 @@ mod tests {
             "We should prefer the parent interpreter"
         );
 
+        // Test with `EnvironmentPreference::OnlySystem`
+        let python = context.run_with_vars(
+            &[
+                ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
+                ("VIRTUAL_ENV", Some(venv.as_os_str())),
+            ],
+            || {
+                find_python_installation(
+                    &PythonRequest::Any,
+                    EnvironmentPreference::OnlySystem,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            },
+        )??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.12.3",
+            "We should prefer the system interpreter"
+        );
+
         // Test with `EnvironmentPreference::OnlyVirtual`
         let python = context.run_with_vars(
             &[
