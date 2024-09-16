@@ -204,7 +204,7 @@ fn prune_unzipped() -> Result<()> {
 
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    Removed 162 files ([SIZE])
+    Removed 170 files ([SIZE])
     "###);
 
     // Reinstalling the source distribution should not require re-downloading the source
