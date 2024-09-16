@@ -7,7 +7,8 @@ use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, ExtrasSpecification, HashCheckingMode, InstallOptions,
+    Concurrency, Constraints, DevMode, DevSpecification, ExtrasSpecification, HashCheckingMode,
+    InstallOptions,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
@@ -34,7 +35,7 @@ pub(crate) async fn sync(
     frozen: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: bool,
+    dev: DevMode,
     install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
@@ -155,7 +156,7 @@ pub(super) async fn do_sync(
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: &ExtrasSpecification,
-    dev: bool,
+    dev: DevMode,
     install_options: InstallOptions,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
@@ -218,10 +219,10 @@ pub(super) async fn do_sync(
     }
 
     // Include development dependencies, if requested.
-    let dev = if dev {
-        vec![DEV_DEPENDENCIES.clone()]
-    } else {
-        vec![]
+    let dev = match dev {
+        DevMode::Include => DevSpecification::Include(std::slice::from_ref(&DEV_DEPENDENCIES)),
+        DevMode::Exclude => DevSpecification::Exclude,
+        DevMode::Only => DevSpecification::Only(std::slice::from_ref(&DEV_DEPENDENCIES)),
     };
 
     // Determine the tags to use for resolution.
@@ -233,7 +234,7 @@ pub(super) async fn do_sync(
         &markers,
         tags,
         extras,
-        &dev,
+        dev,
         build_options,
         &install_options,
     )?;

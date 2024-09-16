@@ -30,7 +30,7 @@ use pypi_types::{
     redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
     RequirementSource, ResolverMarkerEnvironment,
 };
-use uv_configuration::{BuildOptions, ExtrasSpecification, InstallOptions};
+use uv_configuration::{BuildOptions, DevSpecification, ExtrasSpecification, InstallOptions};
 use uv_distribution::DistributionDatabase;
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
@@ -540,7 +540,7 @@ impl Lock {
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecification,
-        dev: &[GroupName],
+        dev: DevSpecification<'_>,
         build_options: &BuildOptions,
         install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
@@ -558,26 +558,28 @@ impl Lock {
                     name: root_name.clone(),
                 })?;
 
-            // Add the base package.
-            queue.push_back((root, None));
+            if dev.prod() {
+                // Add the base package.
+                queue.push_back((root, None));
 
-            // Add any extras.
-            match extras {
-                ExtrasSpecification::None => {}
-                ExtrasSpecification::All => {
-                    for extra in root.optional_dependencies.keys() {
-                        queue.push_back((root, Some(extra)));
+                // Add any extras.
+                match extras {
+                    ExtrasSpecification::None => {}
+                    ExtrasSpecification::All => {
+                        for extra in root.optional_dependencies.keys() {
+                            queue.push_back((root, Some(extra)));
+                        }
                     }
-                }
-                ExtrasSpecification::Some(extras) => {
-                    for extra in extras {
-                        queue.push_back((root, Some(extra)));
+                    ExtrasSpecification::Some(extras) => {
+                        for extra in extras {
+                            queue.push_back((root, Some(extra)));
+                        }
                     }
                 }
             }
 
             // Add any dev dependencies.
-            for group in dev {
+            for group in dev.iter() {
                 for dep in root.dev_dependencies.get(group).into_iter().flatten() {
                     if dep.complexified_marker.evaluate(marker_env, &[]) {
                         let dep_dist = self.find_by_id(&dep.package_id);
@@ -596,7 +598,7 @@ impl Lock {
 
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
         // dependencies in (legacy) non-project workspace roots).
-        for group in dev {
+        for group in dev.iter() {
             for dependency in project.group(group) {
                 if dependency.marker.evaluate(marker_env, &[]) {
                     let root_name = &dependency.name;

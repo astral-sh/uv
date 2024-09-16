@@ -7,16 +7,16 @@ use std::path::{Component, Path, PathBuf};
 use either::Either;
 use petgraph::visit::IntoNodeReferences;
 use petgraph::{Directed, Graph};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
 use distribution_filename::{DistExtension, SourceDistExtension};
 use pep508_rs::MarkerTree;
 use pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
-use uv_configuration::{ExtrasSpecification, InstallOptions};
+use uv_configuration::{DevSpecification, ExtrasSpecification, InstallOptions};
 use uv_fs::Simplified;
 use uv_git::GitReference;
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{ExtraName, PackageName};
 
 use crate::graph_ops::marker_reachability;
 use crate::lock::{Package, PackageId, Source};
@@ -42,15 +42,16 @@ impl<'lock> RequirementsTxtExport<'lock> {
         lock: &'lock Lock,
         root_name: &PackageName,
         extras: &ExtrasSpecification,
-        dev: &[GroupName],
+        dev: DevSpecification<'_>,
         hashes: bool,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
         let size_guess = lock.packages.len();
         let mut petgraph = LockGraph::with_capacity(size_guess, size_guess);
+        let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
 
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
-        let mut inverse = FxHashMap::default();
+        let mut seen = FxHashSet::default();
 
         // Add the workspace package to the queue.
         let root = lock
@@ -58,30 +59,51 @@ impl<'lock> RequirementsTxtExport<'lock> {
             .expect("found too many packages matching root")
             .expect("could not find root");
 
-        // Add the base package.
-        queue.push_back((root, None));
+        if dev.prod() {
+            // Add the base package.
+            queue.push_back((root, None));
 
-        // Add any extras.
-        match extras {
-            ExtrasSpecification::None => {}
-            ExtrasSpecification::All => {
-                for extra in root.optional_dependencies.keys() {
-                    queue.push_back((root, Some(extra)));
+            // Add any extras.
+            match extras {
+                ExtrasSpecification::None => {}
+                ExtrasSpecification::All => {
+                    for extra in root.optional_dependencies.keys() {
+                        queue.push_back((root, Some(extra)));
+                    }
+                }
+                ExtrasSpecification::Some(extras) => {
+                    for extra in extras {
+                        queue.push_back((root, Some(extra)));
+                    }
                 }
             }
-            ExtrasSpecification::Some(extras) => {
-                for extra in extras {
-                    queue.push_back((root, Some(extra)));
+
+            // Add the root package to the graph.
+            inverse.insert(&root.id, petgraph.add_node(root));
+        }
+
+        // Add any dev dependencies.
+        for group in dev.iter() {
+            for dep in root.dev_dependencies.get(group).into_iter().flatten() {
+                let dep_dist = lock.find_by_id(&dep.package_id);
+
+                // Add the dependency to the graph.
+                if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
+                    entry.insert(petgraph.add_node(dep_dist));
+                }
+
+                if seen.insert((&dep.package_id, None)) {
+                    queue.push_back((dep_dist, None));
+                }
+                for extra in &dep.extra {
+                    if seen.insert((&dep.package_id, Some(extra))) {
+                        queue.push_back((dep_dist, Some(extra)));
+                    }
                 }
             }
         }
 
-        // Add the root package to the graph.
-        inverse.insert(&root.id, petgraph.add_node(root));
-
         // Create all the relevant nodes.
-        let mut seen = FxHashSet::default();
-
         while let Some((package, extra)) = queue.pop_front() {
             let index = inverse[&package.id];
 
@@ -94,11 +116,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
                         .flatten(),
                 )
             } else {
-                Either::Right(package.dependencies.iter().chain(
-                    dev.iter().flat_map(|group| {
-                        package.dev_dependencies.get(group).into_iter().flatten()
-                    }),
-                ))
+                Either::Right(package.dependencies.iter())
             };
 
             for dep in deps {

@@ -22,9 +22,9 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExportFormat, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SourceStrategy, TargetTriple, TrustedHost, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, DevMode, ExportFormat, ExtrasSpecification,
+    HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild,
+    PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost, Upgrade,
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
@@ -209,7 +209,7 @@ pub(crate) struct RunSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: bool,
+    pub(crate) dev: DevMode,
     pub(crate) with: Vec<String>,
     pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
@@ -233,6 +233,7 @@ impl RunSettings {
             no_all_extras,
             dev,
             no_dev,
+            only_dev,
             command: _,
             with,
             with_editable,
@@ -257,7 +258,7 @@ impl RunSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: flag(dev, no_dev).unwrap_or(true),
+            dev: DevMode::from_args(dev, no_dev, only_dev),
             with,
             with_editable,
             with_requirements: with_requirements
@@ -659,7 +660,7 @@ pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: bool,
+    pub(crate) dev: DevMode,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
     pub(crate) package: Option<PackageName>,
@@ -678,6 +679,7 @@ impl SyncSettings {
             no_all_extras,
             dev,
             no_dev,
+            only_dev,
             inexact,
             exact,
             no_install_project,
@@ -704,7 +706,7 @@ impl SyncSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: flag(dev, no_dev).unwrap_or(true),
+            dev: DevMode::from_args(dev, no_dev, only_dev),
             install_options: InstallOptions::new(
                 no_install_project,
                 no_install_workspace,
@@ -958,7 +960,7 @@ pub(crate) struct ExportSettings {
     pub(crate) format: ExportFormat,
     pub(crate) package: Option<PackageName>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: bool,
+    pub(crate) dev: DevMode,
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
     pub(crate) output_file: Option<PathBuf>,
@@ -981,6 +983,7 @@ impl ExportSettings {
             no_all_extras,
             dev,
             no_dev,
+            only_dev,
             hashes,
             no_hashes,
             output_file,
@@ -1002,7 +1005,7 @@ impl ExportSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: flag(dev, no_dev).unwrap_or(true),
+            dev: DevMode::from_args(dev, no_dev, only_dev),
             hashes: flag(hashes, no_hashes).unwrap_or(true),
             install_options: InstallOptions::new(
                 no_emit_project,

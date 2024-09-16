@@ -14,7 +14,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions, SourceStrategy};
+use uv_configuration::{Concurrency, DevMode, ExtrasSpecification, InstallOptions, SourceStrategy};
 use uv_distribution::LoweredRequirement;
 use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -57,7 +57,7 @@ pub(crate) async fn run(
     no_project: bool,
     no_config: bool,
     extras: ExtrasSpecification,
-    dev: bool,
+    dev: DevMode,
     python: Option<String>,
     settings: ResolverInstallerSettings,
     python_preference: PythonPreference,
@@ -268,8 +268,11 @@ pub(crate) async fn run(
         if !extras.is_empty() {
             warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
-        if !dev {
+        if matches!(dev, DevMode::Exclude) {
             warn_user!("`--no-dev` is not supported for Python scripts with inline metadata");
+        }
+        if matches!(dev, DevMode::Only) {
+            warn_user!("`--only-dev` is not supported for Python scripts with inline metadata");
         }
         if package.is_some() {
             warn_user!(
@@ -342,8 +345,11 @@ pub(crate) async fn run(
             if !extras.is_empty() {
                 warn_user!("Extras have no effect when used alongside `--no-project`");
             }
-            if !dev {
+            if matches!(dev, DevMode::Exclude) {
                 warn_user!("`--no-dev` has no effect when used alongside `--no-project`");
+            }
+            if matches!(dev, DevMode::Only) {
+                warn_user!("`--only-dev` has no effect when used alongside `--no-project`");
             }
             if locked {
                 warn_user!("`--locked` has no effect when used alongside `--no-project`");
@@ -359,8 +365,11 @@ pub(crate) async fn run(
             if !extras.is_empty() {
                 warn_user!("Extras have no effect when used outside of a project");
             }
-            if !dev {
+            if matches!(dev, DevMode::Exclude) {
                 warn_user!("`--no-dev` has no effect when used outside of a project");
+            }
+            if matches!(dev, DevMode::Only) {
+                warn_user!("`--only-dev` has no effect when used outside of a project");
             }
             if locked {
                 warn_user!("`--locked` has no effect when used outside of a project");

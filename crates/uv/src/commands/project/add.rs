@@ -16,7 +16,7 @@ use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, ExtrasSpecification, InstallOptions, SourceStrategy,
+    Concurrency, Constraints, DevMode, ExtrasSpecification, InstallOptions, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -729,17 +729,17 @@ async fn lock_and_sync(
     let (extras, dev) = match dependency_type {
         DependencyType::Production => {
             let extras = ExtrasSpecification::None;
-            let dev = false;
+            let dev = DevMode::Exclude;
             (extras, dev)
         }
         DependencyType::Dev => {
             let extras = ExtrasSpecification::None;
-            let dev = true;
+            let dev = DevMode::Include;
             (extras, dev)
         }
         DependencyType::Optional(ref group_name) => {
             let extras = ExtrasSpecification::Some(vec![group_name.clone()]);
-            let dev = false;
+            let dev = DevMode::Exclude;
             (extras, dev)
         }
     };
