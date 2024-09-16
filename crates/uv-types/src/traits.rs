@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use distribution_types::{
-    CachedDist, IndexCapabilities, IndexLocations, InstalledDist, Resolution, SourceDist,
-    StaticMetadata,
+    CachedDist, IndexCapabilities, IndexLocations, InstalledDist, MetadataOverrides, Resolution,
+    SourceDist,
 };
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
@@ -64,7 +64,7 @@ pub trait BuildContext {
     fn capabilities(&self) -> &IndexCapabilities;
 
     /// Return a reference to any pre-defined static metadata.
-    fn static_metadata(&self) -> &StaticMetadata;
+    fn metadata_override(&self) -> &MetadataOverrides;
 
     /// Whether source distribution building or pre-built wheels is disabled.
     ///

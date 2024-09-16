@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
 
-use distribution_types::{IndexLocations, StaticMetadata};
+use distribution_types::{IndexLocations, MetadataOverrides};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{ExtraName, RequirementOrigin};
 use pypi_types::{Requirement, SupportedEnvironments};
@@ -1784,7 +1784,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) allow_insecure_host: &'a [TrustedHost],
-    pub(crate) static_metadata: &'a StaticMetadata,
+    pub(crate) metadata_override: &'a MetadataOverrides,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: &'a [PackageName],
@@ -1809,7 +1809,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) static_metadata: StaticMetadata,
+    pub(crate) metadata_override: MetadataOverrides,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
@@ -1828,7 +1828,7 @@ pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) allow_insecure_host: &'a [TrustedHost],
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) static_metadata: &'a StaticMetadata,
+    pub(crate) metadata_override: &'a MetadataOverrides,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: &'a [PackageName],
@@ -1860,7 +1860,7 @@ impl ResolverSettings {
             allow_insecure_host: &self.allow_insecure_host,
             resolution: self.resolution,
             prerelease: self.prerelease,
-            static_metadata: &self.static_metadata,
+            metadata_override: &self.metadata_override,
             config_setting: &self.config_setting,
             no_build_isolation: self.no_build_isolation,
             no_build_isolation_package: &self.no_build_isolation_package,
@@ -1884,8 +1884,8 @@ impl From<ResolverOptions> for ResolverSettings {
             ),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
-            static_metadata: StaticMetadata::from_entries(
-                value.static_metadata.into_iter().flatten(),
+            metadata_override: MetadataOverrides::from_entries(
+                value.metadata_override.into_iter().flatten(),
             ),
             index_strategy: value.index_strategy.unwrap_or_default(),
             keyring_provider: value.keyring_provider.unwrap_or_default(),
@@ -1921,7 +1921,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) allow_insecure_host: &'a [TrustedHost],
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) static_metadata: &'a StaticMetadata,
+    pub(crate) metadata_override: &'a MetadataOverrides,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: &'a [PackageName],
@@ -1948,7 +1948,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) static_metadata: StaticMetadata,
+    pub(crate) metadata_override: MetadataOverrides,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
@@ -1985,7 +1985,7 @@ impl ResolverInstallerSettings {
             allow_insecure_host: &self.allow_insecure_host,
             resolution: self.resolution,
             prerelease: self.prerelease,
-            static_metadata: &self.static_metadata,
+            metadata_override: &self.metadata_override,
             config_setting: &self.config_setting,
             no_build_isolation: self.no_build_isolation,
             no_build_isolation_package: &self.no_build_isolation_package,
@@ -2011,8 +2011,8 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
             ),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
-            static_metadata: StaticMetadata::from_entries(
-                value.static_metadata.into_iter().flatten(),
+            metadata_override: MetadataOverrides::from_entries(
+                value.metadata_override.into_iter().flatten(),
             ),
             index_strategy: value.index_strategy.unwrap_or_default(),
             keyring_provider: value.keyring_provider.unwrap_or_default(),
@@ -2070,7 +2070,7 @@ pub(crate) struct PipSettings {
     pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) static_metadata: StaticMetadata,
+    pub(crate) metadata_override: MetadataOverrides,
     pub(crate) output_file: Option<PathBuf>,
     pub(crate) no_strip_extras: bool,
     pub(crate) no_strip_markers: bool,
@@ -2130,7 +2130,7 @@ impl PipSettings {
             allow_empty_requirements,
             resolution,
             prerelease,
-            static_metadata,
+            metadata_override,
             output_file,
             no_strip_extras,
             no_strip_markers,
@@ -2171,7 +2171,7 @@ impl PipSettings {
             allow_insecure_host: top_level_allow_insecure_host,
             resolution: top_level_resolution,
             prerelease: top_level_prerelease,
-            static_metadata: top_level_static_metadata,
+            metadata_override: top_level_metadata_override,
             config_settings: top_level_config_settings,
             no_build_isolation: top_level_no_build_isolation,
             no_build_isolation_package: top_level_no_build_isolation_package,
@@ -2202,7 +2202,7 @@ impl PipSettings {
         let allow_insecure_host = allow_insecure_host.combine(top_level_allow_insecure_host);
         let resolution = resolution.combine(top_level_resolution);
         let prerelease = prerelease.combine(top_level_prerelease);
-        let static_metadata = static_metadata.combine(top_level_static_metadata);
+        let metadata_override = metadata_override.combine(top_level_metadata_override);
         let config_settings = config_settings.combine(top_level_config_settings);
         let no_build_isolation = no_build_isolation.combine(top_level_no_build_isolation);
         let no_build_isolation_package =
@@ -2236,9 +2236,9 @@ impl PipSettings {
             },
             resolution: args.resolution.combine(resolution).unwrap_or_default(),
             prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
-            static_metadata: StaticMetadata::from_entries(
-                args.static_metadata
-                    .combine(static_metadata)
+            metadata_override: MetadataOverrides::from_entries(
+                args.metadata_override
+                    .combine(metadata_override)
                     .unwrap_or_default(),
             ),
             output_file: args.output_file.combine(output_file),
@@ -2385,7 +2385,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
             allow_insecure_host: settings.allow_insecure_host,
             resolution: settings.resolution,
             prerelease: settings.prerelease,
-            static_metadata: settings.static_metadata,
+            metadata_override: settings.metadata_override,
             config_setting: settings.config_setting,
             no_build_isolation: settings.no_build_isolation,
             no_build_isolation_package: settings.no_build_isolation_package,
@@ -2405,7 +2405,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for InstallerSettingsRef<'a> {
             index_strategy: settings.index_strategy,
             keyring_provider: settings.keyring_provider,
             allow_insecure_host: settings.allow_insecure_host,
-            static_metadata: settings.static_metadata,
+            metadata_override: settings.metadata_override,
             config_setting: settings.config_setting,
             no_build_isolation: settings.no_build_isolation,
             no_build_isolation_package: settings.no_build_isolation_package,

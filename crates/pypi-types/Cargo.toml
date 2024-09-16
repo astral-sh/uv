@@ -26,7 +26,6 @@ jiff = { workspace = true, features = ["serde"] }
 mailparse = { workspace = true }
 regex = { workspace = true }
 rkyv = { workspace = true }
-schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }

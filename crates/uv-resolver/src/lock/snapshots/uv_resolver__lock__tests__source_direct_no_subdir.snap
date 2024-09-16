@@ -81,7 +81,7 @@ Ok(
             requirements: {},
             constraints: {},
             overrides: {},
-            static_metadata: {},
+            metadata_override: {},
         },
     },
 )

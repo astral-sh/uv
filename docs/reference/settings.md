@@ -672,6 +672,47 @@ Windows.
 
 ---
 
+### [`metadata-override`](#metadata-override) {: #metadata-override }
+
+Pre-defined static metadata for dependencies of the project (direct or transitive). When
+provided, enables the resolver to use the specified metadata instead of querying the
+registry or building the relevant package from source.
+
+Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
+standard, though only the following fields are respected:
+
+- `name`: The name of the package.
+- (Optional) `version`: The version of the package. If omitted, the metadata will be applied
+  to all versions of the package.
+- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
+- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
+- (Optional) `provides-extras`: The extras provided by the package.
+
+**Default value**: `[]`
+
+**Type**: `list[dict]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    metadata-override = [
+        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+    ]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    metadata-override = [
+        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+    ]
+    ```
+
+---
+
 ### [`native-tls`](#native-tls) {: #native-tls }
 
 Whether to load TLS certificates from the platform's native certificate store.
@@ -1171,44 +1212,6 @@ By default, uv will use the latest compatible version of each package (`highest`
     ```toml
     
     resolution = "lowest-direct"
-    ```
-
----
-
-### [`static-metadata`](#static-metadata) {: #static-metadata }
-
-Pre-defined static metadata for dependencies of the project (direct or transitive).
-
-Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
-standard, though only the following fields are respected:
-
-- `name`
-- `version`
-- `requires-dist`
-- `requires-python`
-- `provides-extras`
-
-**Default value**: `[]`
-
-**Type**: `list[dict]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv]
-    static-metadata = [
-        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
-    ]
-    ```
-=== "uv.toml"
-
-    ```toml
-    
-    static-metadata = [
-        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
-    ]
     ```
 
 ---
@@ -1930,6 +1933,48 @@ Windows.
 
 ---
 
+#### [`metadata-override`](#pip_metadata-override) {: #pip_metadata-override }
+<span id="metadata-override"></span>
+
+Pre-defined static metadata for dependencies of the project (direct or transitive). When
+provided, enables the resolver to use the specified metadata instead of querying the
+registry or building the relevant package from source.
+
+Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
+standard, though only the following fields are respected:
+
+- `name`: The name of the package.
+- (Optional) `version`: The version of the package. If omitted, the metadata will be applied
+  to all versions of the package.
+- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
+- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
+- (Optional) `provides-extras`: The extras provided by the package.
+
+**Default value**: `[]`
+
+**Type**: `list[dict]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    metadata-override = [
+        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+    ]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    metadata-override = [
+        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+    ]
+    ```
+
+---
+
 #### [`no-annotate`](#pip_no-annotate) {: #pip_no-annotate }
 <span id="no-annotate"></span>
 
@@ -2619,45 +2664,6 @@ By default, uv will use the latest compatible version of each package (`highest`
     ```toml
     [pip]
     resolution = "lowest-direct"
-    ```
-
----
-
-#### [`static-metadata`](#pip_static-metadata) {: #pip_static-metadata }
-<span id="static-metadata"></span>
-
-Pre-defined static metadata for dependencies of the project (direct or transitive).
-
-Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
-standard, though only the following fields are respected:
-
-- `name`
-- `version`
-- `requires-dist`
-- `requires-python`
-- `provides-extras`
-
-**Default value**: `[]`
-
-**Type**: `list[dict]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    static-metadata = [
-        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
-    ]
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    static-metadata = [
-        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
-    ]
     ```
 
 ---

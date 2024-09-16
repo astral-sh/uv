@@ -363,7 +363,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // If the metadata was provided by the user directly, prefer it.
         if let Some(metadata) = self
             .build_context
-            .static_metadata()
+            .metadata_override()
             .get(dist.name(), dist.version())
         {
             return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
@@ -429,7 +429,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             if let Some(version) = dist.version() {
                 if let Some(metadata) = self
                     .build_context
-                    .static_metadata()
+                    .metadata_override()
                     .get(dist.name(), version)
                 {
                     return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));

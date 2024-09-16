@@ -83,7 +83,7 @@ mod resolver {
 
     use anyhow::Result;
 
-    use distribution_types::{IndexCapabilities, IndexLocations, StaticMetadata};
+    use distribution_types::{IndexCapabilities, IndexLocations, MetadataOverrides};
     use install_wheel_rs::linker::LinkMode;
     use pep440_rs::Version;
     use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
@@ -161,7 +161,7 @@ mod resolver {
         let installed_packages = EmptyInstalledPackages;
         let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
         let sources = SourceStrategy::default();
-        let static_metadata = StaticMetadata::default();
+        let metadata_override = MetadataOverrides::default();
 
         let python_requirement = if universal {
             PythonRequirement::from_requires_python(
@@ -179,7 +179,7 @@ mod resolver {
             interpreter,
             &index_locations,
             &flat_index,
-            &static_metadata,
+            &metadata_override,
             &index,
             &git,
             &capabilities,

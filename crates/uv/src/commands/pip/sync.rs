@@ -5,7 +5,7 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, Resolution, StaticMetadata};
+use distribution_types::{IndexLocations, MetadataOverrides, Resolution};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::PackageName;
 use uv_auth::store_credentials_from_url;
@@ -47,7 +47,7 @@ pub(crate) async fn pip_sync(
     hash_checking: Option<HashCheckingMode>,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
-    static_metadata: StaticMetadata,
+    metadata_override: MetadataOverrides,
     keyring_provider: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     allow_empty_requirements: bool,
@@ -288,7 +288,7 @@ pub(crate) async fn pip_sync(
         interpreter,
         &index_locations,
         &flat_index,
-        &static_metadata,
+        &metadata_override,
         &state.index,
         &state.git,
         &state.capabilities,

@@ -300,7 +300,7 @@ pub(crate) async fn add(
         target.interpreter(),
         &settings.index_locations,
         &flat_index,
-        &settings.static_metadata,
+        &settings.metadata_override,
         &state.index,
         &state.git,
         &state.capabilities,

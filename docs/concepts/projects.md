@@ -715,8 +715,8 @@ $ uv sync --extra build
 $ uv sync --extra build --extra compile
 ```
 
-Some packages, like `cchardet`, only require build dependencies for the _installation_ phase of
-`uv sync`. Others, like `flash-attn`, require their build dependencies to be present even just to
+Some packages, like `cchardet` above, only require build dependencies for the _installation_ phase
+of `uv sync`. Others, like `flash-attn`, require their build dependencies to be present even just to
 resolve the project's lockfile during the _resolution_ phase.
 
 In such cases, the build dependencies must be installed prior to running any `uv lock` or `uv sync`
@@ -735,10 +735,54 @@ dependencies = ["flash-attn"]
 no-build-isolation-package = ["flash-attn"]
 ```
 
-You could run the following sequence of commands:
+You could run the following sequence of commands to sync `flash-attn`:
 
 ```console
 $ uv venv
 $ uv pip install torch
 $ uv sync
+```
+
+Alternatively, you can provide the `flash-attn` metadata upfront via the
+[`metadata-override`](../reference/settings.md#metadata-override) setting, thereby forgoing the need
+to build the package during the dependency resolution phase. For example, to provide the
+`flash-attn` metadata upfront, include the following in your `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[[tool.uv.metadata-override]]
+name = "flash-attn"
+version = "2.6.3"
+requires-dist = ["torch", "einops"]
+```
+
+Once included, you can again use the two-step `uv sync` process to install the build dependencies.
+Given the following `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[project]
+name = "project"
+version = "0.1.0"
+description = "..."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+build = ["torch", "setuptools", "packaging"]
+compile = ["flash-attn"]
+
+[tool.uv]
+no-build-isolation-package = ["flash-attn"]
+
+[[tool.uv.metadata-override]]
+name = "flash-attn"
+version = "2.6.3"
+requires-dist = ["torch", "einops"]
+```
+
+You could run the following sequence of commands to sync `flash-attn`:
+
+```console
+$ uv sync --extra build
+$ uv sync --extra build --extra compile
 ```

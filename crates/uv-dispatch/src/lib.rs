@@ -12,7 +12,7 @@ use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
 use distribution_types::{
-    CachedDist, IndexCapabilities, IndexLocations, Name, Resolution, SourceDist, StaticMetadata,
+    CachedDist, IndexCapabilities, IndexLocations, MetadataOverrides, Name, Resolution, SourceDist,
     VersionOrUrlRef,
 };
 use pypi_types::Requirement;
@@ -46,7 +46,7 @@ pub struct BuildDispatch<'a> {
     index: &'a InMemoryIndex,
     git: &'a GitResolver,
     capabilities: &'a IndexCapabilities,
-    static_metadata: &'a StaticMetadata,
+    metadata_override: &'a MetadataOverrides,
     in_flight: &'a InFlight,
     build_isolation: BuildIsolation<'a>,
     link_mode: install_wheel_rs::linker::LinkMode,
@@ -68,7 +68,7 @@ impl<'a> BuildDispatch<'a> {
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
-        static_metadata: &'a StaticMetadata,
+        metadata_override: &'a MetadataOverrides,
         index: &'a InMemoryIndex,
         git: &'a GitResolver,
         capabilities: &'a IndexCapabilities,
@@ -93,7 +93,7 @@ impl<'a> BuildDispatch<'a> {
             index,
             git,
             capabilities,
-            static_metadata,
+            metadata_override,
             in_flight,
             index_strategy,
             config_settings,
@@ -140,8 +140,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.capabilities
     }
 
-    fn static_metadata(&self) -> &StaticMetadata {
-        self.static_metadata
+    fn metadata_override(&self) -> &MetadataOverrides {
+        self.metadata_override
     }
 
     fn build_options(&self) -> &BuildOptions {

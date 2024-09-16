@@ -12628,7 +12628,7 @@ fn lock_python_upper_bound() -> Result<()> {
 }
 
 #[test]
-fn lock_static_metadata() -> Result<()> {
+fn lock_metadata_override() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -12644,7 +12644,7 @@ fn lock_static_metadata() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
-        [[tool.uv.static-metadata]]
+        [[tool.uv.metadata-override]]
         name = "anyio"
         version = "3.7.0"
         requires-dist = ["iniconfig"]
@@ -12675,7 +12675,7 @@ fn lock_static_metadata() -> Result<()> {
 
         [manifest]
 
-        [[manifest.static-metadata]]
+        [[manifest.metadata-override]]
         name = "anyio"
         version = "3.7.0"
         requires-dist = ["iniconfig"]
@@ -12763,7 +12763,7 @@ fn lock_static_metadata() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
-        [[tool.uv.static-metadata]]
+        [[tool.uv.metadata-override]]
         name = "anyio"
         version = "3.7.0"
         requires-dist = ["typing-extensions"]
@@ -12808,6 +12808,38 @@ fn lock_static_metadata() -> Result<()> {
     Added idna v3.6
     Added sniffio v1.3.1
     Removed typing-extensions v4.10.0
+    "###);
+
+    // Use a blanket match.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [[tool.uv.metadata-override]]
+        name = "anyio"
+        requires-dist = ["iniconfig"]
+        "#,
+    )?;
+
+    // The lockfile should update.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Removed idna v3.6
+    Added iniconfig v2.0.0
+    Removed sniffio v1.3.1
     "###);
 
     Ok(())

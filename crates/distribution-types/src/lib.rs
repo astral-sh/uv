@@ -58,11 +58,11 @@ pub use crate::hash::*;
 pub use crate::id::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
+pub use crate::metadata_override::*;
 pub use crate::prioritized_distribution::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
-pub use crate::static_metadata::*;
 pub use crate::traits::*;
 
 mod annotation;
@@ -76,11 +76,11 @@ mod hash;
 mod id;
 mod index_url;
 mod installed;
+mod metadata_override;
 mod prioritized_distribution;
 mod resolution;
 mod resolved;
 mod specified_requirement;
-mod static_metadata;
 mod traits;
 
 #[derive(Debug, Clone)]

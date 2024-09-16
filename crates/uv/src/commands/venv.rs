@@ -9,7 +9,7 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use distribution_types::{IndexLocations, StaticMetadata};
+use distribution_types::{IndexLocations, MetadataOverrides};
 use install_wheel_rs::linker::LinkMode;
 use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
@@ -48,7 +48,7 @@ pub(crate) async fn venv(
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
-    static_metadata: StaticMetadata,
+    metadata_override: MetadataOverrides,
     keyring_provider: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     prompt: uv_virtualenv::Prompt,
@@ -71,7 +71,7 @@ pub(crate) async fn venv(
         link_mode,
         index_locations,
         index_strategy,
-        static_metadata,
+        metadata_override,
         keyring_provider,
         allow_insecure_host,
         prompt,
@@ -127,7 +127,7 @@ async fn venv_impl(
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
-    static_metadata: StaticMetadata,
+    metadata_override: MetadataOverrides,
     keyring_provider: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     prompt: uv_virtualenv::Prompt,
@@ -320,7 +320,7 @@ async fn venv_impl(
             interpreter,
             index_locations,
             &flat_index,
-            &static_metadata,
+            &metadata_override,
             &state.index,
             &state.git,
             &state.capabilities,
