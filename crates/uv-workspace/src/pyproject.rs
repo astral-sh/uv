@@ -44,7 +44,7 @@ pub struct PyProjectToml {
     #[serde(skip)]
     pub raw: String,
 
-    /// Used to determine whether a `build-system` is present.
+    /// Used to determine whether a `build-system` section is present.
     #[serde(default, skip_serializing)]
     build_system: Option<serde::de::IgnoredAny>,
 }
@@ -70,17 +70,42 @@ impl PyProjectToml {
     /// non-package ("virtual") project.
     pub fn is_package(&self) -> bool {
         // If `tool.uv.package` is set, defer to that explicit setting.
-        if let Some(is_package) = self
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.package)
-        {
+        if let Some(is_package) = self.is_uv_package() {
             return is_package;
         }
 
         // Otherwise, a project is assumed to be a package if `build-system` is present.
         self.build_system.is_some()
+    }
+
+    /// Returns whether the project should be considered a packaged script.
+    ///
+    /// This detects if a project is declared as a uv package, or if it has
+    /// a scripts-related section defined.
+    pub fn is_packaged_script(&self) -> bool {
+        if let Some(is_package) = self.is_uv_package() {
+            return is_package;
+        };
+
+        if let Some(ref project) = self.project {
+            let is_script = project.gui_scripts.is_some() || project.scripts.is_some();
+            return is_script;
+        };
+
+        false
+    }
+
+    /// Returns whether the project has a `build-system` section.
+    pub fn has_build_system(&self) -> bool {
+        self.build_system.is_some()
+    }
+
+    /// Returns the value of `tool.uv.package`, if explicitly set.
+    fn is_uv_package(&self) -> Option<bool> {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.package)
     }
 }
 
@@ -102,7 +127,7 @@ impl AsRef<[u8]> for PyProjectToml {
 /// PEP 621 project metadata (`project`).
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct Project {
     /// The name of the project
@@ -113,6 +138,13 @@ pub struct Project {
     pub requires_python: Option<VersionSpecifiers>,
     /// The optional dependencies of the project.
     pub optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
+
+    /// Used to determine whether a `gui-scripts` section is present.
+    #[serde(default, skip_serializing)]
+    pub(crate) gui_scripts: Option<serde::de::IgnoredAny>,
+    /// Used to determine whether a `scripts` section is present.
+    #[serde(default, skip_serializing)]
+    pub(crate) scripts: Option<serde::de::IgnoredAny>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

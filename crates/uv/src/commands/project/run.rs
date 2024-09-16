@@ -451,6 +451,12 @@ pub(crate) async fn run(
                 .await?
             };
 
+            if project.workspace().pyproject_toml().is_packaged_script()
+                && !project.workspace().pyproject_toml().has_build_system()
+            {
+                warn_user!("No `build-system` section found for the package; consider adding one to correctly build the project");
+            }
+
             if no_sync {
                 debug!("Skipping environment synchronization due to `--no-sync`");
             } else {
