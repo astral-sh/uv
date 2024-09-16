@@ -1950,3 +1950,44 @@ fn run_invalid_project_table() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_script_without_build_system() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        entry = "foo:custom_entry"
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("src/__init__.py");
+    test_script.write_str(indoc! { r#"
+        def custom_entry():
+            print!("Hello")
+       "#
+    })?;
+
+    // TODO(lucab): this should match `entry` and warn
+    // https://github.com/astral-sh/uv/issues/7428
+    uv_snapshot!(context.filters(), context.run().arg("entry"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    error: Failed to spawn: `entry`
+      Caused by: No such file or directory (os error 2)
+    "###);
+
+    Ok(())
+}
