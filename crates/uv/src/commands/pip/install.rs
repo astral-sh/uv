@@ -6,7 +6,8 @@ use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
 use distribution_types::{
-    IndexLocations, NameRequirementSpecification, Resolution, UnresolvedRequirementSpecification,
+    IndexLocations, NameRequirementSpecification, Resolution, StaticMetadata,
+    UnresolvedRequirementSpecification,
 };
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::PackageName;
@@ -54,6 +55,7 @@ pub(crate) async fn pip_install(
     upgrade: Upgrade,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
+    static_metadata: StaticMetadata,
     keyring_provider: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     reinstall: Reinstall,
@@ -337,6 +339,7 @@ pub(crate) async fn pip_install(
         interpreter,
         &index_locations,
         &flat_index,
+        &static_metadata,
         &state.index,
         &state.git,
         &state.capabilities,

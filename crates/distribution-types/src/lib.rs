@@ -47,7 +47,6 @@ use uv_fs::normalize_absolute_path;
 use uv_git::GitUrl;
 use uv_normalize::PackageName;
 
-pub use crate::static_metadata::*;
 pub use crate::annotation::*;
 pub use crate::any::*;
 pub use crate::buildable::*;
@@ -63,6 +62,7 @@ pub use crate::prioritized_distribution::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
+pub use crate::static_metadata::*;
 pub use crate::traits::*;
 
 mod annotation;
@@ -80,8 +80,8 @@ mod prioritized_distribution;
 mod resolution;
 mod resolved;
 mod specified_requirement;
-mod traits;
 mod static_metadata;
+mod traits;
 
 #[derive(Debug, Clone)]
 pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {

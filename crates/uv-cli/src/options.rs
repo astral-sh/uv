@@ -271,6 +271,7 @@ pub fn resolver_options(
         } else {
             prerelease
         },
+        static_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
         no_build_isolation: flag(no_build_isolation, build_isolation),
@@ -364,6 +365,7 @@ pub fn resolver_installer_options(
         } else {
             prerelease
         },
+        static_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
         no_build_isolation: flag(no_build_isolation, build_isolation),

@@ -323,6 +323,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.emit_index_annotation,
                 args.settings.index_locations,
                 args.settings.index_strategy,
+                args.settings.static_metadata,
                 args.settings.keyring_provider,
                 args.settings.allow_insecure_host,
                 args.settings.config_setting,
@@ -390,6 +391,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.hash_checking,
                 args.settings.index_locations,
                 args.settings.index_strategy,
+                args.settings.static_metadata,
                 args.settings.keyring_provider,
                 args.settings.allow_insecure_host,
                 args.settings.allow_empty_requirements,
@@ -453,7 +455,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
-
             let build_constraints = args
                 .build_constraint
                 .into_iter()
@@ -474,6 +475,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.upgrade,
                 args.settings.index_locations,
                 args.settings.index_strategy,
+                args.settings.static_metadata,
                 args.settings.keyring_provider,
                 args.settings.allow_insecure_host,
                 args.settings.reinstall,
@@ -733,6 +735,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.link_mode,
                 &args.settings.index_locations,
                 args.settings.index_strategy,
+                args.settings.static_metadata,
                 args.settings.keyring_provider,
                 args.settings.allow_insecure_host,
                 uv_virtualenv::Prompt::from_args(prompt),

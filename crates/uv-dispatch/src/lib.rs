@@ -11,7 +11,10 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, IndexCapabilities, IndexLocations, Name, Resolution, SourceDist, StaticMetadata, VersionOrUrlRef};
+use distribution_types::{
+    CachedDist, IndexCapabilities, IndexLocations, Name, Resolution, SourceDist, StaticMetadata,
+    VersionOrUrlRef,
+};
 use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
@@ -65,10 +68,10 @@ impl<'a> BuildDispatch<'a> {
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
+        static_metadata: &'a StaticMetadata,
         index: &'a InMemoryIndex,
         git: &'a GitResolver,
         capabilities: &'a IndexCapabilities,
-        static_metadata: &'a StaticMetadata,
         in_flight: &'a InFlight,
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
