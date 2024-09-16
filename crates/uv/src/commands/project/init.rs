@@ -47,7 +47,17 @@ pub(crate) async fn init(
     };
 
     // Make sure a project does not already exist in the given directory.
-    if path.join("pyproject.toml").exists() {
+    if project_kind == InitProjectKind::Script {
+        if explicit_path.is_none() {
+            anyhow::bail!("Missing script name to initialize",);
+        }
+        if path.exists() {
+            anyhow::bail!(
+                "Script is already initialized in `{}`",
+                path.display().cyan()
+            );
+        }
+    } else if path.join("pyproject.toml").exists() {
         let path = std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
         anyhow::bail!(
             "Project is already initialized in `{}` (`pyproject.toml` file exists)",
@@ -98,6 +108,16 @@ pub(crate) async fn init(
         // Initialized a project in the current directory.
         None => {
             writeln!(printer.stderr(), "Initialized project `{}`", name.cyan())?;
+        }
+        // Initialized script
+        Some(path) if project_kind == InitProjectKind::Script => {
+            let path =
+                std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
+            writeln!(
+                printer.stderr(),
+                "Initialized script at `{}`",
+                path.display().cyan()
+            )?;
         }
         // Initialized a project in the given directory.
         Some(path) => {
@@ -430,8 +450,7 @@ impl InitProjectKind {
                 .await
             }
             InitProjectKind::Script => {
-                self.init_script(name, path, requires_python, python_request, no_readme)
-                    .await
+                InitProjectKind::init_script(path, requires_python, no_readme)
             }
         }
     }
@@ -577,16 +596,14 @@ impl InitProjectKind {
         Ok(())
     }
 
-    async fn init_script(
-        self,
-        name: &PackageName,
-        path: &Path,
-        requires_python: &RequiresPython,
-        python_request: Option<&PythonRequest>,
-        no_readme: bool,
-    ) -> Result<()> {
+    fn init_script(path: &Path, requires_python: &RequiresPython, no_readme: bool) -> Result<()> {
+        let script_name = path
+            .file_name()
+            .and_then(|path| path.to_str())
+            .context("Missing directory name")?;
+
         // Create the embedded `pyproject.toml`
-        let pyproject = pyproject_script(name, requires_python, no_readme);
+        let pyproject = pyproject_script(script_name, requires_python, no_readme);
 
         // Create the script
         if !path.try_exists()? {
@@ -594,8 +611,9 @@ impl InitProjectKind {
                 path,
                 indoc::formatdoc! {r#"
                 {pyproject}
+
                 def main():
-                    print("Hello from {name}!")
+                    print("Hello from {script_name}!")
 
 
                 if __name__ == "__main__":
@@ -627,25 +645,18 @@ fn pyproject_project(
     }
 }
 
-fn pyproject_script(
-    name: &PackageName,
-    requires_python: &RequiresPython,
-    no_readme: bool,
-) -> String {
+fn pyproject_script(name: &str, requires_python: &RequiresPython, no_readme: bool) -> String {
     let readme_txt = indoc::formatdoc! {r#"
         # /// readme
         # You can execute this file with any tool compliant with inline script metadata. E.g.:
         # $ uv run {name}
         # ///
+
         "#,
         name = name,
     };
 
-    indoc::formatdoc! {r#"{readme}
-            # /// script
-            # name = "{name}"
-            # version = "0.1.0"
-            # description = "Add your description here"
+    indoc::formatdoc! {r#"{readme}# /// script
             # requires-python = "{requires_python}"
             # dependencies = []
             # ///
