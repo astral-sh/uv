@@ -130,7 +130,13 @@ impl SourceDistFilename {
 
 impl Display for SourceDistFilename {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}.{}", self.name, self.version, self.extension)
+        write!(
+            f,
+            "{}-{}.{}",
+            self.name.as_dist_info_name(),
+            self.version,
+            self.extension
+        )
     }
 }
 
@@ -173,14 +179,17 @@ mod tests {
     use crate::{SourceDistExtension, SourceDistFilename};
 
     /// Only test already normalized names since the parsing is lossy
+    ///
+    /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/#source-distribution-file-name>
+    /// <https://packaging.python.org/en/latest/specifications/binary-distribution-format/#escaping-and-unicode>
     #[test]
     fn roundtrip() {
         for normalized in [
-            "foo-lib-1.2.3.zip",
-            "foo-lib-1.2.3a3.zip",
-            "foo-lib-1.2.3.tar.gz",
-            "foo-lib-1.2.3.tar.bz2",
-            "foo-lib-1.2.3.tar.zst",
+            "foo_lib-1.2.3.zip",
+            "foo_lib-1.2.3a3.zip",
+            "foo_lib-1.2.3.tar.gz",
+            "foo_lib-1.2.3.tar.bz2",
+            "foo_lib-1.2.3.tar.zst",
         ] {
             let ext = SourceDistExtension::from_path(normalized).unwrap();
             assert_eq!(
