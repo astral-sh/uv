@@ -2327,8 +2327,9 @@ pub struct InitArgs {
     ///
     /// A script is a standalone file which adheres to the PEP-723 specification.
     ///
-    /// Python version the script depends on is defined by (in descending order of priority)
-    /// user input (via --python), .python-version file (if present, ignore with no_pin_python), or any.
+    /// By default, the Python version the script depends on is the system version; can be
+    /// manually specified with the --python argument (takes absolute precedence) or a
+    /// .python-version file (ignore with --no_pin_python).
     #[arg(long, alias="script", conflicts_with_all=["app", "lib"])]
     pub r#script: bool,
 
