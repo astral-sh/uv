@@ -1754,6 +1754,7 @@ fn add_workspace_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + child1==0.1.0 (from file://[TEMP_DIR]/child1)

@@ -7970,14 +7970,15 @@ fn lock_editable() -> Result<()> {
     library.child("src/__init__.py").touch()?;
 
     // First, lock without marking the dependency as editable from either member.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -8029,14 +8030,15 @@ fn lock_editable() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
-    "###);
+    "#);
 
     // Next, mark the dependency as editable from one member.
     leaf.child("pyproject.toml").write_str(indoc! {r#"
@@ -8053,14 +8055,15 @@ fn lock_editable() -> Result<()> {
         library = { path = "../../library", editable = true }
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[WORKSPACE]/.venv` does not match the project environment path `.venv` and will be ignored
     Resolved 3 packages in [TIME]
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 

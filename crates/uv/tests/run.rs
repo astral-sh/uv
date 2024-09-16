@@ -231,7 +231,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     // Running the script should install the requirements.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -239,10 +239,11 @@ fn run_pep723_script() -> Result<()> {
     ----- stderr -----
     Reading inline script metadata from: main.py
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     // Running again should use the existing environment.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
@@ -411,7 +412,7 @@ fn run_pep723_script_requires_python() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -420,6 +421,7 @@ fn run_pep723_script_requires_python() -> Result<()> {
     Reading inline script metadata from: main.py
     warning: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the script's Python requirement: `>=3.11`
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
@@ -427,12 +429,12 @@ fn run_pep723_script_requires_python() -> Result<()> {
       File "main.py", line 10, in <module>
         x: str | int = "hello"
     TypeError: unsupported operand type(s) for |: 'type' and 'type'
-    "###);
+    "#);
 
     // Delete the `.python-version` file to allow the script to run.
     fs_err::remove_file(&python_version)?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -441,9 +443,10 @@ fn run_pep723_script_requires_python() -> Result<()> {
     ----- stderr -----
     Reading inline script metadata from: main.py
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     Ok(())
 }
@@ -515,7 +518,7 @@ fn run_pep723_script_metadata() -> Result<()> {
     })?;
 
     // Running the script should fail without network access.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -523,10 +526,11 @@ fn run_pep723_script_metadata() -> Result<()> {
     ----- stderr -----
     Reading inline script metadata from: main.py
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==1.0.1
-    "###);
+    "#);
 
     // Respect `tool.uv.sources`.
     let test_script = context.temp_dir.child("main.py");
@@ -546,7 +550,7 @@ fn run_pep723_script_metadata() -> Result<()> {
     })?;
 
     // The script should succeed with the specified source.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -554,10 +558,11 @@ fn run_pep723_script_metadata() -> Result<()> {
     ----- stderr -----
     Reading inline script metadata from: main.py
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
-    "###);
+    "#);
 
     Ok(())
 }
@@ -621,7 +626,7 @@ fn run_with() -> Result<()> {
     })?;
 
     // Requesting an unsatisfied requirement should install it.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -635,10 +640,11 @@ fn run_with() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     // Requesting a satisfied requirement should use the base environment.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio").arg("main.py"), @r###"
@@ -652,7 +658,7 @@ fn run_with() -> Result<()> {
     "###);
 
     // Unless the user requests a different version.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio<1.3.1").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio<1.3.1").arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -661,10 +667,11 @@ fn run_with() -> Result<()> {
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + sniffio==1.3.0
-    "###);
+    "#);
 
     // If the dependencies can't be resolved, we should reference `--with`.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("add").arg("main.py"), @r###"
@@ -721,7 +728,7 @@ fn run_with_editable() -> Result<()> {
     })?;
 
     // Requesting an editable requirement should install it in a layer.
-    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/black_editable").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/black_editable").arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -735,13 +742,14 @@ fn run_with_editable() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[TEMP_DIR]/src/black_editable)
-    "###);
+    "#);
 
     // Requesting an editable requirement should install it in a layer, even if it satisfied
-    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -750,10 +758,11 @@ fn run_with_editable() -> Result<()> {
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
-    "###);
+    "#);
 
     // Requesting the project itself should use the base environment.
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg(".").arg("main.py"), @r###"
@@ -1120,7 +1129,7 @@ fn run_requirements_txt() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig")?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1134,10 +1143,11 @@ fn run_requirements_txt() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     // Requesting a satisfied requirement should use the base environment.
     requirements_txt.write_str("sniffio")?;
@@ -1155,7 +1165,7 @@ fn run_requirements_txt() -> Result<()> {
     // Unless the user requests a different version.
     requirements_txt.write_str("sniffio<1.3.1")?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1164,10 +1174,11 @@ fn run_requirements_txt() -> Result<()> {
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + sniffio==1.3.0
-    "###);
+    "#);
 
     // Or includes an unsatisfied requirement via `--with`.
     requirements_txt.write_str("sniffio")?;
@@ -1177,7 +1188,7 @@ fn run_requirements_txt() -> Result<()> {
         .arg(requirements_txt.as_os_str())
         .arg("--with")
         .arg("iniconfig")
-        .arg("main.py"), @r###"
+        .arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1186,11 +1197,12 @@ fn run_requirements_txt() -> Result<()> {
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     Resolved 2 packages in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + sniffio==1.3.1
-    "###);
+    "#);
 
     // But reject `-` as a requirements file.
     uv_snapshot!(context.filters(), context.run()
@@ -1243,7 +1255,7 @@ fn run_requirements_txt_arguments() -> Result<()> {
         "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1256,10 +1268,11 @@ fn run_requirements_txt_arguments() -> Result<()> {
      + typing-extensions==4.10.0
     warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + idna==3.6
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1297,7 +1310,7 @@ fn run_editable() -> Result<()> {
     })?;
 
     // We treat arguments before the command as uv arguments
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1309,10 +1322,11 @@ fn run_editable() -> Result<()> {
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/)
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1401,15 +1415,16 @@ fn run_without_output() -> Result<()> {
     })?;
 
     // On the first run, we only show the summary line for each environment.
-    uv_snapshot!(context.filters(), context.run().env_remove("UV_SHOW_RESOLUTION").arg("--with").arg("iniconfig").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().env_remove("UV_SHOW_RESOLUTION").arg("--with").arg("iniconfig").arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Installed 4 packages in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Installed 1 package in [TIME]
-    "###);
+    "#);
 
     // Subsequent runs are quiet.
     uv_snapshot!(context.filters(), context.run().env_remove("UV_SHOW_RESOLUTION").arg("--with").arg("iniconfig").arg("main.py"), @r###"
@@ -1476,7 +1491,7 @@ fn run_isolated_python_version() -> Result<()> {
      + typing-extensions==4.10.0
     "###);
 
-    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1484,6 +1499,7 @@ fn run_isolated_python_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 5 packages in [TIME]
     Installed 6 packages in [TIME]
      + anyio==4.3.0
@@ -1492,7 +1508,7 @@ fn run_isolated_python_version() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    "###);
+    "#);
 
     // Set the `.python-version` to `3.12`.
     context
@@ -1500,7 +1516,7 @@ fn run_isolated_python_version() -> Result<()> {
         .child(PYTHON_VERSION_FILENAME)
         .write_str("3.12")?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1508,13 +1524,14 @@ fn run_isolated_python_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 3 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    "#);
 
     Ok(())
 }
@@ -1848,7 +1865,7 @@ fn run_compiled_python_file() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("script.py"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1856,10 +1873,11 @@ fn run_compiled_python_file() -> Result<()> {
     ----- stderr -----
     Reading inline script metadata from: script.py
     Resolved 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 
     // Compile the PEP 723 script.
     let compile_output = context

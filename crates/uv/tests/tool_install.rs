@@ -29,13 +29,14 @@ fn tool_install() {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -45,7 +46,7 @@ fn tool_install() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
@@ -107,13 +108,14 @@ fn tool_install() {
         .arg("flask")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/flask/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + blinker==1.7.0
@@ -124,7 +126,7 @@ fn tool_install() {
      + markupsafe==2.1.5
      + werkzeug==3.0.1
     Installed 1 executable: flask
-    "###);
+    "#);
 
     tool_dir.child("flask").assert(predicate::path::is_dir());
     assert!(bin_dir
@@ -188,7 +190,7 @@ fn tool_install_suggest_other_packages_with_executable() {
     .env("UV_EXCLUDE_NEWER", "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
     // (FastAPI 0.111 is only available from this date onwards)
     .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -198,6 +200,7 @@ fn tool_install_suggest_other_packages_with_executable() {
 
     ----- stderr -----
     Resolved 35 packages in [TIME]
+    Installing to environment at tools/fastapi/bin/python
     Prepared 35 packages in [TIME]
     Installed 35 packages in [TIME]
      + annotated-types==0.6.0
@@ -234,7 +237,7 @@ fn tool_install_suggest_other_packages_with_executable() {
      + uvicorn==0.29.0
      + watchfiles==0.21.0
      + websockets==12.0
-    "###);
+    "#);
 }
 
 /// Test installing a tool at a version
@@ -249,13 +252,14 @@ fn tool_install_version() {
         .arg("black==24.2.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.2.0
@@ -265,7 +269,7 @@ fn tool_install_version() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
@@ -336,18 +340,19 @@ fn tool_install_editable() {
         .arg(context.workspace_root.join("scripts/packages/black_editable"))
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     Installed 1 executable: black
-    "###);
+    "#);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
@@ -439,13 +444,14 @@ fn tool_install_editable() {
         .arg("black==24.2.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Prepared 6 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 6 packages in [TIME]
@@ -457,7 +463,7 @@ fn tool_install_editable() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -489,13 +495,14 @@ fn tool_install_remove_on_empty() -> Result<()> {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.3.0
@@ -505,7 +512,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -555,7 +562,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
         .arg(black.path())
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -563,6 +570,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Installing to environment at tools/black/bin/python3
     Prepared 1 package in [TIME]
     Uninstalled 6 packages in [TIME]
     Installed 1 package in [TIME]
@@ -573,20 +581,21 @@ fn tool_install_remove_on_empty() -> Result<()> {
      - packaging==24.0
      - pathspec==0.12.1
      - platformdirs==4.2.0
-    "###);
+    "#);
 
     // Re-request `black`. It should reinstall, without requiring `--force`.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed 6 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -595,7 +604,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -632,18 +641,19 @@ fn tool_install_editable_from() {
         .arg(context.workspace_root.join("scripts/packages/black_editable"))
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     Installed 1 executable: black
-    "###);
+    "#);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
@@ -713,13 +723,14 @@ fn tool_install_from() {
         .arg("black==24.2.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.2.0
@@ -729,7 +740,7 @@ fn tool_install_from() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     // Attempt to install `black` using `--from` with a different package name
     uv_snapshot!(context.filters(), context.tool_install()
@@ -778,13 +789,14 @@ fn tool_install_already_installed() {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -794,7 +806,7 @@ fn tool_install_already_installed() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
@@ -883,13 +895,14 @@ fn tool_install_already_installed() {
         .arg("--reinstall")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -900,7 +913,7 @@ fn tool_install_already_installed() {
      ~ pathspec==0.12.1
      ~ platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     // Install `black` again with `--reinstall-package` for `black`
     // We should reinstall `black` in the environment and reinstall the entry points
@@ -910,19 +923,20 @@ fn tool_install_already_installed() {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      ~ black==24.3.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     // Install `black` again with `--reinstall-package` for a dependency
     // We should reinstall `click` in the environment but not reinstall `black`
@@ -932,19 +946,20 @@ fn tool_install_already_installed() {
         .arg("click")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      ~ click==8.1.7
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 }
 
 /// Test installing a tool when its entry point already exists
@@ -964,13 +979,14 @@ fn tool_install_entry_point_exists() {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -980,7 +996,7 @@ fn tool_install_entry_point_exists() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     error: Executable already exists: black (use `--force` to overwrite)
-    "###);
+    "#);
 
     // We should delete the virtual environment
     assert!(!tool_dir.child("black").exists());
@@ -1003,13 +1019,14 @@ fn tool_install_entry_point_exists() {
         .arg("--reinstall")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -1019,7 +1036,7 @@ fn tool_install_entry_point_exists() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     error: Executable already exists: black (use `--force` to overwrite)
-    "###);
+    "#);
 
     // We should not create a virtual environment
     assert!(!tool_dir.child("black").exists());
@@ -1044,13 +1061,14 @@ fn tool_install_entry_point_exists() {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -1059,7 +1077,7 @@ fn tool_install_entry_point_exists() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     error: Executables already exist: black, blackd (use `--force` to overwrite)
-    "###);
+    "#);
 
     // Install `black` with `--force`
     uv_snapshot!(context.filters(), context.tool_install()
@@ -1067,13 +1085,14 @@ fn tool_install_entry_point_exists() {
         .arg("--force")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -1082,7 +1101,7 @@ fn tool_install_entry_point_exists() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
 
@@ -1125,13 +1144,14 @@ fn tool_install_entry_point_exists() {
         .arg("--reinstall")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1142,7 +1162,7 @@ fn tool_install_entry_point_exists() {
      ~ pathspec==0.12.1
      ~ platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
 
@@ -1231,13 +1251,14 @@ fn tool_install_home() {
             "PATH",
             context.home_dir.child(".local").child("bin").as_os_str(),
         );
-    uv_snapshot!(context.filters(), cmd, @r###"
+    uv_snapshot!(context.filters(), cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.3.0
@@ -1247,7 +1268,7 @@ fn tool_install_home() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     context
         .home_dir
@@ -1268,13 +1289,14 @@ fn tool_install_xdg_data_home() {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_DATA_HOME", data_home.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.3.0
@@ -1284,7 +1306,7 @@ fn tool_install_xdg_data_home() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     context
         .temp_dir
@@ -1304,13 +1326,14 @@ fn tool_install_xdg_bin_home() {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.3.0
@@ -1320,7 +1343,7 @@ fn tool_install_xdg_bin_home() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     bin_dir
         .child(format!("black{}", std::env::consts::EXE_SUFFIX))
@@ -1339,13 +1362,14 @@ fn tool_install_tool_bin_dir() {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("UV_TOOL_BIN_DIR", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.3.0
@@ -1355,7 +1379,7 @@ fn tool_install_tool_bin_dir() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     bin_dir
         .child(format!("black{}", std::env::consts::EXE_SUFFIX))
@@ -1373,7 +1397,7 @@ fn tool_install_no_entrypoints() {
         .arg("iniconfig")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1381,10 +1405,11 @@ fn tool_install_no_entrypoints() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Installing to environment at tools/iniconfig/bin/python
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    "#);
 }
 
 /// Test installing a tool with a bare URL requirement.
@@ -1399,13 +1424,14 @@ fn tool_install_unnamed_package() {
         .arg("https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.4.2 (from https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl)
@@ -1415,7 +1441,7 @@ fn tool_install_unnamed_package() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
@@ -1512,13 +1538,14 @@ fn tool_install_unnamed_from() {
         .arg("https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.4.2 (from https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl)
@@ -1528,7 +1555,7 @@ fn tool_install_unnamed_from() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
@@ -1600,13 +1627,14 @@ fn tool_install_unnamed_with() {
         .arg("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + black==24.3.0
@@ -1617,7 +1645,7 @@ fn tool_install_unnamed_with() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
@@ -1697,13 +1725,14 @@ fn tool_install_requirements_txt() {
         .arg("requirements.txt")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -1714,7 +1743,7 @@ fn tool_install_requirements_txt() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1746,20 +1775,21 @@ fn tool_install_requirements_txt() {
         .arg("requirements.txt")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + idna==3.6
      - iniconfig==2.0.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1805,7 +1835,7 @@ fn tool_install_requirements_txt_arguments() {
         .arg("requirements.txt")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1813,6 +1843,7 @@ fn tool_install_requirements_txt_arguments() {
     ----- stderr -----
     warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved 7 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + black==24.3.0
@@ -1823,7 +1854,7 @@ fn tool_install_requirements_txt_arguments() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1889,13 +1920,14 @@ fn tool_install_requirements_txt_arguments() {
         .arg("https://test.pypi.org/simple")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
+    Installing to environment at tools/flask/bin/python
     Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + blinker==1.7.0
@@ -1907,7 +1939,7 @@ fn tool_install_requirements_txt_arguments() {
      + markupsafe==2.1.5
      + werkzeug==3.0.1
     Installed 1 executable: flask
-    "###);
+    "#);
 }
 
 /// Test upgrading an already installed tool.
@@ -1924,13 +1956,14 @@ fn tool_install_upgrade() {
         .arg("black==24.1.1")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.1.1
@@ -1940,7 +1973,7 @@ fn tool_install_upgrade() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1998,18 +2031,19 @@ fn tool_install_upgrade() {
         .arg("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2038,13 +2072,14 @@ fn tool_install_upgrade() {
         .arg("--upgrade")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -2052,7 +2087,7 @@ fn tool_install_upgrade() {
      + black==24.3.0
      - iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2088,13 +2123,14 @@ fn tool_install_python_request() {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -2104,7 +2140,7 @@ fn tool_install_python_request() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     // Install with Python 3.12 (compatible).
     uv_snapshot!(context.filters(), context.tool_install()
@@ -2129,7 +2165,7 @@ fn tool_install_python_request() {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2137,6 +2173,7 @@ fn tool_install_python_request() {
     ----- stderr -----
     Existing environment for `black` does not satisfy the requested Python interpreter
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -2146,7 +2183,7 @@ fn tool_install_python_request() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 }
 
 /// Test preserving a tool environment when new but incompatible requirements are requested.
@@ -2163,13 +2200,14 @@ fn tool_install_preserve_environment() {
         .arg("black==24.1.1")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.1.1
@@ -2179,7 +2217,7 @@ fn tool_install_preserve_environment() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     // Install `black`, but with an incompatible requirement.
     uv_snapshot!(context.filters(), context.tool_install()
@@ -2228,13 +2266,14 @@ fn tool_install_warn_path() {
         .arg("black==24.1.1")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env_remove("PATH"), @r###"
+        .env_remove("PATH"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.1.1
@@ -2245,7 +2284,7 @@ fn tool_install_warn_path() {
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
     warning: `[TEMP_DIR]/bin` is not on your PATH. To use installed tools, run `export PATH="[TEMP_DIR]/bin:$PATH"` or `uv tool update-shell`.
-    "###);
+    "#);
 }
 
 /// Test installing and reinstalling with an invalid receipt.
@@ -2262,13 +2301,14 @@ fn tool_install_bad_receipt() -> Result<()> {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -2278,7 +2318,7 @@ fn tool_install_bad_receipt() -> Result<()> {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     tool_dir
         .child("black")
@@ -2296,7 +2336,7 @@ fn tool_install_bad_receipt() -> Result<()> {
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2304,6 +2344,7 @@ fn tool_install_bad_receipt() -> Result<()> {
     ----- stderr -----
     warning: Removed existing `black` with invalid receipt
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -2312,7 +2353,7 @@ fn tool_install_bad_receipt() -> Result<()> {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     Ok(())
 }
@@ -2332,18 +2373,19 @@ fn tool_install_malformed_dist_info() {
         .arg("babel")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/babel/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + babel==2.14.0
     Installed 1 executable: pybabel
-    "###);
+    "#);
 
     tool_dir.child("babel").assert(predicate::path::is_dir());
     tool_dir
@@ -2405,13 +2447,14 @@ fn tool_install_settings() {
         .arg("--resolution=lowest-direct")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/flask/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + blinker==1.7.0
@@ -2422,7 +2465,7 @@ fn tool_install_settings() {
      + markupsafe==2.1.5
      + werkzeug==3.0.1
     Installed 1 executable: flask
-    "###);
+    "#);
 
     tool_dir.child("flask").assert(predicate::path::is_dir());
     tool_dir
@@ -2509,20 +2552,21 @@ fn tool_install_settings() {
         .arg("--upgrade")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/flask/bin/python3
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - flask==3.0.0
      + flask==3.0.2
     Installed 1 executable: flask
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2556,13 +2600,14 @@ fn tool_install_at_version() {
         .arg("black@24.1.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.1.0
@@ -2572,7 +2617,7 @@ fn tool_install_at_version() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2622,13 +2667,14 @@ fn tool_install_at_latest() {
         .arg("black@latest")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -2638,7 +2684,7 @@ fn tool_install_at_latest() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2672,18 +2718,19 @@ fn tool_install_from_at_latest() {
         .arg("babel@latest")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/babel/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + babel==2.14.0
     Installed 1 executable: pybabel
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2716,18 +2763,19 @@ fn tool_install_from_at_version() {
         .arg("babel@2.13.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/babel/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + babel==2.13.0
     Installed 1 executable: pybabel
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2759,13 +2807,14 @@ fn tool_install_at_latest_upgrade() {
         .arg("black==24.1.1")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.1.1
@@ -2775,7 +2824,7 @@ fn tool_install_at_latest_upgrade() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2831,20 +2880,21 @@ fn tool_install_at_latest_upgrade() {
         .arg("black@latest")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - black==24.1.1
      + black==24.3.0
     Installed 2 executables: black, blackd
-    "###);
+    "#);
 
     insta::with_settings!({
         filters => context.filters(),
