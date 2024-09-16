@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
-use tracing::debug;
+// use tracing::debug;
 
 use distribution_types::{
     CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification,
@@ -39,7 +39,7 @@ use uv_resolver::{
     Preferences, PythonRequirement, ResolutionGraph, Resolver, ResolverMarkers,
 };
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
-use uv_warnings::warn_user;
+// use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
@@ -377,9 +377,185 @@ impl Changelog {
     }
 }
 
+use crate::debug;
 /// Install a set of requirements into the current environment.
 ///
 /// Returns a [`Changelog`] summarizing the changes made to the environment.
+// pub(crate) async fn install(
+//     resolution: &Resolution,
+//     site_packages: SitePackages,
+//     modifications: Modifications,
+//     reinstall: &Reinstall,
+//     build_options: &BuildOptions,
+//     link_mode: LinkMode,
+//     compile: bool,
+//     index_urls: &IndexLocations,
+//     config_settings: &ConfigSettings,
+//     hasher: &HashStrategy,
+//     markers: &ResolverMarkerEnvironment,
+//     tags: &Tags,
+//     client: &RegistryClient,
+//     in_flight: &InFlight,
+//     concurrency: Concurrency,
+//     build_dispatch: &BuildDispatch<'_>,
+//     cache: &Cache,
+//     venv: &PythonEnvironment,
+//     logger: Box<dyn InstallLogger>,
+//     dry_run: bool,
+//     printer: Printer,
+// ) -> Result<Changelog, Error> {
+//     let start = std::time::Instant::now();
+
+//     // Extract the requirements from the resolution.
+//     let requirements = resolution.requirements().collect::<Vec<_>>();
+
+//     // Partition into those that should be linked from the cache (`local`), those that need to be
+//     // downloaded (`remote`), and those that should be removed (`extraneous`).
+//     let plan = Planner::new(&requirements)
+//         .build(
+//             site_packages,
+//             reinstall,
+//             build_options,
+//             hasher,
+//             index_urls,
+//             config_settings,
+//             cache,
+//             venv,
+//             markers,
+//             tags,
+//         )
+//         .context("Failed to determine installation plan")?;
+
+//     if dry_run {
+//         report_dry_run(resolution, plan, modifications, start, printer)?;
+//         return Ok(Changelog::default());
+//     }
+
+//     let Plan {
+//         cached,
+//         remote,
+//         reinstalls,
+//         extraneous,
+//     } = plan;
+
+//     // If we're in `install` mode, ignore any extraneous distributions.
+//     let extraneous = match modifications {
+//         Modifications::Sufficient => vec![],
+//         Modifications::Exact => extraneous,
+//     };
+
+//     // Nothing to do.
+//     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
+//         logger.on_audit(resolution.len(), start, printer)?;
+//         return Ok(Changelog::default());
+//     }
+
+//     // Map any registry-based requirements back to those returned by the resolver.
+//     let remote = remote
+//         .iter()
+//         .map(|dist| {
+//             resolution
+//                 .get_remote(&dist.name)
+//                 .cloned()
+//                 .expect("Resolution should contain all packages")
+//         })
+//         .collect::<Vec<_>>();
+
+//     // Download, build, and unzip any missing distributions.
+//     let wheels = if remote.is_empty() {
+//         vec![]
+//     } else {
+//         let start = std::time::Instant::now();
+
+//         let preparer = Preparer::new(
+//             cache,
+//             tags,
+//             hasher,
+//             build_options,
+//             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+//         )
+//         .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
+
+//         let wheels = preparer
+//             .prepare(remote.clone(), in_flight)
+//             .await
+//             .context("Failed to prepare distributions")?;
+
+//         logger.on_prepare(wheels.len(), start, printer)?;
+
+//         wheels
+//     };
+
+//     // Remove any upgraded or extraneous installations.
+//     let uninstalls = extraneous.into_iter().chain(reinstalls).collect::<Vec<_>>();
+//     if !uninstalls.is_empty() {
+//         let start = std::time::Instant::now();
+
+//         for dist_info in &uninstalls {
+//             match uv_installer::uninstall(dist_info).await {
+//                 Ok(summary) => {
+//                     debug!(
+//                         "Uninstalled {} ({} file{}, {} director{})",
+//                         dist_info.name(),
+//                         summary.file_count,
+//                         if summary.file_count == 1 { "" } else { "s" },
+//                         summary.dir_count,
+//                         if summary.dir_count == 1 { "y" } else { "ies" },
+//                     );
+//                 }
+//                 Err(uv_installer::UninstallError::Uninstall(
+//                     install_wheel_rs::Error::MissingRecord(_),
+//                 )) => {
+//                     warn_user!(
+//                         "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
+//                         dist_info.path().user_display().cyan(),
+//                     );
+//                 }
+//                 Err(uv_installer::UninstallError::Uninstall(
+//                     install_wheel_rs::Error::MissingTopLevel(_),
+//                 )) => {
+//                     warn_user!(
+//                         "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
+//                         dist_info.path().user_display().cyan(),
+//                     );
+//                 }
+//                 Err(err) => return Err(err.into()),
+//             }
+//         }
+
+//         logger.on_uninstall(uninstalls.len(), start, printer)?;
+//     }
+
+//     // Install the resolved distributions.
+//     let mut installs = wheels.into_iter().chain(cached).collect::<Vec<_>>();
+//     if !installs.is_empty() {
+//         let start = std::time::Instant::now();
+//         installs = uv_installer::Installer::new(venv)
+//             .with_link_mode(link_mode)
+//             .with_cache(cache)
+//             .with_reporter(InstallReporter::from(printer).with_length(installs.len() as u64))
+//             // This technically can block the runtime, but we are on the main thread and
+//             // have no other running tasks at this point, so this lets us avoid spawning a blocking
+//             // task.
+//             .install_blocking(installs)?;
+
+//         logger.on_install(installs.len(), start, printer)?;
+//     }
+
+//     if compile {
+//         compile_bytecode(venv, cache, printer).await?;
+//     }
+
+//     // Construct a summary of the changes made to the environment.
+//     let changelog = Changelog::new(installs, uninstalls);
+
+//     // Notify the user of any environment modifications.
+//     logger.on_complete(&changelog, printer)?;
+
+//     Ok(changelog)
+// }
+use uv_warnings::warn_user;
+
 pub(crate) async fn install(
     resolution: &Resolution,
     site_packages: SitePackages,
@@ -405,11 +581,28 @@ pub(crate) async fn install(
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
 
+    // Print the environment path
+    let python_executable = venv.python_executable();
+    let venv_dir = PathBuf::from(".venv");
+    let venv_dir_canonical = venv_dir.canonicalize().unwrap_or(venv_dir);
+    let is_outside_working_directory = !(python_executable.starts_with(venv_dir_canonical));
+    if is_outside_working_directory {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Installing to environment at {}",
+                python_executable.user_display()
+            )
+            .dimmed()
+        )?;
+    }
+
     // Extract the requirements from the resolution.
     let requirements = resolution.requirements().collect::<Vec<_>>();
 
-    // Partition into those that should be linked from the cache (`local`), those that need to be
-    // downloaded (`remote`), and those that should be removed (`extraneous`).
+    // Partition into those that should be linked from the cache (local), those that need to be
+    // downloaded (remote), and those that should be removed (extraneous).
     let plan = Planner::new(&requirements)
         .build(
             site_packages,
@@ -437,7 +630,7 @@ pub(crate) async fn install(
         extraneous,
     } = plan;
 
-    // If we're in `install` mode, ignore any extraneous distributions.
+    // If we're in install mode, ignore any extraneous distributions.
     let extraneous = match modifications {
         Modifications::Sufficient => vec![],
         Modifications::Exact => extraneous,
@@ -506,7 +699,7 @@ pub(crate) async fn install(
                     install_wheel_rs::Error::MissingRecord(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at {} due to missing RECORD file. Installation may result in an incomplete environment.",
                         dist_info.path().user_display().cyan(),
                     );
                 }
@@ -514,7 +707,7 @@ pub(crate) async fn install(
                     install_wheel_rs::Error::MissingTopLevel(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at {} due to missing top-level.txt file. Installation may result in an incomplete environment.",
                         dist_info.path().user_display().cyan(),
                     );
                 }
