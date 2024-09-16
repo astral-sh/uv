@@ -2412,5 +2412,21 @@ mod tests {
             VersionRequest::from_str("313t").unwrap(),
             VersionRequest::FreeThreaded(VersionRequest::MajorMinor(3, 13).into())
         );
+        assert_eq!(
+            VersionRequest::from_str("3.13t").unwrap(),
+            VersionRequest::FreeThreaded(VersionRequest::MajorMinor(3, 13).into())
+        );
+        assert_eq!(
+            VersionRequest::from_str(">=3.13t").unwrap(),
+            VersionRequest::FreeThreaded(VersionRequest::from_str(">=3.13").unwrap().into())
+        );
+        assert_eq!(
+            VersionRequest::from_str(">=3.12,<3.14t").unwrap(),
+            VersionRequest::FreeThreaded(VersionRequest::from_str(">=3.12,<3.14").unwrap().into())
+        );
+        assert!(matches!(
+            VersionRequest::from_str("3.13tt"),
+            Err(Error::InvalidVersionRequest(_))
+        ));
     }
 }

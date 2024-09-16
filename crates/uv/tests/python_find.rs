@@ -455,4 +455,14 @@ fn python_find_unsupported_version() {
     ----- stderr -----
     error: No interpreter found for Python <3.0 in virtual environments or system path
     "###);
+
+    // Request free-threaded Python on unsupported version
+    uv_snapshot!(context.filters(), context.python_find().arg("2.12t"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.13 does not support free-threading but 2.12t was requested.
+    "###);
 }
