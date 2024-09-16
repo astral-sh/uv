@@ -4963,12 +4963,10 @@ dependencies = [
  "distribution-filename",
  "fs-err",
  "futures",
- "pep440_rs",
  "pypi-types",
  "thiserror",
  "tokio",
  "tokio-util",
- "tracing",
  "uv-normalize",
  "zip",
 ]

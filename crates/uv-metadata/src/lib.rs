@@ -4,16 +4,13 @@
 //! specification](https://packaging.python.org/en/latest/specifications/core-metadata/).
 
 use distribution_filename::WheelFilename;
-use pep440_rs::Version;
 use pypi_types::Metadata23;
 use std::io;
 use std::io::{Read, Seek};
 use std::path::Path;
-use std::str::FromStr;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-use tracing::warn;
 use uv_normalize::{DistInfoName, InvalidNameError};
 use zip::ZipArchive;
 
@@ -32,8 +29,6 @@ pub enum Error {
     MissingDistInfoSegments(String),
     #[error("The .dist-info directory {0} does not start with the normalized package name: {1}")]
     MissingDistInfoPackageName(String, String),
-    #[error("The .dist-info directory {0} does not start with the normalized version: {1}")]
-    MissingDistInfoVersion(String, String),
     #[error("The .dist-info directory name contains invalid characters")]
     InvalidName(#[from] InvalidNameError),
     #[error("The metadata at {0} is invalid")]
@@ -85,28 +80,17 @@ pub fn find_archive_dist_info<'a, T: Copy>(
     };
 
     // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
-    // package name, but only warn if the version is not the normalized version.
+    // package name.
     let normalized_prefix = DistInfoName::new(dist_info_prefix);
-    let Some(rest) = normalized_prefix
+    if !normalized_prefix
         .as_ref()
-        .strip_prefix(filename.name.as_str())
-    else {
+        .starts_with(filename.name.as_str())
+    {
         return Err(Error::MissingDistInfoPackageName(
             dist_info_prefix.to_string(),
             filename.name.to_string(),
         ));
     };
-    if !rest.strip_prefix('-').is_some_and(|version| {
-        Version::from_str(version).is_ok_and(|version| version == filename.version)
-    }) {
-        warn!(
-            "{}",
-            Error::MissingDistInfoVersion(
-                dist_info_prefix.to_string(),
-                filename.version.to_string(),
-            )
-        );
-    }
 
     Ok((payload, dist_info_prefix))
 }
@@ -125,28 +109,17 @@ pub fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, E
     };
 
     // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
-    // package name, but only warn if the version is not the normalized version.
+    // package name.
     let normalized_prefix = DistInfoName::new(dist_info_prefix);
-    let Some(rest) = normalized_prefix
+    if !normalized_prefix
         .as_ref()
-        .strip_prefix(filename.name.as_str())
-    else {
+        .starts_with(filename.name.as_str())
+    {
         return Err(Error::MissingDistInfoPackageName(
             dist_info_prefix.to_string(),
             filename.name.to_string(),
         ));
     };
-    if !rest.strip_prefix('-').is_some_and(|version| {
-        Version::from_str(version).is_ok_and(|version| version == filename.version)
-    }) {
-        warn!(
-            "{}",
-            Error::MissingDistInfoVersion(
-                dist_info_prefix.to_string(),
-                filename.version.to_string(),
-            )
-        );
-    }
 
     Ok(true)
 }
@@ -200,28 +173,17 @@ pub fn find_flat_dist_info(
     };
 
     // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
-    // package name, but only warn if the version is not the normalized version.
+    // package name.
     let normalized_prefix = DistInfoName::new(&dist_info_prefix);
-    let Some(rest) = normalized_prefix
+    if !normalized_prefix
         .as_ref()
-        .strip_prefix(filename.name.as_str())
-    else {
+        .starts_with(filename.name.as_str())
+    {
         return Err(Error::MissingDistInfoPackageName(
             dist_info_prefix.to_string(),
             filename.name.to_string(),
         ));
     };
-    if !rest.strip_prefix('-').is_some_and(|version| {
-        Version::from_str(version).is_ok_and(|version| version == filename.version)
-    }) {
-        warn!(
-            "{}",
-            Error::MissingDistInfoVersion(
-                dist_info_prefix.to_string(),
-                filename.version.to_string(),
-            )
-        );
-    }
 
     Ok(dist_info_prefix)
 }
