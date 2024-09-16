@@ -16,6 +16,7 @@ use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
@@ -73,6 +74,12 @@ pub(crate) async fn sync(
     } else {
         InstallTarget::from(&project)
     };
+
+    if project.workspace().pyproject_toml().has_scripts()
+        && !project.workspace().pyproject_toml().is_package()
+    {
+        warn_user!("Skipping scripts installation because this project is not a package. To install them, consider setting `tool.uv.package = true` or configuring a custom `build-system`.");
+    }
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(

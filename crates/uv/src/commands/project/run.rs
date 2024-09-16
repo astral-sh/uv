@@ -451,12 +451,6 @@ pub(crate) async fn run(
                 .await?
             };
 
-            if project.workspace().pyproject_toml().has_scripts()
-                && !project.workspace().pyproject_toml().is_package()
-            {
-                warn_user!("Skipping scripts installation because this project is not a package. To install them, consider setting `tool.uv.package = true` or configuring a custom `build-system`.");
-            }
-
             if no_sync {
                 debug!("Skipping environment synchronization due to `--no-sync`");
             } else {
