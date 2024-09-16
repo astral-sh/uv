@@ -1952,9 +1952,8 @@ fn run_invalid_project_table() -> Result<()> {
 }
 
 #[test]
+/// Check warning message for https://github.com/astral-sh/uv/issues/6998.
 fn run_script_without_build_system() -> Result<()> {
-    // Check warning message for https://github.com/astral-sh/uv/issues/6998.
-
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
