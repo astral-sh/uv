@@ -1952,6 +1952,7 @@ fn run_invalid_project_table() -> Result<()> {
 }
 
 #[test]
+#[cfg(target_family = "unix")]
 fn run_script_without_build_system() -> Result<()> {
     let context = TestContext::new("3.12");
 
