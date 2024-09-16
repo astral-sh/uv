@@ -964,7 +964,7 @@ mod tests {
     #[test]
     fn find_python_from_active_python() -> Result<()> {
         let context = TestContext::new()?;
-        let venv = context.tempdir.child(".venv");
+        let venv = context.tempdir.child("some-venv");
         TestContext::mock_venv(&venv, "3.12.0")?;
 
         let python =
@@ -979,6 +979,31 @@ mod tests {
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
             "3.12.0",
+            "We should prefer the active environment"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_from_active_python_prerelease() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.12.0"])?;
+        let venv = context.tempdir.child("some-venv");
+        TestContext::mock_venv(&venv, "3.13.0rc1")?;
+
+        let python =
+            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+                find_python_installation(
+                    &PythonRequest::Any,
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            })??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.13.0rc1",
             "We should prefer the active environment"
         );
 
