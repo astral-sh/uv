@@ -1230,6 +1230,39 @@ mod tests {
     }
 
     #[test]
+    fn find_python_from_parent_interpreter_prerelease() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.12.0"])?;
+        let parent = context.tempdir.child("python").to_path_buf();
+        TestContext::create_mock_interpreter(
+            &parent,
+            &PythonVersion::from_str("3.13.0rc2").unwrap(),
+            ImplementationName::CPython,
+            // Note we mark this as a system interpreter instead of a virtual environment
+            true,
+        )?;
+
+        let python = context.run_with_vars(
+            &[("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str()))],
+            || {
+                find_python_installation(
+                    &PythonRequest::Any,
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            },
+        )??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.13.0rc2",
+            "We should find the parent interpreter"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn find_python_active_python_skipped_if_system_required() -> Result<()> {
         let mut context = TestContext::new()?;
         let venv = context.tempdir.child(".venv");
