@@ -127,11 +127,20 @@ Multiple dependencies can be requested by repeating with `--with` option.
 Note that if `uv run` is used in a _project_, these dependencies will be included _in addition_ to
 the project's dependencies. To opt-out of this behavior, use the `--no-project` flag.
 
-## Declaring script dependencies
+## Creating a python script
 
 Python recently added a standard format for
 [inline script metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata).
-This allows the dependencies for a script to be declared in the script itself.
+It allows for selecting python versions and defining dependencies. Use `uv init --script` to initialize
+scripts with the inline metadata:
+
+```console
+$ uv init --script example.py --python 3.12
+```
+
+## Declaring script dependencies
+
+The inline metadata format allows the dependencies for a script to be declared in the script itself.
 
 uv supports adding and updating inline script metadata for you. Use `uv add --script` to declare the
 dependencies for the script:
