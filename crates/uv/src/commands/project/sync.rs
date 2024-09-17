@@ -1,9 +1,19 @@
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
+use crate::commands::pip::operations::Modifications;
+use crate::commands::project::lock::do_safe_lock;
+use crate::commands::project::{ProjectError, SharedState};
+use crate::commands::{pip, project, ExitStatus};
+use crate::printer::Printer;
+use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 use anyhow::{Context, Result};
-use itertools::Itertools;
-
 use distribution_types::{DirectorySourceDist, Dist, ResolvedDist, SourceDist};
-use pep508_rs::MarkerTree;
-use uv_auth::store_credentials_from_url;
+use itertools::Itertools;
+use pep508_rs::{MarkerTree, Requirement, VersionOrUrl};
+use pypi_types::{
+    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
+};
+use std::borrow::Cow;
+use std::str::FromStr;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -18,15 +28,8 @@ use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequ
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
+use uv_workspace::pyproject::{Source, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
-
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::Modifications;
-use crate::commands::project::lock::do_safe_lock;
-use crate::commands::project::{ProjectError, SharedState};
-use crate::commands::{pip, project, ExitStatus};
-use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -250,8 +253,11 @@ pub(super) async fn do_sync(
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
-        store_credentials_from_url(url);
+        uv_auth::store_credentials_from_url(url);
     }
+
+    // Populate credentials from the workspace.
+    store_credentials_from_workspace(target.workspace());
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -397,5 +403,80 @@ fn apply_editable_mode(
                 url,
             })))
         }),
+    }
+}
+
+fn store_credentials_from_workspace(workspace: &Workspace) {
+    for member in workspace.packages().values() {
+        // Iterate over the `tool.uv.sources`.
+        for source in member
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .map(ToolUvSources::inner)
+            .iter()
+            .flat_map(|sources| sources.values())
+        {
+            match source {
+                Source::Git { git, .. } => {
+                    uv_git::store_credentials_from_url(git);
+                }
+                Source::Url { url, .. } => {
+                    uv_auth::store_credentials_from_url(url);
+                }
+                _ => {}
+            }
+        }
+
+        // Iterate over all dependencies.
+        let dependencies = member
+            .pyproject_toml()
+            .project
+            .as_ref()
+            .and_then(|project| project.dependencies.as_ref())
+            .into_iter()
+            .flatten();
+        let optional_dependencies = member
+            .pyproject_toml()
+            .project
+            .as_ref()
+            .and_then(|project| project.optional_dependencies.as_ref())
+            .into_iter()
+            .flat_map(|optional| optional.values())
+            .flatten();
+        let dev_dependencies = member
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.dev_dependencies.as_ref())
+            .into_iter()
+            .flatten();
+
+        for requirement in dependencies
+            .chain(optional_dependencies)
+            .filter_map(|requires_dist| {
+                LenientRequirement::<VerbatimParsedUrl>::from_str(requires_dist)
+                    .map(Requirement::from)
+                    .map(Cow::Owned)
+                    .ok()
+            })
+            .chain(dev_dependencies.map(Cow::Borrowed))
+        {
+            let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
+                continue;
+            };
+            match &url.parsed_url {
+                ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
+                    uv_git::store_credentials_from_url(url.repository());
+                }
+                ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
+                    uv_auth::store_credentials_from_url(url);
+                }
+                _ => {}
+            }
+        }
     }
 }

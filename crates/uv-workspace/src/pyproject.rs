@@ -120,6 +120,8 @@ pub struct Project {
     pub version: Option<Version>,
     /// The Python versions this project is compatible with.
     pub requires_python: Option<VersionSpecifiers>,
+    /// The dependencies of the project.
+    pub dependencies: Option<Vec<String>>,
     /// The optional dependencies of the project.
     pub optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
 
