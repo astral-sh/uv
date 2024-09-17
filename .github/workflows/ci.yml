@@ -968,6 +968,61 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: "/home/runner/example"
 
+  integration-test-publish:
+    timeout-minutes: 10
+    needs: build-binary-linux
+    name: "integration test | uv publish"
+    runs-on: ubuntu-latest
+    # Only the main repository is a trusted publisher
+    if: github.repository == 'astral-sh/uv'
+    environment: uv-test-publish
+    env:
+      # No dbus in GitHub Actions
+      PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Only publish a new release if the
+      - uses: tj-actions/changed-files@v45
+        id: changed
+        with:
+          files_yaml: |
+            code:
+              - "crates/uv-publish/**/*"
+              - "scripts/publish/**/*"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Add password to keyring"
+        run: |
+          # `keyrings.alt` contains the plaintext keyring
+          ./uv tool install --with keyrings.alt "keyring<25.4.0" # TODO(konsti): Remove upper bound once fix is released
+          echo $UV_TEST_PUBLISH_KEYRING | keyring set https://test.pypi.org/legacy/?astral-test-keyring __token__
+        env:
+          UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
+
+      - name: "Publish test packages"
+        if: ${{ steps.changed.outputs.code_any_changed }}
+        # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
+        run: ./uv run -p 3.12 scripts/publish/test_publish.py --uv ./uv all
+        env:
+          RUST_LOG: uv=debug,uv_publish=trace
+          UV_TEST_PUBLISH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_TOKEN }}
+          UV_TEST_PUBLISH_PASSWORD: ${{ secrets.UV_TEST_PUBLISH_PASSWORD }}
+          UV_TEST_PUBLISH_GITLAB_PAT: ${{ secrets.UV_TEST_PUBLISH_GITLAB_PAT }}
+
   cache-test-ubuntu:
     timeout-minutes: 10
     needs: build-binary-linux
