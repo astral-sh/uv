@@ -2138,7 +2138,7 @@ fn tool_install_python_params() {
     ----- stdout -----
 
     ----- stderr -----
-    Ignored existing environment for `black` due to stale Python interpreter
+    Ignoring existing environment for `black`: the requested Python interpreter does not match the environment interpreter
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -2184,7 +2184,7 @@ fn tool_install_python_params() {
     ----- stdout -----
 
     ----- stderr -----
-    Ignored existing environment for `black` due to stale Python interpreter
+    Ignoring existing environment for `black`: the requested Python interpreter does not match the environment interpreter
     Resolved [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0

@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::MarkerTree;
 use pypi_types::{Requirement, RequirementSource};
-use tracing::debug;
+use tracing::trace;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -283,8 +283,8 @@ pub(crate) async fn install(
                 let old_base_prefix = environment.interpreter().sys_base_prefix();
                 let selected_base_prefix = interpreter.sys_base_prefix();
                 if old_base_prefix == selected_base_prefix {
-                    debug!(
-                        "Found existing interpreter for tool `{}`: {}",
+                    trace!(
+                        "Existing interpreter matches the requested interpreter for `{}`: {}",
                         from.name,
                         environment.interpreter().sys_executable().display()
                     );
@@ -292,7 +292,7 @@ pub(crate) async fn install(
                 } else {
                     let _ = writeln!(
                         printer.stderr(),
-                        "Ignored existing environment for `{from}` due to stale Python interpreter",
+                        "Ignoring existing environment for `{from}`: the requested Python interpreter does not match the environment interpreter",
                         from = from.name.cyan(),
                     );
                     false
