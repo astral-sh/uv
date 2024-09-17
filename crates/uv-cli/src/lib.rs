@@ -77,6 +77,13 @@ pub struct Cli {
     pub command: Box<Commands>,
 
     #[command(flatten)]
+    pub top_level: TopLevelArgs,
+}
+
+#[derive(Parser)]
+#[command(disable_help_flag = true, disable_version_flag = true)]
+pub struct TopLevelArgs {
+    #[command(flatten)]
     pub cache_args: Box<CacheArgs>,
 
     #[command(flatten)]
