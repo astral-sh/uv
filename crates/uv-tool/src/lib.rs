@@ -204,7 +204,7 @@ impl InstalledTools {
         match PythonEnvironment::from_root(&environment_path, cache) {
             Ok(venv) => {
                 debug!(
-                    "Using existing environment for tool `{name}`: {}",
+                    "Found existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
                 Ok(Some(venv))

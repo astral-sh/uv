@@ -276,19 +276,27 @@ pub(crate) async fn install(
         installed_tools
             .get_environment(&from.name, &cache)?
             .filter(|environment| {
-                python_request.as_ref().map_or(true, |python_request| {
-                    if python_request.satisfied(environment.interpreter(), &cache) {
-                        debug!("Found existing environment for `{from}`", from = from.name.cyan());
-                        true
-                    } else {
-                        let _ = writeln!(
-                            printer.stderr(),
-                            "Existing environment for `{from}` does not satisfy the requested Python interpreter",
-                            from = from.name.cyan(),
-                        );
-                        false
-                    }
-                })
+                // NOTE(lucab): this compares `base_prefix` paths as a proxy for
+                // detecting interpreters mismatches. Directly comparing interpreters
+                // (by paths or binaries on-disk) would result in several false
+                // positives on Windows due to file-copying and shims.
+                let old_base_prefix = environment.interpreter().sys_base_prefix();
+                let selected_base_prefix = interpreter.sys_base_prefix();
+                if old_base_prefix == selected_base_prefix {
+                    debug!(
+                        "Found existing interpreter for tool `{}`: {}",
+                        from.name,
+                        environment.interpreter().sys_executable().display()
+                    );
+                    true
+                } else {
+                    let _ = writeln!(
+                        printer.stderr(),
+                        "Ignored existing environment for `{from}` due to stale Python interpreter",
+                        from = from.name.cyan(),
+                    );
+                    false
+                }
             });
 
     // If the requested and receipt requirements are the same...
