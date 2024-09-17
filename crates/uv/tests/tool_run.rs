@@ -955,7 +955,7 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Invalid requirement
+      × Invalid `--with` requirement
       ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
     "###);
 
