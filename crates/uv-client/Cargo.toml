@@ -51,8 +51,8 @@ urlencoding = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-http-body-util = { version = "0.1.0" }
-hyper = { version = "1.2.0", features = ["server", "http1"] }
-hyper-util = { version = "0.1.3", features = ["tokio"] }
-insta = { version = "1.36.1", features = ["filters", "json", "redactions"] }
+http-body-util = { version = "0.1.2" }
+hyper = { version = "1.4.1", features = ["server", "http1"] }
+hyper-util = { version = "0.1.8", features = ["tokio"] }
+insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
 tokio = { workspace = true }
