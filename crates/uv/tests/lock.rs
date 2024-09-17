@@ -6111,7 +6111,7 @@ fn lock_redact_git() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(&filters, context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
