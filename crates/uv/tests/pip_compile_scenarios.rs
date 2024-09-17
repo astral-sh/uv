@@ -127,7 +127,7 @@ fn compatible_python_incompatible_override() -> Result<()> {
                  ----- stderr -----
                  warning: The requested Python version 3.9 is not available; 3.11.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the requested Python version (>=3.9.0) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because package-a==1.0.0 depends on Python>=3.10 and the requested Python version (>=3.9.0) does not satisfy Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
                        hint: The `--python-version` value (>=3.9.0) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.10). Consider using a higher `--python-version` value.
@@ -183,7 +183,7 @@ fn incompatible_python_compatible_override_unavailable_no_wheels() -> Result<()>
                  ----- stderr -----
                  warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because package-a==1.0.0 depends on Python>=3.10 and the current Python version (3.9.[X]) does not satisfy Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
                  "###
     );
@@ -295,7 +295,7 @@ fn incompatible_python_compatible_override_no_compatible_wheels() -> Result<()> 
                  ----- stderr -----
                  warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because package-a==1.0.0 depends on Python>=3.10 and the current Python version (3.9.[X]) does not satisfy Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
                  "###
     );
@@ -353,15 +353,12 @@ fn incompatible_python_compatible_override_other_wheel() -> Result<()> {
                  ----- stderr -----
                  warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
-                       And because only the following versions of package-a are available:
+                   ╰─▶ Because only the following versions of package-a are available:
                            package-a==1.0.0
                            package-a==2.0.0
-                       we can conclude that package-a<2.0.0 cannot be used. (1)
-
-                       Because the requested Python version (>=3.11.0) does not satisfy Python>=3.12 and package-a==2.0.0 depends on Python>=3.12, we can conclude that package-a==2.0.0 cannot be used.
-                       And because we know from (1) that package-a<2.0.0 cannot be used, we can conclude that all versions of package-a cannot be used.
-                       And because you require package-a, we can conclude that your requirements are unsatisfiable.
+                       and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a<2.0.0 depends on Python>=3.10.
+                       And because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==2.0.0 depends on Python>=3.12, we can conclude that all versions of package-a depend on Python>=3.12.
+                       And because the requested Python version (>=3.11.0) does not satisfy Python>=3.12 and you require package-a, we can conclude that your requirements are unsatisfiable.
 
                        hint: The `--python-version` value (>=3.11.0) includes Python versions that are not supported by your dependencies (e.g., package-a==2.0.0 only supports >=3.12). Consider using a higher `--python-version` value.
                  "###

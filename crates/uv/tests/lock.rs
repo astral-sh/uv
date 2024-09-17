@@ -2838,18 +2838,15 @@ fn lock_requires_python() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and the requested Python version (>=3.7) does not satisfy Python>=3.7.9,<3.8, we can conclude that Python>=3.7.9 is incompatible.
-          And because pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4 and only pygls<=1.3.0 is available, we can conclude that all of:
-              pygls>=1.1.0,<1.3.0
-              pygls>1.3.0
-           cannot be used. (1)
-
-          Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls==1.3.0 depends on Python>=3.8, we can conclude that pygls==1.3.0 cannot be used.
-          And because we know from (1) that all of:
-              pygls>=1.1.0,<1.3.0
-              pygls>1.3.0
-           cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
-          And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because your project depends on pygls>=1.1.0 and pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4, we can conclude that all of:
+              Python<3.7.9
+              Python>=4
+          , your project, pygls!=1.3.0 are incompatible.
+          And because the requested Python version (>=3.7) does not satisfy Python>=3.7.9,<3.8, we can conclude that all of:
+              Python<3.8
+              Python>=4
+          , your project, pygls!=1.3.0 are incompatible.
+          And because pygls==1.3.0 depends on Python>=3.8 and the requested Python version (>=3.7) does not satisfy Python>=3.8, we can conclude that your project's requirements are unsatisfiable.
 
           hint: Pre-releases are available for pygls in the requested range (e.g., 2.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
@@ -5305,7 +5302,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because dearpygui==1.9.1 has no wheels with a matching Python ABI tag and your project depends on dearpygui==1.9.1, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because your project depends on dearpygui==1.9.1 and dearpygui==1.9.1 has no wheels with a matching Python ABI tag, we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     Ok(())
@@ -8710,7 +8707,7 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only datasets<2.19 is available and your project depends on datasets>=2.19, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because your project depends on datasets>=2.19 and only datasets<2.19 is available, we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     Ok(())
@@ -9158,7 +9155,7 @@ fn lock_add_member() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the cache and leaf depends on anyio>3, we can conclude that leaf's requirements are unsatisfiable.
+      ╰─▶ Because leaf depends on anyio>3 and anyio was not found in the cache, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.

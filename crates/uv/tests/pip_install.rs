@@ -3602,8 +3602,8 @@ requires-python = ">=3.13"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only example==0.0.0 is available and example==0.0.0 depends on Python>=3.13, we can conclude that all versions of example depend on Python>=3.13.
+          And because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -4115,8 +4115,8 @@ requires-python = ">=3.13"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only example==0.0.0 is available and example==0.0.0 depends on Python>=3.13, we can conclude that all versions of example depend on Python>=3.13.
+          And because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -4689,8 +4689,8 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
-          And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only second-local==0.1.0 is available and second-local==0.1.0 depends on first-local, we can conclude that all versions of second-local depend on first-local.
+          And because first-local was not found in the provided package locations and you require second-local, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -4787,8 +4787,8 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
-          And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only second-local==0.1.0 is available and second-local==0.1.0 depends on first-local, we can conclude that all versions of second-local depend on first-local.
+          And because first-local was not found in the provided package locations and you require second-local, we can conclude that your requirements are unsatisfiable.
     "###
     );
 

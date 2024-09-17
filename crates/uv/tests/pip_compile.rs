@@ -1131,7 +1131,7 @@ fn compile_python_37() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the requested Python version (>=3.7.0) does not satisfy Python>=3.8 and black==23.10.1 depends on Python>=3.8, we can conclude that black==23.10.1 cannot be used.
+      ╰─▶ Because black==23.10.1 depends on Python>=3.8 and the requested Python version (>=3.7.0) does not satisfy Python>=3.8, we can conclude that black==23.10.1 cannot be used.
           And because you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
           hint: The `--python-version` value (>=3.7.0) includes Python versions that are not supported by your dependencies (e.g., black==23.10.1 only supports >=3.8). Consider using a higher `--python-version` value.
@@ -9084,8 +9084,8 @@ requires-python = ">=3.13"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only example==0.0.0 is available and example==0.0.0 depends on Python>=3.13, we can conclude that all versions of example depend on Python>=3.13.
+          And because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -9136,8 +9136,8 @@ requires-python = ">=3.13"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only example==0.0.0 is available and example==0.0.0 depends on Python>=3.13, we can conclude that all versions of example depend on Python>=3.13.
+          And because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -9364,8 +9364,8 @@ requires-python = ">=3.13"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only example==0.0.0 is available and example==0.0.0 depends on Python>=3.13, we can conclude that all versions of example depend on Python>=3.13.
+          And because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -10499,9 +10499,9 @@ requires-python = ">3.8"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==0.0.0 and lib==0.0.0 depends on anyio==0.0.0, we can conclude that lib==0.0.0 cannot be used.
-          And because only lib==0.0.0 is available and example==0.0.0 depends on lib, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only example==0.0.0 is available and example==0.0.0 depends on lib, we can conclude that all versions of example depend on lib.
+          And because only lib==0.0.0 is available and lib==0.0.0 depends on anyio==0.0.0, we can conclude that all versions of example depend on anyio==0.0.0.
+          And because there is no version of anyio==0.0.0 and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 

@@ -3330,8 +3330,8 @@ requires-python = ">=3.13"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only example==0.0.0 is available and example==0.0.0 depends on Python>=3.13, we can conclude that all versions of example depend on Python>=3.13.
+          And because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -3401,8 +3401,8 @@ requires-python = ">=3.13"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only example==0.0.0 is available and example==0.0.0 depends on Python>=3.13, we can conclude that all versions of example depend on Python>=3.13.
+          And because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 

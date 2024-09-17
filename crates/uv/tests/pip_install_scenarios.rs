@@ -244,8 +244,8 @@ fn transitive_requires_package_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-b was not found in the package registry and package-a==1.0.0 depends on package-b, we can conclude that package-a==1.0.0 cannot be used.
-          And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b, we can conclude that all versions of package-a depend on package-b.
+          And because package-b was not found in the package registry and you require package-a, we can conclude that your requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -341,17 +341,17 @@ fn excluded_only_compatible_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
               package-a==2.0.0
               package-a==3.0.0
-          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
           And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all of:
               package-a<2.0.0
               package-a>2.0.0
           depend on one of:
-              package-b==1.0.0
-              package-b==3.0.0
+              package-b<=1.0.0
+              package-b>=3.0.0
 
           And because you require one of:
               package-a<2.0.0
@@ -1173,7 +1173,7 @@ fn transitive_incompatible_with_root_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==2.0.0 and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b==2.0.0.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a depend on package-b==2.0.0.
           And because you require package-a and package-b==1.0.0, we can conclude that your requirements are unsatisfiable.
     "###);
 
@@ -1282,7 +1282,7 @@ fn transitive_incompatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because package-a==1.0.0 depends on package-b==2.0.0 and package-b==1.0.0, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     "###);
 
@@ -1562,7 +1562,7 @@ fn local_transitive_greater_than() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b>2.0.0 and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b>2.0.0.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b>2.0.0, we can conclude that all versions of package-a depend on package-b>2.0.0.
           And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     "###);
 
@@ -1673,7 +1673,7 @@ fn local_transitive_less_than() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b<2.0.0 and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b<2.0.0.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b<2.0.0, we can conclude that all versions of package-a depend on package-b<2.0.0.
           And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     "###);
 
@@ -1783,8 +1783,8 @@ fn local_transitive_confounding() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-b==2.0.0 has no wheels with a matching Python ABI tag and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
-          And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a depend on package-b==2.0.0.
+          And because package-b==2.0.0 has no wheels with a matching Python ABI tag and you require package-a, we can conclude that your requirements are unsatisfiable.
     "###);
 
     // The version '2.0.0+foo' satisfies the constraint '==2.0.0'.
@@ -1832,7 +1832,7 @@ fn local_transitive_conflicting() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==2.0.0+bar and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b==2.0.0+bar.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0+bar, we can conclude that all versions of package-a depend on package-b==2.0.0+bar.
           And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     "###);
 
@@ -3077,8 +3077,8 @@ fn transitive_package_only_prereleases_in_range() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-b<0.1 is available and package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
-          And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only package-a==0.1.0 is available and package-a==0.1.0 depends on package-b>0.1, we can conclude that all versions of package-a depend on package-b>0.1.
+          And because only package-b<0.1 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for package-b in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
@@ -3199,8 +3199,8 @@ fn transitive_prerelease_and_stable_dependency() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of package-c==2.0.0b1 and package-a==1.0.0 depends on package-c==2.0.0b1, we can conclude that package-a==1.0.0 cannot be used.
-          And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c==2.0.0b1, we can conclude that all versions of package-a depend on package-c==2.0.0b1.
+          And because there is no version of package-c==2.0.0b1 and you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: package-c was requested with a pre-release marker (e.g., package-c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
@@ -3450,17 +3450,21 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-c are available:
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on one of:
+              package-c>1.0.0,<2.0.0a5
+              package-c>2.0.0a7,<2.0.0b1
+              package-c>2.0.0b1,<2.0.0b5
+          we can conclude that all versions of package-a depend on one of:
+              package-c>1.0.0,<2.0.0a5
+              package-c>2.0.0a7,<2.0.0b1
+              package-c>2.0.0b1,<2.0.0b5
+
+          And because only the following versions of package-c are available:
               package-c<1.0.0
               package-c>=2.0.0a5,<=2.0.0a7
               package-c==2.0.0b1
               package-c>=2.0.0b5
-          and package-a==1.0.0 depends on one of:
-              package-c>1.0.0,<2.0.0a5
-              package-c>2.0.0a7,<2.0.0b1
-              package-c>2.0.0b1,<2.0.0b5
-          we can conclude that package-a==1.0.0 cannot be used.
-          And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+          and you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: package-c was requested with a pre-release marker (e.g., all of:
               package-c>1.0.0,<2.0.0a5
@@ -3706,7 +3710,7 @@ fn python_version_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.8.[X]) does not satisfy Python>=3.30 and package-a==1.0.0 depends on Python>=3.30, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because package-a==1.0.0 depends on Python>=3.30 and the current Python version (3.8.[X]) does not satisfy Python>=3.30, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     "###);
 
@@ -3787,7 +3791,7 @@ fn python_greater_than_current() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because package-a==1.0.0 depends on Python>=3.10 and the current Python version (3.9.[X]) does not satisfy Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     "###);
 
@@ -3994,24 +3998,14 @@ fn python_greater_than_current_excluded() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10,<3.11 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that all of:
-              Python>=3.10,<3.11
-              Python>=3.12
-           are incompatible.
-          And because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12, we can conclude that Python>=3.10 is incompatible.
-          And because package-a==2.0.0 depends on Python>=3.10 and only the following versions of package-a are available:
+      ╰─▶ Because only the following versions of package-a are available:
               package-a<=2.0.0
               package-a==3.0.0
               package-a==4.0.0
-          we can conclude that package-a>=2.0.0,<3.0.0 cannot be used. (1)
-
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that Python>=3.11 is incompatible.
-          And because package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
-          And because we know from (1) that package-a>=2.0.0,<3.0.0 cannot be used, we can conclude that package-a>=2.0.0,<4.0.0 cannot be used. (2)
-
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and package-a==4.0.0 depends on Python>=3.12, we can conclude that package-a==4.0.0 cannot be used.
-          And because we know from (2) that package-a>=2.0.0,<4.0.0 cannot be used, we can conclude that package-a>=2.0.0 cannot be used.
-          And because you require package-a>=2.0.0, we can conclude that your requirements are unsatisfiable.
+          and package-a==2.0.0 depends on Python>=3.10, we can conclude that package-a>=2.0.0,<3.0.0 depends on Python>=3.10.
+          And because the current Python version (3.9.[X]) does not satisfy Python>=3.10,<3.11 and package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a>=2.0.0,<4.0.0 depends on Python>=3.11.
+          And because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12 and package-a==4.0.0 depends on Python>=3.12, we can conclude that package-a>=2.0.0 depends on Python>=3.12.
+          And because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and you require package-a>=2.0.0, we can conclude that your requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -4654,9 +4648,11 @@ fn transitive_package_only_yanked() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-b==1.0.0 is available and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that all versions of package-b cannot be used.
-          And because package-a==0.1.0 depends on package-b, we can conclude that package-a==0.1.0 cannot be used.
-          And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only package-a==0.1.0 is available and package-a==0.1.0 depends on package-b, we can conclude that all versions of package-a depend on package-b. (1)
+
+          Because only package-b==1.0.0 is available and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that all versions of package-b cannot be used.
+          And because we know from (1) that all versions of package-a depend on package-b, we can conclude that all versions of package-a cannot be used.
+          And because you require package-a, we can conclude that your requirements are unsatisfiable.
     "###);
 
     // Yanked versions should not be installed, even if they are the only one
@@ -4703,12 +4699,14 @@ fn transitive_package_only_yanked_in_range() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-b are available:
+      ╰─▶ Because only package-a==0.1.0 is available and package-a==0.1.0 depends on package-b>0.1, we can conclude that all versions of package-a depend on package-b>0.1. (1)
+
+          Because only the following versions of package-b are available:
               package-b<0.1
               package-b==1.0.0
           and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-b>0.1 cannot be used.
-          And because package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
-          And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+          And because we know from (1) that all versions of package-a depend on package-b>0.1, we can conclude that all versions of package-a cannot be used.
+          And because you require package-a, we can conclude that your requirements are unsatisfiable.
     "###);
 
     // Yanked versions should not be installed, even if they are the only valid version
@@ -4827,8 +4825,8 @@ fn transitive_yanked_and_unyanked_dependency() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-c==2.0.0 was yanked (reason: Yanked for testing) and package-a==1.0.0 depends on package-c==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
-          And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c==2.0.0, we can conclude that all versions of package-a depend on package-c==2.0.0.
+          And because package-c==2.0.0 was yanked (reason: Yanked for testing) and you require package-a, we can conclude that your requirements are unsatisfiable.
     "###);
 
     // Since the user did not explicitly select the yanked version, it cannot be used.
