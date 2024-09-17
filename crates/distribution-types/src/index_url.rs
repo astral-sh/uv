@@ -1,10 +1,11 @@
 use itertools::Either;
+use rustc_hash::FxHashSet;
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, RwLock};
 use thiserror::Error;
 use url::{ParseError, Url};
 
@@ -482,6 +483,30 @@ impl From<IndexLocations> for IndexUrls {
             index: locations.index,
             extra_index: locations.extra_index,
             no_index: locations.no_index,
+        }
+    }
+}
+
+/// A map of [`IndexUrl`]s to their capabilities.
+///
+/// For now, we only support a single capability (range requests), and we only store an index if
+/// it _doesn't_ support range requests. The benefit is that the map is almost always empty, so
+/// validating capabilities is extremely cheap.
+#[derive(Debug, Default, Clone)]
+pub struct IndexCapabilities(Arc<RwLock<FxHashSet<IndexUrl>>>);
+
+impl IndexCapabilities {
+    /// Returns `true` if the given [`IndexUrl`] supports range requests.
+    pub fn supports_range_requests(&self, index_url: &IndexUrl) -> bool {
+        !self.0.read().unwrap().contains(index_url)
+    }
+
+    /// Mark an [`IndexUrl`] as not supporting range requests.
+    pub fn set_supports_range_requests(&self, index_url: IndexUrl, supports: bool) {
+        if supports {
+            self.0.write().unwrap().remove(&index_url);
+        } else {
+            self.0.write().unwrap().insert(index_url);
         }
     }
 }

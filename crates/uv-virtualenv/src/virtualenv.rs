@@ -8,7 +8,7 @@ use std::path::Path;
 use fs_err as fs;
 use fs_err::File;
 use itertools::Itertools;
-use tracing::info;
+use tracing::debug;
 
 use pypi_types::Scheme;
 use uv_fs::{cachedir, Simplified, CWD};
@@ -43,6 +43,7 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
 }
 
 /// Create a [`VirtualEnvironment`] at the given location.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) fn create(
     location: &Path,
     interpreter: &Interpreter,
@@ -50,6 +51,7 @@ pub(crate) fn create(
     system_site_packages: bool,
     allow_existing: bool,
     relocatable: bool,
+    seed: bool,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment. This is typically the Python executable
@@ -92,16 +94,16 @@ pub(crate) fn create(
                 )));
             } else if metadata.is_dir() {
                 if allow_existing {
-                    info!("Allowing existing directory");
+                    debug!("Allowing existing directory");
                 } else if location.join("pyvenv.cfg").is_file() {
-                    info!("Removing existing directory");
+                    debug!("Removing existing directory");
                     fs::remove_dir_all(location)?;
                     fs::create_dir_all(location)?;
                 } else if location
                     .read_dir()
                     .is_ok_and(|mut dir| dir.next().is_none())
                 {
-                    info!("Ignoring empty directory");
+                    debug!("Ignoring empty directory");
                 } else {
                     return Err(Error::Io(io::Error::new(
                         io::ErrorKind::AlreadyExists,
@@ -119,7 +121,7 @@ pub(crate) fn create(
         Err(err) => return Err(Error::Io(err)),
     }
 
-    let location = location.canonicalize()?;
+    let location = std::path::absolute(location)?;
 
     let bin_name = if cfg!(unix) {
         "bin"
@@ -350,15 +352,15 @@ pub(crate) fn create(
                 "false".to_string()
             },
         ),
-        (
-            "relocatable".to_string(),
-            if relocatable {
-                "true".to_string()
-            } else {
-                "false".to_string()
-            },
-        ),
     ];
+
+    if relocatable {
+        pyvenv_cfg_data.push(("relocatable".to_string(), "true".to_string()));
+    }
+
+    if seed {
+        pyvenv_cfg_data.push(("seed".to_string(), "true".to_string()));
+    }
 
     if let Some(prompt) = prompt {
         pyvenv_cfg_data.push(("prompt".to_string(), prompt));

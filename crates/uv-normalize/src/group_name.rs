@@ -17,7 +17,7 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 pub struct GroupName(String);
 
 impl GroupName {
-    /// Create a validated, normalized extra name.
+    /// Create a validated, normalized group name.
     pub fn new(name: String) -> Result<Self, InvalidNameError> {
         validate_and_normalize_owned(name).map(Self)
     }

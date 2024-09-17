@@ -1,25 +1,25 @@
-use indexmap::IndexSet;
-use petgraph::{
-    graph::{Graph, NodeIndex},
-    Directed, Direction,
-};
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-
 use distribution_types::{
     Dist, DistributionMetadata, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
     VersionOrUrlRef,
 };
+use indexmap::IndexSet;
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{MarkerEnvironment, MarkerTree, MarkerTreeKind, VerbatimUrl};
+use petgraph::{
+    graph::{Graph, NodeIndex},
+    Directed, Direction,
+};
 use pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use std::fmt::{Display, Formatter};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
+use crate::graph_ops::marker_reachability;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
-use crate::python_requirement::PythonTarget;
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolution_mode::ResolutionStrategy;
@@ -33,12 +33,12 @@ pub(crate) type MarkersForDistribution = FxHashMap<(Version, Option<VerbatimUrl>
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
     pub(crate) petgraph: Graph<ResolutionGraphNode, MarkerTree, Directed>,
     /// The range of supported Python versions.
-    pub(crate) requires_python: Option<RequiresPython>,
+    pub(crate) requires_python: RequiresPython,
     /// If the resolution had non-identical forks, store the forks in the lockfile so we can
     /// recreate them in subsequent resolutions.
     pub(crate) fork_markers: Vec<MarkerTree>,
@@ -57,10 +57,28 @@ pub struct ResolutionGraph {
     pub(crate) package_markers: FxHashMap<PackageName, MarkersForDistribution>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum ResolutionGraphNode {
     Root,
     Dist(AnnotatedDist),
+}
+
+impl ResolutionGraphNode {
+    pub(crate) fn marker(&self) -> &MarkerTree {
+        match self {
+            ResolutionGraphNode::Root => &MarkerTree::TRUE,
+            ResolutionGraphNode::Dist(dist) => &dist.marker,
+        }
+    }
+}
+
+impl Display for ResolutionGraphNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResolutionGraphNode::Root => f.write_str("root"),
+            ResolutionGraphNode::Dist(dist) => Display::fmt(dist, f),
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Hash)]
@@ -161,12 +179,7 @@ impl ResolutionGraph {
         }
 
         // Extract the `Requires-Python` range, if provided.
-        // TODO(charlie): Infer the supported Python range from the `Requires-Python` of the
-        // included packages.
-        let requires_python = python
-            .target()
-            .and_then(PythonTarget::as_requires_python)
-            .cloned();
+        let requires_python = python.target().clone();
 
         let fork_markers = if let [resolution] = resolutions {
             match resolution.markers {
@@ -202,6 +215,19 @@ impl ResolutionGraph {
                 .filter(|fork| !fork.is_false())
                 .collect()
         };
+
+        // Compute and apply the marker reachability.
+        let mut reachability = marker_reachability(&petgraph, &fork_markers);
+
+        // Apply the reachability to the graph.
+        for index in petgraph.node_indices() {
+            if let ResolutionGraphNode::Dist(dist) = &mut petgraph[index] {
+                dist.marker = reachability.remove(&index).unwrap_or_default();
+            }
+        }
+
+        // Discard any unreachable nodes.
+        petgraph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
             report_missing_lower_bounds(&petgraph, &mut diagnostics);
@@ -282,7 +308,7 @@ impl ResolutionGraph {
         // Map the package to a distribution.
         let (dist, hashes, metadata) = Self::parse_dist(
             name,
-            url,
+            url.as_ref(),
             version,
             pins,
             diagnostics,
@@ -291,34 +317,38 @@ impl ResolutionGraph {
             git,
         )?;
 
-        // Validate the extra.
-        if let Some(extra) = extra {
-            if !metadata.provides_extras.contains(extra) {
-                diagnostics.push(ResolutionDiagnostic::MissingExtra {
-                    dist: dist.clone(),
-                    extra: extra.clone(),
-                });
+        if let Some(metadata) = metadata.as_ref() {
+            // Validate the extra.
+            if let Some(extra) = extra {
+                if !metadata.provides_extras.contains(extra) {
+                    diagnostics.push(ResolutionDiagnostic::MissingExtra {
+                        dist: dist.clone(),
+                        extra: extra.clone(),
+                    });
+                }
             }
-        }
 
-        // Validate the development dependency group.
-        if let Some(dev) = dev {
-            if !metadata.dev_dependencies.contains_key(dev) {
-                diagnostics.push(ResolutionDiagnostic::MissingDev {
-                    dist: dist.clone(),
-                    dev: dev.clone(),
-                });
+            // Validate the development dependency group.
+            if let Some(dev) = dev {
+                if !metadata.dev_dependencies.contains_key(dev) {
+                    diagnostics.push(ResolutionDiagnostic::MissingDev {
+                        dist: dist.clone(),
+                        dev: dev.clone(),
+                    });
+                }
             }
         }
 
         // Add the distribution to the graph.
         let index = petgraph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
             dist,
+            name: name.clone(),
             version: version.clone(),
             extra: extra.clone(),
             dev: dev.clone(),
             hashes,
             metadata,
+            marker: MarkerTree::TRUE,
         }));
         inverse.insert(
             PackageRef {
@@ -335,14 +365,14 @@ impl ResolutionGraph {
 
     fn parse_dist(
         name: &PackageName,
-        url: &Option<VerbatimParsedUrl>,
+        url: Option<&VerbatimParsedUrl>,
         version: &Version,
         pins: &FilePins,
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
         index: &InMemoryIndex,
         git: &GitResolver,
-    ) -> Result<(ResolvedDist, Vec<HashDigest>, Metadata), ResolveError> {
+    ) -> Result<(ResolvedDist, Vec<HashDigest>, Option<Metadata>), ResolveError> {
         Ok(if let Some(url) = url {
             // Create the distribution.
             let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
@@ -350,22 +380,23 @@ impl ResolutionGraph {
             let version_id = VersionId::from_url(&url.verbatim);
 
             // Extract the hashes.
-            let hashes = Self::get_hashes(&version_id, name, version, preferences, index);
+            let hashes =
+                Self::get_hashes(name, Some(url), &version_id, version, preferences, index);
 
             // Extract the metadata.
             let metadata = {
                 let response = index.distributions().get(&version_id).unwrap_or_else(|| {
-                    panic!("Every package should have metadata: {version_id:?}")
+                    panic!("Every URL distribution should have metadata: {version_id:?}")
                 });
 
                 let MetadataResponse::Found(archive) = &*response else {
-                    panic!("Every package should have metadata: {version_id:?}")
+                    panic!("Every URL distribution should have metadata: {version_id:?}")
                 };
 
                 archive.metadata.clone()
             };
 
-            (dist.into(), hashes, metadata)
+            (dist.into(), hashes, Some(metadata))
         } else {
             let dist = pins
                 .get(name, version)
@@ -392,19 +423,17 @@ impl ResolutionGraph {
             }
 
             // Extract the hashes.
-            let hashes = Self::get_hashes(&version_id, name, version, preferences, index);
+            let hashes = Self::get_hashes(name, None, &version_id, version, preferences, index);
 
             // Extract the metadata.
             let metadata = {
-                let response = index.distributions().get(&version_id).unwrap_or_else(|| {
-                    panic!("Every package should have metadata: {version_id:?}")
-                });
-
-                let MetadataResponse::Found(archive) = &*response else {
-                    panic!("Every package should have metadata: {version_id:?}")
-                };
-
-                archive.metadata.clone()
+                index.distributions().get(&version_id).and_then(|response| {
+                    if let MetadataResponse::Found(archive) = &*response {
+                        Some(archive.metadata.clone())
+                    } else {
+                        None
+                    }
+                })
             };
 
             (dist, hashes, metadata)
@@ -414,8 +443,9 @@ impl ResolutionGraph {
     /// Identify the hashes for the [`VersionId`], preserving any hashes that were provided by the
     /// lockfile.
     fn get_hashes(
-        version_id: &VersionId,
         name: &PackageName,
+        url: Option<&VerbatimParsedUrl>,
+        version_id: &VersionId,
         version: &Version,
         preferences: &Preferences,
         index: &InMemoryIndex,
@@ -427,31 +457,33 @@ impl ResolutionGraph {
             }
         }
 
-        // 2. Look for hashes from the registry, which are served at the package level.
-        if let Some(versions_response) = index.packages().get(name) {
-            if let VersionsResponse::Found(ref version_maps) = *versions_response {
-                if let Some(digests) = version_maps
-                    .iter()
-                    .find_map(|version_map| version_map.hashes(version))
-                    .map(|mut digests| {
-                        digests.sort_unstable();
-                        digests
-                    })
-                {
-                    if !digests.is_empty() {
-                        return digests;
-                    }
-                }
-            }
-        }
-
-        // 3. Look for hashes for the distribution (i.e., the specific wheel or source distribution).
+        // 2. Look for hashes for the distribution (i.e., the specific wheel or source distribution).
         if let Some(metadata_response) = index.distributions().get(version_id) {
             if let MetadataResponse::Found(ref archive) = *metadata_response {
                 let mut digests = archive.hashes.clone();
                 digests.sort_unstable();
                 if !digests.is_empty() {
                     return digests;
+                }
+            }
+        }
+
+        // 3. Look for hashes from the registry, which are served at the package level.
+        if url.is_none() {
+            if let Some(versions_response) = index.packages().get(name) {
+                if let VersionsResponse::Found(ref version_maps) = *versions_response {
+                    if let Some(digests) = version_maps
+                        .iter()
+                        .find_map(|version_map| version_map.hashes(version))
+                        .map(|mut digests| {
+                            digests.sort_unstable();
+                            digests
+                        })
+                    {
+                        if !digests.is_empty() {
+                            return digests;
+                        }
+                    }
                 }
             }
         }
@@ -713,13 +745,17 @@ fn has_lower_bound(
             return true;
         }
 
+        let Some(metadata) = neighbor_dist.metadata.as_ref() else {
+            // We can't check for lower bounds if we lack metadata.
+            return true;
+        };
+
         // Get all individual specifier for the current package and check if any has a lower
         // bound.
-        for requirement in neighbor_dist
-            .metadata
+        for requirement in metadata
             .requires_dist
             .iter()
-            .chain(neighbor_dist.metadata.dev_dependencies.values().flatten())
+            .chain(metadata.dev_dependencies.values().flatten())
         {
             if requirement.name != *package_name {
                 continue;

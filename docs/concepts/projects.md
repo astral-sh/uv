@@ -43,6 +43,22 @@ definitions with [package sources](./dependencies.md) in `tool.uv.sources`.
 
     See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) for more details on getting started with a `pyproject.toml`.
 
+## Defining entry points
+
+uv uses the standard `[project.scripts]` table to define entry points for the project.
+
+For example, to declare a command called `hello` that invokes the `hello` function in the
+`example_package_app` module:
+
+```toml title="pyproject.toml"
+[project.scripts]
+hello = "example_package_app:hello"
+```
+
+!!! important
+
+    Using `[project.scripts]` requires a [build system](#build-systems) to be defined.
+
 ## Build systems
 
 Projects _may_ define a `[build-system]` in the `pyproject.toml`. The build system defines how the
@@ -51,9 +67,9 @@ project should be packaged and installed.
 uv uses the presence of a build system to determine if a project contains a package that should be
 installed in the project virtual environment. If a build system is not defined, uv will not attempt
 to build or install the project itself, just its dependencies. If a build system is defined, uv will
-build and install the project into the project environment. Projects are installed in
+build and install the project into the project environment. By default, projects are installed in
 [editable mode](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) so changes to
-the source code are reflected immediately, without reinstallation.
+the source code are reflected immediately, without re-installation.
 
 ### Configuring project packaging
 
@@ -90,6 +106,7 @@ Applications are the default target for `uv init`, but can also be specified wit
 $ uv init --app example-app
 $ tree example-app
 example-app
+├── .python-version
 ├── README.md
 ├── hello.py
 └── pyproject.toml
@@ -139,10 +156,12 @@ Libraries can be created by using the `--lib` flag:
 $ uv init --lib example-lib
 $ tree example-lib
 example-lib
+├── .python-version
 ├── README.md
 ├── pyproject.toml
 └── src
     └── example_lib
+        ├── py.typed
         └── __init__.py
 ```
 
@@ -201,6 +220,7 @@ The project structure looks the same as a library:
 $ uv init --app --package example-packaged-app
 $ tree example-packaged-app
 example-packaged-app
+├── .python-version
 ├── README.md
 ├── pyproject.toml
 └── src
@@ -211,13 +231,13 @@ example-packaged-app
 But the module defines a CLI function:
 
 ```python title="__init__.py"
-def hello():
+def hello() -> None:
     print("Hello from example-packaged-app!")
 ```
 
 And the `pyproject.toml` includes a script entrypoint:
 
-```python title="pyproject.toml" hl_lines="9 10"
+```toml title="pyproject.toml" hl_lines="9 10"
 [project]
 name = "example-packaged-app"
 version = "0.1.0"
@@ -277,6 +297,36 @@ use [`uvx`](../guides/tools.md) or
     managed = false
     ```
 
+By default, the project will be installed in editable mode, such that changes to the source code are
+immediately reflected in the environment. `uv sync` and `uv run` both accept a `--no-editable` flag,
+which instructs uv to install the project in non-editable mode. `--no-editable` is intended for
+deployment use-cases, such as building a Docker container, in which the project should be included
+in the deployed environment without a dependency on the originating source code.
+
+### Configuring the project environment path
+
+The `UV_PROJECT_ENVIRONMENT` environment variable can be used to configure the project virtual
+environment path (`.venv` by default).
+
+If a relative path is provided, it will be resolved relative to the workspace root. If an absolute
+path is provided, it will be used as-is, i.e. a child directory will not be created for the
+environment. If an environment is not present at the provided path, uv will create it.
+
+This option can be used to write to the system Python environment, though it is not recommended.
+`uv sync` will remove extraneous packages from the environment by default and, as such, may leave
+the system in a broken state.
+
+!!! important
+
+    If an absolute path is provided and the setting is used across multiple projects, the
+    environment will be overwritten by invocations in each project. This setting is only recommended
+    for use for a single project in CI or Docker images.
+
+!!! note
+
+    uv does not read the `VIRTUAL_ENV` environment variable during project operations. A warning
+    will be displayed if `VIRTUAL_ENV` is set to a different path than the project's environment.
+
 ## Project lockfile
 
 uv creates a `uv.lock` file next to the `pyproject.toml`.
@@ -314,15 +364,39 @@ and not usable by other tools.
 
 To avoid updating the lockfile during `uv sync` and `uv run` invocations, use the `--frozen` flag.
 
+To avoid updating the environment during `uv run` invocations, use the `--no-sync` flag.
+
 To assert the lockfile matches the project metadata, use the `--locked` flag. If the lockfile is not
 up-to-date, an error will be raised instead of updating the lockfile.
 
 ### Upgrading locked package versions
 
 By default, uv will prefer the locked versions of packages when running `uv sync` and `uv lock`.
-Package versions will only change if project's dependency constraints exclude the previous, locked
-version. To upgrade to the latest package versions supported by the project's dependency
-constraints, use `uv lock --upgrade`.
+Package versions will only change if the project's dependency constraints exclude the previous,
+locked version.
+
+To upgrade all packages:
+
+```console
+$ uv lock --upgrade
+```
+
+To upgrade a single package to the latest version:
+
+```console
+$ uv lock --upgrade-package <package>
+```
+
+To upgrade a single package to a specific version:
+
+```console
+$ uv lock --upgrade-package <package>==<version>
+```
+
+!!! note
+
+    In all cases, upgrades are limited to the project's dependency constraints. For example, if the
+    project defines an upper bound for a package then an upgrade will not go beyond that version.
 
 ### Limited resolution environments
 
@@ -342,6 +416,19 @@ Entries in the `environments` setting must be disjoint (i.e., they must not over
 `sys_platform == 'darwin'` and `sys_platform == 'linux'` are disjoint, but
 `sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the
 same time.
+
+### Optional dependencies
+
+uv requires that all optional dependencies ("extras") declared by the project are compatible with
+each other and resolves all optional dependencies together when creating the lockfile.
+
+If optional dependencies declared in one group are not compatible with those in another group, uv
+will fail to resolve the requirements of the project with an error.
+
+!!! note
+
+    There is currently no way to declare conflicting optional dependencies. See
+    [astral.sh/uv#6981](https://github.com/astral-sh/uv/issues/6981) to track support.
 
 ## Managing dependencies
 
@@ -404,6 +491,38 @@ To add a dependency source, e.g., to use `httpx` from GitHub during development:
 ```console
 $ uv add git+https://github.com/encode/httpx
 ```
+
+### Platform-specific dependencies
+
+To ensure that a dependency is only installed on a specific platform or on specific Python versions,
+use Python's standardized
+[environment markers](https://peps.python.org/pep-0508/#environment-markers) syntax.
+
+For example, to install `jax` on Linux, but not on Windows or macOS:
+
+```console
+$ uv add 'jax; sys_platform == "linux"'
+```
+
+The resulting `pyproject.toml` will then include the environment marker in the dependency
+definition:
+
+```toml title="pyproject.toml" hl_lines="6"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["jax; sys_platform == 'linux'"]
+```
+
+Similarly, to include `numpy` on Python 3.11 and later:
+
+```console
+$ uv add 'numpy; python_version >= "3.11"'
+```
+
+See Python's [environment marker](https://peps.python.org/pep-0508/#environment-markers)
+documentation for a complete enumeration of the available markers and operators.
 
 ## Running commands
 
@@ -475,6 +594,54 @@ dependencies listed.
 
 If working in a project composed of many packages, see the [workspaces](./workspaces.md)
 documentation.
+
+## Building projects
+
+To distribute your project to others (e.g., to upload it to an index like PyPI), you'll need to
+build it into a distributable format.
+
+Python projects are typically distributed as both source distributions (sdists) and binary
+distributions (wheels). The former is typically a `.tar.gz` or `.zip` file containing the project's
+source code along with some additional metadata, while the latter is a `.whl` file containing
+pre-built artifacts that can be installed directly.
+
+`uv build` can be used to build both source distributions and binary distributions for your project.
+By default, `uv build` will build the project in the current directory, and place the built
+artifacts in a `dist/` subdirectory:
+
+```console
+$ uv build
+$ ls dist/
+example-0.1.0-py3-none-any.whl
+example-0.1.0.tar.gz
+```
+
+You can build the project in a different directory by providing a path to `uv build`, e.g.,
+`uv build path/to/project`.
+
+`uv build` will first build a source distribution, and then build a binary distribution (wheel) from
+that source distribution.
+
+You can limit `uv build` to building a source distribution with `uv build --sdist`, a binary
+distribution with `uv build --wheel`, or build both distributions from source with
+`uv build --sdist --wheel`.
+
+`uv build` accepts `--build-constraint`, which can be used to constrain the versions of any build
+requirements during the build process. When coupled with `--require-hashes`, uv will enforce that
+the requirement used to build the project match specific, known hashes, for reproducibility.
+
+For example, given the following `constraints.txt`:
+
+```text
+setuptools==68.2.2 --hash=sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
+```
+
+Running the following would build the project with the specified version of `setuptools`, and verify
+that the downloaded `setuptools` distribution matches the specified hash:
+
+```console
+$ uv build --build-constraint constraints.txt --require-hashes
+```
 
 ## Build isolation
 

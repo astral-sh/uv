@@ -377,6 +377,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON]
     Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
@@ -402,6 +403,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -435,6 +437,7 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
@@ -479,6 +482,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON]
     Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
@@ -504,6 +508,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -542,6 +547,7 @@ fn test_uv_run_isolate() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Resolved 8 packages in [TIME]
@@ -572,6 +578,7 @@ fn test_uv_run_isolate() -> Result<()> {
     Success
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Resolved 8 packages in [TIME]
     Audited 5 packages in [TIME]
     "###
@@ -594,7 +601,6 @@ fn test_uv_run_isolate() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 3 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder)
@@ -1026,7 +1032,7 @@ fn workspace_inherit_sources() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -1043,7 +1049,7 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = ["library"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     leaf.child("src/__init__.py").touch()?;
@@ -1057,7 +1063,7 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     library.child("src/__init__.py").touch()?;
@@ -1086,7 +1092,7 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = ["library"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -1114,7 +1120,7 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = ["library"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -1127,7 +1133,7 @@ fn workspace_inherit_sources() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -1202,7 +1208,7 @@ fn workspace_inherit_sources() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -1220,7 +1226,7 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = ["library"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -1259,7 +1265,7 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -1276,7 +1282,7 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
         dependencies = ["httpx>9999"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     leaf.child("src/__init__.py").touch()?;
@@ -1315,7 +1321,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -1332,7 +1338,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
         dependencies = ["anyio==4.1.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     foo.child("src/__init__.py").touch()?;
@@ -1344,7 +1350,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
         dependencies = ["anyio==4.2.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     bar.child("src/__init__.py").touch()?;
@@ -1383,7 +1389,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -1400,7 +1406,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
         dependencies = ["anyio==4.1.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     red.child("src/__init__.py").touch()?;
@@ -1412,7 +1418,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
         dependencies = ["anyio==4.2.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     knot.child("src/__init__.py").touch()?;
@@ -1427,7 +1433,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
         dependencies = ["anyio==4.3.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     bird.child("src/__init__.py").touch()?;
@@ -1466,7 +1472,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -1483,7 +1489,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
         dependencies = ["anyio==4.1.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     foo.child("src/__init__.py").touch()?;
@@ -1497,7 +1503,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
         some_extra = ["anyio==4.2.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     bar.child("src/__init__.py").touch()?;
@@ -1536,7 +1542,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -1553,7 +1559,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
         dependencies = ["anyio==4.1.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     foo.child("src/__init__.py").touch()?;
@@ -1564,7 +1570,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
         version = "0.1.0"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -1607,7 +1613,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
@@ -1624,7 +1630,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
         dependencies = ["anyio==4.1.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     foo.child("src/__init__.py").touch()?;
@@ -1638,7 +1644,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     anyio.child("src/__init__.py").touch()?;

@@ -191,6 +191,7 @@ impl<'a> BaseClientBuilder<'a> {
     ) -> Client {
         // Configure the builder.
         let client_builder = ClientBuilder::new()
+            .http1_title_case_headers()
             .user_agent(user_agent)
             .pool_max_idle_per_host(20)
             .read_timeout(std::time::Duration::from_secs(timeout))

@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.4.0"
+version = "0.4.10"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 cache-key = { workspace = true }
+distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true, default-features = false }
 pep440_rs = { workspace = true }
@@ -23,11 +24,13 @@ platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-auth = { workspace = true }
 uv-cache = { workspace = true }
+uv-cache-info = { workspace = true }
 uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
+uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-installer = { workspace = true }
@@ -48,9 +51,11 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 axoupdater = { workspace = true, features = ["github_releases", "tokio"], optional = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
+ctrlc = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+http = { workspace = true }
 indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
@@ -63,6 +68,7 @@ regex = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -74,24 +80,25 @@ tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
+zip = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-mimalloc = { version = "0.1.39" }
+mimalloc = { version = "0.1.43" }
 
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
 tikv-jemallocator = { version = "0.6.0" }
 
 [dev-dependencies]
-assert_cmd = { version = "2.0.14" }
-assert_fs = { version = "1.1.0" }
-base64 = { version = "0.22.0" }
+assert_cmd = { version = "2.0.16" }
+assert_fs = { version = "1.1.2" }
+base64 = { version = "0.22.1" }
 byteorder = { version = "1.5.0" }
 etcetera = { workspace = true }
-filetime = { version = "0.2.23" }
-ignore = { version = "0.4.22" }
-indoc = { version = "2.0.4" }
-insta = { version = "1.36.1", features = ["filters", "json"] }
-predicates = { version = "3.0.4" }
+filetime = { version = "0.2.25" }
+ignore = { version = "0.4.23" }
+indoc = { version = "2.0.5" }
+insta = { version = "1.40.0", features = ["filters", "json"] }
+predicates = { version = "3.1.2" }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
 similar = { version = "2.6.0" }

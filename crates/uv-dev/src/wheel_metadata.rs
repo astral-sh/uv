@@ -5,7 +5,7 @@ use anyhow::{bail, Result};
 use clap::Parser;
 
 use distribution_filename::WheelFilename;
-use distribution_types::{BuiltDist, DirectUrlBuiltDist, RemoteSource};
+use distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities, RemoteSource};
 use pep508_rs::VerbatimUrl;
 use pypi_types::ParsedUrl;
 use uv_cache::{Cache, CacheArgs};
@@ -21,6 +21,7 @@ pub(crate) struct WheelMetadataArgs {
 pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
     let cache = Cache::try_from(args.cache_args)?.init()?;
     let client = RegistryClientBuilder::new(cache).build();
+    let capabilities = IndexCapabilities::default();
 
     let filename = WheelFilename::from_str(&args.url.filename()?)?;
 
@@ -29,11 +30,14 @@ pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
     };
 
     let metadata = client
-        .wheel_metadata(&BuiltDist::DirectUrl(DirectUrlBuiltDist {
-            filename,
-            location: archive.url,
-            url: args.url,
-        }))
+        .wheel_metadata(
+            &BuiltDist::DirectUrl(DirectUrlBuiltDist {
+                filename,
+                location: archive.url,
+                url: args.url,
+            }),
+            &capabilities,
+        )
         .await?;
     println!("{metadata:?}");
     Ok(())

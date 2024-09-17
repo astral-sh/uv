@@ -9,13 +9,8 @@ use distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnn
 use pep508_rs::MarkerTree;
 use uv_normalize::PackageName;
 
-use crate::graph_ops::{propagate_markers, Markers};
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolutionGraph, ResolverMarkers};
-
-static UNIVERSAL_MARKERS: ResolverMarkers = ResolverMarkers::Universal {
-    fork_preferences: vec![],
-};
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
@@ -44,32 +39,17 @@ pub struct DisplayResolutionGraph<'a> {
 }
 
 #[derive(Debug)]
-enum DisplayResolutionGraphNode {
+enum DisplayResolutionGraphNode<'dist> {
     Root,
-    Dist(RequirementsTxtDist),
+    Dist(RequirementsTxtDist<'dist>),
 }
 
-impl Markers for DisplayResolutionGraphNode {
-    fn set_markers(&mut self, markers: MarkerTree) {
-        if let DisplayResolutionGraphNode::Dist(node) = self {
-            node.markers = markers;
+impl DisplayResolutionGraphNode<'_> {
+    fn markers(&self) -> &MarkerTree {
+        match self {
+            DisplayResolutionGraphNode::Root => &MarkerTree::TRUE,
+            DisplayResolutionGraphNode::Dist(dist) => dist.markers,
         }
-    }
-}
-
-impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
-    fn from(resolution: &'a ResolutionGraph) -> Self {
-        Self::new(
-            resolution,
-            &UNIVERSAL_MARKERS,
-            &[],
-            false,
-            false,
-            false,
-            true,
-            false,
-            AnnotationStyle::default(),
-        )
     }
 }
 
@@ -156,11 +136,25 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             SourceAnnotations::default()
         };
 
-        // Convert from `AnnotatedDist` to `RequirementsTxtDist`.
-        let petgraph = to_requirements_txt_graph(&self.resolution.petgraph);
-
-        // Propagate markers across the graph.
-        let petgraph = propagate_markers(petgraph);
+        // Convert a [`petgraph::graph::Graph`] based on [`ResolutionGraphNode`] to a graph based on
+        // [`DisplayResolutionGraphNode`]. In other words: converts from [`AnnotatedDist`] to
+        // [`RequirementsTxtDist`].
+        //
+        // We assign each package its propagated markers: In `requirements.txt`, we want a flat list
+        // that for each package tells us if it should be installed on the current platform, without
+        // looking at which packages depend on it.
+        let petgraph = self.resolution.petgraph.map(
+            |_index, node| match node {
+                ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
+                ResolutionGraphNode::Dist(dist) => {
+                    let dist = RequirementsTxtDist::from_annotated_dist(dist);
+                    DisplayResolutionGraphNode::Dist(dist)
+                }
+            },
+            // We can drop the edge markers, while retaining their existence and direction for the
+            // annotations.
+            |_index, _edge| (),
+        );
 
         // Reduce the graph, such that all nodes for a single package are combined, regardless of
         // the extras.
@@ -187,13 +181,17 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         for (index, node) in nodes {
             // Display the node itself.
             let mut line = node
-                .to_requirements_txt(self.include_extras, self.include_markers)
+                .to_requirements_txt(
+                    &self.resolution.requires_python,
+                    self.include_extras,
+                    self.include_markers,
+                )
                 .to_string();
 
             // Display the distribution hashes, if any.
             let mut has_hashes = false;
             if self.show_hashes {
-                for hash in &node.hashes {
+                for hash in node.hashes {
                     has_hashes = true;
                     line.push_str(" \\\n");
                     line.push_str("    --hash=");
@@ -314,47 +312,12 @@ pub enum AnnotationStyle {
     Split,
 }
 
-type ResolutionPetGraph =
-    petgraph::graph::Graph<ResolutionGraphNode, MarkerTree, petgraph::Directed>;
+/// We don't need the edge markers anymore since we switched to propagated markers.
+type IntermediatePetGraph<'dist> =
+    petgraph::graph::Graph<DisplayResolutionGraphNode<'dist>, (), petgraph::Directed>;
 
-type IntermediatePetGraph =
-    petgraph::graph::Graph<DisplayResolutionGraphNode, MarkerTree, petgraph::Directed>;
-
-type RequirementsTxtGraph =
-    petgraph::graph::Graph<RequirementsTxtDist, MarkerTree, petgraph::Directed>;
-
-/// Convert a [`petgraph::graph::Graph`] based on [`ResolutionGraphNode`] to a graph based on
-/// [`DisplayResolutionGraphNode`].
-///
-/// In other words: converts from [`AnnotatedDist`] to [`RequirementsTxtDist`].
-fn to_requirements_txt_graph(graph: &ResolutionPetGraph) -> IntermediatePetGraph {
-    let mut next = IntermediatePetGraph::with_capacity(graph.node_count(), graph.edge_count());
-    let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
-
-    // Re-add the nodes to the reduced graph.
-    for index in graph.node_indices() {
-        match &graph[index] {
-            ResolutionGraphNode::Root => {
-                inverse.insert(index, next.add_node(DisplayResolutionGraphNode::Root));
-            }
-            ResolutionGraphNode::Dist(dist) => {
-                let dist = RequirementsTxtDist::from(dist);
-                inverse.insert(index, next.add_node(DisplayResolutionGraphNode::Dist(dist)));
-            }
-        }
-    }
-
-    // Re-add the edges to the reduced graph.
-    for edge in graph.edge_indices() {
-        let (source, target) = graph.edge_endpoints(edge).unwrap();
-        let weight = graph[edge].clone();
-        let source = inverse[&source];
-        let target = inverse[&target];
-        next.update_edge(source, target, weight);
-    }
-
-    next
-}
+type RequirementsTxtGraph<'dist> =
+    petgraph::graph::Graph<RequirementsTxtDist<'dist>, (), petgraph::Directed>;
 
 /// Reduce the graph, such that all nodes for a single package are combined, regardless of
 /// the extras.
@@ -363,7 +326,7 @@ fn to_requirements_txt_graph(graph: &ResolutionPetGraph) -> IntermediatePetGraph
 /// node.
 ///
 /// We also remove the root node, to simplify the graph structure.
-fn combine_extras(graph: &IntermediatePetGraph) -> RequirementsTxtGraph {
+fn combine_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxtGraph<'dist> {
     let mut next = RequirementsTxtGraph::with_capacity(graph.node_count(), graph.edge_count());
     let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
 
@@ -373,14 +336,42 @@ fn combine_extras(graph: &IntermediatePetGraph) -> RequirementsTxtGraph {
             continue;
         };
 
+        // In the `requirements.txt` output, we want a flat installation list, so we need to use
+        // the reachability markers instead of the edge markers.
+        // We use the markers of the base package: We know that each virtual extra package has an
+        // edge to the base package, so we know that base package markers are more general than the
+        // extra package markers (the extra package markers are a subset of the base package
+        // markers).
         if let Some(index) = inverse.get(&dist.version_id()) {
             let node: &mut RequirementsTxtDist = &mut next[*index];
             node.extras.extend(dist.extras.iter().cloned());
             node.extras.sort_unstable();
             node.extras.dedup();
         } else {
-            let index = next.add_node(dist.clone());
-            inverse.insert(dist.version_id(), index);
+            let version_id = dist.version_id();
+            let dist = dist.clone();
+            let index = next.add_node(dist);
+            inverse.insert(version_id, index);
+        }
+    }
+
+    // Verify that the package markers are more general than the extra markers.
+    if cfg!(debug_assertions) {
+        for index in graph.node_indices() {
+            let DisplayResolutionGraphNode::Dist(dist) = &graph[index] else {
+                continue;
+            };
+            let combined_markers = next[inverse[&dist.version_id()]].markers.clone();
+            let mut package_markers = combined_markers.clone();
+            package_markers.or(graph[index].markers().clone());
+            assert_eq!(
+                package_markers,
+                combined_markers,
+                "{} {:?} {:?}",
+                dist.version_id(),
+                dist.extras,
+                dist.markers.try_to_string()
+            );
         }
     }
 
@@ -393,24 +384,10 @@ fn combine_extras(graph: &IntermediatePetGraph) -> RequirementsTxtGraph {
         let DisplayResolutionGraphNode::Dist(target_node) = &graph[target] else {
             continue;
         };
-        let weight = graph[edge].clone();
         let source = inverse[&source_node.version_id()];
         let target = inverse[&target_node.version_id()];
 
-        // If either the existing marker or new marker is `true`, then the dependency is
-        // included unconditionally, and so the combined marker should be `true`.
-        if let Some(edge) = next
-            .find_edge(source, target)
-            .and_then(|edge| next.edge_weight_mut(edge))
-        {
-            if edge.is_true() || weight.is_true() {
-                *edge = MarkerTree::TRUE;
-            } else {
-                edge.and(weight.clone());
-            }
-        } else {
-            next.update_edge(source, target, weight);
-        }
+        next.update_edge(source, target, ());
     }
 
     next

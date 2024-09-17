@@ -7,7 +7,7 @@ use url::Url;
 use cache_key::{CanonicalUrl, RepositoryUrl};
 use distribution_types::{InstalledDirectUrlDist, InstalledDist};
 use pypi_types::{DirInfo, DirectUrl, RequirementSource, VcsInfo, VcsKind};
-use uv_cache::{ArchiveTarget, ArchiveTimestamp};
+use uv_cache_info::CacheInfo;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum RequirementSatisfaction {
@@ -50,6 +50,7 @@ impl RequirementSatisfaction {
                 let InstalledDist::Url(InstalledDirectUrlDist {
                     direct_url,
                     editable,
+                    cache_info,
                     ..
                 }) = &distribution
                 else {
@@ -81,10 +82,10 @@ impl RequirementSatisfaction {
                 // If the requirement came from a local path, check freshness.
                 if requested_url.scheme() == "file" {
                     if let Ok(archive) = requested_url.to_file_path() {
-                        if !ArchiveTimestamp::up_to_date_with(
-                            &archive,
-                            ArchiveTarget::Install(distribution),
-                        )? {
+                        let Some(cache_info) = cache_info.as_ref() else {
+                            return Ok(Self::OutOfDate);
+                        };
+                        if *cache_info != CacheInfo::from_path(&archive)? {
                             return Ok(Self::OutOfDate);
                         }
                     }
@@ -153,7 +154,11 @@ impl RequirementSatisfaction {
                 ext: _,
                 url: _,
             } => {
-                let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
+                let InstalledDist::Url(InstalledDirectUrlDist {
+                    direct_url,
+                    cache_info,
+                    ..
+                }) = &distribution
                 else {
                     return Ok(Self::Mismatch);
                 };
@@ -184,11 +189,10 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 }
 
-                if !ArchiveTimestamp::up_to_date_with(
-                    requested_path,
-                    ArchiveTarget::Install(distribution),
-                )? {
-                    trace!("Installed package is out of date");
+                let Some(cache_info) = cache_info.as_ref() else {
+                    return Ok(Self::OutOfDate);
+                };
+                if *cache_info != CacheInfo::from_path(requested_path)? {
                     return Ok(Self::OutOfDate);
                 }
 
@@ -200,7 +204,11 @@ impl RequirementSatisfaction {
                 r#virtual: _,
                 url: _,
             } => {
-                let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
+                let InstalledDist::Url(InstalledDirectUrlDist {
+                    direct_url,
+                    cache_info,
+                    ..
+                }) = &distribution
                 else {
                     return Ok(Self::Mismatch);
                 };
@@ -242,11 +250,10 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 }
 
-                if !ArchiveTimestamp::up_to_date_with(
-                    requested_path,
-                    ArchiveTarget::Install(distribution),
-                )? {
-                    trace!("Installed package is out of date");
+                let Some(cache_info) = cache_info.as_ref() else {
+                    return Ok(Self::OutOfDate);
+                };
+                if *cache_info != CacheInfo::from_path(requested_path)? {
                     return Ok(Self::OutOfDate);
                 }
 

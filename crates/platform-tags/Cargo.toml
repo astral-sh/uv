@@ -18,4 +18,4 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.36.1" }
+insta = { version = "1.40.0" }

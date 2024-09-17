@@ -50,7 +50,7 @@ fn command(context: &TestContext) -> Command {
         .arg(packse_index_url())
         .arg("--find-links")
         .arg(build_vendor_links_url());
-    context.add_shared_args(&mut command);
+    context.add_shared_args(&mut command, true);
     command.env_remove("UV_EXCLUDE_NEWER");
     command
 }

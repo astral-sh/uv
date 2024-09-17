@@ -1,10 +1,12 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
+pub use dist_info_name::DistInfoName;
 pub use extra_name::ExtraName;
 pub use group_name::{GroupName, DEV_DEPENDENCIES};
 pub use package_name::PackageName;
 
+mod dist_info_name;
 mod extra_name;
 mod group_name;
 mod package_name;
@@ -22,10 +24,11 @@ pub(crate) fn validate_and_normalize_owned(name: String) -> Result<String, Inval
 pub(crate) fn validate_and_normalize_ref(
     name: impl AsRef<str>,
 ) -> Result<String, InvalidNameError> {
-    let mut normalized = String::with_capacity(name.as_ref().len());
+    let name = name.as_ref();
+    let mut normalized = String::with_capacity(name.len());
 
     let mut last = None;
-    for char in name.as_ref().bytes() {
+    for char in name.bytes() {
         match char {
             b'A'..=b'Z' => {
                 normalized.push(char.to_ascii_lowercase() as char);
@@ -36,19 +39,19 @@ pub(crate) fn validate_and_normalize_ref(
             b'-' | b'_' | b'.' => {
                 match last {
                     // Names can't start with punctuation.
-                    None => return Err(InvalidNameError(name.as_ref().to_string())),
+                    None => return Err(InvalidNameError(name.to_string())),
                     Some(b'-' | b'_' | b'.') => {}
                     Some(_) => normalized.push('-'),
                 }
             }
-            _ => return Err(InvalidNameError(name.as_ref().to_string())),
+            _ => return Err(InvalidNameError(name.to_string())),
         }
         last = Some(char);
     }
 
     // Names can't end with punctuation.
     if matches!(last, Some(b'-' | b'_' | b'.')) {
-        return Err(InvalidNameError(name.as_ref().to_string()));
+        return Err(InvalidNameError(name.to_string()));
     }
 
     Ok(normalized)

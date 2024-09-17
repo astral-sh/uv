@@ -964,7 +964,7 @@ mod tests {
     #[test]
     fn find_python_from_active_python() -> Result<()> {
         let context = TestContext::new()?;
-        let venv = context.tempdir.child(".venv");
+        let venv = context.tempdir.child("some-venv");
         TestContext::mock_venv(&venv, "3.12.0")?;
 
         let python =
@@ -979,6 +979,31 @@ mod tests {
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
             "3.12.0",
+            "We should prefer the active environment"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_from_active_python_prerelease() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.12.0"])?;
+        let venv = context.tempdir.child("some-venv");
+        TestContext::mock_venv(&venv, "3.13.0rc1")?;
+
+        let python =
+            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+                find_python_installation(
+                    &PythonRequest::Any,
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            })??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.13.0rc1",
             "We should prefer the active environment"
         );
 
@@ -1205,6 +1230,27 @@ mod tests {
             "We should prefer the parent interpreter"
         );
 
+        // Test with `EnvironmentPreference::OnlySystem`
+        let python = context.run_with_vars(
+            &[
+                ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
+                ("VIRTUAL_ENV", Some(venv.as_os_str())),
+            ],
+            || {
+                find_python_installation(
+                    &PythonRequest::Any,
+                    EnvironmentPreference::OnlySystem,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            },
+        )??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should prefer the parent interpreter since it's not virtual"
+        );
+
         // Test with `EnvironmentPreference::OnlyVirtual`
         let python = context.run_with_vars(
             &[
@@ -1224,6 +1270,39 @@ mod tests {
             python.interpreter().python_full_version().to_string(),
             "3.12.2",
             "We find the virtual environment Python because a system is explicitly not allowed"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_from_parent_interpreter_prerelease() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.12.0"])?;
+        let parent = context.tempdir.child("python").to_path_buf();
+        TestContext::create_mock_interpreter(
+            &parent,
+            &PythonVersion::from_str("3.13.0rc2").unwrap(),
+            ImplementationName::CPython,
+            // Note we mark this as a system interpreter instead of a virtual environment
+            true,
+        )?;
+
+        let python = context.run_with_vars(
+            &[("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str()))],
+            || {
+                find_python_installation(
+                    &PythonRequest::Any,
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            },
+        )??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.13.0rc2",
+            "We should find the parent interpreter"
         );
 
         Ok(())

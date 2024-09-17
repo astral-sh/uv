@@ -329,6 +329,12 @@ impl Version {
         self.is_pre() || self.is_dev()
     }
 
+    /// Whether this is a stable version (i.e., _not_ an alpha/beta/rc or dev version)
+    #[inline]
+    pub fn is_stable(&self) -> bool {
+        !self.is_pre() && !self.is_dev()
+    }
+
     /// Whether this is an alpha/beta/rc version
     #[inline]
     pub fn is_pre(&self) -> bool {
@@ -1403,6 +1409,12 @@ impl std::fmt::Display for PrereleaseKind {
     }
 }
 
+impl std::fmt::Display for Prerelease {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.kind, self.number)
+    }
+}
+
 /// A part of the [local version identifier](<https://peps.python.org/pep-0440/#local-version-identifiers>)
 ///
 /// Local versions are a mess:
@@ -1491,6 +1503,7 @@ struct Parser<'a> {
 impl<'a> Parser<'a> {
     /// The "separators" that are allowed in several different parts of a
     /// version.
+    #[allow(clippy::byte_char_slices)]
     const SEPARATOR: ByteSet = ByteSet::new(&[b'.', b'_', b'-']);
 
     /// Create a new `Parser` for parsing the version in the given byte string.

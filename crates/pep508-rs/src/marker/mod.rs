@@ -18,9 +18,9 @@ mod tree;
 pub use environment::{MarkerEnvironment, MarkerEnvironmentBuilder};
 pub use tree::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerExpression,
-    MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeKind, MarkerValue, MarkerValueExtra,
-    MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion,
-    VersionMarkerTree,
+    MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeDebugGraph, MarkerTreeKind,
+    MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion, MarkerWarningKind,
+    StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 
 /// `serde` helpers for [`MarkerTree`].

@@ -156,7 +156,7 @@ impl Credentials {
     /// Parse [`Credentials`] from an authorization header, if any.
     ///
     /// Only HTTP Basic Authentication is supported.
-    /// [`None`] will be returned if another authoriziation scheme is detected.
+    /// [`None`] will be returned if another authorization scheme is detected.
     ///
     /// Panics if the authentication is not conformant to the HTTP Basic Authentication scheme:
     /// - The contents must be base64 encoded

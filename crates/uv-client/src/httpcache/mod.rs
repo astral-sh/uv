@@ -123,7 +123,7 @@ actually need to make an HTTP request).
 # Additional reading
 
 * Short introduction to `Cache-Control`: <https://csswizardry.com/2019/03/cache-control-for-civilians/>
-* Caching best practcies: <https://jakearchibald.com/2016/caching-best-practices/>
+* Caching best practices: <https://jakearchibald.com/2016/caching-best-practices/>
 * Overview of HTTP caching: <https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching>
 * MDN docs for `Cache-Control`: <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control>
 * The 1997 RFC for HTTP 1.1: <https://www.rfc-editor.org/rfc/rfc2068#section-13>
@@ -734,7 +734,7 @@ impl ArchivedCachePolicy {
         let age = self.age(now).as_secs();
 
         // Per RFC 8246, the `immutable` directive means that a reload from an
-        // end user should not result in a revlalidation request. Indeed, the
+        // end user should not result in a revalidation request. Indeed, the
         // `immutable` directive seems to imply that clients should never talk
         // to the origin server until the cached response is stale with respect
         // to its freshness lifetime (as set by the server).
