@@ -2317,6 +2317,20 @@ mod tests {
             "Pre-release version requests require a patch version of zero"
         );
         assert!(
+            matches!(
+                VersionRequest::from_str("3.12-dev"),
+                Err(Error::InvalidVersionRequest(_))
+            ),
+            "Development version segments are not allowed"
+        );
+        assert!(
+            matches!(
+                VersionRequest::from_str("3.12.post0"),
+                Err(Error::InvalidVersionRequest(_))
+            ),
+            "Post version segments are not allowed"
+        );
+        assert!(
             // Test for overflow
             matches!(
                 VersionRequest::from_str("31000"),
