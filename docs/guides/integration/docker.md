@@ -21,7 +21,7 @@ $ docker run ghcr.io/astral-sh/uv --help
 uv provides a distroless Docker image including the `uv` binary. The following tags are published:
 
 - `uv:latest`
-- `uv:{major}.{minor}.{patch}`, e.g., `uv:0.4.10`
+- `uv:{major}.{minor}.{patch}`, e.g., `uv:0.4.11`
 - `uv:{major}.{minor}`, e.g., `uv:0.4` (the latest patch version)
 
 In addition, uv publishes the following images:
@@ -56,7 +56,7 @@ In addition, uv publishes the following images:
     - `uv:python3.8-bookworm-slim`
 
 As with the distroless image, each image is published with uv version tags as
-`uv:{major}.{minor}.{patch}-{base}` and `uv:{major}.{minor}-{base}`, e.g., `uv:0.4.10-alpine`.
+`uv:{major}.{minor}.{patch}-{base}` and `uv:{major}.{minor}-{base}`, e.g., `uv:0.4.11-alpine`.
 
 For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
 page.
@@ -94,13 +94,13 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.4.10 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.4.11 /uv /bin/uv
 ```
 
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.4.10/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.4.11/install.sh /uv-installer.sh
 ```
 
 ### Installing a project

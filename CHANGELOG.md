@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.4.11
+
+### Enhancements
+
+- Add `--no-editable` support to `uv sync` and `uv export` ([#7371](https://github.com/astral-sh/uv/pull/7371))
+- Add support for `--only-dev` to `uv sync` and `uv export` ([#7367](https://github.com/astral-sh/uv/pull/7367))
+- Add support for remaining pip-supported file extensions ([#7387](https://github.com/astral-sh/uv/pull/7387))
+- Generate shell completion for `uvx` ([#7388](https://github.com/astral-sh/uv/pull/7388))
+- Include `uv export` command in `requirements.txt` output ([#7374](https://github.com/astral-sh/uv/pull/7374))
+- Prune unzipped source distributions in `uv cache prune --ci` ([#7446](https://github.com/astral-sh/uv/pull/7446))
+- Warn when trying to `uv sync` a package without build configuration ([#7420](https://github.com/astral-sh/uv/pull/7420))
+- Support pre-releases in Python version requests (`command --python <major.minor.pre-release>`) ([#7335](https://github.com/astral-sh/uv/pull/7335))
+
+### Bug fixes
+
+- Avoid erroneous version warning for `.dist-info` directories ([#7444](https://github.com/astral-sh/uv/pull/7444))
+- Avoid removing seed packages for `uv venv --seed` environments ([#7410](https://github.com/astral-sh/uv/pull/7410))
+- Avoid unnecessary progress bar initializations ([#7412](https://github.com/astral-sh/uv/pull/7412))
+- Error when `tool.uv.sources` contains duplicate package names ([#7383](https://github.com/astral-sh/uv/pull/7383))
+- Include `--branch` et al when resolving unnamed URLs in `uv add` ([#7447](https://github.com/astral-sh/uv/pull/7447))
+- Include `dev-dependencies` in `--no-sources` invocations ([#7408](https://github.com/astral-sh/uv/pull/7408))
+- Include the parent interpreter in Python discovery when `--system` is used ([#7440](https://github.com/astral-sh/uv/pull/7440))
+- Respect `--no-sources` in PEP 723 scripts ([#7409](https://github.com/astral-sh/uv/pull/7409))
+- Respect `pyproject.toml` credentials from user-provided requirements ([#7474](https://github.com/astral-sh/uv/pull/7474))
+- Use consistent PyPI cache bucket ([#7443](https://github.com/astral-sh/uv/pull/7443))
+- Use unambiguous relative paths in `uv export` ([#7378](https://github.com/astral-sh/uv/pull/7378))
+
+### Documentation
+
+- Add documentation on platform-specific dependencies ([#7411](https://github.com/astral-sh/uv/pull/7411))
+- Add documentation for passing installer options on Linux ([#6839](https://github.com/astral-sh/uv/pull/6839))
+- Separate project data from configuration settings ([#7053](https://github.com/astral-sh/uv/pull/7053))
+
+### Error messages
+
+- Hint at missing `project.name` ([#6803](https://github.com/astral-sh/uv/pull/6803))
+- Surface dedicated `project.name` error for workspaces ([#7399](https://github.com/astral-sh/uv/pull/7399))
+- Remove duplicate warning for settings discovery errors ([#7384](https://github.com/astral-sh/uv/pull/7384))
+
 ## 0.4.10
 
 ### Enhancements
