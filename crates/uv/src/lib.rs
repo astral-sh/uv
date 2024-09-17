@@ -780,19 +780,20 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // uv
             args.shell.generate(&mut Cli::command(), &mut stdout());
 
-            // uvx: combine `uv tool uvx` with top level arguments
+            // uvx: combine `uv tool uvx` with the top-level arguments
             let mut uvx = Cli::command()
                 .find_subcommand("tool")
                 .unwrap()
                 .find_subcommand("uvx")
                 .unwrap()
                 .clone()
-                // avoid duplicating TopLevelArgs's help, version
+                // Avoid duplicating the `--help` and `--version` flags from the top-level arguments.
                 .disable_help_flag(true)
                 .disable_version_flag(true)
-                .version("dummy_for_completion");
+                .version(env!("CARGO_PKG_VERSION"));
 
-            // like Args::augment_args but open coded to skip collisions
+            // Copy the top-level arguments into the `uvx` command. (Like `Args::augment_args`, but
+            // expanded to skip collisions.)
             for arg in TopLevelArgs::command().get_arguments() {
                 if arg.get_id() != "isolated" {
                     uvx = uvx.arg(arg);
