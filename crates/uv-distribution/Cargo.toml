@@ -53,4 +53,4 @@ zip = { workspace = true }
 
 [dev-dependencies]
 indoc = { version = "2.0.5" }
-insta = { version = "1.39.0", features = ["filters", "json", "redactions"] }
+insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
