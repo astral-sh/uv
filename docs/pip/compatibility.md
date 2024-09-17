@@ -148,10 +148,9 @@ supports the following values:
 While `unsafe-best-match` is the closest to `pip`'s behavior, it exposes users to the risk of
 "dependency confusion" attacks.
 
-In the future, uv will support pinning packages to dedicated indexes (see:
-[#171](https://github.com/astral-sh/uv/issues/171)). Additionally,
-[PEP 708](https://peps.python.org/pep-0708/) is a provisional standard that aims to address the
-"dependency confusion" issue across package registries and installers.
+uv also supports pinning packages to dedicated indexes (see:
+[_Indexes_](../configuration/indexes.md#pinning-a-package-to-an-index)), such that a given package
+is _always_ installed from a specific index.
 
 ## PEP 517 build isolation
 

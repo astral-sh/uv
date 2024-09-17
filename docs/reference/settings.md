@@ -73,6 +73,50 @@ environments = ["sys_platform == 'darwin'"]
 
 ---
 
+### [`index`](#index) {: #index }
+
+The indexes to use when resolving dependencies.
+
+Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
+(the simple repository API), or a local directory laid out in the same format.
+
+Indexes are considered in the order in which they're defined, such that the first-defined
+index has the highest priority. Further, the indexes provided by this setting are given
+higher priority than any indexes specified via [`index_url`](#index-url) or
+[`extra_index_url`](#extra-index-url).
+
+If an index is marked as `explicit = true`, it will be used exclusively for those
+dependencies that select it explicitly via `[tool.uv.sources]`, as in:
+
+```toml
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+```
+
+If an index is marked as `default = true`, it will be moved to the front of the list of
+the list of indexes, such that it is given the highest priority when resolving packages.
+Additionally, marking an index as default will disable the PyPI default index.
+
+**Default value**: `"[]"`
+
+**Type**: `dict`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+```
+
+---
+
 ### [`managed`](#managed) {: #managed }
 
 Whether the project is managed by uv. If `false`, uv will ignore the project when
@@ -533,10 +577,13 @@ Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep
 (the simple repository API), or a local directory laid out in the same format.
 
 All indexes provided via this flag take priority over the index specified by
-[`index_url`](#index-url). When multiple indexes are provided, earlier values take priority.
+[`index_url`](#index-url) or [`index`](#index) with `default = true`. When multiple indexes
+are provided, earlier values take priority.
 
 To control uv's resolution strategy when multiple indexes are present, see
 [`index_strategy`](#index-strategy).
+
+(Deprecated: use `index` instead.)
 
 **Default value**: `[]`
 
@@ -591,14 +638,66 @@ formats described above.
 
 ---
 
+### [`index`](#index) {: #index }
+
+The package indexes to use when resolving dependencies.
+
+Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
+(the simple repository API), or a local directory laid out in the same format.
+
+Indexes are considered in the order in which they're defined, such that the first-defined
+index has the highest priority.
+
+If an index is marked as `explicit = true`, it will be used exclusively for those
+dependencies that select it explicitly via `[tool.uv.sources]`, as in:
+
+```toml
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+```
+
+Marking an index as `default = true` will disable the PyPI default index and move the
+index to the end of the prioritized list, such that it is used when a package is not found
+on any other index.
+
+**Default value**: `"[]"`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    [[tool.uv.index]]
+    name = "pytorch"
+    url = "https://download.pytorch.org/whl/cu121"
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    [[tool.uv.index]]
+    name = "pytorch"
+    url = "https://download.pytorch.org/whl/cu121"
+    ```
+
+---
+
 ### [`index-strategy`](#index-strategy) {: #index-strategy }
 
 The strategy to use when resolving against multiple index URLs.
 
 By default, uv will stop at the first index on which a given package is available, and
 limit resolutions to those present on that first index (`first-match`). This prevents
-"dependency confusion" attacks, whereby an attack can upload a malicious package under the
-same name to a secondary.
+"dependency confusion" attacks, whereby an attacker can upload a malicious package under the
+same name to an alternate index.
 
 **Default value**: `"first-index"`
 
@@ -633,7 +732,9 @@ Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep
 (the simple repository API), or a local directory laid out in the same format.
 
 The index provided by this setting is given lower priority than any indexes specified via
-[`extra_index_url`](#extra-index-url).
+[`extra_index_url`](#extra-index-url) or [`index`](#index).
+
+(Deprecated: use `index` instead.)
 
 **Default value**: `"https://pypi.org/simple"`
 
@@ -1911,8 +2012,8 @@ The strategy to use when resolving against multiple index URLs.
 
 By default, uv will stop at the first index on which a given package is available, and
 limit resolutions to those present on that first index (`first-match`). This prevents
-"dependency confusion" attacks, whereby an attack can upload a malicious package under the
-same name to a secondary.
+"dependency confusion" attacks, whereby an attacker can upload a malicious package under the
+same name to an alternate index.
 
 **Default value**: `"first-index"`
 

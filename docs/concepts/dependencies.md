@@ -70,6 +70,7 @@ standards-compliant `project.dependencies` table.
 During development, a project may rely on a package that isn't available on PyPI. The following
 additional sources are supported by uv:
 
+- Index: A package from an explicit package index.
 - Git: A Git repository.
 - URL: A remote wheel or source distribution.
 - Path: A local wheel, source distribution, or project directory.
@@ -90,6 +91,29 @@ $ uv lock --no-sources
 
 The use of `--no-sources` will also prevent uv from discovering any
 [workspace members](#workspace-member) that could satisfy a given dependency.
+
+### Index
+
+To pin a Python package to a specific index, add a named index to the `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = [
+  "torch",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+```
+
+The `explicit` flag is optional and indicates that the index should _only_ be used for packages that
+explicitly specify it in `tool.uv.sources`. If `explicit` is not set, other packages may be resolved
+from the index, if not found elsewhere.
 
 ### Git
 

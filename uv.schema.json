@@ -128,7 +128,7 @@
       ]
     },
     "extra-index-url": {
-      "description": "Extra URLs of package indexes to use, in addition to `--index-url`.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nAll indexes provided via this flag take priority over the index specified by [`index_url`](#index-url). When multiple indexes are provided, earlier values take priority.\n\nTo control uv's resolution strategy when multiple indexes are present, see [`index_strategy`](#index-strategy).",
+      "description": "Extra URLs of package indexes to use, in addition to `--index-url`.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nAll indexes provided via this flag take priority over the index specified by [`index_url`](#index-url) or [`index`](#index) with `default = true`. When multiple indexes are provided, earlier values take priority.\n\nTo control uv's resolution strategy when multiple indexes are present, see [`index_strategy`](#index-strategy).\n\n(Deprecated: use `index` instead.)",
       "type": [
         "array",
         "null"
@@ -147,8 +147,18 @@
         "$ref": "#/definitions/FlatIndexLocation"
       }
     },
+    "index": {
+      "description": "The indexes to use when resolving dependencies.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nIndexes are considered in the order in which they're defined, such that the first-defined index has the highest priority. Further, the indexes provided by this setting are given higher priority than any indexes specified via [`index_url`](#index-url) or [`extra_index_url`](#extra-index-url).\n\nIf an index is marked as `explicit = true`, it will be used exclusively for those dependencies that select it explicitly via `[tool.uv.sources]`, as in:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\" explicit = true\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```\n\nIf an index is marked as `default = true`, it will be moved to the front of the list of the list of indexes, such that it is given the highest priority when resolving packages. Additionally, marking an index as default will disable the PyPI default index.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/Index"
+      }
+    },
     "index-strategy": {
-      "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attack can upload a malicious package under the same name to a secondary.",
+      "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
       "anyOf": [
         {
           "$ref": "#/definitions/IndexStrategy"
@@ -159,7 +169,7 @@
       ]
     },
     "index-url": {
-      "description": "The URL of the Python package index (by default: <https://pypi.org/simple>).\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nThe index provided by this setting is given lower priority than any indexes specified via [`extra_index_url`](#extra-index-url).",
+      "description": "The URL of the Python package index (by default: <https://pypi.org/simple>).\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nThe index provided by this setting is given lower priority than any indexes specified via [`extra_index_url`](#extra-index-url) or [`index`](#index).\n\n(Deprecated: use `index` instead.)",
       "anyOf": [
         {
           "$ref": "#/definitions/IndexUrl"
@@ -545,6 +555,39 @@
       "description": "The path to a directory of distributions, or a URL to an HTML file with a flat listing of distributions.",
       "type": "string"
     },
+    "Index": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "default": {
+          "description": "Mark the index as the default index.\n\nBy default, uv uses PyPI as the default index, such that even if additional indexes are defined via `[[tool.uv.index]]`, PyPI will still be used as a fallback for packages that aren't found elsewhere. To disable the PyPI default, set `default = true` on at least one other index.\n\nMarking an index as default will move it to the front of the list of indexes, such that it is given the highest priority when resolving packages.",
+          "default": false,
+          "type": "boolean"
+        },
+        "explicit": {
+          "description": "Mark the index as explicit.\n\nExplicit indexes will _only_ be used when explicitly enabled via a `[tool.uv.sources]` definition, as in:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\" explicit = true\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```",
+          "default": false,
+          "type": "boolean"
+        },
+        "name": {
+          "description": "The name of the index.\n\nIndex names can be used to reference indexes elsewhere in the configuration. For example, you can pin a package to a specific index by name:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\"\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "The URL of the index.\n\nExpects to receive a URL (e.g., `https://pypi.org/simple`) or a local path.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/IndexUrl"
+            }
+          ]
+        }
+      }
+    },
     "IndexStrategy": {
       "oneOf": [
         {
@@ -803,7 +846,7 @@
           ]
         },
         "index-strategy": {
-          "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attack can upload a malicious package under the same name to a secondary.",
+          "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
           "anyOf": [
             {
               "$ref": "#/definitions/IndexStrategy"

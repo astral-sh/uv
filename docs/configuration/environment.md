@@ -2,12 +2,20 @@
 
 uv accepts the following command-line arguments as environment variables:
 
+- `UV_INDEX`: Equivalent to the `--index` command-line argument. If set, uv will use this URL as the
+  base index for searching for packages.
+- `UV_DEFAULT_INDEX`: Equivalent to the `--default-index` command-line argument. If set, uv will use
+  this space-separated list of URLs as additional indexes when searching for packages.
 - `UV_INDEX_URL`: Equivalent to the `--index-url` command-line argument. If set, uv will use this
-  URL as the base index for searching for packages.
+  URL as the base index for searching for packages. (Deprecated: use `UV_INDEX` instead.)
 - `UV_EXTRA_INDEX_URL`: Equivalent to the `--extra-index-url` command-line argument. If set, uv will
   use this space-separated list of URLs as additional indexes when searching for packages.
+<<<<<<< HEAD
 - `UV_FIND_LINKS`: Equivalent to the `--find-links` command-line argument. If set, uv will use this
   comma-separated list of additional locations to search for packages.
+=======
+  (Deprecated: use `UV_DEFAULT_INDEX` instead.)
+>>>>>>> f9658eca9 (Add explicit index support)
 - `UV_CACHE_DIR`: Equivalent to the `--cache-dir` command-line argument. If set, uv will use this
   directory for caching instead of the default cache directory.
 - `UV_NO_CACHE`: Equivalent to the `--no-cache` command-line argument. If set, uv will not use the

@@ -3075,3 +3075,60 @@ fn sync_no_sources_missing_member() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn sync_explicit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "idna>2",
+        ]
+
+        [[tool.uv.index]]
+        name = "test"
+        url = "https://test.pypi.org/simple"
+        explicit = true
+
+        [tool.uv.sources]
+        idna = { index = "test" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==2.7
+    "###);
+
+    // Clear the environment.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    // The package should be drawn from the cache.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + idna==2.7
+    "###);
+
+    Ok(())
+}

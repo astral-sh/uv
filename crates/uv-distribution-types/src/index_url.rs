@@ -11,12 +11,13 @@ use url::{ParseError, Url};
 
 use uv_pep508::{VerbatimUrl, VerbatimUrlError};
 
-use crate::Verbatim;
+use crate::{Index, Verbatim};
 
 static PYPI_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("https://pypi.org/simple").unwrap());
 
-static DEFAULT_INDEX_URL: LazyLock<IndexUrl> =
-    LazyLock::new(|| IndexUrl::Pypi(VerbatimUrl::from_url(PYPI_URL.clone())));
+static DEFAULT_INDEX_URL: LazyLock<Index> = LazyLock::new(|| {
+    Index::from_index_url(IndexUrl::Pypi(VerbatimUrl::from_url(PYPI_URL.clone())))
+});
 
 /// The URL of an index to use for fetching packages (e.g., PyPI).
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -52,6 +53,15 @@ impl IndexUrl {
             Self::Pypi(url) => url.raw(),
             Self::Url(url) => url.raw(),
             Self::Path(url) => url.raw(),
+        }
+    }
+
+    /// Convert the index URL into a [`Url`].
+    pub fn into_url(self) -> Url {
+        match self {
+            Self::Pypi(url) => url.into_url(),
+            Self::Url(url) => url.into_url(),
+            Self::Path(url) => url.into_url(),
         }
     }
 
@@ -288,39 +298,21 @@ impl From<VerbatimUrl> for FlatIndexLocation {
 
 /// The index locations to use for fetching packages. By default, uses the PyPI index.
 ///
-/// From a pip perspective, this type merges `--index-url`, `--extra-index-url`, and `--find-links`.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+/// From a pip perspective, this type merges `--index-url`, `--extra-index-url`, and `--find-links`,
+/// along with the uv-specific `--index` and `--default-index` options.
+#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct IndexLocations {
-    index: Option<IndexUrl>,
-    extra_index: Vec<IndexUrl>,
+    indexes: Vec<Index>,
     flat_index: Vec<FlatIndexLocation>,
     no_index: bool,
 }
 
-impl Default for IndexLocations {
-    /// By default, use the `PyPI` index.
-    fn default() -> Self {
-        Self {
-            index: Some(DEFAULT_INDEX_URL.clone()),
-            extra_index: Vec::new(),
-            flat_index: Vec::new(),
-            no_index: false,
-        }
-    }
-}
-
 impl IndexLocations {
     /// Determine the index URLs to use for fetching packages.
-    pub fn new(
-        index: Option<IndexUrl>,
-        extra_index: Vec<IndexUrl>,
-        flat_index: Vec<FlatIndexLocation>,
-        no_index: bool,
-    ) -> Self {
+    pub fn new(indexes: Vec<Index>, flat_index: Vec<FlatIndexLocation>, no_index: bool) -> Self {
         Self {
-            index,
-            extra_index,
+            indexes,
             flat_index,
             no_index,
         }
@@ -335,14 +327,12 @@ impl IndexLocations {
     #[must_use]
     pub fn combine(
         self,
-        index: Option<IndexUrl>,
-        extra_index: Vec<IndexUrl>,
+        indexes: Vec<Index>,
         flat_index: Vec<FlatIndexLocation>,
         no_index: bool,
     ) -> Self {
         Self {
-            index: self.index.or(index),
-            extra_index: self.extra_index.into_iter().chain(extra_index).collect(),
+            indexes: self.indexes.into_iter().chain(indexes).collect(),
             flat_index: self.flat_index.into_iter().chain(flat_index).collect(),
             no_index: self.no_index || no_index,
         }
@@ -351,47 +341,69 @@ impl IndexLocations {
     /// Returns `true` if no index configuration is set, i.e., the [`IndexLocations`] matches the
     /// default configuration.
     pub fn is_none(&self) -> bool {
-        self.index.is_none()
-            && self.extra_index.is_empty()
-            && self.flat_index.is_empty()
-            && !self.no_index
+        *self == Self::default()
     }
 }
 
 impl<'a> IndexLocations {
-    /// Return the primary [`IndexUrl`] entry.
+    /// Return the default [`Index`] entry.
     ///
     /// If `--no-index` is set, return `None`.
     ///
     /// If no index is provided, use the `PyPI` index.
-    pub fn index(&'a self) -> Option<&'a IndexUrl> {
+    pub fn default_index(&'a self) -> Option<&'a Index> {
         if self.no_index {
             None
         } else {
-            match self.index.as_ref() {
-                Some(index) => Some(index),
-                None => Some(&DEFAULT_INDEX_URL),
-            }
+            let mut seen = FxHashSet::default();
+            self.indexes
+                .iter()
+                .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                .find(|index| index.default && !index.explicit)
+                .or_else(|| Some(&DEFAULT_INDEX_URL))
         }
     }
 
-    /// Return an iterator over the extra [`IndexUrl`] entries.
-    pub fn extra_index(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
+    /// Return an iterator over the implicit [`Index`] entries.
+    pub fn implicit_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         if self.no_index {
             Either::Left(std::iter::empty())
         } else {
-            Either::Right(self.extra_index.iter())
+            let mut seen = FxHashSet::default();
+            Either::Right(
+                self.indexes
+                    .iter()
+                    .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                    .filter(|index| !(index.default || index.explicit)),
+            )
         }
     }
 
-    /// Return an iterator over all [`IndexUrl`] entries in order.
+    /// Return an iterator over the explicit [`Index`] entries.
+    pub fn explicit_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        if self.no_index {
+            Either::Left(std::iter::empty())
+        } else {
+            let mut seen = FxHashSet::default();
+            Either::Right(
+                self.indexes
+                    .iter()
+                    .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                    .filter(|index| index.explicit),
+            )
+        }
+    }
+
+    /// Return an iterator over all [`Index`] entries in order.
     ///
-    /// Prioritizes the extra indexes over the main index.
+    /// Explicit indexes are excluded.
+    ///
+    /// Prioritizes the extra indexes over the default index.
     ///
     /// If `no_index` was enabled, then this always returns an empty
     /// iterator.
-    pub fn indexes(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
-        self.extra_index().chain(self.index())
+    pub fn indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        self.implicit_indexes().chain(self.default_index())
     }
 
     /// Return an iterator over the [`FlatIndexLocation`] entries.
@@ -407,88 +419,89 @@ impl<'a> IndexLocations {
     /// Clone the index locations into a [`IndexUrls`] instance.
     pub fn index_urls(&'a self) -> IndexUrls {
         IndexUrls {
-            index: self.index.clone(),
-            extra_index: self.extra_index.clone(),
+            indexes: self.indexes.clone(),
             no_index: self.no_index,
         }
     }
 
-    /// Return an iterator over all [`Url`] entries.
-    pub fn urls(&'a self) -> impl Iterator<Item = &'a Url> + 'a {
-        self.indexes()
-            .map(IndexUrl::url)
-            .chain(self.flat_index.iter().filter_map(|index| match index {
-                FlatIndexLocation::Path(_) => None,
-                FlatIndexLocation::Url(url) => Some(url.raw()),
-            }))
+    /// Return an iterator over all allowed [`IndexUrl`] entries.
+    ///
+    /// This includes both explicit and implicit indexes, as well as the default index.
+    ///
+    /// If `no_index` was enabled, then this always returns an empty
+    /// iterator.
+    pub fn allowed_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        self.explicit_indexes()
+            .chain(self.implicit_indexes())
+            .chain(self.default_index())
+    }
+
+    /// Return an iterator over all allowed [`Url`] entries.
+    ///
+    /// This includes both explicit and implicit index URLs, as well as the default index.
+    ///
+    /// If `no_index` was enabled, then this always returns an empty
+    /// iterator.
+    pub fn allowed_urls(&'a self) -> impl Iterator<Item = &'a Url> + 'a {
+        self.allowed_indexes()
+            .map(Index::raw_url)
+            .chain(self.flat_index().map(FlatIndexLocation::url))
     }
 }
 
 /// The index URLs to use for fetching packages.
 ///
-/// From a pip perspective, this type merges `--index-url` and `--extra-index-url`.
-#[derive(Debug, Clone)]
+/// From a pip perspective, this type merges `--index-url` and `--extra-index-url`, along with the
+/// uv-specific `--index` and `--default-index` options.
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct IndexUrls {
-    index: Option<IndexUrl>,
-    extra_index: Vec<IndexUrl>,
+    indexes: Vec<Index>,
     no_index: bool,
 }
 
-impl Default for IndexUrls {
-    /// By default, use the `PyPI` index.
-    fn default() -> Self {
-        Self {
-            index: Some(DEFAULT_INDEX_URL.clone()),
-            extra_index: Vec::new(),
-            no_index: false,
-        }
-    }
-}
-
 impl<'a> IndexUrls {
-    /// Return the fallback [`IndexUrl`] entry.
+    /// Return the default [`Index`] entry.
     ///
     /// If `--no-index` is set, return `None`.
     ///
     /// If no index is provided, use the `PyPI` index.
-    fn index(&'a self) -> Option<&'a IndexUrl> {
+    fn default_index(&'a self) -> Option<&'a Index> {
         if self.no_index {
             None
         } else {
-            match self.index.as_ref() {
-                Some(index) => Some(index),
-                None => Some(&DEFAULT_INDEX_URL),
-            }
+            let mut seen = FxHashSet::default();
+            self.indexes
+                .iter()
+                .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                .find(|index| index.default && !index.explicit)
+                .or_else(|| Some(&DEFAULT_INDEX_URL))
         }
     }
 
-    /// Return an iterator over the extra [`IndexUrl`] entries.
-    fn extra_index(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
+    /// Return an iterator over the implicit [`Index`] entries.
+    fn implicit_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         if self.no_index {
             Either::Left(std::iter::empty())
         } else {
-            Either::Right(self.extra_index.iter())
+            let mut seen = FxHashSet::default();
+            Either::Right(
+                self.indexes
+                    .iter()
+                    .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                    .filter(|index| !(index.default || index.explicit)),
+            )
         }
     }
 
     /// Return an iterator over all [`IndexUrl`] entries in order.
     ///
-    /// Prioritizes the extra indexes over the main index.
+    /// Prioritizes the `[tool.uv.index]` definitions over the `--extra-index-url` definitions
+    /// over the `--index-url` definition.
     ///
     /// If `no_index` was enabled, then this always returns an empty
     /// iterator.
-    pub fn indexes(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
-        self.extra_index().chain(self.index())
-    }
-}
-
-impl From<IndexLocations> for IndexUrls {
-    fn from(locations: IndexLocations) -> Self {
-        Self {
-            index: locations.index,
-            extra_index: locations.extra_index,
-            no_index: locations.no_index,
-        }
+    pub fn indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        self.implicit_indexes().chain(self.default_index())
     }
 }
 

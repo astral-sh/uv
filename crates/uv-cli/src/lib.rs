@@ -7,13 +7,14 @@ use anyhow::{anyhow, Result};
 use clap::builder::styling::{AnsiColor, Effects, Style};
 use clap::builder::Styles;
 use clap::{Args, Parser, Subcommand};
+
 use url::Url;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
     TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
-use uv_distribution_types::{FlatIndexLocation, IndexUrl};
+use uv_distribution_types::{FlatIndexLocation, Index, IndexUrl};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
@@ -781,6 +782,7 @@ fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
     }
 }
 
+
 /// Parse a string into an [`FlatIndexLocation`], mapping the empty string to `None`.
 fn parse_flat_index(input: &str) -> Result<Maybe<FlatIndexLocation>, String> {
     if input.is_empty() {
@@ -788,6 +790,36 @@ fn parse_flat_index(input: &str) -> Result<Maybe<FlatIndexLocation>, String> {
     } else {
         match FlatIndexLocation::from_str(input) {
             Ok(url) => Ok(Maybe::Some(url)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
+/// Parse a string into an [`Index`], mapping the empty string to `None`.
+fn parse_index_source(input: &str) -> Result<Maybe<Index>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match Index::from_str(input) {
+            Ok(index) => Ok(Maybe::Some(Index {
+                default: false,
+                ..index
+            })),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
+/// Parse a string into an [`Index`], mapping the empty string to `None`.
+fn parse_default_index_source(input: &str) -> Result<Maybe<Index>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match Index::from_str(input) {
+            Ok(index) => Ok(Maybe::Some(Index {
+                default: true,
+                ..index
+            })),
             Err(err) => Err(err.to_string()),
         }
     }
@@ -2282,8 +2314,8 @@ pub struct VenvArgs {
     ///
     /// By default, uv will stop at the first index on which a given package is available, and
     /// limit resolutions to those present on that first index (`first-match`). This prevents
-    /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
-    /// same name to a secondary.
+    /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
+    /// same name to an alternate index.
     #[arg(long, value_enum, env = EnvVars::UV_INDEX_STRATEGY)]
     pub index_strategy: Option<IndexStrategy>,
 
@@ -3808,6 +3840,27 @@ pub struct GenerateShellCompletionArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct IndexArgs {
+    /// The URLs to use when resolving dependencies, in addition to the default index.
+    ///
+    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
+    /// directory laid out in the same format.
+    ///
+    /// All indexes provided via this flag take priority over the index specified by
+    /// `--default-index` (which defaults to PyPI). When multiple `--index` flags are
+    /// provided, earlier values take priority.
+    #[arg(long, env = "UV_INDEX", value_delimiter = ' ', value_parser = parse_index_source, help_heading = "Index options")]
+    pub index: Option<Vec<Maybe<Index>>>,
+
+    /// The URL of the default package index (by default: <https://pypi.org/simple>).
+    ///
+    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
+    /// directory laid out in the same format.
+    ///
+    /// The index given by this flag is given lower priority than all other indexes specified via
+    /// the `--index` flag.
+    #[arg(long, env = "UV_DEFAULT_INDEX", value_parser = parse_default_index_source, help_heading = "Index options")]
+    pub default_index: Option<Maybe<Index>>,
+
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
     /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
@@ -3815,6 +3868,8 @@ pub struct IndexArgs {
     ///
     /// The index given by this flag is given lower priority than all other
     /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// (Deprecated: use `--default-index` instead.)
     #[arg(long, short, env = EnvVars::UV_INDEX_URL, value_parser = parse_index_url, help_heading = "Index options")]
     pub index_url: Option<Maybe<IndexUrl>>,
 
@@ -3826,7 +3881,9 @@ pub struct IndexArgs {
     /// All indexes provided via this flag take priority over the index specified by
     /// `--index-url` (which defaults to PyPI). When multiple `--extra-index-url` flags are
     /// provided, earlier values take priority.
-    #[arg(long, env = EnvVars::UV_EXTRA_INDEX_URL, value_delimiter = ' ', value_parser = parse_index_url, help_heading = "Index options")]
+    ///
+    /// (Deprecated: use `--index` instead.)
+    #[arg(long, EnvVars::UV_EXTRA_INDEX_URL, value_delimiter = ' ', value_parser = parse_index_url, help_heading = "Index options")]
     pub extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
     /// Locations to search for candidate distributions, in addition to those found in the registry
@@ -3955,8 +4012,8 @@ pub struct InstallerArgs {
     ///
     /// By default, uv will stop at the first index on which a given package is available, and
     /// limit resolutions to those present on that first index (`first-match`). This prevents
-    /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
-    /// same name to a secondary.
+    /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
+    /// same name to an alternate index.
     #[arg(
         long,
         value_enum,
@@ -4117,8 +4174,8 @@ pub struct ResolverArgs {
     ///
     /// By default, uv will stop at the first index on which a given package is available, and
     /// limit resolutions to those present on that first index (`first-match`). This prevents
-    /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
-    /// same name to a secondary.
+    /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
+    /// same name to an alternate index.
     #[arg(
         long,
         value_enum,
@@ -4309,8 +4366,8 @@ pub struct ResolverInstallerArgs {
     ///
     /// By default, uv will stop at the first index on which a given package is available, and
     /// limit resolutions to those present on that first index (`first-match`). This prevents
-    /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
-    /// same name to a secondary.
+    /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
+    /// same name to an alternate index.
     #[arg(
         long,
         value_enum,

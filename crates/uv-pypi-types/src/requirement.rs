@@ -319,7 +319,7 @@ pub enum RequirementSource {
     Registry {
         specifier: VersionSpecifiers,
         /// Choose a version from the index with this name.
-        index: Option<String>,
+        index: Option<Url>,
     },
     // TODO(konsti): Track and verify version specifier from `project.dependencies` matches the
     // version in remote location.
@@ -607,7 +607,7 @@ enum RequirementSourceWire {
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
-        index: Option<String>,
+        index: Option<Url>,
     },
 }
 
