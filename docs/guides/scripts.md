@@ -22,12 +22,15 @@ To start an interactive Python session where you can run commands and explore yo
 ```console
 $ uv run python
 ```
+
 ```
 Type "help", "copyright", "credits" or "license" for more information.
 >>> print("Hello World")
 Hello World
 ```
-This will open a Python script where you can execute individual Python commands and experiment interactively with the environment.
+
+This will open a Python script where you can execute individual Python commands and experiment
+interactively with the environment.
 
 ## Running a script without dependencies
 
