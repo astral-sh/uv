@@ -280,7 +280,6 @@ Its effect on performance is dependent on the packages being installed.
       env:
         # Configure a relative location for the uv cache
         UV_CACHE_DIR: ${{ github.workspace }}/.cache/uv
-      # ... restore uv cache ...
     ```
 
     Using a post job hook requires setting the `ACTIONS_RUNNER_HOOK_JOB_STARTED` environment
