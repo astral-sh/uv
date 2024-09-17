@@ -2408,9 +2408,10 @@ pub struct RunArgs {
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
 
-    /// Install the project and any local dependencies as non-editable.
+    /// Install any editable dependencies, including the project and any workspace members, as
+    /// non-editable.
     #[arg(long)]
-    pub non_editable: bool,
+    pub no_editable: bool,
 
     /// The command to run.
     ///
@@ -2564,9 +2565,10 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
 
-    /// Install the project and any local dependencies as non-editable.
+    /// Install any editable dependencies, including the project and any workspace members, as
+    /// non-editable.
     #[arg(long)]
-    pub non_editable: bool,
+    pub no_editable: bool,
 
     /// Do not remove extraneous packages present in the environment.
     ///
@@ -3010,9 +3012,10 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
 
-    /// Install the project and any local dependencies as non-editable.
+    /// Install any editable dependencies, including the project and any workspace members, as
+    /// non-editable.
     #[arg(long)]
-    pub non_editable: bool,
+    pub no_editable: bool,
 
     /// Include hashes for all dependencies.
     #[arg(long, overrides_with("no_hashes"), hide = true)]

@@ -2394,7 +2394,7 @@ fn transitive_dev() -> Result<()> {
 
 /// Avoid installing dev dependencies of transitive dependencies.
 #[test]
-fn sync_non_editable() -> Result<()> {
+fn sync_no_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -2405,11 +2405,14 @@ fn sync_non_editable() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["child"]
+
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
+
         [tool.uv.sources]
         child = { workspace = true }
+
         [tool.uv.workspace]
         members = ["child"]
         "#,
@@ -2431,6 +2434,7 @@ fn sync_non_editable() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
+
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
@@ -2443,7 +2447,7 @@ fn sync_non_editable() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--non-editable"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

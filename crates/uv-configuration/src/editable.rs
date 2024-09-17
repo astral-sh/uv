@@ -7,8 +7,8 @@ pub enum EditableMode {
 
 impl EditableMode {
     /// Determine the editable mode based on the command-line arguments.
-    pub fn from_args(non_editable: bool) -> Self {
-        if non_editable {
+    pub fn from_args(no_editable: bool) -> Self {
+        if no_editable {
             Self::NonEditable
         } else {
             Self::Editable

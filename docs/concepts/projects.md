@@ -67,9 +67,9 @@ project should be packaged and installed.
 uv uses the presence of a build system to determine if a project contains a package that should be
 installed in the project virtual environment. If a build system is not defined, uv will not attempt
 to build or install the project itself, just its dependencies. If a build system is defined, uv will
-build and install the project into the project environment. Projects are installed in
+build and install the project into the project environment. By default, projects are installed in
 [editable mode](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) so changes to
-the source code are reflected immediately, without reinstallation.
+the source code are reflected immediately, without re-installation.
 
 ### Configuring project packaging
 
@@ -296,6 +296,12 @@ use [`uvx`](../guides/tools.md) or
     [tool.uv]
     managed = false
     ```
+
+By default, the project will be installed in editable mode, such that changes to the source code are
+immediately reflected in the environment. `uv sync` and `uv run` both accept a `--no-editable` flag,
+which instructs uv to install the project in non-editable mode. `--no-editable` is intended for
+deployment use-cases, such as building a Docker container, in which the project should be included
+in the deployed environment without a dependency on the originating source code.
 
 ### Configuring the project environment path
 
