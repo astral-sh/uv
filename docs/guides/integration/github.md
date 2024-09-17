@@ -286,7 +286,7 @@ Its effect on performance is dependent on the packages being installed.
     Using a post job hook requires setting the `ACTIONS_RUNNER_HOOK_JOB_STARTED` environment
     variable on the self-hosted runner to the path of a cleanup script such as the one shown below.
 
-    ```sh
+    ```sh title="clean-workspace.sh"
     #!/usr/bin/env sh
     rm -rf $GITHUB_WORKSPACE/*
     ```
