@@ -11,7 +11,7 @@
 - Include `uv export` command in `requirements.txt` output ([#7374](https://github.com/astral-sh/uv/pull/7374))
 - Prune unzipped source distributions in `uv cache prune --ci` ([#7446](https://github.com/astral-sh/uv/pull/7446))
 - Warn when trying to `uv sync` a package without build configuration ([#7420](https://github.com/astral-sh/uv/pull/7420))
-- Support pre-releases in Python version requests (`command --python <major.minor.pre-release>`) ([#7335](https://github.com/astral-sh/uv/pull/7335))
+- Support requests for pre-releases in the `--python` option ([#7335](https://github.com/astral-sh/uv/pull/7335))
 
 ### Bug fixes
 
