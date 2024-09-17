@@ -10,8 +10,8 @@ use tracing::debug;
 
 use cache_key::RepositoryUrl;
 use distribution_types::UnresolvedRequirement;
-use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
-use pypi_types::redact_git_credentials;
+use pep508_rs::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
+use pypi_types::{redact_git_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -21,7 +21,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::{Simplified, CWD};
-use uv_git::GIT_STORE;
+use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -317,17 +317,22 @@ pub(crate) async fn add(
     // Resolve any unnamed requirements.
     let requirements = {
         // Partition the requirements into named and unnamed requirements.
-        let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
-            requirements
-                .into_iter()
-                .partition_map(|spec| match spec.requirement {
-                    UnresolvedRequirement::Named(requirement) => {
-                        itertools::Either::Left(requirement)
-                    }
-                    UnresolvedRequirement::Unnamed(requirement) => {
-                        itertools::Either::Right(requirement)
-                    }
-                });
+        let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
+            .into_iter()
+            .map(|spec| {
+                augment_requirement(
+                    spec.requirement,
+                    rev.as_deref(),
+                    tag.as_deref(),
+                    branch.as_deref(),
+                )
+            })
+            .partition_map(|requirement| match requirement {
+                UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
+                UnresolvedRequirement::Unnamed(requirement) => {
+                    itertools::Either::Right(requirement)
+                }
+            });
 
         // Resolve any unnamed requirements.
         if !unnamed.is_empty() {
@@ -764,6 +769,74 @@ async fn lock_and_sync(
     .await?;
 
     Ok(())
+}
+
+/// Augment a user-provided requirement by attaching any specification data that was provided
+/// separately from the requirement itself (e.g., `--branch main`).
+fn augment_requirement(
+    requirement: UnresolvedRequirement,
+    rev: Option<&str>,
+    tag: Option<&str>,
+    branch: Option<&str>,
+) -> UnresolvedRequirement {
+    match requirement {
+        UnresolvedRequirement::Named(requirement) => {
+            UnresolvedRequirement::Named(pypi_types::Requirement {
+                source: match requirement.source {
+                    RequirementSource::Git {
+                        repository,
+                        reference,
+                        precise,
+                        subdirectory,
+                        url,
+                    } => {
+                        let reference = if let Some(rev) = rev {
+                            GitReference::from_rev(rev.to_string())
+                        } else if let Some(tag) = tag {
+                            GitReference::Tag(tag.to_string())
+                        } else if let Some(branch) = branch {
+                            GitReference::Branch(branch.to_string())
+                        } else {
+                            reference
+                        };
+                        RequirementSource::Git {
+                            repository,
+                            reference,
+                            precise,
+                            subdirectory,
+                            url,
+                        }
+                    }
+                    _ => requirement.source,
+                },
+                ..requirement
+            })
+        }
+        UnresolvedRequirement::Unnamed(requirement) => {
+            UnresolvedRequirement::Unnamed(UnnamedRequirement {
+                url: match requirement.url.parsed_url {
+                    ParsedUrl::Git(mut git) => {
+                        let reference = if let Some(rev) = rev {
+                            Some(GitReference::from_rev(rev.to_string()))
+                        } else if let Some(tag) = tag {
+                            Some(GitReference::Tag(tag.to_string()))
+                        } else {
+                            branch.map(|branch| GitReference::Branch(branch.to_string()))
+                        };
+                        if let Some(reference) = reference {
+                            git.url = git.url.with_reference(reference);
+                        }
+                        VerbatimParsedUrl {
+                            parsed_url: ParsedUrl::Git(git),
+                            verbatim: requirement.url.verbatim,
+                        }
+                    }
+                    _ => requirement.url,
+                },
+                ..requirement
+            })
+        }
+    }
 }
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.
