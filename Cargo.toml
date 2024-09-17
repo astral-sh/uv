@@ -125,7 +125,7 @@ regex = { version = "1.10.6" }
 reqwest = { version = "0.12.7", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots"] }
 reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
 reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
-rkyv = { version = "0.7.45", features = ["strict", "validation"] }
+rkyv = { version = "0.8.0", features = ["strict", "validation"] }
 rmp-serde = { version = "1.3.0" }
 rust-netrc = { version = "0.1.1" }
 rustc-hash = { version = "2.0.0" }
