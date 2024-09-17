@@ -1718,8 +1718,8 @@ impl FromStr for VersionRequest {
         // Split the release component if it uses the wheel tag format (e.g., `38`)
         let version = split_wheel_tag_release_version(version);
 
-        // We dont allow post and dev versions here
-        if version.post().is_some() || version.dev().is_some() {
+        // We dont allow post, dev, or local versions here
+        if version.post().is_some() || version.dev().is_some() || !version.local().is_empty() {
             return Err(Error::InvalidVersionRequest(s.to_string()));
         }
 
@@ -2322,6 +2322,13 @@ mod tests {
                 Err(Error::InvalidVersionRequest(_))
             ),
             "Development version segments are not allowed"
+        );
+        assert!(
+            matches!(
+                VersionRequest::from_str("3.12+local"),
+                Err(Error::InvalidVersionRequest(_))
+            ),
+            "Local version segments are not allowed"
         );
         assert!(
             matches!(
