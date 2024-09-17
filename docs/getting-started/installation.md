@@ -14,14 +14,6 @@ uv provides a standalone installer to download and install uv:
     $ curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
 
-    You can provide options to the installer as follows:
-
-    ```
-    $  curl -LsSf https://astral.sh/uv/install.sh | CARGO_HOME=~/.local sh -s -- --help # See all the options
-    # One-liner to install in ~/.local/bin, avoid modifying the PATH, and describe what is being done
-    $  curl -LsSf https://astral.sh/uv/install.sh | CARGO_HOME=~/.local sh -s -- --no-modify-path -v
-    ```
-
 === "Windows"
 
     ```console
@@ -82,6 +74,13 @@ disable this behavior, use `INSTALLER_NO_MODIFY_PATH`. For example:
 
 ```console
 $ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
+```
+
+Using environment variables is recommended because they are consistent across platforms. However,
+options can be passed directly to the install script. For example, to see the available options:
+
+```console
+$ curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --help
 ```
 
 ### PyPI
