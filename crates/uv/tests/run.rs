@@ -810,7 +810,7 @@ fn run_with_editable() -> Result<()> {
     "###);
 
     // If invalid, we should reference `--with-editable`.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("./foo").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./foo").arg("main.py"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
