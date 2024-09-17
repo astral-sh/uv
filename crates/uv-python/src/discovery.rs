@@ -1920,7 +1920,7 @@ mod tests {
     use std::{path::PathBuf, str::FromStr};
 
     use assert_fs::{prelude::*, TempDir};
-    use pep440_rs::Prerelease;
+    use pep440_rs::{Prerelease, PrereleaseKind};
     use test_log::test;
 
     use crate::{
@@ -2221,15 +2221,36 @@ mod tests {
         );
         assert_eq!(
             VersionRequest::from_str("3.13a1").unwrap(),
-            VersionRequest::MajorMinorPrerelease(3, 13, Prerelease::from_str("3.13a1").unwrap())
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                13,
+                Prerelease {
+                    kind: PrereleaseKind::Alpha,
+                    number: 1
+                }
+            )
         );
         assert_eq!(
             VersionRequest::from_str("3.13.0b2").unwrap(),
-            VersionRequest::MajorMinorPrerelease(3, 13, Prerelease::from_str("3.13.0b2").unwrap())
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                13,
+                Prerelease {
+                    kind: PrereleaseKind::Beta,
+                    number: 2
+                }
+            )
         );
         assert_eq!(
             VersionRequest::from_str("3.13.0rc3").unwrap(),
-            VersionRequest::MajorMinorPrerelease(3, 13, Prerelease::from_str("3.13.0rc3").unwrap())
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                13,
+                Prerelease {
+                    kind: PrereleaseKind::Rc,
+                    number: 3
+                }
+            )
         );
         assert!(
             // Test for overflow

@@ -1415,20 +1415,6 @@ impl std::fmt::Display for Prerelease {
     }
 }
 
-impl FromStr for Prerelease {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let version = Version::from_str(s).map_err(|err| err.to_string())?;
-        match version.pre() {
-            Some(pre) => Ok(pre),
-            None => Err(format!(
-                "unable to parse pre-release version from the given input: {s}"
-            )),
-        }
-    }
-}
-
 /// A part of the [local version identifier](<https://peps.python.org/pep-0440/#local-version-identifiers>)
 ///
 /// Local versions are a mess:
