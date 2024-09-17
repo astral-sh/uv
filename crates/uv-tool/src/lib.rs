@@ -139,12 +139,9 @@ impl InstalledTools {
         }
     }
 
-    /// Lock the tools directory.
-    pub fn acquire_lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(
-            self.root.join(".lock"),
-            self.root.user_display(),
-        )?)
+    /// Grab a file lock for the tools directory to prevent concurrent access across processes.
+    pub async fn lock(&self) -> Result<LockedFile, Error> {
+        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
     }
 
     /// Add a receipt for a tool.
@@ -258,6 +255,7 @@ impl InstalledTools {
             &environment_path,
             interpreter,
             uv_virtualenv::Prompt::None,
+            false,
             false,
             false,
             false,

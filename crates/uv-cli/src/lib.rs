@@ -4,15 +4,16 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
-use clap::builder::styling::Style;
+use clap::builder::styling::{AnsiColor, Effects, Style};
+use clap::builder::Styles;
 use clap::{Args, Parser, Subcommand};
-
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
+    ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
+    TargetTriple, TrustedHost,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -51,6 +52,13 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
     })
 }
 
+// Configures Clap v3-style help menu colors
+const STYLES: Styles = Styles::styled()
+    .header(AnsiColor::Green.on_default().effects(Effects::BOLD))
+    .usage(AnsiColor::Green.on_default().effects(Effects::BOLD))
+    .literal(AnsiColor::Cyan.on_default().effects(Effects::BOLD))
+    .placeholder(AnsiColor::Cyan.on_default());
+
 #[derive(Parser)]
 #[command(name = "uv", author, long_version = crate::version::version())]
 #[command(about = "An extremely fast Python package manager.")]
@@ -62,11 +70,19 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
     disable_help_subcommand = true,
     disable_version_flag = true
 )]
+#[command(styles=STYLES)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Box<Commands>,
 
+    #[command(flatten)]
+    pub top_level: TopLevelArgs,
+}
+
+#[derive(Parser)]
+#[command(disable_help_flag = true, disable_version_flag = true)]
+pub struct TopLevelArgs {
     #[command(flatten)]
     pub cache_args: Box<CacheArgs>,
 
@@ -313,6 +329,10 @@ pub enum Commands {
     /// By default, creates a virtual environment named `.venv` in the working
     /// directory. An alternative path may be provided positionally.
     ///
+    /// If in a project, the default environment name can be changed with
+    /// the `UV_PROJECT_ENVIRONMENT` environment variable; this only applies
+    /// when run from the project root directory.
+    ///
     /// If a virtual environment exists at the target path, it will be removed
     /// and a new, empty virtual environment will be created.
     ///
@@ -326,6 +346,27 @@ pub enum Commands {
         after_long_help = ""
     )]
     Venv(VenvArgs),
+    /// Build Python packages into source distributions and wheels.
+    ///
+    /// `uv build` accepts a path to a directory or source distribution,
+    /// which defaults to the current working directory.
+    ///
+    /// By default, if passed a directory, `uv build` will build a source
+    /// distribution ("sdist") from the source directory, and a binary
+    /// distribution ("wheel") from  the source distribution.
+    ///
+    /// `uv build --sdist` can be used to build only the source distribution,
+    /// `uv build --wheel` can be used to build only the binary distribution,
+    /// and `uv build --sdist --wheel` can be used to build both distributions
+    /// from source.
+    ///
+    /// If passed a source distribution, `uv build --wheel` will build a wheel
+    /// from  the source distribution.
+    #[command(
+        after_help = "Use `uv help build` for more details.",
+        after_long_help = ""
+    )]
+    Build(BuildArgs),
     /// Manage uv's cache.
     #[command(
         after_help = "Use `uv help cache` for more details.",
@@ -384,8 +425,20 @@ pub struct SelfNamespace {
 #[derive(Subcommand)]
 #[cfg(feature = "self-update")]
 pub enum SelfCommand {
-    /// Update uv to the latest version.
-    Update,
+    /// Update uv.
+    Update(SelfUpdateArgs),
+}
+
+#[derive(Args, Debug)]
+#[cfg(feature = "self-update")]
+pub struct SelfUpdateArgs {
+    /// Update to the specified version. If not provided, uv will update to the latest version.
+    pub target_version: Option<String>,
+
+    /// A GitHub token for authentication.
+    /// A token is not required but can be used to reduce the chance of encountering rate limits.
+    #[arg(long, env = "UV_GITHUB_TOKEN")]
+    pub token: Option<String>,
 }
 
 #[derive(Args)]
@@ -645,6 +698,23 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Lock(LockArgs),
+    /// Export the project's lockfile to an alternate format.
+    ///
+    /// At present, only `requirements-txt` is supported.
+    ///
+    /// The project is re-locked before exporting unless the `--locked` or `--frozen` flag is
+    /// provided.
+    ///
+    /// uv will search for a project in the current directory or any parent directory. If a project
+    /// cannot be found, uv will exit with an error.
+    ///
+    /// If operating in a workspace, the root will be exported by default; however, a specific
+    /// member can be selected using the `--package` option.
+    #[command(
+        after_help = "Use `uv help export` for more details.",
+        after_long_help = ""
+    )]
+    Export(ExportArgs),
     /// Display the project's dependency tree.
     Tree(TreeArgs),
 }
@@ -678,6 +748,18 @@ fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
     }
 }
 
+/// Parse a string into an [`Url`], mapping the empty string to `None`.
+fn parse_insecure_host(input: &str) -> Result<Maybe<TrustedHost>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match TrustedHost::from_str(input) {
+            Ok(host) => Ok(Maybe::Some(host)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
 /// Parse a string into a [`PathBuf`]. The string can represent a file, either as a path or a
 /// `file://` URL.
 fn parse_file_path(input: &str) -> Result<PathBuf, String> {
@@ -689,10 +771,7 @@ fn parse_file_path(input: &str) -> Result<PathBuf, String> {
         url.to_file_path()
             .map_err(|()| "invalid file URL".to_string())
     } else {
-        match PathBuf::from_str(input) {
-            Ok(path) => Ok(path),
-            Err(err) => Err(err.to_string()),
-        }
+        Ok(PathBuf::from(input))
     }
 }
 
@@ -935,7 +1014,7 @@ pub struct PipCompileArgs {
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// `aarch64-apple-darwin`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
@@ -1087,7 +1166,7 @@ pub struct PipSyncArgs {
 
     /// The Python interpreter into which packages should be installed.
     ///
-    /// By default, syncing requires a virtual environment. An path to an
+    /// By default, syncing requires a virtual environment. A path to an
     /// alternative Python can be provided, but it is only recommended in
     /// continuous integration (CI) environments and should be used with
     /// caution, as it can modify the system Python installation.
@@ -1218,7 +1297,7 @@ pub struct PipSyncArgs {
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// `aarch64-apple-darwin`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
@@ -1369,7 +1448,7 @@ pub struct PipInstallArgs {
 
     /// The Python interpreter into which packages should be installed.
     ///
-    /// By default, installation requires a virtual environment. An path to an
+    /// By default, installation requires a virtual environment. A path to an
     /// alternative Python can be provided, but it is only recommended in
     /// continuous integration (CI) environments and should be used with
     /// caution, as it can modify the system Python installation.
@@ -1493,7 +1572,7 @@ pub struct PipInstallArgs {
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// `aarch64-apple-darwin`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
@@ -1534,7 +1613,7 @@ pub struct PipUninstallArgs {
 
     /// The Python interpreter from which packages should be uninstalled.
     ///
-    /// By default, uninstallation requires a virtual environment. An path to an
+    /// By default, uninstallation requires a virtual environment. A path to an
     /// alternative Python can be provided, but it is only recommended in
     /// continuous integration (CI) environments and should be used with
     /// caution, as it can modify the system Python installation.
@@ -1558,6 +1637,25 @@ pub struct PipUninstallArgs {
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub keyring_provider: Option<KeyringProviderType>,
+
+    /// Allow insecure connections to a host.
+    ///
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[arg(
+        long,
+        alias = "trusted-host",
+        env = "UV_INSECURE_HOST",
+        value_delimiter = ' ',
+        value_parser = parse_insecure_host,
+    )]
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// Use the system Python to uninstall packages.
     ///
@@ -1868,6 +1966,115 @@ pub struct PipTreeArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
+pub struct BuildArgs {
+    /// The directory from which distributions should be built, or a source
+    /// distribution archive to build into a wheel.
+    ///
+    /// Defaults to the current working directory.
+    #[arg(value_parser = parse_file_path)]
+    pub src: Option<PathBuf>,
+
+    /// Build a specific package in the workspace.
+    ///
+    /// The workspace will be discovered from the provided source directory, or the current
+    /// directory if no source directory is provided.
+    ///
+    /// If the workspace member does not exist, uv will exit with an error.
+    #[arg(long)]
+    pub package: Option<PackageName>,
+
+    /// The output directory to which distributions should be written.
+    ///
+    /// Defaults to the `dist` subdirectory within the source directory, or the
+    /// directory containing the source distribution archive.
+    #[arg(long, short, value_parser = parse_file_path)]
+    pub out_dir: Option<PathBuf>,
+
+    /// Build a source distribution ("sdist") from the given directory.
+    #[arg(long)]
+    pub sdist: bool,
+
+    /// Build a binary distribution ("wheel") from the given directory.
+    #[arg(long)]
+    pub wheel: bool,
+
+    /// Constrain build dependencies using the given requirements files when building
+    /// distributions.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// build dependency that's installed. However, including a package in a constraints file will
+    /// _not_ trigger the inclusion of that package on its own.
+    #[arg(long, short, env = "UV_BUILD_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub build_constraint: Vec<Maybe<PathBuf>>,
+
+    /// Require a matching hash for each build requirement.
+    ///
+    /// Hash-checking mode is all or nothing. If enabled, _all_ build requirements must be provided
+    /// with a corresponding hash or set of hashes via the `--build-constraint` argument.
+    /// Additionally, if enabled, _all_ requirements must either be pinned to exact versions
+    /// (e.g., `==1.0.0`), or be specified via direct URL.
+    ///
+    /// Hash-checking mode introduces a number of additional constraints:
+    ///
+    /// - Git dependencies are not supported.
+    /// - Editable installs are not supported.
+    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
+    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
+    #[arg(
+        long,
+        env = "UV_REQUIRE_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_require_hashes"),
+    )]
+    pub require_hashes: bool,
+
+    #[arg(long, overrides_with("require_hashes"), hide = true)]
+    pub no_require_hashes: bool,
+
+    /// Validate any hashes provided in the build constraints file.
+    ///
+    /// Unlike `--require-hashes`, `--verify-hashes` does not require that all requirements have
+    /// hashes; instead, it will limit itself to verifying the hashes of those requirements that do
+    /// include them.
+    #[arg(
+        long,
+        env = "UV_VERIFY_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_verify_hashes"),
+    )]
+    pub verify_hashes: bool,
+
+    #[arg(long, overrides_with("verify_hashes"), hide = true)]
+    pub no_verify_hashes: bool,
+
+    /// The Python interpreter to use for the build environment.
+    ///
+    /// By default, builds are executed in isolated virtual environments. The
+    /// discovered interpreter will be used to create those environments, and
+    /// will be symlinked or copied in depending on the platform.
+    ///
+    /// See `uv help python` to view supported request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
+    pub python: Option<String>,
+
+    #[command(flatten)]
+    pub resolver: ResolverArgs,
+
+    #[command(flatten)]
+    pub build: BuildOptionsArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     ///
@@ -1904,6 +2111,14 @@ pub struct VenvArgs {
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
 
+    /// Avoid discovering a project or workspace.
+    ///
+    /// By default, uv searches for projects in the current directory or any parent directory to
+    /// determine the default path of the virtual environment and check for Python version
+    /// constraints, if any.
+    #[arg(long, alias = "no-workspace")]
+    pub no_project: bool,
+
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment.
     ///
     /// Note `setuptools` and `wheel` are not included in Python 3.12+ environments.
@@ -1923,8 +2138,11 @@ pub struct VenvArgs {
     pub allow_existing: bool,
 
     /// The path to the virtual environment to create.
-    #[arg(default_value = ".venv")]
-    pub name: PathBuf,
+    ///
+    /// Default to `.venv` in the working directory.
+    ///
+    /// Relative paths are resolved relative to the working directory.
+    pub path: Option<PathBuf>,
 
     /// Provide an alternative prompt prefix for the virtual environment.
     ///
@@ -1984,6 +2202,25 @@ pub struct VenvArgs {
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub keyring_provider: Option<KeyringProviderType>,
+
+    /// Allow insecure connections to a host.
+    ///
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[arg(
+        long,
+        alias = "trusted-host",
+        env = "UV_INSECURE_HOST",
+        value_delimiter = ' ',
+        value_parser = parse_insecure_host,
+    )]
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -2049,25 +2286,66 @@ pub struct InitArgs {
     #[arg(long)]
     pub name: Option<PackageName>,
 
-    /// Create a virtual workspace instead of a project.
+    /// Create a virtual project, rather than a package.
     ///
-    /// A virtual workspace does not define project dependencies and cannot be
-    /// published. Instead, workspace members declare project dependencies.
-    /// Development dependencies may still be declared.
-    #[arg(long)]
+    /// This option is deprecated and will be removed in a future release.
+    #[arg(long, hide = true, conflicts_with = "package")]
     pub r#virtual: bool,
+
+    /// Set up the project to be built as a Python package.
+    ///
+    /// Defines a `[build-system]` for the project.
+    ///
+    /// This is the default behavior when using `--lib`.
+    ///
+    /// When using `--app`, this will include a `[project.scripts]` entrypoint and use a `src/`
+    /// project structure.
+    #[arg(long, overrides_with = "no_package")]
+    pub r#package: bool,
+
+    /// Do not set up the project to be built as a Python package.
+    ///
+    /// Does not include a `[build-system]` for the project.
+    ///
+    /// This is the default behavior when using `--app`.
+    #[arg(long, overrides_with = "package", conflicts_with = "lib")]
+    pub r#no_package: bool,
+
+    /// Create a project for an application.
+    ///
+    /// This is the default behavior if `--lib` is not requested.
+    ///
+    /// This project kind is for web servers, scripts, and command-line interfaces.
+    ///
+    /// By default, an application is not intended to be built and distributed as a Python package.
+    /// The `--package` option can be used to create an application that is distributable, e.g., if
+    /// you want to distribute a command-line interface via PyPI.
+    #[arg(long, alias = "application", conflicts_with = "lib")]
+    pub r#app: bool,
+
+    /// Create a project for a library.
+    ///
+    /// A library is a project that is intended to be built and distributed as a Python package.
+    #[arg(long, alias = "library", conflicts_with = "app")]
+    pub r#lib: bool,
 
     /// Do not create a `README.md` file.
     #[arg(long)]
     pub no_readme: bool,
 
-    /// Avoid discovering a workspace.
+    /// Do not create a `.python-version` file for the project.
     ///
-    /// Instead, create a standalone project.
+    /// By default, uv will create a `.python-version` file containing the minor version of
+    /// the discovered Python interpreter, which will cause subsequent uv commands to use that
+    /// version.
+    #[arg(long)]
+    pub no_pin_python: bool,
+
+    /// Avoid discovering a workspace and create a standalone project.
     ///
     /// By default, uv searches for workspaces in the current directory or any
     /// parent directory.
-    #[arg(long, alias = "no_project")]
+    #[arg(long, alias = "no-project")]
     pub no_workspace: bool,
 
     /// The Python interpreter to use to determine the minimum supported Python version.
@@ -2124,6 +2402,17 @@ pub struct RunArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
+    /// Omit non-development dependencies.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("no_dev"))]
+    pub only_dev: bool,
+
+    /// Install any editable dependencies, including the project and any workspace members, as
+    /// non-editable.
+    #[arg(long)]
+    pub no_editable: bool,
+
     /// The command to run.
     ///
     /// If the path to a Python script (i.e., ending in `.py`), it will be
@@ -2168,6 +2457,13 @@ pub struct RunArgs {
     #[arg(long)]
     pub isolated: bool,
 
+    /// Avoid syncing the virtual environment.
+    ///
+    /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
+    /// be updated, since the environment will not be synced regardless).
+    #[arg(long, conflicts_with = "frozen")]
+    pub no_sync: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or
@@ -2189,15 +2485,14 @@ pub struct RunArgs {
     pub installer: ResolverInstallerArgs,
 
     #[command(flatten)]
-    pub build: BuildArgs,
+    pub build: BuildOptionsArgs,
 
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
     /// Run the command in a specific package in the workspace.
     ///
-    /// If not in a workspace, or if the workspace member does not exist, uv
-    /// will exit with an error.
+    /// If the workspace member does not exist, uv will exit with an error.
     #[arg(long)]
     pub package: Option<PackageName>,
 
@@ -2240,10 +2535,16 @@ pub struct SyncArgs {
     /// Include optional dependencies from the extra group name.
     ///
     /// May be provided more than once.
+    ///
+    /// Note that all optional dependencies are always included in the resolution; this option only
+    /// affects the selection of packages to install.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    ///
+    /// Note that all optional dependencies are always included in the resolution; this option only
+    /// affects the selection of packages to install.
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
 
@@ -2258,13 +2559,21 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
+    /// Omit non-development dependencies.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("no_dev"))]
+    pub only_dev: bool,
+
+    /// Install any editable dependencies, including the project and any workspace members, as
+    /// non-editable.
+    #[arg(long)]
+    pub no_editable: bool,
+
     /// Do not remove extraneous packages present in the environment.
     ///
     /// When enabled, uv will make the minimum necessary changes to satisfy the requirements.
-    ///
-    /// By default, syncing will remove any extraneous packages from the environment, unless
-    /// `--no-build-isolation` is enabled, in which case extra packages are considered necessary for
-    /// builds.
+    /// By default, syncing will remove any extraneous packages from the environment
     #[arg(long, overrides_with("exact"), alias = "no-exact")]
     pub inexact: bool,
 
@@ -2321,7 +2630,7 @@ pub struct SyncArgs {
     pub installer: ResolverInstallerArgs,
 
     #[command(flatten)]
-    pub build: BuildArgs,
+    pub build: BuildOptionsArgs,
 
     #[command(flatten)]
     pub refresh: RefreshArgs,
@@ -2331,8 +2640,7 @@ pub struct SyncArgs {
     /// The workspace's environment (`.venv`) is updated to reflect the subset
     /// of dependencies declared by the specified workspace member package.
     ///
-    /// If not in a workspace, or if the workspace member does not exist, uv
-    /// will exit with an error.
+    /// If the workspace member does not exist, uv will exit with an error.
     #[arg(long)]
     pub package: Option<PackageName>,
 
@@ -2375,7 +2683,7 @@ pub struct LockArgs {
     pub resolver: ResolverArgs,
 
     #[command(flatten)]
-    pub build: BuildArgs,
+    pub build: BuildOptionsArgs,
 
     #[command(flatten)]
     pub refresh: RefreshArgs,
@@ -2426,11 +2734,11 @@ pub struct AddArgs {
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
-    #[arg(long, overrides_with = "no_editable", hide = true)]
+    /// Add the requirements as editable.
+    #[arg(long, overrides_with = "no_editable")]
     pub editable: bool,
 
-    /// Don't add the requirements as editables.
-    #[arg(long, overrides_with = "editable")]
+    #[arg(long, overrides_with = "editable", hide = true)]
     pub no_editable: bool,
 
     /// Add source requirements to `project.dependencies`, rather than `tool.uv.sources`.
@@ -2468,7 +2776,7 @@ pub struct AddArgs {
     #[arg(long)]
     pub extra: Option<Vec<ExtraName>>,
 
-    /// Avoid syncing the virtual environment after re-locking the project.
+    /// Avoid syncing the virtual environment.
     #[arg(long, conflicts_with = "frozen")]
     pub no_sync: bool,
 
@@ -2489,7 +2797,7 @@ pub struct AddArgs {
     pub installer: ResolverInstallerArgs,
 
     #[command(flatten)]
-    pub build: BuildArgs,
+    pub build: BuildOptionsArgs,
 
     #[command(flatten)]
     pub refresh: RefreshArgs,
@@ -2501,7 +2809,7 @@ pub struct AddArgs {
     /// Add the dependency to the specified Python script, rather than to a project.
     ///
     /// If provided, uv will add the dependency to the script's inline metadata
-    /// table, in adhere with PEP 723. If no such inline metadata table is present,
+    /// table, in adherence with PEP 723. If no such inline metadata table is present,
     /// a new one will be created and added to the script. When executed via `uv run`,
     /// uv will create a temporary environment for the script with all inline
     /// dependencies installed.
@@ -2558,7 +2866,7 @@ pub struct RemoveArgs {
     pub installer: ResolverInstallerArgs,
 
     #[command(flatten)]
-    pub build: BuildArgs,
+    pub build: BuildOptionsArgs,
 
     #[command(flatten)]
     pub refresh: RefreshArgs,
@@ -2570,7 +2878,7 @@ pub struct RemoveArgs {
     /// Remove the dependency from the specified Python script, rather than from a project.
     ///
     /// If provided, uv will remove the dependency from the script's inline metadata
-    /// table, in adhere with PEP 723.
+    /// table, in adherence with PEP 723.
     #[arg(long)]
     pub script: Option<PathBuf>,
 
@@ -2618,7 +2926,7 @@ pub struct TreeArgs {
     pub frozen: bool,
 
     #[command(flatten)]
-    pub build: BuildArgs,
+    pub build: BuildOptionsArgs,
 
     #[command(flatten)]
     pub resolver: ResolverArgs,
@@ -2639,7 +2947,7 @@ pub struct TreeArgs {
     ///
     /// Represented as a "target triple", a string that describes the target
     /// platform in terms of its CPU, vendor, and operating system name, like
-    /// `x86_64-unknown-linux-gnu` or `aaarch64-apple-darwin`.
+    /// `x86_64-unknown-linux-gnu` or `aarch64-apple-darwin`.
     #[arg(long, conflicts_with = "universal")]
     pub python_platform: Option<TargetTriple>,
 
@@ -2649,6 +2957,130 @@ pub struct TreeArgs {
     /// the Python interpreter. Use `--universal` to display the tree for all
     /// platforms, or use `--python-version` or `--python-platform` to override
     /// a subset of markers.
+    ///
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
+    pub python: Option<String>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct ExportArgs {
+    /// The format to which `uv.lock` should be exported.
+    ///
+    /// At present, only `requirements-txt` is supported.
+    #[arg(long, value_enum, default_value_t = ExportFormat::default())]
+    pub format: ExportFormat,
+
+    /// Export the dependencies for a specific package in the workspace.
+    ///
+    /// If the workspace member does not exist, uv will exit with an error.
+    #[arg(long)]
+    pub package: Option<PackageName>,
+
+    /// Include optional dependencies from the extra group name.
+    ///
+    /// May be provided more than once.
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    pub extra: Option<Vec<ExtraName>>,
+
+    /// Include all optional dependencies.
+    #[arg(long, conflicts_with = "extra")]
+    pub all_extras: bool,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub no_all_extras: bool,
+
+    /// Include development dependencies.
+    #[arg(long, overrides_with("no_dev"), hide = true)]
+    pub dev: bool,
+
+    /// Omit development dependencies.
+    #[arg(long, overrides_with("dev"))]
+    pub no_dev: bool,
+
+    /// Omit non-development dependencies.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("no_dev"))]
+    pub only_dev: bool,
+
+    /// Install any editable dependencies, including the project and any workspace members, as
+    /// non-editable.
+    #[arg(long)]
+    pub no_editable: bool,
+
+    /// Include hashes for all dependencies.
+    #[arg(long, overrides_with("no_hashes"), hide = true)]
+    pub hashes: bool,
+
+    /// Omit hashes in the generated output.
+    #[arg(long, overrides_with("hashes"))]
+    pub no_hashes: bool,
+
+    /// Write the exported requirements to the given file.
+    #[arg(long, short)]
+    pub output_file: Option<PathBuf>,
+
+    /// Do not emit the current project.
+    ///
+    /// By default, the current project is included in the exported requirements file with all of its
+    /// dependencies. The `--no-emit-project` option allows the project to be excluded, but all of
+    /// its dependencies to remain included.
+    #[arg(long, alias = "no-install-project")]
+    pub no_emit_project: bool,
+
+    /// Do not emit any workspace members, including the root project.
+    ///
+    /// By default, all workspace members and their dependencies are included in the exported
+    /// requirements file, with all of their dependencies. The `--no-emit-workspace` option allows
+    /// exclusion of all the workspace members while retaining their dependencies.
+    #[arg(long, alias = "no-install-workspace")]
+    pub no_emit_workspace: bool,
+
+    /// Do not emit the given package(s).
+    ///
+    /// By default, all of the project's dependencies are included in the exported requirements
+    /// file. The `--no-install-package` option allows exclusion of specific packages.
+    #[arg(long, alias = "no-install-package")]
+    pub no_emit_package: Vec<PackageName>,
+
+    /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
+    #[arg(long, conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Do not update the `uv.lock` before exporting.
+    ///
+    /// If a `uv.lock` does not exist, uv will exit with an error.
+    #[arg(long, conflicts_with = "locked")]
+    pub frozen: bool,
+
+    #[command(flatten)]
+    pub resolver: ResolverArgs,
+
+    #[command(flatten)]
+    pub build: BuildOptionsArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+
+    /// The Python interpreter to use during resolution.
+    ///
+    /// A Python interpreter is required for building source distributions to
+    /// determine package metadata when there are not wheels.
+    ///
+    /// The interpreter is also used as the fallback value for the minimum
+    /// Python version if `requires-python` is not set.
     ///
     /// See `uv help python` for details on Python discovery and supported
     /// request formats.
@@ -2676,7 +3108,7 @@ pub enum ToolCommand {
     /// By default, the package to install is assumed to match the command name.
     ///
     /// The name of the command can include an exact version in the format
-    /// `<package>@<version>`, e.g., `uv run ruff@0.3.0`. If more complex
+    /// `<package>@<version>`, e.g., `uv tool run ruff@0.3.0`. If more complex
     /// version specification is desired or if the command is provided by a
     /// different package, use `--from`.
     ///
@@ -2792,7 +3224,7 @@ pub struct ToolRunArgs {
     pub installer: ResolverInstallerArgs,
 
     #[command(flatten)]
-    pub build: BuildArgs,
+    pub build: BuildOptionsArgs,
 
     #[command(flatten)]
     pub refresh: RefreshArgs,
@@ -2844,7 +3276,7 @@ pub struct ToolInstallArgs {
     pub installer: ResolverInstallerArgs,
 
     #[command(flatten)]
-    pub build: BuildArgs,
+    pub build: BuildOptionsArgs,
 
     #[command(flatten)]
     pub refresh: RefreshArgs,
@@ -2876,9 +3308,14 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_paths: bool,
 
+    /// Whether to display the version specifier(s) used to install each tool.
+    #[arg(long)]
+    pub show_version_specifiers: bool,
+
     // Hide unused global Python options.
     #[arg(long, hide = true)]
     pub python_preference: Option<PythonPreference>,
+
     #[arg(long, hide = true)]
     pub no_python_downloads: bool,
 }
@@ -2907,7 +3344,7 @@ pub struct ToolDirArgs {
 pub struct ToolUninstallArgs {
     /// The name of the tool to uninstall.
     #[arg(required = true)]
-    pub name: Option<PackageName>,
+    pub name: Vec<PackageName>,
 
     /// Uninstall all tools.
     #[arg(long, conflicts_with("name"))]
@@ -2919,7 +3356,7 @@ pub struct ToolUninstallArgs {
 pub struct ToolUpgradeArgs {
     /// The name of the tool to upgrade.
     #[arg(required = true)]
-    pub name: Option<PackageName>,
+    pub name: Vec<PackageName>,
 
     /// Upgrade all tools.
     #[arg(long, conflicts_with("name"))]
@@ -2929,7 +3366,7 @@ pub struct ToolUpgradeArgs {
     pub installer: ResolverInstallerArgs,
 
     #[command(flatten)]
-    pub build: BuildArgs,
+    pub build: BuildOptionsArgs,
 }
 
 #[derive(Args)]
@@ -3192,7 +3629,7 @@ pub struct IndexArgs {
     /// indexes.
     ///
     /// If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
-    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    /// source distributions (e.g., `.tar.gz` or `.zip`) at the top level.
     ///
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.
@@ -3233,7 +3670,7 @@ pub struct RefreshArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct BuildArgs {
+pub struct BuildOptionsArgs {
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -3331,6 +3768,26 @@ pub struct InstallerArgs {
         help_heading = "Index options"
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+
+    /// Allow insecure connections to a host.
+    ///
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[arg(
+        long,
+        alias = "trusted-host",
+        env = "UV_INSECURE_HOST",
+        value_delimiter = ' ',
+        value_parser = parse_insecure_host,
+        help_heading = "Index options"
+    )]
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -3473,6 +3930,26 @@ pub struct ResolverArgs {
         help_heading = "Index options"
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+
+    /// Allow insecure connections to a host.
+    ///
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[arg(
+        long,
+        alias = "trusted-host",
+        env = "UV_INSECURE_HOST",
+        value_delimiter = ' ',
+        value_parser = parse_insecure_host,
+        help_heading = "Index options"
+    )]
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -3645,6 +4122,26 @@ pub struct ResolverInstallerArgs {
         help_heading = "Index options"
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+
+    /// Allow insecure connections to a host.
+    ///
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[arg(
+        long,
+        alias = "trusted-host",
+        env = "UV_INSECURE_HOST",
+        value_delimiter = ' ',
+        value_parser = parse_insecure_host,
+        help_heading = "Index options"
+    )]
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.

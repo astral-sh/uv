@@ -28,12 +28,48 @@ If you're running into caching issues, uv includes a few escape hatches:
 
 ## Dynamic metadata
 
-Note that for local directory dependencies in particular (e.g., editables), uv will _only_ reinstall
-the package if its `pyproject.toml`, `setup.py`, or `setup.cfg` file has changed. This is a
+By default, uv will _only_ rebuild and reinstall local directory dependencies (e.g., editables) if
+the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the directory root has changed. This is a
 heuristic and, in some cases, may lead to fewer re-installs than desired.
 
-For example, if a local dependency uses `dynamic` metadata, you can instruct uv to _always_
-reinstall the package by adding `reinstall-package` to the `uv` section of your `pyproject.toml`:
+To incorporate other information into the cache key for a given package, you can add cache key
+entries under `tool.uv.cache-keys`, which can include both file paths and Git commit hashes.
+
+For example, if a project uses [`setuptools-scm`](https://pypi.org/project/setuptools-scm/), and
+should be rebuilt whenever the commit hash changes, you can add the following to the project's
+`pyproject.toml`:
+
+```toml title="pyproject.toml"
+[tool.uv]
+cache-keys = [{ git = true }]
+```
+
+Similarly, if a project reads from a `requirements.txt` to populate its dependencies, you can add
+the following to the project's `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[tool.uv]
+cache-keys = [{ file = "requirements.txt" }]
+```
+
+Globs are supported, following the syntax of the
+[`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html) crate. For example, to invalidate the
+cache whenever a `.toml` file in the project directory or any of its subdirectories is modified, use
+the following:
+
+```toml title="pyproject.toml"
+[tool.uv]
+cache-keys = [{ file = "**/*.toml" }]
+```
+
+!!! note
+
+    The use of globs can be expensive, as uv may need to walk the filesystem to determine whether any files have changed.
+    This may, in turn, requiring traversal of large or deeply nested directories.
+
+As an escape hatch, if a project uses `dynamic` metadata that isn't covered by `tool.uv.cache-keys`,
+you can instruct uv to _always_ rebuild and reinstall it by adding the project to the
+`tool.uv.reinstall-package` list:
 
 ```toml title="pyproject.toml"
 [tool.uv]
@@ -79,9 +115,9 @@ from source tends to be worthwhile, since the wheel building process can be expe
 for extension modules.
 
 To support this caching strategy, uv provides a `uv cache prune --ci` command, which removes all
-pre-built wheels from the cache but retains any wheels that were built from source. We recommend
-running `uv cache prune --ci` at the end of your continuous integration job to ensure maximum cache
-efficiency. For an example, see the
+pre-built wheels and unzipped source distributions from the cache, but retains any wheels that were
+built from source. We recommend running `uv cache prune --ci` at the end of your continuous
+integration job to ensure maximum cache efficiency. For an example, see the
 [GitHub integration guide](../guides/integration/github.md#caching).
 
 ## Cache directory

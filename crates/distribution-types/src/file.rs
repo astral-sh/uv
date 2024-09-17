@@ -143,31 +143,16 @@ impl Display for FileLocation {
     PartialOrd,
     Ord,
     Hash,
+    Serialize,
+    Deserialize,
     rkyv::Archive,
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
+#[serde(transparent)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 pub struct UrlString(String);
-
-impl serde::Serialize for UrlString {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        String::serialize(&self.0, serializer)
-    }
-}
-
-impl<'de> serde::de::Deserialize<'de> for UrlString {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        String::deserialize(deserializer).map(UrlString)
-    }
-}
 
 impl UrlString {
     /// Converts a [`UrlString`] to a [`Url`].

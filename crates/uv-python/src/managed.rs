@@ -16,6 +16,7 @@ use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
 use crate::installation::{self, PythonInstallationKey};
+use crate::libc::LibcDetectionError;
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
@@ -52,6 +53,8 @@ pub enum Error {
     NameError(String),
     #[error(transparent)]
     NameParseError(#[from] installation::PythonInstallationKeyError),
+    #[error(transparent)]
+    LibcDetection(#[from] LibcDetectionError),
 }
 /// A collection of uv-managed Python installations installed on the current system.
 #[derive(Debug, Clone)]
@@ -66,12 +69,10 @@ impl ManagedPythonInstallations {
         Self { root: root.into() }
     }
 
-    /// Lock the toolchains directory.
-    pub fn acquire_lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(
-            self.root.join(".lock"),
-            self.root.user_display(),
-        )?)
+    /// Grab a file lock for the managed Python distribution directory to prevent concurrent access
+    /// across processes.
+    pub async fn lock(&self) -> Result<LockedFile, Error> {
+        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
     }
 
     /// Prefer, in order:
@@ -193,7 +194,7 @@ impl ManagedPythonInstallations {
     pub fn find_matching_current_platform(
         &self,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
-        let platform_key = platform_key_from_env();
+        let platform_key = platform_key_from_env()?;
 
         let iter = ManagedPythonInstallations::from_settings()?
             .find_all()?
@@ -347,11 +348,11 @@ impl ManagedPythonInstallation {
 }
 
 /// Generate a platform portion of a key from the environment.
-fn platform_key_from_env() -> String {
+fn platform_key_from_env() -> Result<String, Error> {
     let os = Os::from_env();
     let arch = Arch::from_env();
-    let libc = Libc::from_env();
-    format!("{os}-{arch}-{libc}").to_lowercase()
+    let libc = Libc::from_env()?;
+    Ok(format!("{os}-{arch}-{libc}").to_lowercase())
 }
 
 impl fmt::Display for ManagedPythonInstallation {

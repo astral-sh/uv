@@ -76,15 +76,34 @@ impl Resolution {
     pub fn filter(self, predicate: impl Fn(&ResolvedDist) -> bool) -> Self {
         let packages = self
             .packages
-            .iter()
+            .into_iter()
             .filter(|(_, dist)| predicate(dist))
-            .map(|(name, dist)| (name.clone(), dist.clone()))
             .collect::<BTreeMap<_, _>>();
         let hashes = self
             .hashes
-            .iter()
+            .into_iter()
             .filter(|(name, _)| packages.contains_key(name))
-            .map(|(name, hashes)| (name.clone(), hashes.clone()))
+            .collect();
+        let diagnostics = self.diagnostics.clone();
+        Self {
+            packages,
+            hashes,
+            diagnostics,
+        }
+    }
+
+    /// Map over the resolved distributions in this resolution.
+    #[must_use]
+    pub fn map(self, predicate: impl Fn(ResolvedDist) -> ResolvedDist) -> Self {
+        let packages = self
+            .packages
+            .into_iter()
+            .map(|(name, dist)| (name, predicate(dist)))
+            .collect::<BTreeMap<_, _>>();
+        let hashes = self
+            .hashes
+            .into_iter()
+            .filter(|(name, _)| packages.contains_key(name))
             .collect();
         let diagnostics = self.diagnostics.clone();
         Self {
@@ -220,6 +239,7 @@ impl From<&ResolvedDist> for Requirement {
                     install_path: sdist.install_path.clone(),
                     url: sdist.url.clone(),
                     editable: sdist.editable,
+                    r#virtual: sdist.r#virtual,
                 },
             },
             ResolvedDist::Installed(dist) => RequirementSource::Registry {

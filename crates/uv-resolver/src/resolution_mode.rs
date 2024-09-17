@@ -1,9 +1,8 @@
 use rustc_hash::FxHashSet;
 
-use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
-use crate::{DependencyMode, Manifest};
+use crate::{DependencyMode, Manifest, ResolverMarkers};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -47,7 +46,7 @@ impl ResolutionStrategy {
     pub(crate) fn from_mode(
         mode: ResolutionMode,
         manifest: &Manifest,
-        markers: Option<&MarkerEnvironment>,
+        markers: &ResolverMarkers,
         dependencies: DependencyMode,
     ) -> Self {
         match mode {

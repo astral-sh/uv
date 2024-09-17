@@ -2,10 +2,20 @@ use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 
 use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
-use pypi_types::{Requirement, RequirementSource};
+use pypi_types::{Hashes, ParsedUrl, Requirement, RequirementSource};
 use uv_normalize::ExtraName;
 
 use crate::VerbatimParsedUrl;
+
+/// An [`UnresolvedRequirement`] with additional metadata from `requirements.txt`, currently only
+/// hashes but in the future also editable and similar information.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct NameRequirementSpecification {
+    /// The actual requirement.
+    pub requirement: Requirement,
+    /// Hashes of the downloadable packages.
+    pub hashes: Vec<String>,
+}
 
 /// An [`UnresolvedRequirement`] with additional metadata from `requirements.txt`, currently only
 /// hashes but in the future also editable and similar information.
@@ -82,12 +92,46 @@ impl UnresolvedRequirement {
             Self::Unnamed(requirement) => requirement.url.is_editable(),
         }
     }
+
+    /// Return the hashes of the requirement, as specified in the URL fragment.
+    pub fn hashes(&self) -> Option<Hashes> {
+        match self {
+            Self::Named(requirement) => requirement.hashes(),
+            Self::Unnamed(requirement) => {
+                let ParsedUrl::Archive(ref url) = requirement.url.parsed_url else {
+                    return None;
+                };
+                let fragment = url.url.fragment()?;
+                Hashes::parse_fragment(fragment).ok()
+            }
+        }
+    }
+}
+
+impl NameRequirementSpecification {
+    /// Return the hashes of the requirement, as specified in the URL fragment.
+    pub fn hashes(&self) -> Option<Hashes> {
+        let RequirementSource::Url { ref url, .. } = self.requirement.source else {
+            return None;
+        };
+        let fragment = url.fragment()?;
+        Hashes::parse_fragment(fragment).ok()
+    }
 }
 
 impl From<Requirement> for UnresolvedRequirementSpecification {
     fn from(requirement: Requirement) -> Self {
         Self {
             requirement: UnresolvedRequirement::Named(requirement),
+            hashes: Vec::new(),
+        }
+    }
+}
+
+impl From<Requirement> for NameRequirementSpecification {
+    fn from(requirement: Requirement) -> Self {
+        Self {
+            requirement,
             hashes: Vec::new(),
         }
     }

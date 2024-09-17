@@ -2,165 +2,67 @@
 
 ## Installation
 
-uv installation differs depending on the platform:
+For use with GitHub Actions, we recommend the official
+[`astral-sh/setup-uv`](https://github.com/astral-sh/setup-uv) action, which installs uv, adds it to
+PATH, (optionally) persists the cache, and more, with support for all uv-supported platforms.
 
-=== "Unix"
+To install the latest version of uv:
 
-    ```yaml title="example.yml"
-    name: Example on Unix
-
-    jobs:
-      uv-example-linux:
-        name: python-linux
-        runs-on: ubuntu-latest
-
-        steps:
-          - uses: actions/checkout@v4
-
-          - name: Set up uv
-            # Install latest uv version using the installer
-            run: curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
-
-=== "macOS"
-
-    ```yaml title="example.yml"
-    name: Example on macOS
-
-    jobs:
-      uv-example-macos:
-        name: python-macos
-        runs-on: macos-latest
-
-        steps:
-          - uses: actions/checkout@v4
-
-          - name: Set up uv
-            # Install latest uv version using the installer
-            run: curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
-
-=== "Windows"
-
-    ```yaml title="example.yml"
-    name: Example on Windows
-
-    jobs:
-      uv-example-windows:
-        name: python-windows
-        runs-on: windows-latest
-
-        steps:
-          - uses: actions/checkout@v4
-
-          - name: Set up uv
-            # Install latest uv version using the installer
-            run: irm https://astral.sh/uv/install.ps1 | iex
-            shell: powershell
-    ```
-
-It is considered best practice to pin to a specific uv version, e.g., with:
-
-=== "Unix"
-
-    ```yaml title="example.yml"
-    name: Example on Unix
-
-    jobs:
-      uv-example-linux:
-        name: python-linux
-        runs-on: ubuntu-latest
-
-        steps:
-          - uses: actions/checkout@v4
-
-          - name: Set up uv
-            # Install a specific uv version using the installer
-            run: curl -LsSf https://astral.sh/uv/0.3.3/install.sh | sh
-    ```
-
-=== "macOS"
-
-    ```yaml title="example.yml"
-    name: Example on macOS
-
-    jobs:
-      uv-example-macos:
-        name: python-macos
-        runs-on: macos-latest
-
-        steps:
-          - uses: actions/checkout@v4
-
-          - name: Set up uv
-            # Install a specific uv version using the installer
-            run: curl -LsSf https://astral.sh/uv/0.3.3/install.sh | sh
-    ```
-
-=== "Windows"
-
-    ```yaml title="example.yml"
-    name: Example on Windows
-
-    jobs:
-      uv-example-windows:
-        name: python-windows
-        runs-on: windows-latest
-
-        steps:
-          - uses: actions/checkout@v4
-
-          - name: Set up uv
-            # Install a specific uv version using the installer
-            run: irm https://astral.sh/uv/0.3.3/install.ps1 | iex
-            shell: powershell
-    ```
-
-### Using a matrix
-
-If you need to support multiple platforms, you can use a matrix:
-
-```yaml title="example.yml"
+```yaml title="example.yml" hl_lines="11-12"
 name: Example
 
 jobs:
-  uv-example-multiplatform:
-    name: python-${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
-          - macos-latest
-
-      fail-fast: false
-
-    runs-on: ${{ matrix.os }}
+  uv-example:
+    name: python
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up uv
-        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' }}
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+```
 
-      - name: Set up uv
-        if: ${{ matrix.os == 'windows-latest' }}
-        run: irm https://astral.sh/uv/install.ps1 | iex
-        shell: powershell
+It is considered best practice to pin to a specific uv version, e.g., with:
+
+```yaml title="example.yml" hl_lines="14 15"
+name: Example
+
+jobs:
+  uv-example:
+    name: python
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+        with:
+          # Install a specific version of uv.
+          version: "0.4.10"
 ```
 
 ## Setting up Python
 
 Python can be installed with the `python install` command:
 
-```yaml title="example.yml"
-steps:
-  # ... setup up uv ...
+```yaml title="example.yml" hl_lines="14 15"
+name: Example
 
-  - name: Set up Python
-    run: uv python install
+jobs:
+  uv-example:
+    name: python
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Set up Python
+        run: uv python install
 ```
 
 This will respect the Python version pinned in the project.
@@ -178,12 +80,22 @@ strategy:
 
 Provide the version to the `python install` invocation:
 
-```yaml title="example.yml"
-steps:
-  # ... setup up uv ...
+```yaml title="example.yml" hl_lines="14 15"
+name: Example
 
-  - name: Set up Python ${{ matrix.python-version }}
-    run: uv python install ${{ matrix.python-version }}
+jobs:
+  uv-example:
+    name: python
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
 ```
 
 Alternatively, the official GitHub `setup-python` action can be used. This can be faster, because
@@ -193,23 +105,47 @@ Set the
 [`python-version-file`](https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#using-the-python-version-file-input)
 option to use the pinned version for the project:
 
-```yaml title="example.yml"
-steps:
-  - name: "Set up Python"
-    uses: actions/setup-python@v5
-    with:
-      python-version-file: ".python-version"
+```yaml title="example.yml" hl_lines="14 15 16 17"
+name: Example
+
+jobs:
+  uv-example:
+    name: python
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
 ```
 
 Or, specify the `pyproject.toml` file to ignore the pin and use the latest version compatible with
 the project's `requires-python` constraint:
 
-```yaml title="example.yml"
-steps:
-  - name: "Set up Python"
-    uses: actions/setup-python@v5
-    with:
-      python-version-file: "pyproject.toml"
+```yaml title="example.yml" hl_lines="17"
+name: Example
+
+jobs:
+  uv-example:
+    name: python
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
 ```
 
 ## Syncing and running
@@ -217,23 +153,85 @@ steps:
 Once uv and Python are installed, the project can be installed with `uv sync` and commands can be
 run in the environment with `uv run`:
 
-```yaml title="example.yml"
-steps:
-  # ... setup up Python and uv ...
+```yaml title="example.yml" hl_lines="17-22"
+name: Example
 
-  - name: Install the project
-    run: uv sync --all-extras --dev
+jobs:
+  uv-example:
+    name: python
+    runs-on: ubuntu-latest
 
-  - name: Run tests
-    # For example, using `pytest`
-    run: uv run pytest tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install the project
+        run: uv sync --all-extras --dev
+
+      - name: Run tests
+        # For example, using `pytest`
+        run: uv run pytest tests
 ```
+
+!!! tip
+
+    The
+    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects.md#configuring-the-project-environment-path) can
+    be used to install to the system Python environment instead of creating a virtual environment.
 
 ## Caching
 
 It may improve CI times to store uv's cache across workflow runs.
 
-The cache can be saved and restored with the official GitHub `cache` action:
+The [`astral-sh/setup-uv`](https://github.com/astral-sh/setup-uv) has built-in support for
+persisting the cache:
+
+```yaml title="example.yml"
+- name: Enable caching
+  uses: astral-sh/setup-uv@v2
+  with:
+    enable-cache: true
+```
+
+You can configure the action to use a custom cache directory on the runner:
+
+```yaml title="example.yml"
+- name: Define a custom uv cache path
+  uses: astral-sh/setup-uv@v2
+  with:
+    enable-cache: true
+    cache-local-path: "/path/to/cache"
+```
+
+Or invalidate it when the lockfile changes:
+
+```yaml title="example.yml"
+- name: Define a cache dependency glob
+  uses: astral-sh/setup-uv@v2
+  with:
+    enable-cache: true
+    cache-dependency-glob: "uv.lock"
+```
+
+Or when any requirements file changes:
+
+```yaml title="example.yml"
+- name: Define a cache dependency glob
+  uses: astral-sh/setup-uv@v2
+  with:
+    enable-cache: true
+    cache-dependency-glob: "requirements**.txt"
+```
+
+Note that `astral-sh/setup-uv` will automatically use a separate cache key for each host
+architecture and platform.
+
+Alternatively, you can manage the cache manually with the `actions/cache` action:
 
 ```yaml title="example.yml"
 jobs:

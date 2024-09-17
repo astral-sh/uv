@@ -442,19 +442,19 @@ def get_operating_system_and_architecture():
         version = None
         architecture = version_arch
 
-    if operating_system == "linux":
-        if sys.version_info < (3, 7):
-            print(
-                json.dumps(
-                    {
-                        "result": "error",
-                        "kind": "unsupported_python_version",
-                        "python_version": format_full_version(sys.version_info),
-                    }
-                )
+    if sys.version_info < (3, 7):
+        print(
+            json.dumps(
+                {
+                    "result": "error",
+                    "kind": "unsupported_python_version",
+                    "python_version": format_full_version(sys.version_info),
+                }
             )
-            sys.exit(0)
+        )
+        sys.exit(0)
 
+    if operating_system == "linux":
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version
 

@@ -1,25 +1,25 @@
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Cursor, Read, Seek, Write};
+use std::io::{BufReader, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::{env, io};
-
-use data_encoding::BASE64URL_NOPAD;
-use fs_err as fs;
-use fs_err::{DirEntry, File};
-use rustc_hash::FxHashMap;
-use sha2::{Digest, Sha256};
-use tracing::{instrument, warn};
-use walkdir::WalkDir;
-use zip::write::FileOptions;
-use zip::ZipWriter;
-
-use pypi_types::DirectUrl;
-use uv_fs::{relative_to, Simplified};
-use uv_normalize::PackageName;
 
 use crate::record::RecordEntry;
 use crate::script::Script;
 use crate::{Error, Layout};
+use data_encoding::BASE64URL_NOPAD;
+use fs_err as fs;
+use fs_err::{DirEntry, File};
+use mailparse::parse_headers;
+use pypi_types::DirectUrl;
+use rustc_hash::FxHashMap;
+use sha2::{Digest, Sha256};
+use tracing::{instrument, warn};
+use uv_cache_info::CacheInfo;
+use uv_fs::{relative_to, Simplified};
+use uv_normalize::PackageName;
+use walkdir::WalkDir;
+use zip::write::FileOptions;
+use zip::ZipWriter;
 
 const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 
@@ -353,10 +353,10 @@ pub enum LibKind {
 /// Parse WHEEL file.
 ///
 /// > {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same
-/// > basic key: value format:
+/// > email message format:
 pub fn parse_wheel_file(wheel_text: &str) -> Result<LibKind, Error> {
-    // {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same basic key: value format:
-    let data = parse_key_value_file(&mut wheel_text.as_bytes(), "WHEEL")?;
+    // {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same email message format:
+    let data = parse_email_message_file(&mut wheel_text.as_bytes(), "WHEEL")?;
 
     // Determine whether Root-Is-Purelib == ‘true’.
     // If it is, the wheel is pure, and should be installed into purelib.
@@ -727,6 +727,7 @@ pub(crate) fn extra_dist_info(
     dist_info_prefix: &str,
     requested: bool,
     direct_url: Option<&DirectUrl>,
+    cache_info: Option<&CacheInfo>,
     installer: Option<&str>,
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
@@ -739,6 +740,14 @@ pub(crate) fn extra_dist_info(
             site_packages,
             &dist_info_dir.join("direct_url.json"),
             serde_json::to_string(direct_url)?.as_bytes(),
+            record,
+        )?;
+    }
+    if let Some(cache_info) = cache_info {
+        write_file_recorded(
+            site_packages,
+            &dist_info_dir.join("uv_cache.json"),
+            serde_json::to_string(cache_info)?.as_bytes(),
             record,
         )?;
     }
@@ -797,29 +806,39 @@ pub fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Erro
         .collect()
 }
 
-/// Parse a file with `Key: value` entries such as WHEEL and METADATA
-fn parse_key_value_file(
+/// Parse a file with email message format such as WHEEL and METADATA
+fn parse_email_message_file(
     file: impl Read,
     debug_filename: &str,
 ) -> Result<FxHashMap<String, Vec<String>>, Error> {
     let mut data: FxHashMap<String, Vec<String>> = FxHashMap::default();
 
     let file = BufReader::new(file);
-    for (line_no, line) in file.lines().enumerate() {
-        let line = line?.trim().to_string();
-        if line.is_empty() {
-            continue;
+    let content = file.bytes().collect::<Result<Vec<u8>, _>>()?;
+
+    let headers = parse_headers(content.as_slice())
+        .map_err(|err| {
+            Error::InvalidWheel(format!("Failed to parse {debug_filename} file: {err}"))
+        })?
+        .0;
+
+    for header in headers {
+        let mut name = header.get_key();
+        let mut value = header.get_value();
+
+        // Trim the name and value only if needed, avoiding unnecessary allocations with .trim().to_string().
+        let trimmed_name = name.trim();
+        if name == trimmed_name {
+            name = trimmed_name.to_string();
         }
-        let (key, value) = line.split_once(':').ok_or_else(|| {
-            Error::InvalidWheel(format!(
-                "Line {} of the {debug_filename} file is invalid",
-                line_no + 1
-            ))
-        })?;
-        data.entry(key.trim().to_string())
-            .or_default()
-            .push(value.trim().to_string());
+        let trimmed_value = value.trim();
+        if value == trimmed_value {
+            value = trimmed_value.to_string();
+        }
+
+        data.entry(name).or_default().push(value);
     }
+
     Ok(data)
 }
 
@@ -836,11 +855,11 @@ mod test {
     use crate::Error;
 
     use super::{
-        get_script_executable, parse_key_value_file, parse_wheel_file, read_record_file, Script,
+        get_script_executable, parse_email_message_file, parse_wheel_file, read_record_file, Script,
     };
 
     #[test]
-    fn test_parse_key_value_file() {
+    fn test_parse_email_message_file() {
         let text = indoc! {"
             Wheel-Version: 1.0
             Generator: bdist_wheel (0.37.1)
@@ -849,7 +868,21 @@ mod test {
             Tag: cp38-cp38-manylinux2014_x86_64
         "};
 
-        parse_key_value_file(&mut text.as_bytes(), "WHEEL").unwrap();
+        parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();
+    }
+
+    #[test]
+    fn test_parse_email_message_file_with_value_starting_with_linesep_and_two_space() {
+        // Check: https://files.pythonhosted.org/packages/0c/b7/ecfdce6368cc3664d301f7f52db4fe1004aa7da7a12c4a9bf1de534ff6ab/ziglang-0.13.0-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl
+        let text = indoc! {"
+            Wheel-Version: 1.0
+            Generator: ziglang make_wheels.py
+            Root-Is-Purelib: false
+            Tag:
+              py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64
+        "};
+
+        parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();
     }
 
     #[test]
@@ -996,7 +1029,7 @@ mod test {
         "
         };
         let reader = Cursor::new(wheel.to_string().into_bytes());
-        let wheel_file = parse_key_value_file(reader, "WHEEL")?;
+        let wheel_file = parse_email_message_file(reader, "WHEEL")?;
         assert_eq!(
             wheel_file.get("Wheel-Version"),
             Some(&["1.0".to_string()].to_vec())

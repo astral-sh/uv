@@ -1,23 +1,13 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::process::Command;
-
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
-use crate::common::{get_bin, uv_snapshot, TestContext};
+use crate::common::{uv_snapshot, TestContext};
 
 mod common;
-
-/// Create a `pip freeze` command with options shared across scenarios.
-fn command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command.arg("pip").arg("freeze");
-    context.add_shared_args(&mut command);
-    command
-}
 
 /// List multiple installed packages in a virtual environment.
 #[test]
@@ -35,7 +25,7 @@ fn freeze_many() -> Result<()> {
         .success();
 
     // Run `pip freeze`.
-    uv_snapshot!(command(&context)
+    uv_snapshot!(context.pip_freeze()
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
@@ -87,7 +77,7 @@ fn freeze_duplicate() -> Result<()> {
     )?;
 
     // Run `pip freeze`.
-    uv_snapshot!(context1.filters(), command(&context1).arg("--strict"), @r###"
+    uv_snapshot!(context1.filters(), context1.pip_freeze().arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -120,7 +110,7 @@ fn freeze_url() -> Result<()> {
         .success();
 
     // Run `pip freeze`.
-    uv_snapshot!(command(&context)
+    uv_snapshot!(context.pip_freeze()
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
@@ -158,7 +148,7 @@ fn freeze_with_editable() -> Result<()> {
         .success();
 
     // Run `pip freeze`.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
@@ -173,7 +163,7 @@ fn freeze_with_editable() -> Result<()> {
     );
 
     // Exclude editable package.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--exclude-editable")
         .arg("--strict"), @r###"
     success: true
@@ -230,7 +220,7 @@ fn freeze_with_egg_info() -> Result<()> {
         .write_str("")?;
 
     // Run `pip freeze`.
-    uv_snapshot!(context.filters(), command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_freeze(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -283,7 +273,7 @@ fn freeze_with_egg_info_no_py() -> Result<()> {
         .write_str("")?;
 
     // Run `pip freeze`.
-    uv_snapshot!(context.filters(), command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_freeze(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -320,7 +310,7 @@ fn freeze_with_egg_info_file() -> Result<()> {
         "})?;
 
     // Run `pip freeze`.
-    uv_snapshot!(context.filters(), command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_freeze(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -358,7 +348,7 @@ Version: 0.22.0
         .write_str(target.path().to_str().unwrap())?;
 
     // Run `pip freeze`.
-    uv_snapshot!(context.filters(), command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_freeze(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

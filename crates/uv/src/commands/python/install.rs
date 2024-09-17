@@ -34,7 +34,7 @@ pub(crate) async fn install(
     let installations = ManagedPythonInstallations::from_settings()?.init()?;
     let installations_dir = installations.root();
     let cache_dir = installations.cache();
-    let _lock = installations.acquire_lock()?;
+    let _lock = installations.lock().await?;
 
     let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {
@@ -118,8 +118,7 @@ pub(crate) async fn install(
     let downloads = unfilled_requests
         .into_iter()
         // Populate the download requests with defaults
-        .map(PythonDownloadRequest::fill)
-        .map(|request| ManagedPythonDownload::from_request(&request))
+        .map(|request| ManagedPythonDownload::from_request(&PythonDownloadRequest::fill(request)?))
         .collect::<Result<Vec<_>, uv_python::downloads::Error>>()?;
 
     // Ensure we only download each version once

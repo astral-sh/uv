@@ -21,7 +21,8 @@ use distribution_types::{
 };
 use platform_tags::Tags;
 use pypi_types::HashDigest;
-use uv_cache::{ArchiveId, ArchiveTimestamp, CacheBucket, CacheEntry, Timestamp, WheelCache};
+use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
+use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
@@ -187,6 +188,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         archive: self.build_context.cache().archive(&archive.id),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
+                        cache: CacheInfo::default(),
                     }),
                     Err(Error::Extract(err)) => {
                         if err.is_http_streaming_unsupported() {
@@ -217,6 +219,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             archive: self.build_context.cache().archive(&archive.id),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
+                            cache: CacheInfo::default(),
                         })
                     }
                     Err(err) => Err(err),
@@ -248,6 +251,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         archive: self.build_context.cache().archive(&archive.id),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
+                        cache: CacheInfo::default(),
                     }),
                     Err(Error::Client(err)) if err.is_http_streaming_unsupported() => {
                         warn!(
@@ -271,6 +275,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             archive: self.build_context.cache().archive(&archive.id),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
+                            cache: CacheInfo::default(),
                         })
                     }
                     Err(err) => Err(err),
@@ -325,6 +330,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     archive,
                     filename: built_wheel.filename,
                     hashes: built_wheel.hashes,
+                    cache: built_wheel.cache_info,
                 });
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
@@ -341,6 +347,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             archive: self.build_context.cache().archive(&id),
             hashes: built_wheel.hashes,
             filename: built_wheel.filename,
+            cache: built_wheel.cache_info,
         })
     }
 
@@ -373,7 +380,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let result = self
             .client
-            .managed(|client| client.wheel_metadata(dist).boxed_local())
+            .managed(|client| {
+                client
+                    .wheel_metadata(dist, self.build_context.capabilities())
+                    .boxed_local()
+            })
             .await;
 
         match result {
@@ -720,7 +731,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         // Determine the last-modified time of the wheel.
-        let modified = ArchiveTimestamp::from_file(path).map_err(Error::CacheRead)?;
+        let modified = Timestamp::from_path(path).map_err(Error::CacheRead)?;
 
         // Attempt to read the archive pointer from the cache.
         let pointer_entry = wheel_entry.with_file(format!("{}.rev", filename.stem()));
@@ -739,6 +750,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 archive: self.build_context.cache().archive(&archive.id),
                 hashes: archive.hashes,
                 filename: filename.clone(),
+                cache: CacheInfo::from_timestamp(modified),
             })
         } else if hashes.is_none() {
             // Otherwise, unzip the wheel.
@@ -746,7 +758,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Write the archive pointer to the cache.
             let pointer = LocalArchivePointer {
-                timestamp: modified.timestamp(),
+                timestamp: modified,
                 archive: archive.clone(),
             };
             pointer.write_to(&pointer_entry).await?;
@@ -756,6 +768,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 archive: self.build_context.cache().archive(&archive.id),
                 hashes: archive.hashes,
                 filename: filename.clone(),
+                cache: CacheInfo::from_timestamp(modified),
             })
         } else {
             // If necessary, compute the hashes of the wheel.
@@ -791,7 +804,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Write the archive pointer to the cache.
             let pointer = LocalArchivePointer {
-                timestamp: modified.timestamp(),
+                timestamp: modified,
                 archive: archive.clone(),
             };
             pointer.write_to(&pointer_entry).await?;
@@ -801,6 +814,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 archive: self.build_context.cache().archive(&archive.id),
                 hashes: archive.hashes,
                 filename: filename.clone(),
+                cache: CacheInfo::from_timestamp(modified),
             })
         }
     }
@@ -834,7 +848,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     fn request(&self, url: Url) -> Result<reqwest::Request, reqwest::Error> {
         self.client
             .unmanaged
-            .uncached_client()
+            .uncached_client(&url)
             .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.
@@ -956,6 +970,11 @@ impl HttpArchivePointer {
     pub fn into_archive(self) -> Archive {
         self.archive
     }
+
+    /// Return the [`CacheInfo`] from the pointer.
+    pub fn to_cache_info(&self) -> CacheInfo {
+        CacheInfo::default()
+    }
 }
 
 /// A pointer to an archive in the cache, fetched from a local path.
@@ -985,12 +1004,17 @@ impl LocalArchivePointer {
     }
 
     /// Returns `true` if the archive is up-to-date with the given modified timestamp.
-    pub fn is_up_to_date(&self, modified: ArchiveTimestamp) -> bool {
-        self.timestamp == modified.timestamp()
+    pub fn is_up_to_date(&self, modified: Timestamp) -> bool {
+        self.timestamp == modified
     }
 
     /// Return the [`Archive`] from the pointer.
     pub fn into_archive(self) -> Archive {
         self.archive
+    }
+
+    /// Return the [`CacheInfo`] from the pointer.
+    pub fn to_cache_info(&self) -> CacheInfo {
+        CacheInfo::from_timestamp(self.timestamp)
     }
 }

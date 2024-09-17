@@ -1,13 +1,17 @@
+use anstream::AutoStream;
+use anyhow::Context;
+use owo_colors::OwoColorize;
+use std::borrow::Cow;
+use std::io::stdout;
+use std::path::Path;
 use std::time::Duration;
 use std::{fmt::Display, fmt::Write, process::ExitCode};
 
-use anyhow::Context;
-use owo_colors::OwoColorize;
-
+pub(crate) use build::build;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 pub(crate) use cache_prune::cache_prune;
-use distribution_types::InstalledMetadata;
+use distribution_types::{IndexCapabilities, InstalledMetadata};
 pub(crate) use help::help;
 pub(crate) use pip::check::pip_check;
 pub(crate) use pip::compile::pip_compile;
@@ -19,7 +23,8 @@ pub(crate) use pip::sync::pip_sync;
 pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
 pub(crate) use project::add::add;
-pub(crate) use project::init::init;
+pub(crate) use project::export::export;
+pub(crate) use project::init::{init, InitProjectKind};
 pub(crate) use project::lock::lock;
 pub(crate) use project::remove::remove;
 pub(crate) use project::run::{run, RunCommand};
@@ -64,6 +69,7 @@ mod python;
 pub(crate) mod reporters;
 mod tool;
 
+mod build;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod venv;
@@ -79,6 +85,9 @@ pub(crate) enum ExitStatus {
 
     /// The command failed with an unexpected error.
     Error,
+
+    /// The command's exit status is propagated from an external command.
+    External(u8),
 }
 
 impl From<ExitStatus> for ExitCode {
@@ -87,6 +96,7 @@ impl From<ExitStatus> for ExitCode {
             ExitStatus::Success => Self::from(0),
             ExitStatus::Failure => Self::from(1),
             ExitStatus::Error => Self::from(2),
+            ExitStatus::External(code) => Self::from(code),
         }
     }
 }
@@ -190,4 +200,57 @@ pub(crate) struct SharedState {
     pub(crate) index: InMemoryIndex,
     /// The downloaded distributions.
     pub(crate) in_flight: InFlight,
+    /// The discovered capabilities for each registry index.
+    pub(crate) capabilities: IndexCapabilities,
+}
+
+/// A multicasting writer that writes to both the standard output and an output file, if present.
+#[allow(clippy::disallowed_types)]
+struct OutputWriter<'a> {
+    stdout: Option<AutoStream<std::io::Stdout>>,
+    output_file: Option<&'a Path>,
+    buffer: Vec<u8>,
+}
+
+#[allow(clippy::disallowed_types)]
+impl<'a> OutputWriter<'a> {
+    /// Create a new output writer.
+    fn new(include_stdout: bool, output_file: Option<&'a Path>) -> Self {
+        let stdout = include_stdout.then(|| AutoStream::<std::io::Stdout>::auto(stdout()));
+        Self {
+            stdout,
+            output_file,
+            buffer: Vec::new(),
+        }
+    }
+
+    /// Write the given arguments to both standard output and the output buffer, if present.
+    fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> std::io::Result<()> {
+        use std::io::Write;
+
+        // Write to the buffer.
+        if self.output_file.is_some() {
+            self.buffer.write_fmt(args)?;
+        }
+
+        // Write to standard output.
+        if let Some(stdout) = &mut self.stdout {
+            write!(stdout, "{args}")?;
+        }
+
+        Ok(())
+    }
+
+    /// Commit the buffer to the output file.
+    async fn commit(self) -> std::io::Result<()> {
+        if let Some(output_file) = self.output_file {
+            // If the output file is an existing symlink, write to the destination instead.
+            let output_file = fs_err::read_link(output_file)
+                .map(Cow::Owned)
+                .unwrap_or(Cow::Borrowed(output_file));
+            let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
+            uv_fs::write_atomic(output_file, &stream).await?;
+        }
+        Ok(())
+    }
 }

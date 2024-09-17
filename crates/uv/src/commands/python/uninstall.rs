@@ -23,7 +23,7 @@ pub(crate) async fn uninstall(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let installations = ManagedPythonInstallations::from_settings()?.init()?;
-    let _lock = installations.acquire_lock()?;
+    let _lock = installations.lock().await?;
 
     // Perform the uninstallation.
     do_uninstall(&installations, targets, all, printer).await?;
@@ -75,6 +75,8 @@ async fn do_uninstall(
                 anyhow::anyhow!("Cannot uninstall managed Python for request: {request}")
             })
         })
+        // Always include pre-releases in uninstalls
+        .map(|result| result.map(|request| request.with_prereleases(true)))
         .collect::<Result<Vec<_>>>()?;
 
     let installed_installations: Vec<_> = installations.find_all()?.collect();

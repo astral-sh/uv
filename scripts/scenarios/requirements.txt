@@ -46,7 +46,7 @@ nh3==0.2.17
     # via readme-renderer
 packaging==24.0
     # via hatchling
-packse==0.3.34
+packse==0.3.37
     # via -r scripts/scenarios/requirements.in
 pathspec==0.12.1
     # via hatchling

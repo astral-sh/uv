@@ -16,8 +16,8 @@ use uv_git::{GitReference, GitSha, GitUrl};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::{
-    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError,
-    VerbatimParsedUrl,
+    Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
+    ParsedUrlError, VerbatimParsedUrl,
 };
 
 #[derive(Debug, Error)]
@@ -114,6 +114,15 @@ impl Requirement {
             ..self
         })
     }
+
+    /// Return the hashes of the requirement, as specified in the URL fragment.
+    pub fn hashes(&self) -> Option<Hashes> {
+        let RequirementSource::Url { ref url, .. } = self.source else {
+            return None;
+        };
+        let fragment = url.fragment()?;
+        Hashes::parse_fragment(fragment).ok()
+    }
 }
 
 impl From<Requirement> for pep508_rs::Requirement<VerbatimUrl> {
@@ -197,12 +206,14 @@ impl From<Requirement> for pep508_rs::Requirement<VerbatimParsedUrl> {
                 RequirementSource::Directory {
                     install_path,
                     editable,
+                    r#virtual,
                     url,
                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
                     parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
                         url: url.to_url(),
                         install_path,
                         editable,
+                        r#virtual,
                     }),
                     verbatim: url,
                 })),
@@ -360,6 +371,8 @@ pub enum RequirementSource {
         install_path: PathBuf,
         /// For a source tree (a directory), whether to install as an editable.
         editable: bool,
+        /// For a source tree (a directory), whether the project should be built and installed.
+        r#virtual: bool,
         /// The PEP 508 style URL in the format
         /// `file:///<path>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
@@ -379,6 +392,7 @@ impl RequirementSource {
             ParsedUrl::Directory(directory) => RequirementSource::Directory {
                 install_path: directory.install_path.clone(),
                 editable: directory.editable,
+                r#virtual: directory.r#virtual,
                 url,
             },
             ParsedUrl::Git(git) => RequirementSource::Git {
@@ -435,11 +449,13 @@ impl RequirementSource {
             Self::Directory {
                 install_path,
                 editable,
+                r#virtual,
                 url,
             } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
                     install_path.clone(),
                     *editable,
+                    *r#virtual,
                     url.to_url(),
                 )),
                 verbatim: url.clone(),
@@ -515,11 +531,14 @@ impl RequirementSource {
             RequirementSource::Directory {
                 install_path,
                 editable,
+                r#virtual,
                 url,
+                ..
             } => Ok(Self::Directory {
                 install_path: relative_to(&install_path, path)
                     .or_else(|_| std::path::absolute(install_path))?,
                 editable,
+                r#virtual,
                 url,
             }),
         }
@@ -582,6 +601,8 @@ enum RequirementSourceWire {
     Directory { directory: PortablePathBuf },
     /// Ex) `source = { editable = "/home/ferris/iniconfig" }`
     Editable { editable: PortablePathBuf },
+    /// Ex) `source = { editable = "/home/ferris/iniconfig" }`
+    Virtual { r#virtual: PortablePathBuf },
     /// Ex) `source = { specifier = "foo >1,<2" }`
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
@@ -668,11 +689,16 @@ impl From<RequirementSource> for RequirementSourceWire {
             RequirementSource::Directory {
                 install_path,
                 editable,
+                r#virtual,
                 url: _,
             } => {
                 if editable {
                     Self::Editable {
                         editable: PortablePathBuf::from(install_path),
+                    }
+                } else if r#virtual {
+                    Self::Virtual {
+                        r#virtual: PortablePathBuf::from(install_path),
                     }
                 } else {
                     Self::Directory {
@@ -760,6 +786,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 Ok(Self::Directory {
                     install_path: directory,
                     editable: false,
+                    r#virtual: false,
                     url,
                 })
             }
@@ -769,6 +796,17 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 Ok(Self::Directory {
                     install_path: editable,
                     editable: true,
+                    r#virtual: false,
+                    url,
+                })
+            }
+            RequirementSourceWire::Virtual { r#virtual } => {
+                let r#virtual = PathBuf::from(r#virtual);
+                let url = VerbatimUrl::from_path(&r#virtual, &*CWD)?;
+                Ok(Self::Directory {
+                    install_path: r#virtual,
+                    editable: false,
+                    r#virtual: true,
                     url,
                 })
             }
@@ -825,6 +863,7 @@ mod tests {
             source: RequirementSource::Directory {
                 install_path: PathBuf::from(path),
                 editable: false,
+                r#virtual: false,
                 url: VerbatimUrl::from_absolute_path(path).unwrap(),
             },
             origin: None,

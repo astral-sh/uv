@@ -17,8 +17,14 @@ pub enum PubGrubSpecifierError {
 pub struct PubGrubSpecifier(Range<Version>);
 
 impl PubGrubSpecifier {
+    /// Returns an iterator over the bounds of the [`PubGrubSpecifier`].
     pub fn iter(&self) -> impl Iterator<Item = (&Bound<Version>, &Bound<Version>)> {
         self.0.iter()
+    }
+
+    /// Return the bounding [`Range`] of the [`PubGrubSpecifier`].
+    pub fn bounding_range(&self) -> Option<(Bound<&Version>, Bound<&Version>)> {
+        self.0.bounding_range()
     }
 }
 
@@ -85,7 +91,7 @@ impl PubGrubSpecifier {
                 } else {
                     // Per PEP 440: "The exclusive ordered comparison <V MUST NOT allow a
                     // pre-release of the specified version unless the specified version is itself a
-                    // pre-release.
+                    // pre-release."
                     Range::strictly_lower_than(version.with_min(Some(0)))
                 }
             }

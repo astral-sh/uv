@@ -22,11 +22,13 @@ fn help() {
       remove                     Remove dependencies from the project
       sync                       Update the project's environment
       lock                       Update the project's lockfile
+      export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
       venv                       Create a virtual environment
+      build                      Build Python packages into source distributions and wheels
       cache                      Manage uv's cache
       version                    Display uv's version
       generate-shell-completion  Generate shell completion
@@ -85,11 +87,13 @@ fn help_flag() {
       remove   Remove dependencies from the project
       sync     Update the project's environment
       lock     Update the project's lockfile
+      export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
+      build    Build Python packages into source distributions and wheels
       cache    Manage uv's cache
       version  Display uv's version
       help     Display documentation for a command
@@ -146,11 +150,13 @@ fn help_short_flag() {
       remove   Remove dependencies from the project
       sync     Update the project's environment
       lock     Update the project's lockfile
+      export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
+      build    Build Python packages into source distributions and wheels
       cache    Manage uv's cache
       version  Display uv's version
       help     Display documentation for a command
@@ -624,11 +630,13 @@ fn help_unknown_subcommand() {
         remove
         sync
         lock
+        export
         tree
         tool
         python
         pip
         venv
+        build
         cache
         version
         generate-shell-completion
@@ -647,11 +655,13 @@ fn help_unknown_subcommand() {
         remove
         sync
         lock
+        export
         tree
         tool
         python
         pip
         venv
+        build
         cache
         version
         generate-shell-completion
@@ -697,11 +707,13 @@ fn help_with_global_option() {
       remove                     Remove dependencies from the project
       sync                       Update the project's environment
       lock                       Update the project's lockfile
+      export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
       venv                       Create a virtual environment
+      build                      Build Python packages into source distributions and wheels
       cache                      Manage uv's cache
       version                    Display uv's version
       generate-shell-completion  Generate shell completion
@@ -796,11 +808,13 @@ fn help_with_no_pager() {
       remove                     Remove dependencies from the project
       sync                       Update the project's environment
       lock                       Update the project's lockfile
+      export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
       venv                       Create a virtual environment
+      build                      Build Python packages into source distributions and wheels
       cache                      Manage uv's cache
       version                    Display uv's version
       generate-shell-completion  Generate shell completion

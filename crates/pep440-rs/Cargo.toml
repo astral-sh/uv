@@ -27,7 +27,7 @@ unicode-width = { workspace = true }
 unscanny = { workspace = true }
 
 [dev-dependencies]
-indoc = { version = "2.0.4" }
+indoc = { version = "2.0.5" }
 
 [features]
 # Match the API of the published crate, for compatibility.

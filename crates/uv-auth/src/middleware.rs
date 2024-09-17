@@ -205,7 +205,7 @@ impl Middleware for AuthMiddleware {
         // Clone the request so we can retry it on authentication failure
         let mut retry_request = request.try_clone().ok_or_else(|| {
             Error::Middleware(anyhow!(
-                "Request object is not clonable. Are you passing a streaming body?".to_string()
+                "Request object is not cloneable. Are you passing a streaming body?".to_string()
             ))
         })?;
 

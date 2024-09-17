@@ -31,12 +31,6 @@ impl FromStr for PythonVersion {
         if version.epoch() != 0 {
             return Err(format!("Python version `{s}` has a non-zero epoch"));
         }
-        if version.version < Version::new([3, 7]) {
-            return Err(format!("Python version `{s}` must be >= 3.7"));
-        }
-        if version.version >= Version::new([4, 0]) {
-            return Err(format!("Python version `{s}` must be < 4.0"));
-        }
 
         Ok(Self(version))
     }
@@ -84,7 +78,7 @@ impl PythonVersion {
     ///
     /// The returned [`MarkerEnvironment`] will preserve the base environment's platform markers,
     /// but override its Python version markers.
-    pub fn markers(self, base: &MarkerEnvironment) -> MarkerEnvironment {
+    pub fn markers(&self, base: &MarkerEnvironment) -> MarkerEnvironment {
         let mut markers = base.clone();
 
         // Ex) `implementation_version == "3.12.0"`

@@ -3,18 +3,20 @@ use std::fmt::Write;
 use anstream::eprint;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pep508_rs::PackageName;
 use tracing::{debug, enabled, Level};
 
-use distribution_types::{IndexLocations, Resolution, UnresolvedRequirementSpecification};
+use distribution_types::{
+    IndexLocations, NameRequirementSpecification, Resolution, UnresolvedRequirementSpecification,
+};
 use install_wheel_rs::linker::LinkMode;
+use pep508_rs::PackageName;
 use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, Reinstall, SourceStrategy, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, HashCheckingMode,
+    IndexStrategy, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -32,7 +34,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
-use crate::commands::pip::{operations, resolution_environment};
+use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 
@@ -53,6 +55,7 @@ pub(crate) async fn pip_install(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    allow_insecure_host: Vec<TrustedHost>,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -83,7 +86,8 @@ pub(crate) async fn pip_install(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .keyring(keyring_provider)
+        .allow_insecure_host(allow_insecure_host);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -112,10 +116,14 @@ pub(crate) async fn pip_install(
     let build_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
 
-    let constraints: Vec<Requirement> = constraints
+    let constraints: Vec<NameRequirementSpecification> = constraints
         .iter()
         .cloned()
-        .chain(constraints_from_workspace.into_iter())
+        .chain(
+            constraints_from_workspace
+                .into_iter()
+                .map(NameRequirementSpecification::from),
+        )
         .collect();
 
     let overrides: Vec<UnresolvedRequirementSpecification> = overrides
@@ -181,7 +189,15 @@ pub(crate) async fn pip_install(
         }
     }
 
-    let _lock = environment.lock()?;
+    let _lock = environment.lock().await?;
+
+    // Determine the markers to use for the resolution.
+    let interpreter = environment.interpreter();
+    let markers = resolution_markers(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    );
 
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_environment(&environment)?;
@@ -190,7 +206,7 @@ pub(crate) async fn pip_install(
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
     // it's an order of magnitude faster to validate the environment than to resolve the requirements.
     if reinstall.is_none() && upgrade.is_none() && source_trees.is_empty() && overrides.is_empty() {
-        match site_packages.satisfies(&requirements, &constraints)? {
+        match site_packages.satisfies(&requirements, &constraints, &markers)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -216,8 +232,6 @@ pub(crate) async fn pip_install(
         }
     }
 
-    let interpreter = environment.interpreter();
-
     // Determine the Python requirement, if the user requested a specific version.
     let python_requirement = if let Some(python_version) = python_version.as_ref() {
         PythonRequirement::from_python_version(interpreter, python_version)
@@ -225,8 +239,12 @@ pub(crate) async fn pip_install(
         PythonRequirement::from_interpreter(interpreter)
     };
 
-    // Determine the environment for the resolution.
-    let (tags, markers) = resolution_environment(python_version, python_platform, interpreter)?;
+    // Determine the tags to use for the resolution.
+    let tags = resolution_tags(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    )?;
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -234,6 +252,9 @@ pub(crate) async fn pip_install(
             requirements
                 .iter()
                 .chain(overrides.iter())
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            constraints
+                .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             Some(&markers),
             hash_checking,
@@ -258,11 +279,11 @@ pub(crate) async fn pip_install(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::from(client_builder)
+    let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
-        .markers(&markers)
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -285,6 +306,26 @@ pub(crate) async fn pip_install(
         BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
     };
 
+    // Enforce (but never require) the build constraints, if `--require-hashes` or `--verify-hashes`
+    // is provided. _Requiring_ hashes would be too strict, and would break with pip.
+    let build_hasher = if hash_checking.is_some() {
+        HashStrategy::from_requirements(
+            std::iter::empty(),
+            build_constraints
+                .iter()
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            Some(&markers),
+            HashCheckingMode::Verify,
+        )?
+    } else {
+        HashStrategy::None
+    };
+    let build_constraints = Constraints::from_requirements(
+        build_constraints
+            .iter()
+            .map(|constraint| constraint.requirement.clone()),
+    );
+
     // Initialize any shared state.
     let state = SharedState::default();
 
@@ -292,18 +333,20 @@ pub(crate) async fn pip_install(
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
-        &build_constraints,
+        build_constraints,
         interpreter,
         &index_locations,
         &flat_index,
         &state.index,
         &state.git,
+        &state.capabilities,
         &state.in_flight,
         index_strategy,
         config_settings,
         build_isolation,
         link_mode,
         &build_options,
+        &build_hasher,
         exclude_newer,
         sources,
         concurrency,
@@ -333,7 +376,7 @@ pub(crate) async fn pip_install(
         &reinstall,
         &upgrade,
         Some(&tags),
-        ResolverMarkers::specific_environment((*markers).clone()),
+        ResolverMarkers::specific_environment(markers.clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -365,7 +408,9 @@ pub(crate) async fn pip_install(
         link_mode,
         compile,
         &index_locations,
+        config_settings,
         &hasher,
+        &markers,
         &tags,
         &client,
         &state.in_flight,
@@ -384,7 +429,7 @@ pub(crate) async fn pip_install(
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run {
-        operations::diagnose_environment(&resolution, &environment, printer)?;
+        operations::diagnose_environment(&resolution, &environment, &markers, printer)?;
     }
 
     Ok(ExitStatus::Success)

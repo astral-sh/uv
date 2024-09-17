@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::PathBuf;
@@ -12,10 +11,11 @@ use tokio::process::Command;
 use tracing::{debug, warn};
 
 use distribution_types::{Name, UnresolvedRequirementSpecification};
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::MarkerTree;
 use pypi_types::{Requirement, RequirementSource};
-use uv_cache::{Cache, Refresh, Timestamp};
+use uv_cache::{Cache, Refresh};
+use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Concurrency;
@@ -35,6 +35,7 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations;
 use crate::commands::project::{resolve_names, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::tool::Target;
 use crate::commands::{
     project::environment::CachedEnvironment, tool::common::matching_packages, tool_list,
 };
@@ -80,7 +81,7 @@ pub(crate) async fn run(
 ) -> anyhow::Result<ExitStatus> {
     // treat empty command as `uv tool list`
     let Some(command) = command else {
-        return tool_list(false, &cache, printer).await;
+        return tool_list(false, false, &cache, printer).await;
     };
 
     let (target, args) = command.split();
@@ -88,7 +89,11 @@ pub(crate) async fn run(
         return Err(anyhow::anyhow!("No tool command provided"));
     };
 
-    let target = Target::parse(target, from.as_deref())?;
+    let Some(target) = target.to_str() else {
+        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+    };
+
+    let target = Target::parse(target, from.as_deref());
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
     let cache = if target.is_latest() {
@@ -222,10 +227,20 @@ pub(crate) async fn run(
     let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command
-    // TODO(zanieb): Do we want to exit with the code of the child process? Probably.
-    if status.success() {
-        Ok(ExitStatus::Success)
+    if let Some(code) = status.code() {
+        debug!("Command exited with code: {code}");
+        if let Ok(code) = u8::try_from(code) {
+            Ok(ExitStatus::External(code))
+        } else {
+            #[allow(clippy::exit)]
+            std::process::exit(code);
+        }
     } else {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            debug!("Command exited with signal: {:?}", status.signal());
+        }
         Ok(ExitStatus::Failure)
     }
 }
@@ -296,78 +311,6 @@ fn warn_executable_not_provided_by_package(
     }
 }
 
-#[derive(Debug, Clone)]
-enum Target<'a> {
-    /// e.g., `ruff`
-    Unspecified(&'a str),
-    /// e.g., `ruff@0.6.0`
-    Version(&'a str, Version),
-    /// e.g., `ruff@latest`
-    Latest(&'a str),
-    /// e.g., `--from ruff==0.6.0`
-    UserDefined(&'a str, &'a str),
-}
-
-impl<'a> Target<'a> {
-    /// Parse a target into a command name and a requirement.
-    fn parse(target: &'a OsString, from: Option<&'a str>) -> anyhow::Result<Self> {
-        let Some(target_str) = target.to_str() else {
-            return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
-        };
-
-        if let Some(from) = from {
-            return Ok(Self::UserDefined(target_str, from));
-        }
-
-        // e.g. `ruff`, no special handling
-        let Some((name, version)) = target_str.split_once('@') else {
-            return Ok(Self::Unspecified(target_str));
-        };
-
-        // e.g. `ruff@`, warn and treat the whole thing as the command
-        if version.is_empty() {
-            debug!("Ignoring empty version request in command");
-            return Ok(Self::Unspecified(target_str));
-        }
-
-        // e.g., ignore `git+https://github.com/astral-sh/ruff.git@main`
-        if PackageName::from_str(name).is_err() {
-            debug!("Ignoring non-package name `{name}` in command");
-            return Ok(Self::Unspecified(target_str));
-        }
-
-        match version {
-            // e.g., `ruff@latest`
-            "latest" => return Ok(Self::Latest(name)),
-            // e.g., `ruff@0.6.0`
-            version => {
-                if let Ok(version) = Version::from_str(version) {
-                    return Ok(Self::Version(name, version));
-                }
-            }
-        };
-
-        // e.g. `ruff@invalid`, warn and treat the whole thing as the command
-        debug!("Ignoring invalid version request `{version}` in command");
-        Ok(Self::Unspecified(target_str))
-    }
-
-    /// Returns the name of the executable.
-    fn executable(&self) -> &str {
-        match self {
-            Self::Unspecified(name) => name,
-            Self::Version(name, _) => name,
-            Self::Latest(name) => name,
-            Self::UserDefined(name, _) => name,
-        }
-    }
-
-    /// Returns `true` if the target is `latest`.
-    fn is_latest(&self) -> bool {
-        matches!(self, Self::Latest(_))
-    }
-}
-
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
 ///
 /// If the target tool is already installed in a compatible environment, returns that
@@ -397,7 +340,7 @@ async fn get_or_create_environment(
 
     // Discover an interpreter.
     let interpreter = PythonInstallation::find_or_download(
-        python_request.clone(),
+        python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
@@ -425,7 +368,7 @@ async fn get_or_create_environment(
             origin: None,
         },
         // Ex) `ruff@0.6.0`
-        Target::Version(name, version) => Requirement {
+        Target::Version(name, version) | Target::FromVersion(_, name, version) => Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
             marker: MarkerTree::default(),
@@ -438,7 +381,7 @@ async fn get_or_create_environment(
             origin: None,
         },
         // Ex) `ruff@latest`
-        Target::Latest(name) => Requirement {
+        Target::Latest(name) | Target::FromLatest(_, name) => Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
             marker: MarkerTree::default(),
@@ -449,7 +392,7 @@ async fn get_or_create_environment(
             origin: None,
         },
         // Ex) `ruff>=0.6.0`
-        Target::UserDefined(_, from) => resolve_names(
+        Target::From(_, from) => resolve_names(
             vec![RequirementsSpecification::parse_package(from)?],
             &interpreter,
             settings,
@@ -497,7 +440,7 @@ async fn get_or_create_environment(
     // Check if the tool is already installed in a compatible environment.
     if !isolated && !target.is_latest() {
         let installed_tools = InstalledTools::from_settings()?.init()?;
-        let _lock = installed_tools.acquire_lock()?;
+        let _lock = installed_tools.lock().await?;
 
         let existing_environment =
             installed_tools
@@ -519,7 +462,11 @@ async fn get_or_create_environment(
             let constraints = [];
 
             if matches!(
-                site_packages.satisfies(&requirements, &constraints),
+                site_packages.satisfies(
+                    &requirements,
+                    &constraints,
+                    &interpreter.resolver_markers()
+                ),
                 Ok(SatisfiesResult::Fresh { .. })
             ) {
                 debug!("Using existing tool `{}`", from.name);

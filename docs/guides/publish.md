@@ -1,23 +1,34 @@
 # Publishing a package
 
-uv does not yet have dedicated commands for building and publishing a package. Instead, you can use
-the PyPA tools [`build`](https://github.com/pypa/build) and
-[`twine`](https://github.com/pypa/twine), both of which can be invoked via `uvx`.
+uv supports building Python packages into source and binary distributions via `uv build`.
+
+As uv does not yet have a dedicated command for publishing packages, you can use the PyPA tool
+[`twine`](https://github.com/pypa/twine) to upload your package to a package registry, which can be
+invoked via `uvx`.
+
+## Preparing your project for packaging
+
+Before attempting to publish your project, you'll want to make sure it's ready to be packaged for
+distribution.
+
+If your project does not include a `[build-system]` definition in the `pyproject.toml`, uv will not
+build it by default. This means that your project may not be ready for distribution. Read more about
+the effect of declaring a build system in the
+[project concept](../concepts/projects.md#build-systems) documentation.
 
 ## Building your package
 
-Build your package with the official `build` frontend:
+Build your package with `uv build`:
 
 ```console
-$ uvx --from build pyproject-build --installer uv
+$ uv build
 ```
 
-!!! note
+By default, `uv build` will build the project in the current directory, and place the built
+artifacts in a `dist/` subdirectory.
 
-    Using `--installer uv` is not required, but uses uv instead of the default, pip, for faster
-    builds.
-
-The build artifacts will be placed in `dist/`.
+Alternatively, `uv build <SRC>` will build the package in the specified directory, while
+`uv build --package <PACKAGE>` will build the specified package within the current workspace.
 
 ## Publishing your package
 

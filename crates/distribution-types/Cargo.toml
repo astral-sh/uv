@@ -19,6 +19,7 @@ pep440_rs = { workspace = true }
 pep508_rs = { workspace = true, features = ["serde"] }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
+uv-cache-info = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-normalize = { workspace = true }
@@ -28,6 +29,7 @@ fs-err = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
 rkyv = { workspace = true }
+rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

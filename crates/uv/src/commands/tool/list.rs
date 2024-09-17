@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use anyhow::Result;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
@@ -12,9 +13,14 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// List installed tools.
-pub(crate) async fn list(show_paths: bool, cache: &Cache, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn list(
+    show_paths: bool,
+    show_version_specifiers: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?;
-    let _lock = match installed_tools.acquire_lock() {
+    let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
         Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
             writeln!(printer.stderr(), "No tools installed")?;
@@ -50,15 +56,32 @@ pub(crate) async fn list(show_paths: bool, cache: &Cache, printer: Printer) -> R
             }
         };
 
+        let version_specifier = if show_version_specifiers {
+            let specifiers = tool
+                .requirements()
+                .iter()
+                .filter(|req| req.name == name)
+                .map(|req| req.source.to_string())
+                .filter(|s| !s.is_empty())
+                .join(", ");
+            format!(" [required: {specifiers}]")
+        } else {
+            String::new()
+        };
+
         if show_paths {
             writeln!(
                 printer.stdout(),
                 "{} ({})",
-                format!("{name} v{version}").bold(),
-                installed_tools.tool_dir(&name).simplified_display().cyan()
+                format!("{name} v{version}{version_specifier}").bold(),
+                installed_tools.tool_dir(&name).simplified_display().cyan(),
             )?;
         } else {
-            writeln!(printer.stdout(), "{}", format!("{name} v{version}").bold())?;
+            writeln!(
+                printer.stdout(),
+                "{}",
+                format!("{name} v{version}{version_specifier}").bold()
+            )?;
         }
 
         // Output tool entrypoints

@@ -171,10 +171,25 @@ impl Shell {
 
     /// Returns `true` if the given path is on the `PATH` in this shell.
     pub fn contains_path(path: &Path) -> bool {
+        let home_dir = home::home_dir();
         std::env::var_os("PATH")
             .as_ref()
             .iter()
             .flat_map(std::env::split_paths)
+            .map(|path| {
+                // If the first component is `~`, expand to the home directory.
+                if let Some(home_dir) = home_dir.as_ref() {
+                    if path
+                        .components()
+                        .next()
+                        .map(std::path::Component::as_os_str)
+                        == Some("~".as_ref())
+                    {
+                        return home_dir.join(path.components().skip(1).collect::<PathBuf>());
+                    }
+                }
+                path
+            })
             .any(|p| same_file::is_same_file(path, p).unwrap_or(false))
     }
 

@@ -1,23 +1,24 @@
-use std::borrow::Cow;
 use std::env;
-use std::io::stdout;
 use std::path::Path;
 
-use anstream::{eprint, AutoStream};
+use anstream::eprint;
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, UnresolvedRequirementSpecification, Verbatim};
+use distribution_types::{
+    IndexCapabilities, IndexLocations, NameRequirementSpecification,
+    UnresolvedRequirementSpecification, Verbatim,
+};
 use install_wheel_rs::linker::LinkMode;
-use pypi_types::Requirement;
+use pypi_types::{Requirement, SupportedEnvironments};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary,
-    NoBuild, Reinstall, SourceStrategy, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
+    NoBinary, NoBuild, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -41,7 +42,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_environment};
-use crate::commands::ExitStatus;
+use crate::commands::{ExitStatus, OutputWriter};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
@@ -53,6 +54,7 @@ pub(crate) async fn pip_compile(
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    environments: SupportedEnvironments,
     extras: ExtrasSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
@@ -74,6 +76,7 @@ pub(crate) async fn pip_compile(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    allow_insecure_host: Vec<TrustedHost>,
     config_settings: ConfigSettings,
     connectivity: Connectivity,
     no_build_isolation: bool,
@@ -106,7 +109,8 @@ pub(crate) async fn pip_compile(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .keyring(keyring_provider)
+        .allow_insecure_host(allow_insecure_host);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -133,7 +137,11 @@ pub(crate) async fn pip_compile(
     let constraints = constraints
         .iter()
         .cloned()
-        .chain(constraints_from_workspace.into_iter())
+        .chain(
+            constraints_from_workspace
+                .into_iter()
+                .map(NameRequirementSpecification::from),
+        )
         .collect();
 
     let overrides: Vec<UnresolvedRequirementSpecification> = overrides
@@ -171,10 +179,10 @@ pub(crate) async fn pip_compile(
     }
 
     // Find an interpreter to use for building distributions
-    let environments = EnvironmentPreference::from_system_flag(system, false);
+    let environment_preference = EnvironmentPreference::from_system_flag(system, false);
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
-        PythonInstallation::find(&request, environments, python_preference, &cache)
+        PythonInstallation::find(&request, environment_preference, python_preference, &cache)
     } else {
         // TODO(zanieb): The split here hints at a problem with the abstraction; we should be able to use
         // `PythonInstallation::find(...)` here.
@@ -184,7 +192,7 @@ pub(crate) async fn pip_compile(
         } else {
             PythonRequest::default()
         };
-        PythonInstallation::find_best(&request, environments, python_preference, &cache)
+        PythonInstallation::find_best(&request, environment_preference, python_preference, &cache)
     }?
     .into_interpreter();
 
@@ -235,7 +243,7 @@ pub(crate) async fn pip_compile(
                 interpreter.python_version()
             },
         );
-        PythonRequirement::from_requires_python(&interpreter, &requires_python)
+        PythonRequirement::from_requires_python(&interpreter, requires_python)
     } else if let Some(python_version) = python_version.as_ref() {
         PythonRequirement::from_python_version(&interpreter, python_version)
     } else {
@@ -244,14 +252,14 @@ pub(crate) async fn pip_compile(
 
     // Determine the environment for the resolution.
     let (tags, markers) = if universal {
-        (None, ResolverMarkers::universal(vec![]))
+        (
+            None,
+            ResolverMarkers::universal(environments.into_markers()),
+        )
     } else {
         let (tags, markers) =
             resolution_environment(python_version, python_platform, &interpreter)?;
-        (
-            Some(tags),
-            ResolverMarkers::specific_environment((*markers).clone()),
-        )
+        (Some(tags), ResolverMarkers::specific_environment(markers))
     };
 
     // Generate, but don't enforce hashes for the requirements.
@@ -274,7 +282,7 @@ pub(crate) async fn pip_compile(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::from(client_builder)
+    let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
@@ -285,6 +293,7 @@ pub(crate) async fn pip_compile(
     // Read the lockfile, if present.
     let preferences = read_requirements_txt(output_file, &upgrade).await?;
     let git = GitResolver::default();
+    let capabilities = IndexCapabilities::default();
 
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.
     let build_options = build_options.combine(no_binary, no_build);
@@ -311,21 +320,31 @@ pub(crate) async fn pip_compile(
         BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
     };
 
+    // Don't enforce hashes in `pip compile`.
+    let build_hashes = HashStrategy::None;
+    let build_constraints = Constraints::from_requirements(
+        build_constraints
+            .iter()
+            .map(|constraint| constraint.requirement.clone()),
+    );
+
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
-        &build_constraints,
+        build_constraints,
         &interpreter,
         &index_locations,
         &flat_index,
         &source_index,
         &git,
+        &capabilities,
         &in_flight,
         index_strategy,
         &config_settings,
         build_isolation,
         link_mode,
         &build_options,
+        &build_hashes,
         exclude_newer,
         sources,
         concurrency,
@@ -602,55 +621,4 @@ fn cmd(
         .flatten()
         .join(" ");
     format!("uv {args}")
-}
-
-/// A multicasting writer that writes to both the standard output and an output file, if present.
-#[allow(clippy::disallowed_types)]
-struct OutputWriter<'a> {
-    stdout: Option<AutoStream<std::io::Stdout>>,
-    output_file: Option<&'a Path>,
-    buffer: Vec<u8>,
-}
-
-#[allow(clippy::disallowed_types)]
-impl<'a> OutputWriter<'a> {
-    /// Create a new output writer.
-    fn new(include_stdout: bool, output_file: Option<&'a Path>) -> Self {
-        let stdout = include_stdout.then(|| AutoStream::<std::io::Stdout>::auto(stdout()));
-        Self {
-            stdout,
-            output_file,
-            buffer: Vec::new(),
-        }
-    }
-
-    /// Write the given arguments to both standard output and the output buffer, if present.
-    fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> std::io::Result<()> {
-        use std::io::Write;
-
-        // Write to the buffer.
-        if self.output_file.is_some() {
-            self.buffer.write_fmt(args)?;
-        }
-
-        // Write to standard output.
-        if let Some(stdout) = &mut self.stdout {
-            write!(stdout, "{args}")?;
-        }
-
-        Ok(())
-    }
-
-    /// Commit the buffer to the output file.
-    async fn commit(self) -> std::io::Result<()> {
-        if let Some(output_file) = self.output_file {
-            // If the output file is an existing symlink, write to the destination instead.
-            let output_file = fs_err::read_link(output_file)
-                .map(Cow::Owned)
-                .unwrap_or(Cow::Borrowed(output_file));
-            let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
-            uv_fs::write_atomic(output_file, &stream).await?;
-        }
-        Ok(())
-    }
 }

@@ -3,14 +3,14 @@ use regex::Regex;
 use same_file::is_same_file;
 use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
-use std::fmt::{self, Formatter};
+use std::fmt::{self, Debug, Formatter};
 use std::{env, io, iter};
 use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use which::{which, which_all};
 
-use pep440_rs::{Version, VersionSpecifiers};
+use pep440_rs::{Prerelease, Version, VersionSpecifier, VersionSpecifiers};
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
@@ -20,7 +20,10 @@ use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
 use crate::managed::ManagedPythonInstallations;
-use crate::py_launcher::{self, py_list_paths};
+#[cfg(windows)]
+use crate::microsoft_store::find_microsoft_store_pythons;
+#[cfg(windows)]
+use crate::py_launcher::{registry_pythons, WindowsPython};
 use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable,
@@ -133,6 +136,7 @@ pub enum VersionRequest {
     Major(u8),
     MajorMinor(u8, u8),
     MajorMinorPatch(u8, u8, u8),
+    MajorMinorPrerelease(u8, u8, Prerelease),
     Range(VersionSpecifiers),
 }
 
@@ -164,8 +168,10 @@ pub enum PythonSource {
     DiscoveredEnvironment,
     /// An executable was found in the search path i.e. `PATH`
     SearchPath,
-    /// An executable was found via the `py` launcher
-    PyLauncher,
+    /// An executable was found in the Windows registry via PEP 514
+    Registry,
+    /// An executable was found in the known Microsoft Store locations
+    MicrosoftStore,
     /// The Python installation was found in the uv managed Python directory
     Managed,
     /// The Python installation was found via the invoking interpreter i.e. via `python -m uv ...`
@@ -189,9 +195,9 @@ pub enum Error {
     #[error(transparent)]
     VirtualEnv(#[from] crate::virtualenv::Error),
 
-    /// An error was encountered when using the `py` launcher on Windows.
-    #[error(transparent)]
-    PyLauncher(#[from] crate::py_launcher::Error),
+    #[cfg(windows)]
+    #[error("Failed to query installed Python versions from the Windows registry")]
+    RegistryError(#[from] windows_result::Error),
 
     /// An invalid version request was given
     #[error("Invalid version request: {0}")]
@@ -206,7 +212,6 @@ pub enum Error {
 ///
 /// The following sources are supported:
 ///
-/// - Spawning interpreter (via `UV_INTERNAL__PARENT_INTERPRETER`)
 /// - Active virtual environment (via `VIRTUAL_ENV`)
 /// - Active conda environment (via `CONDA_PREFIX`)
 /// - Discovered virtual environment (e.g. `.venv` in a parent directory)
@@ -214,13 +219,6 @@ pub enum Error {
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
 fn python_executables_from_environments<'a>(
 ) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
-    let from_parent_interpreter = std::iter::once_with(|| {
-        std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER")
-            .into_iter()
-            .map(|path| Ok((PythonSource::ParentInterpreter, PathBuf::from(path))))
-    })
-    .flatten();
-
     let from_virtual_environment = std::iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
@@ -248,8 +246,7 @@ fn python_executables_from_environments<'a>(
     })
     .flatten_ok();
 
-    from_parent_interpreter
-        .chain(from_virtual_environment)
+    from_virtual_environment
         .chain(from_conda_environment)
         .chain(from_discovered_environment)
 }
@@ -307,23 +304,46 @@ fn python_executables_from_installed<'a>(
     })
     .flatten();
 
-    // TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python installations from the registry instead.
-    let from_py_launcher = std::iter::once_with(move || {
-        (cfg!(windows) && env::var_os("UV_TEST_PYTHON_PATH").is_none())
-            .then(|| {
-                py_list_paths()
-                    .map(|entries|
-                // We can avoid querying the interpreter using versions from the py launcher output unless a patch is requested
-                entries.into_iter().filter(move |entry|
-                    version.is_none() || version.is_some_and(|version|
-                        version.has_patch() || version.matches_major_minor(entry.major, entry.minor)
-                    )
-                )
-                .map(|entry| (PythonSource::PyLauncher, entry.executable_path)))
-                    .map_err(Error::from)
-            })
-            .into_iter()
-            .flatten_ok()
+    let from_windows = std::iter::once_with(move || {
+        #[cfg(windows)]
+        {
+            // Skip interpreter probing if we already know the version doesn't match.
+            let version_filter = move |entry: &WindowsPython| {
+                if let Some(version_request) = version {
+                    if let Some(version) = &entry.version {
+                        version_request.matches_version(version)
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                }
+            };
+
+            env::var_os("UV_TEST_PYTHON_PATH")
+                .is_none()
+                .then(|| {
+                    registry_pythons()
+                        .map(|entries| {
+                            entries
+                                .into_iter()
+                                .filter(version_filter)
+                                .map(|entry| (PythonSource::Registry, entry.path))
+                                .chain(
+                                    find_microsoft_store_pythons()
+                                        .filter(version_filter)
+                                        .map(|entry| (PythonSource::MicrosoftStore, entry.path)),
+                                )
+                        })
+                        .map_err(Error::from)
+                })
+                .into_iter()
+                .flatten_ok()
+        }
+        #[cfg(not(windows))]
+        {
+            Vec::new()
+        }
     })
     .flatten();
 
@@ -332,14 +352,14 @@ fn python_executables_from_installed<'a>(
         PythonPreference::Managed => Box::new(
             from_managed_installations
                 .chain(from_search_path)
-                .chain(from_py_launcher),
+                .chain(from_windows),
         ),
         PythonPreference::System => Box::new(
             from_search_path
-                .chain(from_py_launcher)
+                .chain(from_windows)
                 .chain(from_managed_installations),
         ),
-        PythonPreference::OnlySystem => Box::new(from_search_path.chain(from_py_launcher)),
+        PythonPreference::OnlySystem => Box::new(from_search_path.chain(from_windows)),
     }
 }
 
@@ -355,15 +375,31 @@ fn python_executables<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
+    // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
+    let from_parent_interpreter = std::iter::once_with(|| {
+        std::env::var_os("UV_INTERNAL__PARENT_INTERPRETER")
+            .into_iter()
+            .map(|path| Ok((PythonSource::ParentInterpreter, PathBuf::from(path))))
+    })
+    .flatten();
+
     let from_environments = python_executables_from_environments();
     let from_installed = python_executables_from_installed(version, implementation, preference);
 
+    // Limit the search to the relevant environment preference; we later validate that they match
+    // the preference but queries are expensive and we query less interpreters this way.
     match environments {
-        EnvironmentPreference::OnlyVirtual => Box::new(from_environments),
-        EnvironmentPreference::ExplicitSystem | EnvironmentPreference::Any => {
-            Box::new(from_environments.chain(from_installed))
+        EnvironmentPreference::OnlyVirtual => {
+            Box::new(from_parent_interpreter.chain(from_environments))
         }
-        EnvironmentPreference::OnlySystem => Box::new(from_installed),
+        EnvironmentPreference::ExplicitSystem | EnvironmentPreference::Any => Box::new(
+            from_parent_interpreter
+                .chain(from_environments)
+                .chain(from_installed),
+        ),
+        EnvironmentPreference::OnlySystem => {
+            Box::new(from_parent_interpreter.chain(from_installed))
+        }
     }
 }
 
@@ -497,9 +533,9 @@ fn find_all_minor(
                 .collect::<Vec<_>>();
             Either::Left(all_minors.into_iter())
         }
-        VersionRequest::MajorMinor(_, _) | VersionRequest::MajorMinorPatch(_, _, _) => {
-            Either::Right(iter::empty())
-        }
+        VersionRequest::MajorMinor(_, _)
+        | VersionRequest::MajorMinorPatch(_, _, _)
+        | VersionRequest::MajorMinorPrerelease(_, _, _) => Either::Right(iter::empty()),
     }
 }
 
@@ -626,11 +662,6 @@ impl Error {
                     false
                 }
             },
-            // Ignore `py` if it's not installed
-            Error::PyLauncher(py_launcher::Error::NotFound) => {
-                debug!("The `py` launcher could not be found to query for Python versions");
-                false
-            }
             _ => true,
         }
     }
@@ -653,10 +684,7 @@ fn python_installation_from_directory(
     cache: &Cache,
 ) -> Result<PythonInstallation, crate::interpreter::Error> {
     let executable = virtualenv_python_executable(path);
-    Ok(PythonInstallation {
-        source: PythonSource::ProvidedPath,
-        interpreter: Interpreter::query(executable, cache)?,
-    })
+    python_installation_from_executable(&executable, cache)
 }
 
 /// Lazily iterate over all Python interpreters on the path with the given executable name.
@@ -756,19 +784,24 @@ pub fn find_python_installations<'a>(
                     .map(FindPythonResult::Ok)
             })
         }),
-        PythonRequest::Version(version) => Box::new({
-            debug!("Searching for {request} in {preference}");
-            python_interpreters(Some(version), None, environments, preference, cache)
-                .filter(|result| match result {
-                    Err(_) => true,
-                    Ok((_source, interpreter)) => version.matches_interpreter(interpreter),
-                })
-                .map(|result| {
-                    result
-                        .map(PythonInstallation::from_tuple)
-                        .map(FindPythonResult::Ok)
-                })
-        }),
+        PythonRequest::Version(version) => {
+            if let Err(err) = version.check_supported() {
+                return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
+            };
+            Box::new({
+                debug!("Searching for {request} in {preference}");
+                python_interpreters(Some(version), None, environments, preference, cache)
+                    .filter(|result| match result {
+                        Err(_) => true,
+                        Ok((_source, interpreter)) => version.matches_interpreter(interpreter),
+                    })
+                    .map(|result| {
+                        result
+                            .map(PythonInstallation::from_tuple)
+                            .map(FindPythonResult::Ok)
+                    })
+            })
+        }
         PythonRequest::Implementation(implementation) => Box::new({
             debug!("Searching for a {request} interpreter in {preference}");
             python_interpreters(None, Some(implementation), environments, preference, cache)
@@ -784,49 +817,61 @@ pub fn find_python_installations<'a>(
                         .map(FindPythonResult::Ok)
                 })
         }),
-        PythonRequest::ImplementationVersion(implementation, version) => Box::new({
-            debug!("Searching for {request} in {preference}");
-            python_interpreters(
-                Some(version),
-                Some(implementation),
-                environments,
-                preference,
-                cache,
-            )
-            .filter(|result| match result {
-                Err(_) => true,
-                Ok((_source, interpreter)) => {
-                    version.matches_interpreter(interpreter)
-                        && interpreter
-                            .implementation_name()
-                            .eq_ignore_ascii_case(implementation.into())
-                }
+        PythonRequest::ImplementationVersion(implementation, version) => {
+            if let Err(err) = version.check_supported() {
+                return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
+            };
+            Box::new({
+                debug!("Searching for {request} in {preference}");
+                python_interpreters(
+                    Some(version),
+                    Some(implementation),
+                    environments,
+                    preference,
+                    cache,
+                )
+                .filter(|result| match result {
+                    Err(_) => true,
+                    Ok((_source, interpreter)) => {
+                        version.matches_interpreter(interpreter)
+                            && interpreter
+                                .implementation_name()
+                                .eq_ignore_ascii_case(implementation.into())
+                    }
+                })
+                .map(|result| {
+                    result
+                        .map(PythonInstallation::from_tuple)
+                        .map(FindPythonResult::Ok)
+                })
             })
-            .map(|result| {
-                result
-                    .map(PythonInstallation::from_tuple)
-                    .map(FindPythonResult::Ok)
+        }
+        PythonRequest::Key(request) => {
+            if let Some(version) = request.version() {
+                if let Err(err) = version.check_supported() {
+                    return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
+                };
+            };
+            Box::new({
+                debug!("Searching for {request} in {preference}");
+                python_interpreters(
+                    request.version(),
+                    request.implementation(),
+                    environments,
+                    preference,
+                    cache,
+                )
+                .filter(|result| match result {
+                    Err(_) => true,
+                    Ok((_source, interpreter)) => request.satisfied_by_interpreter(interpreter),
+                })
+                .map(|result| {
+                    result
+                        .map(PythonInstallation::from_tuple)
+                        .map(FindPythonResult::Ok)
+                })
             })
-        }),
-        PythonRequest::Key(request) => Box::new({
-            debug!("Searching for {request} in {preference}");
-            python_interpreters(
-                request.version(),
-                request.implementation(),
-                environments,
-                preference,
-                cache,
-            )
-            .filter(|result| match result {
-                Err(_) => true,
-                Ok((_source, interpreter)) => request.satisfied_by_interpreter(interpreter),
-            })
-            .map(|result| {
-                result
-                    .map(PythonInstallation::from_tuple)
-                    .map(FindPythonResult::Ok)
-            })
-        }),
+        }
     }
 }
 
@@ -840,19 +885,43 @@ pub(crate) fn find_python_installation(
     preference: PythonPreference,
     cache: &Cache,
 ) -> Result<FindPythonResult, Error> {
-    let mut installations = find_python_installations(request, environments, preference, cache);
-    if let Some(result) = installations.find(|result| {
-        // Return the first critical discovery error or result
-        result.as_ref().err().map_or(true, Error::is_critical)
-    }) {
-        result
-    } else {
-        Ok(FindPythonResult::Err(PythonNotFound {
-            request: request.clone(),
-            environment_preference: environments,
-            python_preference: preference,
-        }))
+    let installations = find_python_installations(request, environments, preference, cache);
+    let mut first_prerelease = None;
+    for result in installations {
+        // Iterate until the first critical error or happy result
+        if !result.as_ref().err().map_or(true, Error::is_critical) {
+            continue;
+        }
+
+        // If it's an error, we're done.
+        let Ok(Ok(ref installation)) = result else {
+            return result;
+        };
+
+        // If it's a pre-release, and pre-releases aren't allowed skip it but store it for later
+        if installation.python_version().pre().is_some()
+            && !request.allows_prereleases()
+            && !installation.source.allows_prereleases()
+        {
+            debug!("Skipping pre-release {}", installation.key());
+            first_prerelease = Some(installation.clone());
+            continue;
+        }
+
+        // If we didn't skip it, this is the installation to use
+        return result;
     }
+
+    // If we only found pre-releases, they're implicitly allowed and we should return the first one
+    if let Some(installation) = first_prerelease {
+        return Ok(Ok(installation));
+    }
+
+    Ok(FindPythonResult::Err(PythonNotFound {
+        request: request.clone(),
+        environment_preference: environments,
+        python_preference: preference,
+    }))
 }
 
 /// Find the best-matching Python installation.
@@ -874,7 +943,7 @@ pub fn find_best_python_installation(
 ) -> Result<FindPythonResult, Error> {
     debug!("Starting Python discovery for {}", request);
 
-    // First, check for an exact match (or the first available version if no Python versfion was provided)
+    // First, check for an exact match (or the first available version if no Python version was provided)
     debug!("Looking for exact match for request {request}");
     let result = find_python_installation(request, environments, preference, cache)?;
     if let Ok(ref installation) = result {
@@ -1017,7 +1086,7 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
             std::ptr::null_mut(),
             OPEN_EXISTING,
             FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
-            0,
+            std::ptr::null_mut(),
         )
     };
 
@@ -1259,6 +1328,17 @@ impl PythonRequest {
         }
     }
 
+    pub(crate) fn allows_prereleases(&self) -> bool {
+        match self {
+            Self::Any => false,
+            Self::Version(version) => version.allows_prereleases(),
+            Self::Directory(_) | Self::File(_) | Self::ExecutableName(_) => true,
+            Self::Implementation(_) => false,
+            Self::ImplementationVersion(_, _) => true,
+            Self::Key(request) => request.allows_prereleases(),
+        }
+    }
+
     pub(crate) fn is_explicit_system(&self) -> bool {
         matches!(self, Self::File(_) | Self::Directory(_))
     }
@@ -1283,8 +1363,20 @@ impl PythonRequest {
 }
 
 impl PythonSource {
-    pub fn is_managed(&self) -> bool {
+    pub fn is_managed(self) -> bool {
         matches!(self, Self::Managed)
+    }
+
+    /// Whether a pre-release Python installation from the source should be used without opt-in.
+    pub(crate) fn allows_prereleases(self) -> bool {
+        match self {
+            Self::Managed | Self::Registry | Self::SearchPath | Self::MicrosoftStore => false,
+            Self::CondaPrefix
+            | Self::ProvidedPath
+            | Self::ParentInterpreter
+            | Self::ActiveEnvironment
+            | Self::DiscoveredEnvironment => true,
+        }
     }
 }
 
@@ -1293,7 +1385,7 @@ impl PythonPreference {
         // If not dealing with a system interpreter source, we don't care about the preference
         if !matches!(
             source,
-            PythonSource::Managed | PythonSource::SearchPath | PythonSource::PyLauncher
+            PythonSource::Managed | PythonSource::SearchPath | PythonSource::Registry
         ) {
             return true;
         }
@@ -1302,10 +1394,10 @@ impl PythonPreference {
             PythonPreference::OnlyManaged => matches!(source, PythonSource::Managed),
             Self::Managed | Self::System => matches!(
                 source,
-                PythonSource::Managed | PythonSource::SearchPath | PythonSource::PyLauncher
+                PythonSource::Managed | PythonSource::SearchPath | PythonSource::Registry
             ),
             PythonPreference::OnlySystem => {
-                matches!(source, PythonSource::SearchPath | PythonSource::PyLauncher)
+                matches!(source, PythonSource::SearchPath | PythonSource::Registry)
             }
         }
     }
@@ -1377,6 +1469,14 @@ impl VersionRequest {
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
             ],
+            Self::MajorMinorPrerelease(major, minor, prerelease) => [
+                Some(Cow::Owned(format!(
+                    "python{major}.{minor}{prerelease}{extension}",
+                ))),
+                Some(Cow::Owned(format!("python{major}{extension}"))),
+                Some(python),
+                None,
+            ],
         }
     }
 
@@ -1420,10 +1520,56 @@ impl VersionRequest {
                         Some(Cow::Owned(format!("{name}{major}{extension}"))),
                         Some(python),
                     ],
+                    Self::MajorMinorPrerelease(major, minor, prerelease) => [
+                        Some(Cow::Owned(format!(
+                            "{name}{major}.{minor}{prerelease}{extension}",
+                        ))),
+                        Some(Cow::Owned(format!("{name}{major}{extension}"))),
+                        Some(python),
+                        None,
+                    ],
                 }
             })
             .chain(self.default_names())
             .flatten()
+    }
+
+    pub(crate) fn check_supported(&self) -> Result<(), String> {
+        match self {
+            Self::Any => (),
+            Self::Major(major) => {
+                if *major < 3 {
+                    return Err(format!(
+                        "Python <3 is not supported but {major} was requested."
+                    ));
+                }
+            }
+            Self::MajorMinor(major, minor) => {
+                if (*major, *minor) < (3, 7) {
+                    return Err(format!(
+                        "Python <3.7 is not supported but {major}.{minor} was requested."
+                    ));
+                }
+            }
+            Self::MajorMinorPatch(major, minor, patch) => {
+                if (*major, *minor) < (3, 7) {
+                    return Err(format!(
+                        "Python <3.7 is not supported but {major}.{minor}.{patch} was requested."
+                    ));
+                }
+            }
+            Self::MajorMinorPrerelease(major, minor, prerelease) => {
+                if (*major, *minor) < (3, 7) {
+                    return Err(format!(
+                        "Python <3.7 is not supported but {major}.{minor}{prerelease} was requested."
+                    ));
+                }
+            }
+            // TODO(zanieb): We could do some checking here to see if the range can be satisfied
+            Self::Range(_) => (),
+        }
+
+        Ok(())
     }
 
     /// Check if a interpreter matches the requested Python version.
@@ -1441,7 +1587,21 @@ impl VersionRequest {
                     interpreter.python_patch(),
                 ) == (*major, *minor, *patch)
             }
-            Self::Range(specifiers) => specifiers.contains(interpreter.python_version()),
+            Self::Range(specifiers) => {
+                let version = interpreter.python_version().only_release();
+                specifiers.contains(&version)
+            }
+            Self::MajorMinorPrerelease(major, minor, prerelease) => {
+                let version = interpreter.python_version();
+                let Some(interpreter_prerelease) = version.pre() else {
+                    return false;
+                };
+                (
+                    interpreter.python_major(),
+                    interpreter.python_minor(),
+                    interpreter_prerelease,
+                ) == (*major, *minor, *prerelease)
+            }
         }
     }
 
@@ -1457,6 +1617,10 @@ impl VersionRequest {
                     == (*major, *minor, Some(*patch))
             }
             Self::Range(specifiers) => specifiers.contains(&version.version),
+            Self::MajorMinorPrerelease(major, minor, prerelease) => {
+                (version.major(), version.minor(), version.pre())
+                    == (*major, *minor, Some(*prerelease))
+            }
         }
     }
 
@@ -1472,6 +1636,9 @@ impl VersionRequest {
             }
             Self::Range(specifiers) => {
                 specifiers.contains(&Version::new([u64::from(major), u64::from(minor)]))
+            }
+            Self::MajorMinorPrerelease(self_major, self_minor, _) => {
+                (*self_major, *self_minor) == (major, minor)
             }
         }
     }
@@ -1491,6 +1658,10 @@ impl VersionRequest {
                 u64::from(minor),
                 u64::from(patch),
             ])),
+            Self::MajorMinorPrerelease(self_major, self_minor, _) => {
+                // Pre-releases of Python versions are always for the zero patch version
+                (*self_major, *self_minor, 0) == (major, minor, patch)
+            }
         }
     }
 
@@ -1501,6 +1672,7 @@ impl VersionRequest {
             Self::Major(..) => false,
             Self::MajorMinor(..) => false,
             Self::MajorMinorPatch(..) => true,
+            Self::MajorMinorPrerelease(..) => false,
             Self::Range(_) => false,
         }
     }
@@ -1515,7 +1687,22 @@ impl VersionRequest {
             Self::Major(major) => Self::Major(major),
             Self::MajorMinor(major, minor) => Self::MajorMinor(major, minor),
             Self::MajorMinorPatch(major, minor, _) => Self::MajorMinor(major, minor),
+            Self::MajorMinorPrerelease(major, minor, prerelease) => {
+                Self::MajorMinorPrerelease(major, minor, prerelease)
+            }
             Self::Range(_) => self,
+        }
+    }
+
+    /// Whether this request should allow selection of pre-release versions.
+    pub(crate) fn allows_prereleases(&self) -> bool {
+        match self {
+            Self::Any => false,
+            Self::Major(_) => true,
+            Self::MajorMinor(..) => true,
+            Self::MajorMinorPatch(..) => true,
+            Self::MajorMinorPrerelease(..) => true,
+            Self::Range(specifiers) => specifiers.iter().any(VersionSpecifier::any_prerelease),
         }
     }
 }
@@ -1524,48 +1711,66 @@ impl FromStr for VersionRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        fn parse_nosep(s: &str) -> Option<VersionRequest> {
-            let mut chars = s.chars();
-            let major = chars.next()?.to_digit(10)?.try_into().ok()?;
-            if chars.as_str().is_empty() {
-                return Some(VersionRequest::Major(major));
-            }
-            let minor = chars.as_str().parse::<u8>().ok()?;
-            Some(VersionRequest::MajorMinor(major, minor))
+        let Ok(version) = Version::from_str(s) else {
+            return parse_version_specifiers_request(s);
+        };
+
+        // Split the release component if it uses the wheel tag format (e.g., `38`)
+        let version = split_wheel_tag_release_version(version);
+
+        // We dont allow post, dev, or local versions here
+        if version.post().is_some() || version.dev().is_some() || !version.local().is_empty() {
+            return Err(Error::InvalidVersionRequest(s.to_string()));
         }
 
-        // e.g. `3`, `38`, `312`
-        if let Some(request) = parse_nosep(s) {
-            Ok(request)
-        }
-        // e.g. `3.12.1`
-        else if let Ok(versions) = s
-            .splitn(3, '.')
-            .map(str::parse::<u8>)
-            .collect::<Result<Vec<_>, _>>()
-        {
-            let selector = match versions.as_slice() {
-                // e.g. `3`
-                [major] => VersionRequest::Major(*major),
-                // e.g. `3.10`
-                [major, minor] => VersionRequest::MajorMinor(*major, *minor),
-                // e.g. `3.10.4`
-                [major, minor, patch] => VersionRequest::MajorMinorPatch(*major, *minor, *patch),
-                _ => unreachable!(),
-            };
+        // Cast the release components into u8s since that's what we use in `VersionRequest`
+        let Ok(release) = try_into_u8_slice(version.release()) else {
+            return Err(Error::InvalidVersionRequest(s.to_string()));
+        };
 
-            Ok(selector)
+        let prerelease = version.pre();
 
-        // e.g. `>=3.12.1,<3.12`
-        } else if let Ok(specifiers) = VersionSpecifiers::from_str(s) {
-            if specifiers.is_empty() {
-                return Err(Error::InvalidVersionRequest(s.to_string()));
+        match release.as_slice() {
+            // e.g. `3
+            [major] => {
+                // Prereleases are not allowed here, e.g., `3rc1` doesn't make sense
+                if prerelease.is_some() {
+                    return Err(Error::InvalidVersionRequest(s.to_string()));
+                }
+                Ok(Self::Major(*major))
             }
-            Ok(Self::Range(specifiers))
-        } else {
-            Err(Error::InvalidVersionRequest(s.to_string()))
+            // e.g. `3.12` or `312` or `3.13rc1`
+            [major, minor] => {
+                if let Some(prerelease) = prerelease {
+                    return Ok(Self::MajorMinorPrerelease(*major, *minor, prerelease));
+                }
+                Ok(Self::MajorMinor(*major, *minor))
+            }
+            // e.g. `3.12.1` or `3.13.0rc1`
+            [major, minor, patch] => {
+                if let Some(prerelease) = prerelease {
+                    // Prereleases are only allowed for the first patch version, e.g, 3.12.2rc1
+                    // isn't a proper Python release
+                    if *patch != 0 {
+                        return Err(Error::InvalidVersionRequest(s.to_string()));
+                    }
+                    return Ok(Self::MajorMinorPrerelease(*major, *minor, prerelease));
+                }
+                Ok(Self::MajorMinorPatch(*major, *minor, *patch))
+            }
+            _ => Err(Error::InvalidVersionRequest(s.to_string())),
         }
     }
+}
+
+fn parse_version_specifiers_request(s: &str) -> Result<VersionRequest, Error> {
+    let Ok(specifiers) = VersionSpecifiers::from_str(s) else {
+        return Err(Error::InvalidVersionRequest(s.to_string()));
+    };
+    if specifiers.is_empty() {
+        return Err(Error::InvalidVersionRequest(s.to_string()));
+    }
+    Ok(VersionRequest::Range(specifiers))
 }
 
 impl From<&PythonVersion> for VersionRequest {
@@ -1583,6 +1788,9 @@ impl fmt::Display for VersionRequest {
             Self::MajorMinor(major, minor) => write!(f, "{major}.{minor}"),
             Self::MajorMinorPatch(major, minor, patch) => {
                 write!(f, "{major}.{minor}.{patch}")
+            }
+            Self::MajorMinorPrerelease(major, minor, prerelease) => {
+                write!(f, "{major}.{minor}{prerelease}")
             }
             Self::Range(specifiers) => write!(f, "{specifiers}"),
         }
@@ -1616,7 +1824,8 @@ impl fmt::Display for PythonSource {
             Self::CondaPrefix => f.write_str("conda prefix"),
             Self::DiscoveredEnvironment => f.write_str("virtual environment"),
             Self::SearchPath => f.write_str("search path"),
-            Self::PyLauncher => f.write_str("`py` launcher output"),
+            Self::Registry => f.write_str("registry"),
+            Self::MicrosoftStore => f.write_str("Microsoft Store"),
             Self::Managed => f.write_str("managed installations"),
             Self::ParentInterpreter => f.write_str("parent interpreter"),
         }
@@ -1699,11 +1908,47 @@ fn conjunction(items: &[&str]) -> String {
     }
 }
 
+fn try_into_u8_slice(release: &[u64]) -> Result<Vec<u8>, std::num::TryFromIntError> {
+    release
+        .iter()
+        .map(|x| match (*x).try_into() {
+            Ok(x) => Ok(x),
+            Err(e) => Err(e),
+        })
+        .collect()
+}
+
+/// Convert a wheel tag formatted version (e.g., `38`) to multiple components (e.g., `3.8`).
+///
+/// The major version is always assumed to be a single digit 0-9. The minor version is all of
+/// the following content.
+///
+/// If not a wheel tag formatted version, the input is returned unchanged.
+fn split_wheel_tag_release_version(version: Version) -> Version {
+    let release = version.release();
+    if release.len() != 1 {
+        return version;
+    }
+
+    let release = release[0].to_string();
+    let mut chars = release.chars();
+    let Some(major) = chars.next().and_then(|c| c.to_digit(10)) else {
+        return version;
+    };
+
+    let Ok(minor) = chars.as_str().parse::<u32>() else {
+        return version;
+    };
+
+    version.with_release([u64::from(major), u64::from(minor)])
+}
+
 #[cfg(test)]
 mod tests {
     use std::{path::PathBuf, str::FromStr};
 
     use assert_fs::{prelude::*, TempDir};
+    use pep440_rs::{Prerelease, PrereleaseKind};
     use test_log::test;
 
     use crate::{
@@ -1729,9 +1974,33 @@ mod tests {
             PythonRequest::Version(VersionRequest::from_str(">=3.12,<3.13").unwrap())
         );
         assert_eq!(
-            PythonRequest::parse("foo"),
-            PythonRequest::ExecutableName("foo".to_string())
+            PythonRequest::parse(">=3.12,<3.13"),
+            PythonRequest::Version(VersionRequest::from_str(">=3.12,<3.13").unwrap())
         );
+
+        assert_eq!(
+            PythonRequest::parse("3.13.0a1"),
+            PythonRequest::Version(VersionRequest::from_str("3.13.0a1").unwrap())
+        );
+        assert_eq!(
+            PythonRequest::parse("3.13.0b5"),
+            PythonRequest::Version(VersionRequest::from_str("3.13.0b5").unwrap())
+        );
+        assert_eq!(
+            PythonRequest::parse("3.13.0rc1"),
+            PythonRequest::Version(VersionRequest::from_str("3.13.0rc1").unwrap())
+        );
+        assert_eq!(
+            PythonRequest::parse("3.13.1rc1"),
+            PythonRequest::ExecutableName("3.13.1rc1".to_string()),
+            "Pre-release version requests require a patch version of zero"
+        );
+        assert_eq!(
+            PythonRequest::parse("3rc1"),
+            PythonRequest::ExecutableName("3rc1".to_string()),
+            "Pre-release version requests require a minor version"
+        );
+
         assert_eq!(
             PythonRequest::parse("cpython"),
             PythonRequest::Implementation(ImplementationName::CPython)
@@ -1868,6 +2137,31 @@ mod tests {
                 .to_canonical_string(),
             ">=3.12, <3.13"
         );
+
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str("3.13.0a1").unwrap())
+                .to_canonical_string(),
+            "3.13a1"
+        );
+
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str("3.13.0b5").unwrap())
+                .to_canonical_string(),
+            "3.13b5"
+        );
+
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str("3.13.0rc1").unwrap())
+                .to_canonical_string(),
+            "3.13rc1"
+        );
+
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str("313rc4").unwrap())
+                .to_canonical_string(),
+            "3.13rc4"
+        );
+
         assert_eq!(
             PythonRequest::ExecutableName("foo".to_string()).to_canonical_string(),
             "foo"
@@ -1963,6 +2257,85 @@ mod tests {
         assert_eq!(
             VersionRequest::from_str("3100").unwrap(),
             VersionRequest::MajorMinor(3, 100)
+        );
+        assert_eq!(
+            VersionRequest::from_str("3.13a1").unwrap(),
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                13,
+                Prerelease {
+                    kind: PrereleaseKind::Alpha,
+                    number: 1
+                }
+            )
+        );
+        assert_eq!(
+            VersionRequest::from_str("313b1").unwrap(),
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                13,
+                Prerelease {
+                    kind: PrereleaseKind::Beta,
+                    number: 1
+                }
+            )
+        );
+        assert_eq!(
+            VersionRequest::from_str("3.13.0b2").unwrap(),
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                13,
+                Prerelease {
+                    kind: PrereleaseKind::Beta,
+                    number: 2
+                }
+            )
+        );
+        assert_eq!(
+            VersionRequest::from_str("3.13.0rc3").unwrap(),
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                13,
+                Prerelease {
+                    kind: PrereleaseKind::Rc,
+                    number: 3
+                }
+            )
+        );
+        assert!(
+            matches!(
+                VersionRequest::from_str("3rc1"),
+                Err(Error::InvalidVersionRequest(_))
+            ),
+            "Pre-release version requests require a minor version"
+        );
+        assert!(
+            matches!(
+                VersionRequest::from_str("3.13.2rc1"),
+                Err(Error::InvalidVersionRequest(_))
+            ),
+            "Pre-release version requests require a patch version of zero"
+        );
+        assert!(
+            matches!(
+                VersionRequest::from_str("3.12-dev"),
+                Err(Error::InvalidVersionRequest(_))
+            ),
+            "Development version segments are not allowed"
+        );
+        assert!(
+            matches!(
+                VersionRequest::from_str("3.12+local"),
+                Err(Error::InvalidVersionRequest(_))
+            ),
+            "Local version segments are not allowed"
+        );
+        assert!(
+            matches!(
+                VersionRequest::from_str("3.12.post0"),
+                Err(Error::InvalidVersionRequest(_))
+            ),
+            "Post version segments are not allowed"
         );
         assert!(
             // Test for overflow

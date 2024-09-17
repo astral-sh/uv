@@ -309,6 +309,8 @@ pub struct DirectorySourceDist {
     pub install_path: PathBuf,
     /// Whether the package should be installed in editable mode.
     pub editable: bool,
+    /// Whether the package should be built and installed.
+    pub r#virtual: bool,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -404,6 +406,7 @@ impl Dist {
         url: VerbatimUrl,
         install_path: &Path,
         editable: bool,
+        r#virtual: bool,
     ) -> Result<Dist, Error> {
         // Convert to an absolute path.
         let install_path = path::absolute(install_path)?;
@@ -421,6 +424,7 @@ impl Dist {
             name,
             install_path,
             editable,
+            r#virtual,
             url,
         })))
     }
@@ -458,6 +462,7 @@ impl Dist {
                 url.verbatim,
                 &directory.install_path,
                 directory.editable,
+                directory.r#virtual,
             ),
             ParsedUrl::Git(git) => {
                 Self::from_git_url(name, url.verbatim, git.url, git.subdirectory)

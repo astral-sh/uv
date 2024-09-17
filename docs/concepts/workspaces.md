@@ -29,26 +29,6 @@ which direct the workspace to include or exclude specific directories as members
 accept lists of globs:
 
 ```toml title="pyproject.toml"
-[tool.uv.workspace]
-members = ["packages/*", "examples/*"]
-exclude = ["example/excluded_example"]
-```
-
-In this example, the workspace includes all packages in the `packages` directory and all examples in
-the `examples` directory, with the exception of the `example/excluded_example` directory.
-
-Every directory included by the `members` globs (and not excluded by the `exclude` globs) must
-contain a `pyproject.toml` file; in other words, every member must be a valid Python package, or
-workspace discovery will raise an error.
-
-## Workspace roots
-
-Every workspace needs a workspace root, which can either be explicit or "virtual".
-
-An explicit root is a directory that is itself a valid Python package, and thus a valid workspace
-member, as in:
-
-```toml title="pyproject.toml"
 [project]
 name = "albatross"
 version = "0.1.0"
@@ -60,37 +40,25 @@ bird-feeder = { workspace = true }
 
 [tool.uv.workspace]
 members = ["packages/*"]
+exclude = ["packages/seeds"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 ```
 
-A virtual root is a directory that is _not_ a valid Python package, but contains a `pyproject.toml`
-with a `tool.uv.workspace` table. In other words, the `pyproject.toml` exists to define the
-workspace, but does not itself define a package, as in:
+Every directory included by the `members` globs (and not excluded by the `exclude` globs) must
+contain a `pyproject.toml` file. However, workspace members can be _either_
+[applications](./projects.md#applications) or [libraries](./projects.md#libraries); both are
+supported in the workspace context.
 
-```toml title="pyproject.toml"
-[tool.uv.workspace]
-members = ["packages/*"]
-```
+Every workspace needs a root, which is _also_ a workspace member. In the above example, `albatross`
+is the workspace root, and the workspace members include all projects under the `packages`
+directory, with the exception of `seeds`.
 
-A virtual root _must not_ contain a `[project]` table, as the inclusion of a `[project]` table
-implies the directory is a package, and thus an explicit root. As such, virtual roots cannot define
-their own dependencies; however, they _can_ define development dependencies as in:
-
-```toml title="pyproject.toml"
-[tool.uv.workspace]
-members = ["packages/*"]
-
-[tool.uv]
-dev-dependencies = ["ruff==0.5.0"]
-```
-
-By default, `uv run` and `uv sync` operates on the workspace root, if it's explicit. For example, in
-the above example, `uv run` and `uv run --package albatross` would be equivalent. For virtual
-workspaces, `uv run` and `uv sync` instead sync all workspace members, since the root is not a
-member itself.
+By default, `uv run` and `uv sync` operates on the workspace root. For example, in the above
+example, `uv run` and `uv run --package albatross` would be equivalent, while
+`uv run --package bird-feeder` would run the command in the `bird-feeder` package.
 
 ## Workspace sources
 
@@ -115,7 +83,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 ```
 
-In this example, the `albatross` package depends on the `bird-feeder` package, which is a member of
+In this example, the `albatross` project depends on the `bird-feeder` project, which is a member of
 the workspace. The `workspace = true` key-value pair in the `tool.uv.sources` table indicates the
 `bird-feeder` dependency should be provided by the workspace, rather than fetched from PyPI or
 another registry.
@@ -147,13 +115,11 @@ overrides the `tqdm` entry in its own `tool.uv.sources` table.
 
 ## Workspace layouts
 
-In general, there are two common layouts for workspaces, which map to the two kinds of workspace
-roots: a **root package with helpers** (for explicit roots) and a **flat workspace** (for virtual
-roots).
+The most common workspace layout can be thought of as a root project with a series of accompanying
+libraries.
 
-In the former case, the workspace includes an explicit workspace root, with peripheral packages or
-libraries defined in `packages`. For example, here, `albatross` is an explicit workspace root, and
-`bird-feeder` and `seeds` are workspace members:
+For example, continuing with the above example, this workspace has an explicit root at `albatross`,
+with two libraries (`bird-feeder` and `seeds`) in the `packages` directory:
 
 ```text
 albatross
@@ -178,34 +144,8 @@ albatross
         └── main.py
 ```
 
-In the latter case, _all_ members are located in the `packages` directory, and the root
-`pyproject.toml` comprises a virtual root:
-
-```text
-albatross
-├── packages
-│   ├── albatross
-│   │   ├── pyproject.toml
-│   │   └── src
-│   │       └── albatross
-│   │           ├── __init__.py
-│   │           └── foo.py
-│   ├── bird-feeder
-│   │   ├── pyproject.toml
-│   │   └── src
-│   │       └── bird_feeder
-│   │           ├── __init__.py
-│   │           └── foo.py
-│   └── seeds
-│       ├── pyproject.toml
-│       └── src
-│           └── seeds
-│               ├── __init__.py
-│               └── bar.py
-├── pyproject.toml
-├── README.md
-└── uv.lock
-```
+Since `seeds` was excluded in the `pyproject.toml`, the workspace has two members total: `albatross`
+(the root) and `bird-feeder`.
 
 ## When (not) to use workspaces
 

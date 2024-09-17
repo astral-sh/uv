@@ -17,8 +17,9 @@ use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
 use platform_tags::Platform;
 use platform_tags::{Tags, TagsError};
-use pypi_types::Scheme;
-use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
+use pypi_types::{ResolverMarkerEnvironment, Scheme};
+use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
+use uv_cache_info::Timestamp;
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 
 use crate::implementation::LenientImplementationName;
@@ -142,6 +143,11 @@ impl Interpreter {
         &self.markers
     }
 
+    /// Return the [`ResolverMarkerEnvironment`] for this Python executable.
+    pub fn resolver_markers(&self) -> ResolverMarkerEnvironment {
+        ResolverMarkerEnvironment::from(self.markers().clone())
+    }
+
     /// Returns the [`PythonInstallationKey`] for this interpreter.
     pub fn key(&self) -> PythonInstallationKey {
         PythonInstallationKey::new(
@@ -149,6 +155,10 @@ impl Interpreter {
             self.python_major(),
             self.python_minor(),
             self.python_patch(),
+            self.python_version()
+                .pre()
+                .map(|pre| pre.to_string())
+                .unwrap_or_default(),
             self.os(),
             self.arch(),
             self.libc(),
@@ -686,7 +696,7 @@ impl InterpreterInfo {
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
     pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
-        let absolute = uv_fs::absolutize_path(executable)?;
+        let absolute = std::path::absolute(executable)?;
 
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,

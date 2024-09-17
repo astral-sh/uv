@@ -1,0 +1,76 @@
+---
+source: crates/uv-resolver/src/lock/mod.rs
+expression: result
+---
+Ok(
+    Lock {
+        version: 1,
+        fork_markers: [],
+        supported_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            exclude_newer: None,
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "anyio",
+                    ),
+                    version: "4.3.0",
+                    source: Directory(
+                        "path/to/dir",
+                    ),
+                },
+                sdist: None,
+                wheels: [],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dev_dependencies: {},
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    requires_dev: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "anyio",
+                ),
+                version: "4.3.0",
+                source: Directory(
+                    "path/to/dir",
+                ),
+            }: 0,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            constraints: {},
+            overrides: {},
+        },
+    },
+)

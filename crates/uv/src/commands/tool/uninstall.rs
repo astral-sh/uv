@@ -13,13 +13,16 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Uninstall a tool.
-pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
-    let _lock = match installed_tools.acquire_lock() {
+    let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
         Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-            if let Some(name) = name {
-                bail!("`{name}` is not installed");
+            if !name.is_empty() {
+                for name in name {
+                    writeln!(printer.stderr(), "`{name}` is not installed")?;
+                }
+                return Ok(ExitStatus::Success);
             }
             writeln!(printer.stderr(), "Nothing to uninstall")?;
             return Ok(ExitStatus::Success);
@@ -32,10 +35,14 @@ pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Re
 
     // Clean up any empty directories.
     if uv_fs::directories(installed_tools.root()).all(|path| uv_fs::is_temporary(&path)) {
-        fs_err::tokio::remove_dir_all(&installed_tools.root()).await?;
+        fs_err::tokio::remove_dir_all(&installed_tools.root())
+            .await
+            .ignore_currently_being_deleted()?;
         if let Some(top_level) = installed_tools.root().parent() {
             if uv_fs::directories(top_level).all(|path| uv_fs::is_temporary(&path)) {
-                fs_err::tokio::remove_dir_all(top_level).await?;
+                fs_err::tokio::remove_dir_all(top_level)
+                    .await
+                    .ignore_currently_being_deleted()?;
             }
         }
     }
@@ -43,35 +50,52 @@ pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Re
     Ok(ExitStatus::Success)
 }
 
+trait IoErrorExt: std::error::Error + 'static {
+    #[inline]
+    fn is_in_process_of_being_deleted(&self) -> bool {
+        if cfg!(target_os = "windows") {
+            use std::error::Error;
+            let mut e: &dyn Error = &self;
+            loop {
+                if e.to_string().contains("The file cannot be opened because it is in the process of being deleted. (os error 303)") {
+                    return true;
+                }
+                e = match e.source() {
+                    Some(e) => e,
+                    None => break,
+                }
+            }
+        }
+
+        false
+    }
+}
+
+impl IoErrorExt for std::io::Error {}
+
+/// An extension trait to suppress "cannot open file because it's currently being deleted"
+trait IgnoreCurrentlyBeingDeleted {
+    fn ignore_currently_being_deleted(self) -> Self;
+}
+
+impl IgnoreCurrentlyBeingDeleted for Result<(), std::io::Error> {
+    fn ignore_currently_being_deleted(self) -> Self {
+        match self {
+            Ok(()) => Ok(()),
+            Err(err) if err.is_in_process_of_being_deleted() => Ok(()),
+            Err(err) => Err(err),
+        }
+    }
+}
+
 /// Perform the uninstallation.
 async fn do_uninstall(
     installed_tools: &InstalledTools,
-    name: Option<PackageName>,
+    names: Vec<PackageName>,
     printer: Printer,
 ) -> Result<()> {
     let mut dangling = false;
-    let mut entrypoints = if let Some(name) = name {
-        let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
-            // If the tool is not installed, attempt to remove the environment anyway.
-            match installed_tools.remove_environment(&name) {
-                Ok(()) => {
-                    writeln!(
-                        printer.stderr(),
-                        "Removed dangling environment for `{name}`"
-                    )?;
-                    return Ok(());
-                }
-                Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                    bail!("`{name}` is not installed");
-                }
-                Err(err) => {
-                    return Err(err.into());
-                }
-            }
-        };
-
-        uninstall_tool(&name, &receipt, installed_tools).await?
-    } else {
+    let mut entrypoints = if names.is_empty() {
         let mut entrypoints = vec![];
         for (name, receipt) in installed_tools.tools()? {
             let Ok(receipt) = receipt else {
@@ -84,6 +108,31 @@ async fn do_uninstall(
                             "Removed dangling environment for `{name}`"
                         )?;
                         continue;
+                    }
+                    Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                        bail!("`{name}` is not installed");
+                    }
+                    Err(err) => {
+                        return Err(err.into());
+                    }
+                }
+            };
+
+            entrypoints.extend(uninstall_tool(&name, &receipt, installed_tools).await?);
+        }
+        entrypoints
+    } else {
+        let mut entrypoints = vec![];
+        for name in names {
+            let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
+                // If the tool is not installed properly, attempt to remove the environment anyway.
+                match installed_tools.remove_environment(&name) {
+                    Ok(()) => {
+                        writeln!(
+                            printer.stderr(),
+                            "Removed dangling environment for `{name}`"
+                        )?;
+                        return Ok(());
                     }
                     Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                         bail!("`{name}` is not installed");

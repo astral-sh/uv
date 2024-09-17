@@ -23,7 +23,7 @@ An extremely fast Python package and project manager, written in Rust.
 - ❇️ [Runs scripts](#script-support), with support for
   [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
 - 🗂️ Provides [comprehensive project management](#project-management), with a
-  [universal lockfile](./concepts/projects.md#lockfile).
+  [universal lockfile](./concepts/projects.md#project-lockfile).
 - 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
   familiar CLI.
 - 🏢 Supports Cargo-style [workspaces](./concepts/workspaces.md) for scalable projects.
@@ -38,13 +38,17 @@ uv is backed by [Astral](https://astral.sh), the creators of
 
 Install uv with our official standalone installer:
 
-```console title="macOS and Linux"
-$ curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+=== "macOS and Linux"
 
-```console title="Windows"
-$ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
+    ```console
+    $ curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+=== "Windows"
+
+    ```console
+    $ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+    ```
 
 Then, check out the [first steps](./getting-started/first-steps.md) or read on for a brief overview.
 
@@ -151,7 +155,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 
 Use a specific Python version in the current directory:
 
-```
+```console
 $ uv python pin pypy@3.11
 Pinned `.python-version` to `pypy@3.11`
 ```
@@ -173,7 +177,7 @@ Updated `example.py`
 
 Then, run the script in an isolated virtual environment:
 
-```
+```console
 $ uv run example.py
 Reading inline script metadata from: example.py
 Installed 5 packages in 12ms

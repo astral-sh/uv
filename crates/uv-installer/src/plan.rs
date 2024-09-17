@@ -12,9 +12,10 @@ use distribution_types::{
     PathSourceDist, RemoteSource, Verbatim,
 };
 use platform_tags::Tags;
-use pypi_types::{Requirement, RequirementSource};
-use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, WheelCache};
-use uv_configuration::{BuildOptions, Reinstall};
+use pypi_types::{Requirement, RequirementSource, ResolverMarkerEnvironment};
+use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_cache_info::{CacheInfo, Timestamp};
+use uv_configuration::{BuildOptions, ConfigSettings, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
@@ -56,13 +57,15 @@ impl<'a> Planner<'a> {
         build_options: &BuildOptions,
         hasher: &HashStrategy,
         index_locations: &IndexLocations,
+        config_settings: &ConfigSettings,
         cache: &Cache,
         venv: &PythonEnvironment,
+        markers: &ResolverMarkerEnvironment,
         tags: &Tags,
     ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
         let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations, hasher);
-        let built_index = BuiltWheelIndex::new(cache, tags, hasher);
+        let built_index = BuiltWheelIndex::new(cache, tags, hasher, config_settings);
 
         let mut cached = vec![];
         let mut remote = vec![];
@@ -72,7 +75,7 @@ impl<'a> Planner<'a> {
 
         for requirement in self.requirements {
             // Filter out incompatible requirements.
-            if !requirement.evaluate_markers(Some(venv.interpreter().markers()), &[]) {
+            if !requirement.evaluate_markers(Some(markers), &[]) {
                 continue;
             }
 
@@ -92,8 +95,7 @@ impl<'a> Planner<'a> {
                 }
             }
 
-            // Check if the package should be reinstalled. A reinstall involves (1) purging any
-            // cached distributions, and (2) marking any installed distributions as extraneous.
+            // Check if the package should be reinstalled.
             let reinstall = match reinstall {
                 Reinstall::None => false,
                 Reinstall::All => true,
@@ -206,6 +208,7 @@ impl<'a> Planner<'a> {
                                         wheel.filename,
                                         wheel.url,
                                         archive.hashes,
+                                        CacheInfo::default(),
                                         cache.archive(&archive.id),
                                     );
 
@@ -263,6 +266,7 @@ impl<'a> Planner<'a> {
                 }
 
                 RequirementSource::Directory {
+                    r#virtual,
                     url,
                     editable,
                     install_path,
@@ -283,6 +287,7 @@ impl<'a> Planner<'a> {
                         url: url.clone(),
                         install_path,
                         editable: *editable,
+                        r#virtual: *r#virtual,
                     };
 
                     // Find the most-compatible wheel from the cache, since we don't know
@@ -358,14 +363,16 @@ impl<'a> Planner<'a> {
                                 .entry(format!("{}.rev", wheel.filename.stem()));
 
                             if let Some(pointer) = LocalArchivePointer::read_from(&cache_entry)? {
-                                let timestamp = ArchiveTimestamp::from_file(&wheel.install_path)?;
+                                let timestamp = Timestamp::from_path(&wheel.install_path)?;
                                 if pointer.is_up_to_date(timestamp) {
+                                    let cache_info = pointer.to_cache_info();
                                     let archive = pointer.into_archive();
                                     if archive.satisfies(hasher.get(&wheel)) {
                                         let cached_dist = CachedDirectUrlDist::from_url(
                                             wheel.filename,
                                             wheel.url,
                                             archive.hashes,
+                                            cache_info,
                                             cache.archive(&archive.id),
                                         );
 
@@ -405,9 +412,9 @@ impl<'a> Planner<'a> {
 
         // Remove any unnecessary packages.
         if site_packages.any() {
-            // If uv created the virtual environment, then remove all packages, regardless of
-            // whether they're considered "seed" packages.
-            let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_uv());
+            // Retain seed packages unless: (1) the virtual environment was created by uv and
+            // (2) the `--seed` argument was not passed to `uv venv`.
+            let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_uv() && !cfg.is_seed());
             for dist_info in site_packages {
                 if seed_packages
                     && matches!(

@@ -1,16 +1,19 @@
 //! Derived from `pypi_types_crate`.
 
+use std::io::BufRead;
 use std::str::FromStr;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
 use mailparse::{MailHeaderMap, MailParseError};
+use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::warn;
 
 use pep440_rs::{Version, VersionParseError, VersionSpecifiers, VersionSpecifiersParseError};
-use pep508_rs::{Pep508Error, Requirement};
+use pep508_rs::marker::MarkerValueExtra;
+use pep508_rs::{ExtraOperator, MarkerExpression, MarkerTree, Pep508Error, Requirement};
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 
 use crate::lenient_requirement::LenientRequirement;
@@ -42,8 +45,12 @@ pub struct Metadata23 {
 pub enum MetadataError {
     #[error(transparent)]
     MailParse(#[from] MailParseError),
+    #[error("Invalid `pyproject.toml`")]
+    InvalidPyprojectTomlSyntax(#[source] toml_edit::TomlError),
+    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set.")]
+    InvalidPyprojectTomlMissingName(#[source] toml_edit::de::Error),
     #[error(transparent)]
-    Toml(#[from] toml::de::Error),
+    InvalidPyprojectTomlSchema(toml_edit::de::Error),
     #[error("metadata field {0} not found")]
     FieldNotFound(&'static str),
     #[error("invalid version: {0}")]
@@ -62,6 +69,8 @@ pub enum MetadataError {
     DynamicField(&'static str),
     #[error("The project uses Poetry's syntax to declare its dependencies, despite including a `project` table in `pyproject.toml`")]
     PoetrySyntax,
+    #[error("Failed to read `requires.txt` contents")]
+    RequiresTxtContents(#[from] std::io::Error),
 }
 
 impl From<Pep508Error<VerbatimParsedUrl>> for MetadataError {
@@ -192,7 +201,7 @@ impl Metadata23 {
 
     /// Extract the metadata from a `pyproject.toml` file, as specified in PEP 621.
     pub fn parse_pyproject_toml(contents: &str) -> Result<Self, MetadataError> {
-        let pyproject_toml: PyProjectToml = toml::from_str(contents)?;
+        let pyproject_toml = PyProjectToml::from_toml(contents)?;
 
         let project = pyproject_toml
             .project
@@ -273,6 +282,23 @@ impl Metadata23 {
 struct PyProjectToml {
     project: Option<Project>,
     tool: Option<Tool>,
+}
+
+impl PyProjectToml {
+    fn from_toml(toml: &str) -> Result<Self, MetadataError> {
+        let pyproject_toml: toml_edit::ImDocument<_> = toml_edit::ImDocument::from_str(toml)
+            .map_err(MetadataError::InvalidPyprojectTomlSyntax)?;
+        let pyproject_toml: Self = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
+            .map_err(|err| {
+            // TODO(konsti): A typed error would be nicer, this can break on toml upgrades.
+            if err.message().contains("missing field `name`") {
+                MetadataError::InvalidPyprojectTomlMissingName(err)
+            } else {
+                MetadataError::InvalidPyprojectTomlSchema(err)
+            }
+        })?;
+        Ok(pyproject_toml)
+    }
 }
 
 /// PEP 621 project metadata.
@@ -431,7 +457,7 @@ pub struct RequiresDist {
 impl RequiresDist {
     /// Extract the [`RequiresDist`] from a `pyproject.toml` file, as specified in PEP 621.
     pub fn parse_pyproject_toml(contents: &str) -> Result<Self, MetadataError> {
-        let pyproject_toml: PyProjectToml = toml::from_str(contents)?;
+        let pyproject_toml = PyProjectToml::from_toml(contents)?;
 
         let project = pyproject_toml
             .project
@@ -492,6 +518,109 @@ impl RequiresDist {
     }
 }
 
+/// `requires.txt` metadata as defined in <https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#dependency-metadata>.
+///
+/// This is a subset of the full metadata specification, and only includes the fields that are
+/// included in the legacy `requires.txt` file.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct RequiresTxt {
+    pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
+    pub provides_extras: Vec<ExtraName>,
+}
+
+impl RequiresTxt {
+    /// Parse the [`RequiresTxt`] from a `requires.txt` file, as included in an `egg-info`.
+    ///
+    /// See: <https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#dependency-metadata>
+    pub fn parse(content: &[u8]) -> Result<Self, MetadataError> {
+        let mut requires_dist = vec![];
+        let mut provides_extras = vec![];
+        let mut current_marker = MarkerTree::default();
+
+        for line in content.lines() {
+            let line = line.map_err(MetadataError::RequiresTxtContents)?;
+
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            // When encountering a new section, parse the extra and marker from the header, e.g.,
+            // `[:sys_platform == "win32"]` or `[dev]`.
+            if line.starts_with('[') {
+                let line = line.trim_start_matches('[').trim_end_matches(']');
+
+                // Split into extra and marker, both of which can be empty.
+                let (extra, marker) = {
+                    let (extra, marker) = match line.split_once(':') {
+                        Some((extra, marker)) => (Some(extra), Some(marker)),
+                        None => (Some(line), None),
+                    };
+                    let extra = extra.filter(|extra| !extra.is_empty());
+                    let marker = marker.filter(|marker| !marker.is_empty());
+                    (extra, marker)
+                };
+
+                // Parse the extra.
+                let extra = if let Some(extra) = extra {
+                    if let Ok(extra) = ExtraName::from_str(extra) {
+                        provides_extras.push(extra.clone());
+                        Some(MarkerValueExtra::Extra(extra))
+                    } else {
+                        Some(MarkerValueExtra::Arbitrary(extra.to_string()))
+                    }
+                } else {
+                    None
+                };
+
+                // Parse the marker.
+                let marker = marker.map(MarkerTree::parse_str).transpose()?;
+
+                // Create the marker tree.
+                match (extra, marker) {
+                    (Some(extra), Some(mut marker)) => {
+                        marker.and(MarkerTree::expression(MarkerExpression::Extra {
+                            operator: ExtraOperator::Equal,
+                            name: extra,
+                        }));
+                        current_marker = marker;
+                    }
+                    (Some(extra), None) => {
+                        current_marker = MarkerTree::expression(MarkerExpression::Extra {
+                            operator: ExtraOperator::Equal,
+                            name: extra,
+                        });
+                    }
+                    (None, Some(marker)) => {
+                        current_marker = marker;
+                    }
+                    (None, None) => {
+                        current_marker = MarkerTree::default();
+                    }
+                }
+
+                continue;
+            }
+
+            // Parse the requirement.
+            let requirement =
+                Requirement::<VerbatimParsedUrl>::from(LenientRequirement::from_str(line)?);
+
+            // Add the markers and extra, if necessary.
+            requires_dist.push(Requirement {
+                marker: current_marker.clone(),
+                ..requirement
+            });
+        }
+
+        Ok(Self {
+            requires_dist,
+            provides_extras,
+        })
+    }
+}
+
 /// The headers of a distribution metadata file.
 #[derive(Debug)]
 struct Headers<'a>(Vec<mailparse::MailHeader<'a>>);
@@ -531,7 +660,7 @@ mod tests {
     use pep440_rs::Version;
     use uv_normalize::PackageName;
 
-    use crate::MetadataError;
+    use crate::{MetadataError, RequiresTxt};
 
     use super::Metadata23;
 
@@ -676,5 +805,60 @@ mod tests {
             ]
         );
         assert_eq!(meta.provides_extras, vec!["dotenv".parse().unwrap()]);
+    }
+
+    #[test]
+    fn test_requires_txt() {
+        let s = r"
+Werkzeug>=0.14
+Jinja2>=2.10
+
+[dev]
+pytest>=3
+sphinx
+
+[dotenv]
+python-dotenv
+        ";
+        let meta = RequiresTxt::parse(s.as_bytes()).unwrap();
+        assert_eq!(
+            meta.requires_dist,
+            vec![
+                "Werkzeug>=0.14".parse().unwrap(),
+                "Jinja2>=2.10".parse().unwrap(),
+                "pytest>=3; extra == \"dev\"".parse().unwrap(),
+                "sphinx; extra == \"dev\"".parse().unwrap(),
+                "python-dotenv; extra == \"dotenv\"".parse().unwrap(),
+            ]
+        );
+
+        let s = r"
+Werkzeug>=0.14
+
+[dev:]
+Jinja2>=2.10
+
+[:sys_platform == 'win32']
+pytest>=3
+
+[]
+sphinx
+
+[dotenv:sys_platform == 'darwin']
+python-dotenv
+        ";
+        let meta = RequiresTxt::parse(s.as_bytes()).unwrap();
+        assert_eq!(
+            meta.requires_dist,
+            vec![
+                "Werkzeug>=0.14".parse().unwrap(),
+                "Jinja2>=2.10 ; extra == \"dev\"".parse().unwrap(),
+                "pytest>=3; sys_platform == 'win32'".parse().unwrap(),
+                "sphinx".parse().unwrap(),
+                "python-dotenv; sys_platform == 'darwin' and extra == \"dotenv\""
+                    .parse()
+                    .unwrap(),
+            ]
+        );
     }
 }

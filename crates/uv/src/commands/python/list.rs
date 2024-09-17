@@ -1,9 +1,9 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
-
+use rustc_hash::FxHashSet;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
@@ -50,7 +50,9 @@ pub(crate) async fn list(
                     None
                 }
             }
-        };
+        }
+        // Include pre-release versions
+        .map(|request| request.with_prereleases(true));
 
         let downloads = download_request
             .as_ref()
@@ -59,13 +61,7 @@ pub(crate) async fn list(
             .flatten();
 
         for download in downloads {
-            output.insert((
-                download.python_version().version().clone(),
-                download.os().to_string(),
-                download.key().clone(),
-                Kind::Download,
-                None,
-            ));
+            output.insert((download.key().clone(), Kind::Download, None));
         }
     };
 
@@ -94,30 +90,50 @@ pub(crate) async fn list(
             Kind::System
         };
         output.insert((
-            installation.python_version().clone(),
-            installation.os().to_string(),
-            installation.key().clone(),
+            installation.key(),
             kind,
             Some(installation.interpreter().sys_executable().to_path_buf()),
         ));
     }
 
-    let mut seen_minor = HashSet::new();
-    let mut seen_patch = HashSet::new();
+    let mut seen_minor = FxHashSet::default();
+    let mut seen_patch = FxHashSet::default();
+    let mut seen_paths = FxHashSet::default();
     let mut include = Vec::new();
-    for (version, os, key, kind, path) in output.iter().rev() {
+    for (key, kind, path) in output.iter().rev() {
+        // Do not show the same path more than once
+        if let Some(path) = path {
+            if !seen_paths.insert(path) {
+                continue;
+            }
+        }
+
         // Only show the latest patch version for each download unless all were requested
         if !matches!(kind, Kind::System) {
-            if let [major, minor, ..] = version.release() {
-                if !seen_minor.insert((os.clone(), *major, *minor, *key.arch(), *key.libc())) {
+            if let [major, minor, ..] = key.version().release() {
+                if !seen_minor.insert((
+                    *key.os(),
+                    *major,
+                    *minor,
+                    key.implementation(),
+                    *key.arch(),
+                    *key.libc(),
+                )) {
                     if matches!(kind, Kind::Download) && !all_versions {
                         continue;
                     }
                 }
             }
-            if let [major, minor, patch] = version.release() {
-                if !seen_patch.insert((os.clone(), *major, *minor, *patch, *key.arch(), key.libc()))
-                {
+            if let [major, minor, patch] = key.version().release() {
+                if !seen_patch.insert((
+                    *key.os(),
+                    *major,
+                    *minor,
+                    *patch,
+                    key.implementation(),
+                    *key.arch(),
+                    key.libc(),
+                )) {
                     if matches!(kind, Kind::Download) {
                         continue;
                     }

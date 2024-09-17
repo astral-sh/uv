@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.3.3"
+version = "0.4.10"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -33,7 +33,9 @@ readme = "README.md"
 
 [project.urls]
 Repository = "https://github.com/astral-sh/uv"
-Documentation = "https://github.com/astral-sh/uv"
+Documentation = "https://docs.astral.sh/uv"
+Changelog = "https://github.com/astral-sh/uv/blob/main/CHANGELOG.md"
+Releases = "https://github.com/astral-sh/uv/releases"
 
 [tool.maturin]
 bindings = "bin"
@@ -51,7 +53,7 @@ changelog_sections.breaking = "Breaking changes"
 changelog_sections.enhancement = "Enhancements"
 changelog_sections.compatibility = "Enhancements"
 changelog_sections.preview = "Preview features"
-changelog_sections.cli = "CLI"
+changelog_sections.cli = "Enhancements"
 changelog_sections.configuration = "Configuration"
 changelog_sections.performance = "Performance"
 changelog_sections.bug = "Bug fixes"
@@ -73,9 +75,9 @@ version_files = [
   "docs/guides/integration/github.md",
 ]
 
-[tool.uv]
-managed = false
-
 [tool.mypy]
 ignore_missing_imports = true
 files = "crates/uv-python/*.py"
+
+[tool.uv]
+managed = false

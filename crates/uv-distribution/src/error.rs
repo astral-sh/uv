@@ -44,6 +44,10 @@ pub enum Error {
     CacheDecode(#[from] rmp_serde::decode::Error),
     #[error("Failed to serialize cache entry")]
     CacheEncode(#[from] rmp_serde::encode::Error),
+    #[error("Failed to walk the distribution cache")]
+    CacheWalk(#[source] walkdir::Error),
+    #[error(transparent)]
+    CacheInfo(#[from] uv_cache_info::CacheInfoError),
 
     // Build error
     #[error(transparent)]
@@ -61,8 +65,8 @@ pub enum Error {
     VersionMismatch { given: Version, metadata: Version },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] pypi_types::MetadataError),
-    #[error("Failed to read `dist-info` metadata from built wheel")]
-    DistInfo(#[from] install_wheel_rs::Error),
+    #[error("Failed to read metadata: `{}`", _0.user_display())]
+    WheelMetadata(PathBuf, #[source] Box<uv_metadata::Error>),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
     #[error("Source distribution directory contains neither readable `pyproject.toml` nor `setup.py`: `{}`", _0.user_display())]
@@ -71,8 +75,14 @@ pub enum Error {
     Extract(#[from] uv_extract::Error),
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
+    #[error("The source distribution is missing an `egg-info` directory")]
+    MissingEggInfo,
+    #[error("The source distribution is missing a `requires.txt` file")]
+    MissingRequiresTxt,
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] pypi_types::MetadataError),
+    #[error("Failed to extract metadata from `requires.txt`")]
+    RequiresTxt(#[source] pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
     MissingPyprojectToml,
     #[error("Failed to extract static metadata from `pyproject.toml`")]

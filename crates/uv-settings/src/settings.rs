@@ -5,9 +5,11 @@ use serde::{Deserialize, Serialize};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
-use pypi_types::VerbatimParsedUrl;
+use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
+use uv_cache_info::CacheKey;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
+    TrustedHost,
 };
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
@@ -40,15 +42,56 @@ pub struct Options {
     pub top_level: ResolverInstallerOptions,
     #[option_group]
     pub pip: Option<PipOptions>,
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "PEP 508 style requirements, e.g. `ruff==0.5.0`, or `ruff @ https://...`."
-        )
+
+    /// The keys to consider when caching builds for the project.
+    ///
+    /// Cache keys enable you to specify the files or directories that should trigger a rebuild when
+    /// modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`,
+    /// or `setup.cfg` files in the project directory are modified, i.e.:
+    ///
+    /// ```toml
+    /// cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]
+    /// ```
+    ///
+    /// As an example: if a project uses dynamic metadata to read its dependencies from a
+    /// `requirements.txt` file, you can specify `cache-keys = [{ file = "requirements.txt" }, { file = "pyproject.toml" }]`
+    /// to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in
+    /// addition to watching the `pyproject.toml`).
+    ///
+    /// Globs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html)
+    /// crate. For example, to invalidate the cache whenever a `.toml` file in the project directory
+    /// or any of its subdirectories is modified, you can specify `cache-keys = [{ file = "**/*.toml" }]`.
+    /// Note that the use of globs can be expensive, as uv may need to walk the filesystem to
+    /// determine whether any files have changed.
+    ///
+    /// Cache keys can also include version control information. For example, if a project uses
+    /// `setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }, { file = "pyproject.toml" }]`
+    /// to include the current Git commit hash in the cache key (in addition to the
+    /// `pyproject.toml`).
+    ///
+    /// Cache keys only affect the project defined by the `pyproject.toml` in which they're
+    /// specified (as opposed to, e.g., affecting all members in a workspace), and all paths and
+    /// globs are interpreted as relative to the project directory.
+    #[option(
+        default = r#"[{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]"#,
+        value_type = "list[dict]",
+        example = r#"
+            cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = true }]
+        "#
     )]
+    #[serde(default, skip_serializing)]
+    cache_keys: Option<Vec<CacheKey>>,
+
+    // NOTE(charlie): These fields are shared with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`.
@@ -66,11 +109,11 @@ pub struct Options {
 
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    environments: serde::de::IgnoredAny,
+    managed: serde::de::IgnoredAny,
 
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    managed: serde::de::IgnoredAny,
+    r#package: serde::de::IgnoredAny,
 }
 
 impl Options {
@@ -215,6 +258,7 @@ pub struct InstallerOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
@@ -241,6 +285,7 @@ pub struct ResolverOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub config_settings: Option<ConfigSettings>,
@@ -313,7 +358,7 @@ pub struct ResolverInstallerOptions {
     /// indexes.
     ///
     /// If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
-    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    /// source distributions (e.g., `.tar.gz` or `.zip`) at the top level.
     ///
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.
@@ -352,6 +397,22 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+    /// Allow insecure connections to host.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            allow-insecure-host = ["localhost:8080"]
+        "#
+    )]
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
@@ -570,8 +631,8 @@ pub struct PipOptions {
     /// workflows.
     ///
     /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
+    /// - `3.10` looks for an installed Python 3.10 in the registry on Windows (see
+    ///   `py --list-paths`), or `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[option(
@@ -684,7 +745,7 @@ pub struct PipOptions {
     /// indexes.
     ///
     /// If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
-    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    /// source distributions (e.g., `.tar.gz` or `.zip`) at the top level.
     ///
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.
@@ -723,6 +784,22 @@ pub struct PipOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+    /// Allow insecure connections to host.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            allow-insecure-host = ["localhost:8080"]
+        "#
+    )]
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -975,7 +1052,7 @@ pub struct PipOptions {
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// `aarch64-apple-darwin`.
     #[option(
         default = "None",
         value_type = "str",
@@ -1210,6 +1287,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             config_settings: value.config_settings,
@@ -1237,6 +1315,7 @@ impl From<ResolverInstallerOptions> for InstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            allow_insecure_host: value.allow_insecure_host,
             config_settings: value.config_settings,
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode,
@@ -1269,6 +1348,7 @@ pub struct ToolOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub config_settings: Option<ConfigSettings>,
@@ -1293,6 +1373,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             config_settings: value.config_settings,
@@ -1319,6 +1400,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
+            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             config_settings: value.config_settings,

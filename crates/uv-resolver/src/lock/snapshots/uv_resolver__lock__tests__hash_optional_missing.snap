@@ -1,0 +1,110 @@
+---
+source: crates/uv-resolver/src/lock/mod.rs
+expression: result
+---
+Ok(
+    Lock {
+        version: 1,
+        fork_markers: [],
+        supported_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            exclude_newer: None,
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "anyio",
+                    ),
+                    version: "4.3.0",
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: None,
+                wheels: [
+                    Wheel {
+                        url: Url {
+                            url: UrlString(
+                                "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl",
+                            ),
+                        },
+                        hash: None,
+                        size: None,
+                        filename: WheelFilename {
+                            name: PackageName(
+                                "anyio",
+                            ),
+                            version: "4.3.0",
+                            build_tag: None,
+                            python_tag: [
+                                "py3",
+                            ],
+                            abi_tag: [
+                                "none",
+                            ],
+                            platform_tag: [
+                                "any",
+                            ],
+                        },
+                    },
+                ],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dev_dependencies: {},
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    requires_dev: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "anyio",
+                ),
+                version: "4.3.0",
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 0,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            constraints: {},
+            overrides: {},
+        },
+    },
+)

@@ -83,15 +83,16 @@ mod resolver {
 
     use anyhow::Result;
 
-    use distribution_types::IndexLocations;
+    use distribution_types::{IndexCapabilities, IndexLocations};
     use install_wheel_rs::linker::LinkMode;
     use pep440_rs::Version;
     use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use platform_tags::{Arch, Os, Platform, Tags};
+    use pypi_types::ResolverMarkerEnvironment;
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, IndexStrategy, SourceStrategy,
+        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, SourceStrategy,
     };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
@@ -151,6 +152,7 @@ mod resolver {
         );
         let flat_index = FlatIndex::default();
         let git = GitResolver::default();
+        let capabilities = IndexCapabilities::default();
         let hashes = HashStrategy::None;
         let in_flight = InFlight::default();
         let index = InMemoryIndex::default();
@@ -158,12 +160,12 @@ mod resolver {
         let installed_packages = EmptyInstalledPackages;
         let sources = SourceStrategy::default();
         let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
-        let build_constraints = [];
+        let build_constraints = Constraints::default();
 
         let python_requirement = if universal {
             PythonRequirement::from_requires_python(
                 interpreter,
-                &RequiresPython::greater_than_equal_version(&Version::new([3, 11])),
+                RequiresPython::greater_than_equal_version(&Version::new([3, 11])),
             )
         } else {
             PythonRequirement::from_interpreter(interpreter)
@@ -172,18 +174,20 @@ mod resolver {
         let build_context = BuildDispatch::new(
             client,
             &cache,
-            &build_constraints,
+            build_constraints,
             interpreter,
             &index_locations,
             &flat_index,
             &index,
             &git,
+            &capabilities,
             &in_flight,
             IndexStrategy::default(),
             &config_settings,
             build_isolation,
             LinkMode::default(),
             &build_options,
+            &hashes,
             exclude_newer,
             sources,
             concurrency,
@@ -192,7 +196,7 @@ mod resolver {
         let markers = if universal {
             ResolverMarkers::universal(vec![])
         } else {
-            ResolverMarkers::specific_environment(MARKERS.clone())
+            ResolverMarkers::specific_environment(ResolverMarkerEnvironment::from(MARKERS.clone()))
         };
 
         let resolver = Resolver::new(

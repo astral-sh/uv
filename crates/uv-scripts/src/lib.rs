@@ -5,10 +5,10 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 
 use memchr::memmem::Finder;
-use pep440_rs::VersionSpecifiers;
 use serde::Deserialize;
 use thiserror::Error;
 
+use pep440_rs::VersionSpecifiers;
 use pep508_rs::PackageName;
 use pypi_types::VerbatimParsedUrl;
 use uv_settings::{GlobalOptions, ResolverInstallerOptions};
@@ -41,13 +41,14 @@ impl Pep723Script {
         };
 
         // Extract the `script` tag.
-        let Some(ScriptTag {
+        let ScriptTag {
             prelude,
             metadata,
             postlude,
-        }) = ScriptTag::parse(&contents)?
-        else {
-            return Ok(None);
+        } = match ScriptTag::parse(&contents) {
+            Ok(Some(tag)) => tag,
+            Ok(None) => return Ok(None),
+            Err(err) => return Err(err),
         };
 
         // Parse the metadata.
@@ -152,6 +153,8 @@ pub struct ToolUv {
 
 #[derive(Debug, Error)]
 pub enum Pep723Error {
+    #[error("An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`.")]
+    UnclosedBlock,
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
@@ -272,7 +275,7 @@ impl ScriptTag {
         //
         // The latter `///` is the closing pragma
         let Some(index) = toml.iter().rev().position(|line| *line == "///") else {
-            return Ok(None);
+            return Err(Pep723Error::UnclosedBlock);
         };
         let index = toml.len() - index;
 
@@ -347,13 +350,12 @@ fn serialize_metadata(metadata: &str) -> String {
     output.push('\n');
 
     for line in metadata.lines() {
-        if line.is_empty() {
-            output.push('\n');
-        } else {
-            output.push_str("# ");
+        output.push('#');
+        if !line.is_empty() {
+            output.push(' ');
             output.push_str(line);
-            output.push('\n');
         }
+        output.push('\n');
     }
 
     output.push_str("# ///");
@@ -364,7 +366,7 @@ fn serialize_metadata(metadata: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{serialize_metadata, ScriptTag};
+    use crate::{serialize_metadata, Pep723Error, ScriptTag};
 
     #[test]
     fn missing_space() {
@@ -374,7 +376,10 @@ mod tests {
             # ///
         "};
 
-        assert_eq!(ScriptTag::parse(contents.as_bytes()).unwrap(), None);
+        assert!(matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlock)
+        ));
     }
 
     #[test]
@@ -388,7 +393,10 @@ mod tests {
             # ]
         "};
 
-        assert_eq!(ScriptTag::parse(contents.as_bytes()).unwrap(), None);
+        assert!(matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlock)
+        ));
     }
 
     #[test]

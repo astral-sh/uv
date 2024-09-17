@@ -4,6 +4,7 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use predicates::prelude::*;
 use uv_python::{PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME};
 
 use crate::common::{uv_snapshot, TestContext};
@@ -49,6 +50,124 @@ fn create_venv() {
     );
 
     context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn create_venv_project_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // `uv venv` ignores `UV_PROJECT_ENVIRONMENT` when it's not a project
+    uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicates::path::missing());
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["iniconfig"]
+            "#,
+    )?;
+
+    // But, if we're in a project we'll respect it
+    uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: foo
+    Activate with: source foo/bin/activate
+    "###
+    );
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicates::path::is_dir());
+
+    // Unless we're in a child directory
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(child.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // In which case, we'll use the default name of `.venv`
+    child.child("foo").assert(predicates::path::missing());
+    child.child(".venv").assert(predicates::path::is_dir());
+
+    // Or, if a name is provided
+    uv_snapshot!(context.filters(), context.venv().arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: bar
+    Activate with: source bar/bin/activate
+    "###
+    );
+
+    context
+        .temp_dir
+        .child("bar")
+        .assert(predicates::path::is_dir());
+
+    // Or, of they opt-out with `--no-workspace` or `--no-project`
+    uv_snapshot!(context.filters(), context.venv().arg("--no-workspace"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.venv().arg("--no-project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    Ok(())
 }
 
 #[test]
@@ -376,13 +495,6 @@ fn create_venv_warns_user_on_requires_python_discovery_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 1, column 9
-        |
-      1 | invalid toml
-        |         ^
-      expected `.`, `=`
-
     warning: Failed to parse: `pyproject.toml`
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
@@ -802,7 +914,7 @@ fn verify_pyvenv_cfg() {
     pyvenv_cfg.assert(predicates::str::contains(search_string));
 
     // Not relocatable by default.
-    pyvenv_cfg.assert(predicates::str::contains("relocatable = false"));
+    pyvenv_cfg.assert(predicates::str::contains("relocatable").not());
 }
 
 #[test]
