@@ -8,7 +8,8 @@ use std::path::PathBuf;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, DevMode, DevSpecification, ExportFormat, ExtrasSpecification, InstallOptions,
+    Concurrency, DevMode, DevSpecification, EditableMode, ExportFormat, ExtrasSpecification,
+    InstallOptions,
 };
 use uv_fs::CWD;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
@@ -33,6 +34,7 @@ pub(crate) async fn export(
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
     dev: DevMode,
+    editable: EditableMode,
     locked: bool,
     frozen: bool,
     python: Option<String>,
@@ -130,6 +132,7 @@ pub(crate) async fn export(
                 project.project_name(),
                 &extras,
                 dev,
+                editable,
                 hashes,
                 &install_options,
             )?;

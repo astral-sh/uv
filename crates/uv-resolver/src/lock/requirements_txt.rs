@@ -13,7 +13,7 @@ use url::Url;
 use distribution_filename::{DistExtension, SourceDistExtension};
 use pep508_rs::MarkerTree;
 use pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
-use uv_configuration::{DevSpecification, ExtrasSpecification, InstallOptions};
+use uv_configuration::{DevSpecification, EditableMode, ExtrasSpecification, InstallOptions};
 use uv_fs::Simplified;
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
@@ -35,6 +35,7 @@ struct Node<'lock> {
 pub struct RequirementsTxtExport<'lock> {
     nodes: Vec<Node<'lock>>,
     hashes: bool,
+    editable: EditableMode,
 }
 
 impl<'lock> RequirementsTxtExport<'lock> {
@@ -43,6 +44,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         root_name: &PackageName,
         extras: &ExtrasSpecification,
         dev: DevSpecification<'_>,
+        editable: EditableMode,
         hashes: bool,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
@@ -166,7 +168,11 @@ impl<'lock> RequirementsTxtExport<'lock> {
             NodeComparator::from(a.package).cmp(&NodeComparator::from(b.package))
         });
 
-        Ok(Self { nodes, hashes })
+        Ok(Self {
+            nodes,
+            hashes,
+            editable,
+        })
     }
 }
 
@@ -216,9 +222,18 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                         write!(f, "{}", anchor(path).portable_display())?;
                     }
                 }
-                Source::Editable(path) => {
-                    write!(f, "-e {}", anchor(path).portable_display())?;
-                }
+                Source::Editable(path) => match self.editable {
+                    EditableMode::Editable => {
+                        write!(f, "-e {}", anchor(path).portable_display())?;
+                    }
+                    EditableMode::NonEditable => {
+                        if path.is_absolute() {
+                            write!(f, "{}", Url::from_file_path(path).unwrap())?;
+                        } else {
+                            write!(f, "{}", anchor(path).portable_display())?;
+                        }
+                    }
+                },
                 Source::Virtual(_) => {
                     continue;
                 }

@@ -22,9 +22,9 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DevMode, ExportFormat, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild,
-    PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, DevMode, EditableMode, ExportFormat,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
+    NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost, Upgrade,
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
@@ -210,6 +210,7 @@ pub(crate) struct RunSettings {
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevMode,
+    pub(crate) editable: EditableMode,
     pub(crate) with: Vec<String>,
     pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
@@ -234,6 +235,7 @@ impl RunSettings {
             dev,
             no_dev,
             only_dev,
+            no_editable,
             command: _,
             with,
             with_editable,
@@ -259,6 +261,7 @@ impl RunSettings {
                 extra.unwrap_or_default(),
             ),
             dev: DevMode::from_args(dev, no_dev, only_dev),
+            editable: EditableMode::from_args(no_editable),
             with,
             with_editable,
             with_requirements: with_requirements
@@ -661,6 +664,7 @@ pub(crate) struct SyncSettings {
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevMode,
+    pub(crate) editable: EditableMode,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
     pub(crate) package: Option<PackageName>,
@@ -680,6 +684,7 @@ impl SyncSettings {
             dev,
             no_dev,
             only_dev,
+            no_editable,
             inexact,
             exact,
             no_install_project,
@@ -707,6 +712,7 @@ impl SyncSettings {
                 extra.unwrap_or_default(),
             ),
             dev: DevMode::from_args(dev, no_dev, only_dev),
+            editable: EditableMode::from_args(no_editable),
             install_options: InstallOptions::new(
                 no_install_project,
                 no_install_workspace,
@@ -961,6 +967,7 @@ pub(crate) struct ExportSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevMode,
+    pub(crate) editable: EditableMode,
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
     pub(crate) output_file: Option<PathBuf>,
@@ -984,6 +991,7 @@ impl ExportSettings {
             dev,
             no_dev,
             only_dev,
+            no_editable,
             hashes,
             no_hashes,
             output_file,
@@ -1006,6 +1014,7 @@ impl ExportSettings {
                 extra.unwrap_or_default(),
             ),
             dev: DevMode::from_args(dev, no_dev, only_dev),
+            editable: EditableMode::from_args(no_editable),
             hashes: flag(hashes, no_hashes).unwrap_or(true),
             install_options: InstallOptions::new(
                 no_emit_project,

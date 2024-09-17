@@ -1,14 +1,14 @@
 use anyhow::{Context, Result};
 use itertools::Itertools;
 
-use distribution_types::{Dist, ResolvedDist, SourceDist};
+use distribution_types::{DirectorySourceDist, Dist, ResolvedDist, SourceDist};
 use pep508_rs::MarkerTree;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevMode, DevSpecification, ExtrasSpecification, HashCheckingMode,
-    InstallOptions,
+    Concurrency, Constraints, DevMode, DevSpecification, EditableMode, ExtrasSpecification,
+    HashCheckingMode, InstallOptions,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
@@ -36,6 +36,7 @@ pub(crate) async fn sync(
     package: Option<PackageName>,
     extras: ExtrasSpecification,
     dev: DevMode,
+    editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
@@ -133,6 +134,7 @@ pub(crate) async fn sync(
         &lock,
         &extras,
         dev,
+        editable,
         install_options,
         modifications,
         settings.as_ref().into(),
@@ -157,6 +159,7 @@ pub(super) async fn do_sync(
     lock: &Lock,
     extras: &ExtrasSpecification,
     dev: DevMode,
+    editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
@@ -241,6 +244,9 @@ pub(super) async fn do_sync(
 
     // Always skip virtual projects, which shouldn't be built or installed.
     let resolution = apply_no_virtual_project(resolution);
+
+    // If necessary, convert editable to non-editable distributions.
+    let resolution = apply_editable_mode(resolution, editable);
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -357,4 +363,39 @@ fn apply_no_virtual_project(
 
         !dist.r#virtual
     })
+}
+
+/// If necessary, convert any editable requirements to non-editable.
+fn apply_editable_mode(
+    resolution: distribution_types::Resolution,
+    editable: EditableMode,
+) -> distribution_types::Resolution {
+    match editable {
+        // No modifications are necessary for editable mode; retain any editable distributions.
+        EditableMode::Editable => resolution,
+
+        // Filter out any editable distributions.
+        EditableMode::NonEditable => resolution.map(|dist| {
+            let ResolvedDist::Installable(Dist::Source(SourceDist::Directory(
+                DirectorySourceDist {
+                    name,
+                    install_path,
+                    editable: true,
+                    r#virtual: false,
+                    url,
+                },
+            ))) = dist
+            else {
+                return dist;
+            };
+
+            ResolvedDist::Installable(Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                install_path,
+                editable: false,
+                r#virtual: false,
+                url,
+            })))
+        }),
+    }
 }

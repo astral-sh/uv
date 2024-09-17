@@ -14,7 +14,9 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, DevMode, ExtrasSpecification, InstallOptions, SourceStrategy};
+use uv_configuration::{
+    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, SourceStrategy,
+};
 use uv_distribution::LoweredRequirement;
 use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -58,6 +60,7 @@ pub(crate) async fn run(
     no_config: bool,
     extras: ExtrasSpecification,
     dev: DevMode,
+    editable: EditableMode,
     python: Option<String>,
     settings: ResolverInstallerSettings,
     python_preference: PythonPreference,
@@ -501,6 +504,7 @@ pub(crate) async fn run(
                     result.lock(),
                     &extras,
                     dev,
+                    editable,
                     install_options,
                     Modifications::Sufficient,
                     settings.as_ref().into(),

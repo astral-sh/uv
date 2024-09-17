@@ -360,6 +360,50 @@ _contents_ are not copied into the image until the final `uv sync` command.
 
     If you want to remove specific packages from the sync, use `--no-install-package <name>`.
 
+### Non-editable installs
+
+By default, uv installs projects and workspace members in editable mode, such that changes to the
+source code are immediately reflected in the environment.
+
+`uv sync` and `uv run` both accept a `--no-editable` flag, which instructs uv to install the project
+in non-editable mode, removing any dependency on the source code.
+
+In the context of a multi-stage Docker image, `--no-editable` can be used to include the project in
+the synced virtual environment from one stage, then copy the virtual environment alone (and not the
+source code) into the final image.
+
+For example:
+
+```dockerfile title="Dockerfile"
+# Install uv
+FROM python:3.12-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Change the working directory to the `app` directory
+WORKDIR /app
+
+# Install dependencies
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --no-editable
+
+# Copy the project into the intermediate image
+ADD . /app
+
+# Sync the project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-editable
+
+FROM python:3.12-slim
+
+# Copy the environment, but not the source code
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
+
+# Run the application
+CMD ["/app/.venv/bin/hello"]
+```
+
 ### Using uv temporarily
 
 If uv isn't needed in the final image, the binary can be mounted in each invocation:

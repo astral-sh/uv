@@ -16,7 +16,8 @@ use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevMode, ExtrasSpecification, InstallOptions, SourceStrategy,
+    Concurrency, Constraints, DevMode, EditableMode, ExtrasSpecification, InstallOptions,
+    SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -755,6 +756,7 @@ async fn lock_and_sync(
         &lock,
         &extras,
         dev,
+        EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,
         settings.into(),
