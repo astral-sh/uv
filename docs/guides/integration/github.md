@@ -271,8 +271,8 @@ Its effect on performance is dependent on the packages being installed.
 
     [post-job-hook]: https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/running-scripts-before-or-after-a-job
 
-    When using non-ephemeral self-hosted runners and the default cache directory, the cache can grow over time 
-    and become problematic. In such cases, it's recommend to move the cache to inside the
+    When using non-ephemeral self-hosted runners and the default cache directory, the cache can grow
+    over time and become problematic. In such cases, it's recommend to move the cache to inside the
     GitHub Workspace and clean it once the job finishes using a [Post Job Hook][post-job-hook].
 
     ```yaml
