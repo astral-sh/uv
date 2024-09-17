@@ -531,6 +531,22 @@ impl Workspace {
         &self.sources
     }
 
+    /// Returns an iterator over all sources in the workspace.
+    pub fn iter_sources(&self) -> impl Iterator<Item = &Source> {
+        self.packages
+            .values()
+            .filter_map(|member| {
+                member.pyproject_toml().tool.as_ref().and_then(|tool| {
+                    tool.uv
+                        .as_ref()
+                        .and_then(|uv| uv.sources.as_ref())
+                        .map(ToolUvSources::inner)
+                        .map(|sources| sources.values())
+                })
+            })
+            .flatten()
+    }
+
     /// The `pyproject.toml` of the workspace.
     pub fn pyproject_toml(&self) -> &PyProjectToml {
         &self.pyproject_toml
@@ -1608,6 +1624,9 @@ mod tests {
                   "name": "bird-feeder",
                   "version": "1.0.0",
                   "requires-python": ">=3.12",
+                  "dependencies": [
+                    "anyio>=4.3.0,<5"
+                  ],
                   "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
@@ -1619,6 +1638,9 @@ mod tests {
                 "name": "bird-feeder",
                 "version": "1.0.0",
                 "requires-python": ">=3.12",
+                "dependencies": [
+                  "anyio>=4.3.0,<5"
+                ],
                 "optional-dependencies": null
               },
               "tool": null
@@ -1653,6 +1675,9 @@ mod tests {
                       "name": "bird-feeder",
                       "version": "1.0.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "anyio>=4.3.0,<5"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -1664,6 +1689,9 @@ mod tests {
                     "name": "bird-feeder",
                     "version": "1.0.0",
                     "requires-python": ">=3.12",
+                    "dependencies": [
+                      "anyio>=4.3.0,<5"
+                    ],
                     "optional-dependencies": null
                   },
                   "tool": null
@@ -1697,6 +1725,10 @@ mod tests {
                       "name": "albatross",
                       "version": "0.1.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "bird-feeder",
+                        "tqdm>=4,<5"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -1707,6 +1739,10 @@ mod tests {
                       "name": "bird-feeder",
                       "version": "1.0.0",
                       "requires-python": ">=3.8",
+                      "dependencies": [
+                        "anyio>=4.3.0,<5",
+                        "seeds"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -1717,6 +1753,9 @@ mod tests {
                       "name": "seeds",
                       "version": "1.0.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "idna==3.6"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -1732,6 +1771,10 @@ mod tests {
                     "name": "albatross",
                     "version": "0.1.0",
                     "requires-python": ">=3.12",
+                    "dependencies": [
+                      "bird-feeder",
+                      "tqdm>=4,<5"
+                    ],
                     "optional-dependencies": null
                   },
                   "tool": {
@@ -1786,6 +1829,10 @@ mod tests {
                       "name": "albatross",
                       "version": "0.1.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "bird-feeder",
+                        "tqdm>=4,<5"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -1796,6 +1843,10 @@ mod tests {
                       "name": "bird-feeder",
                       "version": "1.0.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "anyio>=4.3.0,<5",
+                        "seeds"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -1806,6 +1857,9 @@ mod tests {
                       "name": "seeds",
                       "version": "1.0.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "idna==3.6"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -1861,6 +1915,9 @@ mod tests {
                       "name": "albatross",
                       "version": "0.1.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "tqdm>=4,<5"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -1872,6 +1929,9 @@ mod tests {
                     "name": "albatross",
                     "version": "0.1.0",
                     "requires-python": ">=3.12",
+                    "dependencies": [
+                      "tqdm>=4,<5"
+                    ],
                     "optional-dependencies": null
                   },
                   "tool": null
@@ -1973,6 +2033,9 @@ mod tests {
                       "name": "albatross",
                       "version": "0.1.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "tqdm>=4,<5"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -1983,6 +2046,9 @@ mod tests {
                       "name": "seeds",
                       "version": "1.0.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "idna==3.6"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -1994,6 +2060,9 @@ mod tests {
                     "name": "albatross",
                     "version": "0.1.0",
                     "requires-python": ">=3.12",
+                    "dependencies": [
+                      "tqdm>=4,<5"
+                    ],
                     "optional-dependencies": null
                   },
                   "tool": {
@@ -2062,6 +2131,9 @@ mod tests {
                       "name": "albatross",
                       "version": "0.1.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "tqdm>=4,<5"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -2072,6 +2144,9 @@ mod tests {
                       "name": "seeds",
                       "version": "1.0.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "idna==3.6"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -2083,6 +2158,9 @@ mod tests {
                     "name": "albatross",
                     "version": "0.1.0",
                     "requires-python": ">=3.12",
+                    "dependencies": [
+                      "tqdm>=4,<5"
+                    ],
                     "optional-dependencies": null
                   },
                   "tool": {
@@ -2152,6 +2230,9 @@ mod tests {
                       "name": "albatross",
                       "version": "0.1.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "tqdm>=4,<5"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -2162,6 +2243,9 @@ mod tests {
                       "name": "bird-feeder",
                       "version": "1.0.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "anyio>=4.3.0,<5"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -2172,6 +2256,9 @@ mod tests {
                       "name": "seeds",
                       "version": "1.0.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "idna==3.6"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -2183,6 +2270,9 @@ mod tests {
                     "name": "albatross",
                     "version": "0.1.0",
                     "requires-python": ">=3.12",
+                    "dependencies": [
+                      "tqdm>=4,<5"
+                    ],
                     "optional-dependencies": null
                   },
                   "tool": {
@@ -2252,6 +2342,9 @@ mod tests {
                       "name": "albatross",
                       "version": "0.1.0",
                       "requires-python": ">=3.12",
+                      "dependencies": [
+                        "tqdm>=4,<5"
+                      ],
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
@@ -2263,6 +2356,9 @@ mod tests {
                     "name": "albatross",
                     "version": "0.1.0",
                     "requires-python": ">=3.12",
+                    "dependencies": [
+                      "tqdm>=4,<5"
+                    ],
                     "optional-dependencies": null
                   },
                   "tool": {
