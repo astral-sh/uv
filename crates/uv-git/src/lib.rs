@@ -60,6 +60,13 @@ impl GitUrl {
         self
     }
 
+    /// Set the [`GitReference`] to use for this Git URL.
+    #[must_use]
+    pub fn with_reference(mut self, reference: GitReference) -> Self {
+        self.reference = reference;
+        self
+    }
+
     /// Return the [`Url`] of the Git repository.
     pub fn repository(&self) -> &Url {
         &self.repository
