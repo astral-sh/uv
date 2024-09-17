@@ -406,6 +406,12 @@ fn apply_editable_mode(
     }
 }
 
+/// Extract any credentials that are defined on the workspace dependencies themselves. While we
+/// don't store plaintext credentials in the `uv.lock`, we do respect credentials that are defined
+/// in the `pyproject.toml`.
+///
+/// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
+/// `project.dependencies`, and `project.optional-dependencies`.
 fn store_credentials_from_workspace(workspace: &Workspace) {
     for member in workspace.packages().values() {
         // Iterate over the `tool.uv.sources`.
