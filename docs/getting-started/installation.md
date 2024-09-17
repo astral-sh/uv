@@ -76,6 +76,13 @@ disable this behavior, use `INSTALLER_NO_MODIFY_PATH`. For example:
 $ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
 ```
 
+Using environment variables is recommended because they are consistent across platforms. However,
+options can be passed directly to the install script. For example, to see the available options:
+
+```console
+$ curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --help
+```
+
 ### PyPI
 
 For convenience, uv is published to [PyPI](https://pypi.org/project/uv/).
