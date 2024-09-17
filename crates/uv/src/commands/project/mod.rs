@@ -22,7 +22,9 @@ use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
-use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
+use uv_requirements::{
+    NamedRequirementsError, NamedRequirementsResolver, RequirementsSpecification,
+};
 use uv_resolver::{
     FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph, ResolverMarkers,
 };
@@ -548,7 +550,7 @@ pub(crate) async fn resolve_names(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> anyhow::Result<Vec<Requirement>> {
+) -> Result<Vec<Requirement>, NamedRequirementsError> {
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
         requirements

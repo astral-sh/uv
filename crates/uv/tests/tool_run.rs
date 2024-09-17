@@ -942,14 +942,20 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
     "###);
 
     // If invalid, we should reference `--with`.
-    uv_snapshot!(context.filters(), context.tool_run().arg("--with").arg("./foo").arg("flask").arg("--version").env("UV_TOOL_DIR", tool_dir.as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str())
-    , @r###"
+    uv_snapshot!(context.filters(), context
+        .tool_run()
+        .arg("--with")
+        .arg("./foo")
+        .arg("flask")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir
+        .as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × Invalid `--with` requirement
+      × Invalid requirement
       ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
     "###);
 
