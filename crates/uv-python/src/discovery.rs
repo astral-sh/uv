@@ -1370,8 +1370,9 @@ impl PythonSource {
     /// Whether a pre-release Python installation from the source should be used without opt-in.
     pub(crate) fn allows_prereleases(self) -> bool {
         match self {
-            Self::Managed | Self::Registry | Self::SearchPath | Self::MicrosoftStore => false,
-            Self::CondaPrefix
+            Self::Managed | Self::Registry | Self::MicrosoftStore => false,
+            Self::SearchPath
+            | Self::CondaPrefix
             | Self::ProvidedPath
             | Self::ParentInterpreter
             | Self::ActiveEnvironment
