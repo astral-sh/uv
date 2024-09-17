@@ -12628,7 +12628,7 @@ fn lock_python_upper_bound() -> Result<()> {
 }
 
 #[test]
-fn lock_metadata_override() -> Result<()> {
+fn lock_dependency_metadata() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -12644,7 +12644,7 @@ fn lock_metadata_override() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
-        [[tool.uv.metadata-override]]
+        [[tool.uv.dependency-metadata]]
         name = "anyio"
         version = "3.7.0"
         requires-dist = ["iniconfig"]
@@ -12675,7 +12675,7 @@ fn lock_metadata_override() -> Result<()> {
 
         [manifest]
 
-        [[manifest.metadata-override]]
+        [[manifest.dependency-metadata]]
         name = "anyio"
         version = "3.7.0"
         requires-dist = ["iniconfig"]
@@ -12763,7 +12763,7 @@ fn lock_metadata_override() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
-        [[tool.uv.metadata-override]]
+        [[tool.uv.dependency-metadata]]
         name = "anyio"
         version = "3.7.0"
         requires-dist = ["typing-extensions"]
@@ -12823,7 +12823,7 @@ fn lock_metadata_override() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
-        [[tool.uv.metadata-override]]
+        [[tool.uv.dependency-metadata]]
         name = "anyio"
         requires-dist = ["iniconfig"]
         "#,

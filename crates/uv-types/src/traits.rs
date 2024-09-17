@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use distribution_types::{
-    CachedDist, IndexCapabilities, IndexLocations, InstalledDist, MetadataOverrides, Resolution,
+    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, InstalledDist, Resolution,
     SourceDist,
 };
 use pep508_rs::PackageName;
@@ -64,7 +64,7 @@ pub trait BuildContext {
     fn capabilities(&self) -> &IndexCapabilities;
 
     /// Return a reference to any pre-defined static metadata.
-    fn metadata_override(&self) -> &MetadataOverrides;
+    fn dependency_metadata(&self) -> &DependencyMetadata;
 
     /// Whether source distribution building or pre-built wheels is disabled.
     ///

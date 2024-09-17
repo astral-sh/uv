@@ -5,13 +5,13 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use uv_normalize::{ExtraName, PackageName};
 
-/// Pre-defined [`MetadataOverride`] entries, indexed by [`PackageName`] and [`Version`].
+/// Pre-defined [`StaticMetadata`] entries, indexed by [`PackageName`] and [`Version`].
 #[derive(Debug, Clone, Default)]
-pub struct MetadataOverrides(FxHashMap<PackageName, Vec<MetadataOverride>>);
+pub struct DependencyMetadata(FxHashMap<PackageName, Vec<StaticMetadata>>);
 
-impl MetadataOverrides {
-    /// Index a set of [`MetadataOverride`] entries by [`PackageName`] and [`Version`].
-    pub fn from_entries(entries: impl IntoIterator<Item = MetadataOverride>) -> Self {
+impl DependencyMetadata {
+    /// Index a set of [`StaticMetadata`] entries by [`PackageName`] and [`Version`].
+    pub fn from_entries(entries: impl IntoIterator<Item = StaticMetadata>) -> Self {
         let mut map = Self::default();
         for entry in entries {
             map.0.entry(entry.name.clone()).or_default().push(entry);
@@ -19,7 +19,7 @@ impl MetadataOverrides {
         map
     }
 
-    /// Retrieve a [`MetadataOverride`] entry by [`PackageName`] and [`Version`].
+    /// Retrieve a [`StaticMetadata`] entry by [`PackageName`] and [`Version`].
     pub fn get(&self, package: &PackageName, version: &Version) -> Option<Metadata23> {
         let versions = self.0.get(package)?;
 
@@ -38,8 +38,8 @@ impl MetadataOverrides {
         })
     }
 
-    /// Retrieve all [`MetadataOverride`] entries.
-    pub fn values(&self) -> impl Iterator<Item = &MetadataOverride> {
+    /// Retrieve all [`StaticMetadata`] entries.
+    pub fn values(&self) -> impl Iterator<Item = &StaticMetadata> {
         self.0.values().flatten()
     }
 }
@@ -49,7 +49,7 @@ impl MetadataOverrides {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
-pub struct MetadataOverride {
+pub struct StaticMetadata {
     // Mandatory fields
     pub name: PackageName,
     #[cfg_attr(

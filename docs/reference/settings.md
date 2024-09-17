@@ -451,6 +451,47 @@ specified as `KEY=VALUE` pairs.
 
 ---
 
+### [`dependency-metadata`](#dependency-metadata) {: #dependency-metadata }
+
+Pre-defined static metadata for dependencies of the project (direct or transitive). When
+provided, enables the resolver to use the specified metadata instead of querying the
+registry or building the relevant package from source.
+
+Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
+standard, though only the following fields are respected:
+
+- `name`: The name of the package.
+- (Optional) `version`: The version of the package. If omitted, the metadata will be applied
+  to all versions of the package.
+- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
+- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
+- (Optional) `provides-extras`: The extras provided by the package.
+
+**Default value**: `[]`
+
+**Type**: `list[dict]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    dependency-metadata = [
+        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+    ]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    dependency-metadata = [
+        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+    ]
+    ```
+
+---
+
 ### [`exclude-newer`](#exclude-newer) {: #exclude-newer }
 
 Limit candidate packages to those that were uploaded prior to the given date.
@@ -668,47 +709,6 @@ Windows.
     ```toml
     
     link-mode = "copy"
-    ```
-
----
-
-### [`metadata-override`](#metadata-override) {: #metadata-override }
-
-Pre-defined static metadata for dependencies of the project (direct or transitive). When
-provided, enables the resolver to use the specified metadata instead of querying the
-registry or building the relevant package from source.
-
-Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
-standard, though only the following fields are respected:
-
-- `name`: The name of the package.
-- (Optional) `version`: The version of the package. If omitted, the metadata will be applied
-  to all versions of the package.
-- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
-- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
-- (Optional) `provides-extras`: The extras provided by the package.
-
-**Default value**: `[]`
-
-**Type**: `list[dict]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv]
-    metadata-override = [
-        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
-    ]
-    ```
-=== "uv.toml"
-
-    ```toml
-    
-    metadata-override = [
-        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
-    ]
     ```
 
 ---
@@ -1515,6 +1515,48 @@ Used to reflect custom build scripts and commands that wrap `uv pip compile`.
 
 ---
 
+#### [`dependency-metadata`](#pip_dependency-metadata) {: #pip_dependency-metadata }
+<span id="dependency-metadata"></span>
+
+Pre-defined static metadata for dependencies of the project (direct or transitive). When
+provided, enables the resolver to use the specified metadata instead of querying the
+registry or building the relevant package from source.
+
+Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
+standard, though only the following fields are respected:
+
+- `name`: The name of the package.
+- (Optional) `version`: The version of the package. If omitted, the metadata will be applied
+  to all versions of the package.
+- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
+- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
+- (Optional) `provides-extras`: The extras provided by the package.
+
+**Default value**: `[]`
+
+**Type**: `list[dict]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    dependency-metadata = [
+        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+    ]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    dependency-metadata = [
+        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+    ]
+    ```
+
+---
+
 #### [`emit-build-options`](#pip_emit-build-options) {: #pip_emit-build-options }
 <span id="emit-build-options"></span>
 
@@ -1929,48 +1971,6 @@ Windows.
     ```toml
     [pip]
     link-mode = "copy"
-    ```
-
----
-
-#### [`metadata-override`](#pip_metadata-override) {: #pip_metadata-override }
-<span id="metadata-override"></span>
-
-Pre-defined static metadata for dependencies of the project (direct or transitive). When
-provided, enables the resolver to use the specified metadata instead of querying the
-registry or building the relevant package from source.
-
-Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
-standard, though only the following fields are respected:
-
-- `name`: The name of the package.
-- (Optional) `version`: The version of the package. If omitted, the metadata will be applied
-  to all versions of the package.
-- (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
-- (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
-- (Optional) `provides-extras`: The extras provided by the package.
-
-**Default value**: `[]`
-
-**Type**: `list[dict]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    metadata-override = [
-        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
-    ]
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    metadata-override = [
-        { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
-    ]
     ```
 
 ---

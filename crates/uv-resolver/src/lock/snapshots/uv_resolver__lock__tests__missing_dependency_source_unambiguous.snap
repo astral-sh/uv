@@ -176,7 +176,7 @@ Ok(
             requirements: {},
             constraints: {},
             overrides: {},
-            metadata_override: {},
+            dependency_metadata: {},
         },
     },
 )

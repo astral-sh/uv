@@ -744,16 +744,26 @@ $ uv sync
 ```
 
 Alternatively, you can provide the `flash-attn` metadata upfront via the
-[`metadata-override`](../reference/settings.md#metadata-override) setting, thereby forgoing the need
-to build the package during the dependency resolution phase. For example, to provide the
+[`dependency-metadata`](../reference/settings.md#dependency-metadata) setting, thereby forgoing the
+need to build the package during the dependency resolution phase. For example, to provide the
 `flash-attn` metadata upfront, include the following in your `pyproject.toml`:
 
 ```toml title="pyproject.toml"
-[[tool.uv.metadata-override]]
+[[tool.uv.dependency-metadata]]
 name = "flash-attn"
 version = "2.6.3"
 requires-dist = ["torch", "einops"]
 ```
+
+!!! tip
+
+    To determine the package metadata for a package like `flash-attn`, navigate to the appropriate Git repository,
+    or look it up on [PyPI](https://pypi.org/project/flash-attn) and download the package's source distribution.
+    The package requirements can typically be found in the `setup.py` or `setup.cfg` file.
+
+    (If the package includes a built distribution, you can unzip it to find the `METADATA` file; however, the presence
+    of a built distribution would negate the need to provide the metadata upfront, since it would already be available
+    to uv.)
 
 Once included, you can again use the two-step `uv sync` process to install the build dependencies.
 Given the following `pyproject.toml`:
@@ -774,7 +784,7 @@ compile = ["flash-attn"]
 [tool.uv]
 no-build-isolation-package = ["flash-attn"]
 
-[[tool.uv.metadata-override]]
+[[tool.uv.dependency-metadata]]
 name = "flash-attn"
 version = "2.6.3"
 requires-dist = ["torch", "einops"]

@@ -9,7 +9,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
 use distribution_types::{
-    IndexLocations, MetadataOverrides, NameRequirementSpecification,
+    DependencyMetadata, IndexLocations, NameRequirementSpecification,
     UnresolvedRequirementSpecification,
 };
 use pep440_rs::Version;
@@ -242,7 +242,7 @@ async fn do_lock(
         allow_insecure_host,
         resolution,
         prerelease,
-        metadata_override,
+        dependency_metadata,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -411,7 +411,7 @@ async fn do_lock(
         interpreter,
         index_locations,
         &flat_index,
-        metadata_override,
+        dependency_metadata,
         &state.index,
         &state.git,
         &state.capabilities,
@@ -439,7 +439,7 @@ async fn do_lock(
             &constraints,
             &overrides,
             environments,
-            metadata_override,
+            dependency_metadata,
             interpreter,
             &requires_python,
             index_locations,
@@ -561,7 +561,7 @@ async fn do_lock(
                 requirements,
                 constraints,
                 overrides,
-                metadata_override.values().cloned(),
+                dependency_metadata.values().cloned(),
             )
             .relative_to(workspace)?;
 
@@ -601,7 +601,7 @@ impl ValidatedLock {
         constraints: &[Requirement],
         overrides: &[Requirement],
         environments: Option<&SupportedEnvironments>,
-        metadata_override: &MetadataOverrides,
+        dependency_metadata: &DependencyMetadata,
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
         index_locations: &IndexLocations,
@@ -721,7 +721,7 @@ impl ValidatedLock {
                 requirements,
                 constraints,
                 overrides,
-                metadata_override,
+                dependency_metadata,
                 indexes,
                 build_options,
                 interpreter.tags()?,

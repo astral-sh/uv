@@ -17,11 +17,11 @@ use url::Url;
 use cache_key::RepositoryUrl;
 use distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use distribution_types::{
-    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
-    DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
-    IndexLocations, IndexUrl, MetadataOverride, MetadataOverrides, Name, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Resolution, ResolvedDist, ToUrlError, UrlString,
+    BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
+    Dist, DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
+    IndexLocations, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, StaticMetadata,
+    ToUrlError, UrlString,
 };
 use pep440_rs::Version;
 use pep508_rs::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
@@ -795,9 +795,9 @@ impl Lock {
                 manifest_table.insert("overrides", value(overrides));
             }
 
-            if !self.manifest.metadata_override.is_empty() {
+            if !self.manifest.dependency_metadata.is_empty() {
                 let mut tables = ArrayOfTables::new();
-                for metadata in &self.manifest.metadata_override {
+                for metadata in &self.manifest.dependency_metadata {
                     let mut table = Table::new();
                     table.insert("name", value(metadata.name.to_string()));
                     if let Some(version) = metadata.version.as_ref() {
@@ -826,7 +826,7 @@ impl Lock {
                     }
                     tables.push(table);
                 }
-                manifest_table.insert("metadata-override", Item::ArrayOfTables(tables));
+                manifest_table.insert("dependency-metadata", Item::ArrayOfTables(tables));
             }
 
             if !manifest_table.is_empty() {
@@ -915,7 +915,7 @@ impl Lock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
-        metadata_override: &MetadataOverrides,
+        dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
         build_options: &BuildOptions,
         tags: &Tags,
@@ -1032,8 +1032,11 @@ impl Lock {
 
         // Validate that the lockfile was generated with the same static metadata.
         {
-            let expected = metadata_override.values().cloned().collect::<BTreeSet<_>>();
-            let actual = &self.manifest.metadata_override;
+            let expected = dependency_metadata
+                .values()
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            let actual = &self.manifest.dependency_metadata;
             if expected != *actual {
                 return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
             }
@@ -1294,10 +1297,7 @@ pub enum SatisfiesResult<'lock> {
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses different static metadata.
-    MismatchedStaticMetadata(
-        BTreeSet<MetadataOverride>,
-        &'lock BTreeSet<MetadataOverride>,
-    ),
+    MismatchedStaticMetadata(BTreeSet<StaticMetadata>, &'lock BTreeSet<StaticMetadata>),
     /// The lockfile is missing a workspace member.
     MissingRoot(PackageName),
     /// The lockfile referenced a remote index that was not provided
@@ -1353,7 +1353,7 @@ pub struct ResolverManifest {
     overrides: BTreeSet<Requirement>,
     /// The static metadata provided to the resolver.
     #[serde(default)]
-    metadata_override: BTreeSet<MetadataOverride>,
+    dependency_metadata: BTreeSet<StaticMetadata>,
 }
 
 impl ResolverManifest {
@@ -1364,14 +1364,14 @@ impl ResolverManifest {
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Requirement>,
-        metadata_override: impl IntoIterator<Item = MetadataOverride>,
+        dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {
         Self {
             members: members.into_iter().collect(),
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
             overrides: overrides.into_iter().collect(),
-            metadata_override: metadata_override.into_iter().collect(),
+            dependency_metadata: dependency_metadata.into_iter().collect(),
         }
     }
 
@@ -1394,7 +1394,7 @@ impl ResolverManifest {
                 .into_iter()
                 .map(|requirement| requirement.relative_to(workspace.install_path()))
                 .collect::<Result<BTreeSet<_>, _>>()?,
-            metadata_override: self.metadata_override,
+            dependency_metadata: self.dependency_metadata,
         })
     }
 }

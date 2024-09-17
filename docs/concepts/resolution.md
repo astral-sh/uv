@@ -265,28 +265,36 @@ If multiple overrides are provided for the same package, they must be differenti
 [markers](#platform-markers). If a package has a dependency with a marker, it is replaced
 unconditionally when using overrides — it does not matter if the marker evaluates to true or false.
 
-## Metadata overrides
+## Dependency metadata
 
-Metadata overrides allow overriding the metadata of a specific package. For example, to provide
-metadata for `chumpy` upfront, include a metadata override in the `pyproject.toml`:
+During resolution, uv needs to resolve the metadata for each package it encounters, in order to
+determine its dependencies. This metadata is often available as a static file in the package index;
+however, for packages that only provide source distributions, the metadata may not be available
+upfront.
+
+In such cases, uv has to build the package to determine its metadata (e.g., by invoking `setup.py`).
+This can introduce a performance penalty during resolution. Further, it imposes the requirement that
+the package can be built on all platforms, which may not be true.
+
+For example, you may have a package that should only be built and installed on Linux, but doesn't
+build successfully on macOS or Windows. While uv can construct a perfectly valid lockfile for this
+scenario, doing so would require building the package, which would fail on non-Linux platforms.
+
+The `tool.uv.dependency-metadata` table can be used to provide static metadata for such dependencies
+upfront, thereby allowing uv to skip the build step and use the provided metadata instead.
+
+For example, to provide metadata for `chumpy` upfront, include its `dependency-metadata` in the
+`pyproject.toml`:
 
 ```toml
-[[tool.uv.metadata-override]]
+[[tool.uv.dependency-metadata]]
 name = "chumpy"
 version = "0.70"
 requires-dist = ["numpy>=1.8.1", "scipy>=0.13.0", "six>=1.11.0"]
 ```
 
-Metadata overrides are intended for cases in which a package does _not_ declare static metadata
-upfront. Typically, uv would be required to build such packages to determine their metadata, e.g.,
-by invoking `setup.py`. This imposes the requirement that the package can be built on all platforms,
-which may not be true.
-
-For example, you may have a package that should only be built and installed on Linux, but doesn't
-build successfully on macOS or Windows. By declaring the metadata upfront, uv can skip the build
-step and use the provided metadata instead.
-
-Metadata overrides are also useful for packages that require disabling build isolation. In such
+These declarations are intended for cases in which a package does _not_ declare static metadata
+upfront, though they are also useful for packages that require disabling build isolation. In such
 cases, it may be easier to declare the package metadata upfront, rather than creating a custom build
 environment prior to resolving the package.
 
@@ -294,16 +302,22 @@ For example, you can declare the metadata for `flash-attn`, allowing uv to resol
 the package from source (which itself requires installing `torch`):
 
 ```toml
-[[tool.uv.metadata-override]]
+[[tool.uv.dependency-metadata]]
 name = "flash-attn"
 version = "2.6.3"
 requires-dist = ["torch", "einops"]
 ```
 
-Like dependency overrides, metadata overrides can also be used for cases in which a package's
-metadata is incorrect or incomplete, or when a package is not available in the package index. While
-dependency overrides allow overriding the allowed versions of a package globally, metadata overrides
-allow overriding the declared metadata of a specific package.
+Like dependency overrides, `tool.uv.dependency-metadata` can also be used for cases in which a
+package's metadata is incorrect or incomplete, or when a package is not available in the package
+index. While dependency overrides allow overriding the allowed versions of a package globally,
+metadata overrides allow overriding the declared metadata of a _specific package_.
+
+Entries in the `tool.uv.dependency-metadata` table follow the
+[Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) specification,
+though only `name`, `version`, `requires-dist`, `requires-python`, and `provides-extra` are read by
+uv. The `version` field is also considered optional. If omitted, the metadata will be used for all
+versions of the specified package.
 
 ## Lower bounds
 
