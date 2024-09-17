@@ -11,6 +11,24 @@ environments.
     isolate packages required by each script. uv automatically manages virtual environments for you
     and prefers a [declarative](#declaring-script-dependencies) approach to dependencies.
 
+<!-- ## Running a script
+
+To start an interactive Python session where you can run commands and explore your environment, use `uv run python`: -->
+
+## Running a REPL
+
+To start an interactive Python session where you can run commands and explore your environment, use:
+
+```console
+$ uv run python
+```
+```
+Type "help", "copyright", "credits" or "license" for more information.
+>>> print("Hello World")
+Hello World
+```
+This will open a Python script where you can execute individual Python commands and experiment interactively with the environment.
+
 ## Running a script without dependencies
 
 If your script has no dependencies, you can execute it with `uv run`:
