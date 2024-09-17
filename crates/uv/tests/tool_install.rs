@@ -2072,10 +2072,88 @@ fn tool_install_upgrade() {
     });
 }
 
+/// Test reinstalling tools with varying `--python` requests.
+#[test]
+fn tool_install_python_requests() {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-p")
+        .arg("3.12")
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    // Install with Python 3.12 (compatible).
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-p")
+        .arg("3.12")
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `black` is already installed
+    "###);
+
+    // // Install with Python 3.11 (incompatible).
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-p")
+        .arg("3.11")
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing environment for `black`: the requested Python interpreter does not match the environment interpreter
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+}
+
 /// Test reinstalling tools with varying `--python` and
 /// `--python-preference` parameters.
+#[ignore = "https://github.com/astral-sh/uv/issues/7473"]
 #[test]
-fn tool_install_python_params() {
+fn tool_install_python_preference() {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_counts()
         .with_filtered_exe_suffix();
