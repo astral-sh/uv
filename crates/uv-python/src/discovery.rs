@@ -3,7 +3,7 @@ use regex::Regex;
 use same_file::is_same_file;
 use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
-use std::fmt::{self, Formatter};
+use std::fmt::{self, Debug, Formatter};
 use std::{env, io, iter};
 use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
@@ -1707,85 +1707,51 @@ impl FromStr for VersionRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        fn parse_nosep(s: &str) -> Option<VersionRequest> {
-            let mut chars = s.chars();
-            let major = chars.next()?.to_digit(10)?.try_into().ok()?;
-            if chars.as_str().is_empty() {
-                return Some(VersionRequest::Major(major));
+        let Ok(version) = Version::from_str(s) else {
+            if let Ok(value) = try_into_version_specifiers(s) {
+                return Ok(value);
             }
-            let minor = chars.as_str().parse::<u8>().ok()?;
-            Some(VersionRequest::MajorMinor(major, minor))
-        }
+            return Err(Error::InvalidVersionRequest(s.to_string()));
+        };
 
-        fn extract_prerelease(s: &str) -> (&str, Option<Prerelease>) {
-            match Prerelease::from_str(s) {
-                Ok(prerelease) => match s.rsplit_once(&prerelease.kind.to_string()) {
-                    Some((s, _)) => (s, Some(prerelease)),
-                    _ => (s, None),
-                },
-                Err(_) => (s, None),
-            }
-        }
+        let version = version_with_major_minor(version);
 
-        let (version_without_pre, prerelease) = extract_prerelease(s);
+        let Ok(release) = try_into_u8(version.release()) else {
+            return Err(Error::InvalidVersionRequest(s.to_string()));
+        };
 
-        // e.g. `3`, `38`, `312`
-        if let Some(request) = parse_nosep(version_without_pre) {
-            if let Some(prerelease) = prerelease {
-                if let VersionRequest::MajorMinor(major, minor) = request {
-                    return Ok(VersionRequest::MajorMinorPrerelease(
-                        major, minor, prerelease,
-                    ));
+        let prerelease = version.pre();
+
+        match release.as_slice() {
+            // e.g. `3
+            [major] => Ok(Self::Major(*major)),
+            // e.g. `3.12` or `312` or `3.13rc1`
+            [major, minor] => {
+                if let Some(prerelease) = prerelease {
+                    return Ok(Self::MajorMinorPrerelease(*major, *minor, prerelease));
                 }
+                Ok(Self::MajorMinor(*major, *minor))
             }
-            Ok(request)
-        }
-        // e.g. `3.12.1`
-        else if let Ok(versions) = version_without_pre
-            .splitn(3, '.')
-            .map(str::parse::<u8>)
-            .collect::<Result<Vec<_>, _>>()
-        {
-            let selector = match versions.as_slice() {
-                // e.g. `3`
-                [major] => VersionRequest::Major(*major),
-                // e.g. `3.10`
-                [major, minor] => {
-                    if let Some(prerelease) = prerelease {
-                        return Ok(VersionRequest::MajorMinorPrerelease(
-                            *major, *minor, prerelease,
-                        ));
-                    }
-                    VersionRequest::MajorMinor(*major, *minor)
+            // e.g. `3.12.1` or `3.13.0rc1`
+            [major, minor, patch] => {
+                if let Some(prerelease) = prerelease {
+                    return Ok(Self::MajorMinorPrerelease(*major, *minor, prerelease));
                 }
-                // e.g. `3.10.4`
-                [major, minor, patch] => {
-                    if let Some(prerelease) = prerelease {
-                        return Ok(VersionRequest::MajorMinorPrerelease(
-                            *major, *minor, prerelease,
-                        ));
-                    }
-                    VersionRequest::MajorMinorPatch(*major, *minor, *patch)
-                }
-                _ => unreachable!(),
-            };
-
-            Ok(selector)
-
-        // e.g. `>=3.12.1,<3.12`
-        } else if let Ok(specifiers) = VersionSpecifiers::from_str(version_without_pre) {
-            if specifiers.is_empty() {
-                return Err(Error::InvalidVersionRequest(
-                    version_without_pre.to_string(),
-                ));
+                Ok(Self::MajorMinorPatch(*major, *minor, *patch))
             }
-            Ok(Self::Range(specifiers))
-        } else {
-            Err(Error::InvalidVersionRequest(
-                version_without_pre.to_string(),
-            ))
+            _ => Err(Error::InvalidVersionRequest(s.to_string())),
         }
     }
+}
+
+fn try_into_version_specifiers(s: &str) -> Result<VersionRequest, Error> {
+    if let Ok(specifiers) = VersionSpecifiers::from_str(s) {
+        if specifiers.is_empty() {
+            return Err(Error::InvalidVersionRequest(s.to_string()));
+        }
+        return Ok(VersionRequest::Range(specifiers));
+    }
+    Err(Error::InvalidVersionRequest(s.to_string()))
 }
 
 impl From<&PythonVersion> for VersionRequest {
@@ -1921,6 +1887,32 @@ fn conjunction(items: &[&str]) -> String {
             )
         }
     }
+}
+
+fn try_into_u8(release: &[u64]) -> Result<Vec<u8>, std::num::TryFromIntError> {
+    release
+        .iter()
+        .map(|x| match (*x).try_into() {
+            Ok(x) => Ok(x),
+            Err(e) => Err(e),
+        })
+        .collect()
+}
+
+/// Convert a single release number to a major-minor version.
+/// e.g. `38` -> `3.8`, `312` -> `3.12`
+fn version_with_major_minor(version: Version) -> Version {
+    let release = version.release();
+    if release.len() == 1 {
+        let release = release[0].to_string();
+        let mut chars = release.chars();
+        if let Some(major) = chars.next().and_then(|c| c.to_digit(10)) {
+            if let Ok(minor) = chars.as_str().parse::<u32>() {
+                return version.with_release([u64::from(major), u64::from(minor)]);
+            }
+        }
+    }
+    version
 }
 
 #[cfg(test)]
@@ -2106,6 +2098,31 @@ mod tests {
                 .to_canonical_string(),
             ">=3.12, <3.13"
         );
+
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str("3.13.0a1").unwrap())
+                .to_canonical_string(),
+            "3.13a1"
+        );
+
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str("3.13.0b5").unwrap())
+                .to_canonical_string(),
+            "3.13b5"
+        );
+
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str("3.13.0rc1").unwrap())
+                .to_canonical_string(),
+            "3.13rc1"
+        );
+
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str("313rc4").unwrap())
+                .to_canonical_string(),
+            "3.13rc4"
+        );
+
         assert_eq!(
             PythonRequest::ExecutableName("foo".to_string()).to_canonical_string(),
             "foo"
