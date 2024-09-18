@@ -1177,7 +1177,7 @@ fn tool_run_python_should_exit_successfully() {
             .arg("python")
             .env("UV_TOOL_DIR", tool_dir.as_os_str())
             .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
-            success: true
+    success: true
     exit_code: 0
     ----- stdout -----
     
@@ -1214,12 +1214,12 @@ fn tool_run_python_should_return_error_if_interpreter_version_cannot_be_found() 
             .arg("python@3.12.99")
             .env("UV_TOOL_DIR", tool_dir.as_os_str())
             .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
-             success: false
+    success: false
     exit_code: 2
     ----- stdout -----
     
     ----- stderr -----
-    error: No interpreter found for Python 3.12.[X] in virtual environments or system path or `py` launcher
+    error: No interpreter found for Python 3.12.[X] in virtual environments, system path, or `py` launcher
     "###);
     }
 }
