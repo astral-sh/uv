@@ -4808,3 +4808,49 @@ fn update_offset() -> Result<()> {
     });
     Ok(())
 }
+
+/// Check hint for <https://github.com/astral-sh/uv/issues/7329>
+/// if there is a broken cyclic dependency on a local package.
+#[test]
+fn add_error_local_cycle() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "dagster"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.8.7"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of dagster-webserver==1.8.7 and your project depends on dagster-webserver==1.8.7, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: Resolution failed on a dependency ('dagster') which has the same name as your local package ('dagster'). Consider checking your project for possible name conflicts with packages in the index.
+      help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
+    "###);
+
+    uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
+
+    let lock = context.temp_dir.join("uv.lock");
+    assert!(!lock.exists());
+
+    Ok(())
+}

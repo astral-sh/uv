@@ -508,6 +508,7 @@ impl PubGrubReportFormatter<'_> {
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
         markers: &ResolverMarkers,
+        workspace_members: &BTreeSet<PackageName>,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
         match derivation_tree {
@@ -526,9 +527,7 @@ impl PubGrubReportFormatter<'_> {
                             output_hints,
                         );
                     }
-                }
 
-                if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to no `--find-links` flat index
                     Self::index_hints(
                         package,
@@ -539,6 +538,14 @@ impl PubGrubReportFormatter<'_> {
                         incomplete_packages,
                         output_hints,
                     );
+
+                    // Check for no versions on the local packages themself, which may
+                    // happen if by mistake one of them is shadowing a transitive dependency.
+                    if workspace_members.contains(name) {
+                        output_hints.insert(PubGrubHint::WorkspacePackageNoVersions {
+                            package: package.clone(),
+                        });
+                    }
                 }
             }
             DerivationTree::External(External::FromDependencyOf(
@@ -571,6 +578,7 @@ impl PubGrubReportFormatter<'_> {
                     incomplete_packages,
                     fork_urls,
                     markers,
+                    workspace_members,
                     output_hints,
                 );
                 self.generate_hints(
@@ -581,6 +589,7 @@ impl PubGrubReportFormatter<'_> {
                     incomplete_packages,
                     fork_urls,
                     markers,
+                    workspace_members,
                     output_hints,
                 );
             }
@@ -747,7 +756,9 @@ pub(crate) enum PubGrubHint {
     /// A package was not found in the registry, but network access was disabled.
     Offline,
     /// Metadata for a package could not be found.
-    MissingPackageMetadata { package: PubGrubPackage },
+    MissingPackageMetadata {
+        package: PubGrubPackage,
+    },
     /// Metadata for a package could not be parsed.
     InvalidPackageMetadata {
         package: PubGrubPackage,
@@ -802,6 +813,9 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         package_requires_python: Range<Version>,
     },
+    WorkspacePackageNoVersions {
+        package: PubGrubPackage,
+    },
 }
 
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
@@ -841,6 +855,9 @@ enum PubGrubHintCore {
     RequiresPython {
         source: PythonRequirementSource,
         requires_python: RequiresPython,
+    },
+    WorkspacePackageNoVersions {
+        package: PubGrubPackage,
     },
 }
 
@@ -885,6 +902,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 source,
                 requires_python,
             },
+            PubGrubHint::WorkspacePackageNoVersions { package } => {
+                Self::WorkspacePackageNoVersions { package }
+            }
         }
     }
 }
@@ -1078,6 +1098,16 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     PackageRange::compatibility(package, package_set, None).bold(),
                     package_requires_python.bold(),
+                )
+            }
+            Self::WorkspacePackageNoVersions { package } => {
+                write!(
+                    f,
+                    "{}{} Resolution failed on a dependency ('{}') which has the same name as your local package ('{}'). Consider checking your project for possible name conflicts with packages in the index.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package,
+                    package,
                 )
             }
         }
