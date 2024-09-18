@@ -9,7 +9,6 @@ use distribution_filename::DistExtension;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{VerbatimUrl, VersionOrUrl};
 use pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
-use uv_fs::PortablePathBuf;
 use uv_git::GitReference;
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
