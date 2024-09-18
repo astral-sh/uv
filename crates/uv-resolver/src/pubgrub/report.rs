@@ -499,7 +499,7 @@ impl PubGrubReportFormatter<'_> {
     ///
     /// The [`PubGrubHints`] help users resolve errors by providing additional context or modifying
     /// their requirements.
-    pub(crate) fn hints(
+    pub(crate) fn generate_hints(
         &self,
         derivation_tree: &ErrorTree,
         selector: &CandidateSelector,
@@ -508,8 +508,8 @@ impl PubGrubReportFormatter<'_> {
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
         markers: &ResolverMarkers,
-    ) -> IndexSet<PubGrubHint> {
-        let mut hints = IndexSet::default();
+        output_hints: &mut IndexSet<PubGrubHint>,
+    ) {
         match derivation_tree {
             DerivationTree::External(
                 External::Custom(package, set, _) | External::NoVersions(package, set),
@@ -518,7 +518,12 @@ impl PubGrubReportFormatter<'_> {
                     // Check for no versions due to pre-release options.
                     if !fork_urls.contains_key(name) {
                         self.prerelease_available_hint(
-                            package, name, set, selector, markers, &mut hints,
+                            package,
+                            name,
+                            set,
+                            selector,
+                            markers,
+                            output_hints,
                         );
                     }
                 }
@@ -532,7 +537,7 @@ impl PubGrubReportFormatter<'_> {
                         index_locations,
                         unavailable_packages,
                         incomplete_packages,
-                        &mut hints,
+                        output_hints,
                     );
                 }
             }
@@ -547,7 +552,7 @@ impl PubGrubReportFormatter<'_> {
                     &**dependency,
                     PubGrubPackageInner::Python(PubGrubPython::Target)
                 ) {
-                    hints.insert(PubGrubHint::RequiresPython {
+                    output_hints.insert(PubGrubHint::RequiresPython {
                         source: self.python_requirement.source(),
                         requires_python: self.python_requirement.target().clone(),
                         package: package.clone(),
@@ -558,7 +563,7 @@ impl PubGrubReportFormatter<'_> {
             }
             DerivationTree::External(External::NotRoot(..)) => {}
             DerivationTree::Derived(derived) => {
-                hints.extend(self.hints(
+                self.generate_hints(
                     &derived.cause1,
                     selector,
                     index_locations,
@@ -566,8 +571,9 @@ impl PubGrubReportFormatter<'_> {
                     incomplete_packages,
                     fork_urls,
                     markers,
-                ));
-                hints.extend(self.hints(
+                    output_hints,
+                );
+                self.generate_hints(
                     &derived.cause2,
                     selector,
                     index_locations,
@@ -575,10 +581,10 @@ impl PubGrubReportFormatter<'_> {
                     incomplete_packages,
                     fork_urls,
                     markers,
-                ));
+                    output_hints,
+                );
             }
-        }
-        hints
+        };
     }
 
     fn index_hints(
