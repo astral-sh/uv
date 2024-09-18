@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.12
+
+### Enhancements
+
+- Allow users to provide pre-defined metadata for resolution ([#7442](https://github.com/astral-sh/uv/pull/7442))
+- Invalidate existing tool environments on Python interpreter mismatch ([#7451](https://github.com/astral-sh/uv/pull/7451))
+
+### Bug fixes
+
+- Avoid fatal error when searching for egg-info with missing directory ([#7498](https://github.com/astral-sh/uv/pull/7498))
+
+### Documentation
+
+- Add note on cache growth for self-hosted GitHub runners ([#5757](https://github.com/astral-sh/uv/pull/5757))
+
 ## 0.4.11
 
 ### Enhancements
