@@ -2,7 +2,7 @@
 
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use common::{uv_snapshot, TestContext};
+use common::{copy_dir_all, uv_snapshot, TestContext};
 use indoc::indoc;
 
 mod common;
@@ -32,7 +32,7 @@ fn tool_run_args() {
         .arg("pytest")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -40,14 +40,13 @@ fn tool_run_args() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.1.1
-    "#);
+    "###);
 
     // Can use `--` to separate uv arguments from the command arguments.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -76,7 +75,7 @@ fn tool_run_at_version() {
         .arg("pytest@8.0.0")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -84,14 +83,13 @@ fn tool_run_at_version() {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.0.0
-    "#);
+    "###);
 
     // Empty versions are just treated as package and command names
     uv_snapshot!(context.filters(), context.tool_run()
@@ -138,7 +136,7 @@ fn tool_run_at_version() {
         .arg("pytest@8.0.0")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -149,7 +147,6 @@ fn tool_run_at_version() {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 1 package in [TIME]
     Installed 4 packages in [TIME]
      + iniconfig==2.0.0
@@ -157,7 +154,7 @@ fn tool_run_at_version() {
      + pluggy==1.4.0
      + pytest==8.1.1
     warning: An executable named `pytest@8.0.0` is not provided by package `pytest`.
-    "#);
+    "###);
 }
 
 #[test]
@@ -172,7 +169,7 @@ fn tool_run_from_version() {
         .arg("pytest")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -180,14 +177,13 @@ fn tool_run_from_version() {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.0.0
-    "#);
+    "###);
 }
 
 #[test]
@@ -201,7 +197,7 @@ fn tool_run_suggest_valid_commands() {
     .arg("black")
     .arg("orange")
     .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -212,7 +208,6 @@ fn tool_run_suggest_valid_commands() {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.3.0
@@ -222,12 +217,12 @@ fn tool_run_suggest_valid_commands() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     warning: An executable named `orange` is not provided by package `black`.
-    "#);
+    "###);
 
     uv_snapshot!(context.filters(), context.tool_run()
     .arg("fastapi-cli")
     .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -235,14 +230,13 @@ fn tool_run_suggest_valid_commands() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + fastapi-cli==0.0.1
      + importlib-metadata==1.7.0
      + zipp==3.18.1
     warning: Package `fastapi-cli` does not provide any executables.
-    "#);
+    "###);
 }
 
 #[test]
@@ -262,14 +256,13 @@ fn tool_run_warn_executable_not_in_from() {
         .env("UV_EXCLUDE_NEWER", "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
         // (FastAPI 0.111 is only available from this date onwards)
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 35 packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 35 packages in [TIME]
     Installed 35 packages in [TIME]
      + annotated-types==0.6.0
@@ -307,7 +300,7 @@ fn tool_run_warn_executable_not_in_from() {
      + watchfiles==0.21.0
      + websockets==12.0
     warning: An executable named `fastapi` is not provided by package `fastapi` but is available via the dependency `fastapi-cli`. Consider using `uv tool run --from fastapi-cli fastapi` instead.
-    "#);
+    "###);
 }
 
 #[test]
@@ -346,7 +339,7 @@ fn tool_run_from_install() {
         .arg("black")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -355,7 +348,6 @@ fn tool_run_from_install() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -364,14 +356,14 @@ fn tool_run_from_install() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "#);
+    "###);
 
     // Verify that `tool run black` at a different version installs the new version.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("black@24.1.1")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -380,7 +372,6 @@ fn tool_run_from_install() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.1.1
@@ -389,7 +380,7 @@ fn tool_run_from_install() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "#);
+    "###);
 
     // Verify that `--with` installs a new version.
     // TODO(charlie): This could (in theory) layer the `--with` requirements on top of the existing
@@ -400,7 +391,7 @@ fn tool_run_from_install() {
         .arg("black")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -409,7 +400,6 @@ fn tool_run_from_install() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -419,7 +409,7 @@ fn tool_run_from_install() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "#);
+    "###);
 
     // Verify that `tool run black` at a different version (via `--from`) installs the new version.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -428,7 +418,7 @@ fn tool_run_from_install() {
         .arg("black")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -437,7 +427,6 @@ fn tool_run_from_install() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.2.0
@@ -446,7 +435,7 @@ fn tool_run_from_install() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "#);
+    "###);
 }
 
 #[test]
@@ -462,7 +451,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -471,7 +460,6 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -480,7 +468,7 @@ fn tool_run_cache() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "#);
+    "###);
 
     // Verify that `tool run black` uses the cached version.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -508,7 +496,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -517,7 +505,6 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -526,7 +513,7 @@ fn tool_run_cache() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "#);
+    "###);
 
     // Verify that `--refresh-package` recreates everything. We may want to change this.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -537,7 +524,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -546,7 +533,6 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -555,7 +541,7 @@ fn tool_run_cache() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "#);
+    "###);
 
     // Verify that varying the interpreter leads to a fresh environment.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -564,7 +550,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -573,7 +559,6 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -582,7 +567,7 @@ fn tool_run_cache() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "#);
+    "###);
 
     // But that re-invoking with the previous interpreter retains the cached version.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -611,7 +596,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -620,7 +605,6 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
@@ -630,7 +614,7 @@ fn tool_run_cache() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "#);
+    "###);
 }
 
 #[test]
@@ -645,7 +629,7 @@ fn tool_run_url() {
         .arg("flask")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -655,7 +639,6 @@ fn tool_run_url() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + blinker==1.7.0
@@ -665,7 +648,7 @@ fn tool_run_url() {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.1
-    "#);
+    "###);
 }
 
 /// Read requirements from a `requirements.txt` file.
@@ -686,7 +669,7 @@ fn tool_run_requirements_txt() {
         .arg("flask")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -696,7 +679,6 @@ fn tool_run_requirements_txt() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + blinker==1.7.0
@@ -708,7 +690,7 @@ fn tool_run_requirements_txt() {
      + markupsafe==2.1.5
      + typing-extensions==4.10.0
      + werkzeug==3.0.1
-    "#);
+    "###);
 }
 
 /// Ignore and warn when (e.g.) the `--index-url` argument is a provided `requirements.txt`.
@@ -733,7 +715,7 @@ fn tool_run_requirements_txt_arguments() {
         .arg("flask")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -744,7 +726,6 @@ fn tool_run_requirements_txt_arguments() {
     ----- stderr -----
     warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + blinker==1.7.0
@@ -755,7 +736,7 @@ fn tool_run_requirements_txt_arguments() {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.1
-    "#);
+    "###);
 }
 
 /// List installed tools when no command arg is given (e.g. `uv tool run`).
@@ -815,16 +796,15 @@ fn tool_run_without_output() {
         .arg("pytest")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     pytest 8.1.1
 
     ----- stderr -----
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Installed [N] packages in [TIME]
-    "#);
+    "###);
 
     // Subsequent runs are quiet.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -841,6 +821,145 @@ fn tool_run_without_output() {
 
     ----- stderr -----
     "###);
+}
+
+#[test]
+fn tool_run_with_editable() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let anyio_local = context.temp_dir.child("src").child("anyio_local");
+    copy_dir_all(
+        context.workspace_root.join("scripts/packages/anyio_local"),
+        &anyio_local,
+    )?;
+
+    let black_editable = context.temp_dir.child("src").child("black_editable");
+    copy_dir_all(
+        context
+            .workspace_root
+            .join("scripts/packages/black_editable"),
+        &black_editable,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio", "sniffio==1.3.1"]
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import sniffio
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-editable")
+        .arg("./src/black_editable")
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("flask")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==0.1.0 (from file://[TEMP_DIR]/src/black_editable)
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + iniconfig==2.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###);
+
+    // Requesting an editable requirement should install it in a layer, even if it satisfied
+    uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg("./src/anyio_local").arg("flask").arg("--version").env("UV_TOOL_DIR", tool_dir.as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str())
+    
+    , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###);
+
+    // Requesting the project itself should use a new environment.
+    uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg(".").arg("flask").arg("--version").env("UV_TOOL_DIR", tool_dir.as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + sniffio==1.3.1
+     + werkzeug==3.0.1
+    "###);
+
+    // If invalid, we should reference `--with`.
+    uv_snapshot!(context.filters(), context
+        .tool_run()
+        .arg("--with")
+        .arg("./foo")
+        .arg("flask")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir
+        .as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Invalid `--with` requirement
+      ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
+    "###);
+
+    Ok(())
 }
 
 #[test]
@@ -883,7 +1002,7 @@ fn tool_run_upgrade_warn() {
         .arg("pytest")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -892,14 +1011,13 @@ fn tool_run_upgrade_warn() {
     ----- stderr -----
     warning: Tools cannot be upgraded via `uv tool run`; use `uv tool upgrade --all` to upgrade all installed tools, or `uv tool run package@latest` to run the latest version of a tool.
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.1.1
-    "#);
+    "###);
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--upgrade")
@@ -908,7 +1026,7 @@ fn tool_run_upgrade_warn() {
         .arg("pytest")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -917,7 +1035,6 @@ fn tool_run_upgrade_warn() {
     ----- stderr -----
     warning: Tools cannot be upgraded via `uv tool run`; use `uv tool upgrade --all` to upgrade all installed tools, `uv tool run package@latest` to run the latest version of a tool, or `uv tool run --refresh package` to upgrade any `--with` dependencies.
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + iniconfig==2.0.0
@@ -925,7 +1042,7 @@ fn tool_run_upgrade_warn() {
      + pluggy==1.4.0
      + pytest==8.1.1
      + typing-extensions==4.10.0
-    "#);
+    "###);
 }
 
 /// If we fail to resolve the tool, we should include "tool" in the error message.
@@ -983,7 +1100,7 @@ fn tool_run_latest() {
         .arg("pytest@latest")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -991,14 +1108,13 @@ fn tool_run_latest() {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.1.1
-    "#);
+    "###);
 
     // Run `pytest`, which should use the installed version.
     uv_snapshot!(context.filters(), context.tool_run()

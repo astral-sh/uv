@@ -84,7 +84,7 @@ fn prune_cached_env() {
         .arg("pytest@8.0.0")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r#"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -92,14 +92,13 @@ fn prune_cached_env() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.0.0
-    "#);
+    "###);
 
     let filters: Vec<_> = context
         .filters()
@@ -185,7 +184,7 @@ fn prune_unzipped() -> Result<()> {
     " })?;
 
     // Install a requirement, to populate the cache.
-    uv_snapshot!(context.filters(), context.pip_sync().env_remove("UV_EXCLUDE_NEWER").arg("requirements.txt").arg("--reinstall"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").env_remove("UV_EXCLUDE_NEWER").arg("requirements.txt").arg("--reinstall"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -205,15 +204,17 @@ fn prune_unzipped() -> Result<()> {
 
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    Removed 162 files ([SIZE])
+    Removed 171 files ([SIZE])
     "###);
+
+    context.venv().assert().success();
 
     // Reinstalling the source distribution should not require re-downloading the source
     // distribution.
     requirements_txt.write_str(indoc! { r"
         source-distribution==0.0.1
     " })?;
-    uv_snapshot!(context.filters(), context.pip_sync().env_remove("UV_EXCLUDE_NEWER").arg("requirements.txt").arg("--reinstall").arg("--offline"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").env_remove("UV_EXCLUDE_NEWER").arg("requirements.txt").arg("--offline"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -221,26 +222,33 @@ fn prune_unzipped() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
-    Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
-     - iniconfig==2.0.0
-     ~ source-distribution==0.0.1
+     + source-distribution==0.0.1
     "###);
 
     // But reinstalling the other package should require a download, since we pruned the wheel.
     requirements_txt.write_str(indoc! { r"
         iniconfig
     " })?;
-    uv_snapshot!(context.filters(), context.pip_sync().env_remove("UV_EXCLUDE_NEWER").arg("requirements.txt").arg("--reinstall").arg("--offline"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").env_remove("UV_EXCLUDE_NEWER").arg("requirements.txt").arg("--offline"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: iniconfig==2.0.0
-      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of iniconfig are available:
+              iniconfig<=0.1
+              iniconfig>=1.0.0
+          and all of:
+              iniconfig<=0.1
+              iniconfig>=1.0.0
+          need to be downloaded from a registry, we can conclude that iniconfig<1.0.0 cannot be used.
+          And because you require iniconfig, we can conclude that your requirements are unsatisfiable.
+
+          hint: Pre-releases are available for iniconfig in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)
+
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "###);
 
     Ok(())

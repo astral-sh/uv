@@ -945,6 +945,77 @@ fn sync_environment() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--only-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     - sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/astral-sh/uv/issues/6316>.
 ///
 /// Previously, we would read metadata statically from pyproject.toml and write that to `uv.lock`. In
@@ -1119,7 +1190,6 @@ fn no_install_workspace() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
-    Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
@@ -1584,7 +1654,6 @@ fn sync_custom_environment_path() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foo
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1610,7 +1679,6 @@ fn sync_custom_environment_path() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foobar/.venv
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1636,7 +1704,6 @@ fn sync_custom_environment_path() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: bar
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1658,7 +1725,6 @@ fn sync_custom_environment_path() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: [OTHER_TEMPDIR]/.venv
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1739,7 +1805,6 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foo
     Resolved 3 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1896,7 +1961,6 @@ fn sync_virtual_env_warning() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: foo
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1912,7 +1976,6 @@ fn sync_virtual_env_warning() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: bar
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -2324,6 +2387,180 @@ fn transitive_dev() -> Result<()> {
      + idna==3.6
      + root==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// Avoid installing dev dependencies of transitive dependencies.
+#[test]
+fn sync_no_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let src = child.child("src").child("child");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + root==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Remove the project.
+    fs_err::remove_dir_all(&child)?;
+
+    // Ensure that we can still import it.
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("python").arg("-c").arg("import child"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+/// Check warning message for <https://github.com/astral-sh/uv/issues/6998>
+/// if no `build-system` section is defined.
+fn sync_scripts_without_build_system() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        entry = "foo:custom_entry"
+        "#,
+    )?;
+
+    let test_script = context.temp_dir.child("src/__init__.py");
+    test_script.write_str(
+        r#"
+        def custom_entry():
+            print!("Hello")
+       "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+/// Check warning message for <https://github.com/astral-sh/uv/issues/6998>
+/// if the project is marked as `package = false`.
+fn sync_scripts_project_not_packaged() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        entry = "foo:custom_entry"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    let test_script = context.temp_dir.child("src/__init__.py");
+    test_script.write_str(
+        r#"
+        def custom_entry():
+            print!("Hello")
+       "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     "###);
 
     Ok(())

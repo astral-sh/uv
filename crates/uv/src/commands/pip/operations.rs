@@ -523,7 +523,7 @@ pub(crate) async fn install(
                     install_wheel_rs::Error::MissingRecord(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing RECORD file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
                         dist_info.path().user_display().cyan(),
                     );
                 }
@@ -531,7 +531,7 @@ pub(crate) async fn install(
                     install_wheel_rs::Error::MissingTopLevel(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing top-level.txt file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
                         dist_info.path().user_display().cyan(),
                     );
                 }
