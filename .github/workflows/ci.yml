@@ -605,7 +605,7 @@ jobs:
           ./uv pip install anyio
 
   integration-test-free-threaded-linux:
-    timeout-minutes: 10
+    timeout-minutes: 5
     needs: build-binary-linux
     name: "integration test | free-threaded on linux"
     runs-on: ubuntu-latest
