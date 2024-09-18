@@ -80,7 +80,7 @@ impl fmt::Display for EnvironmentNotFound {
             EnvironmentPreference::OnlyVirtual => SearchType::Virtual,
         };
 
-        if matches!(self.request, PythonRequest::Any) {
+        if matches!(self.request, PythonRequest::Default) {
             write!(f, "No {search_type} found")?;
         } else {
             write!(f, "No {search_type} found for {}", self.request)?;

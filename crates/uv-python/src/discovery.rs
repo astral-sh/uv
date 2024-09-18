@@ -36,9 +36,12 @@ use crate::{Interpreter, PythonVersion};
 /// See [`PythonRequest::from_str`].
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum PythonRequest {
-    /// Use any discovered Python installation
+    /// Use an appropriate default Python installation
+    ///
+    /// This may skip some Python installations, such as pre-release versions or alternative
+    /// implementations.
     #[default]
-    Any,
+    Default,
     /// A Python version without an implementation name e.g. `3.10` or `>=3.12,<3.13`
     Version(VersionRequest),
     /// A path to a directory containing a Python installation, e.g. `.venv`
@@ -776,7 +779,7 @@ pub fn find_python_installations<'a>(
                 ))))
             }
         }
-        PythonRequest::Any => Box::new({
+        PythonRequest::Default => Box::new({
             debug!("Searching for Python interpreter in {preference}");
             python_interpreters(None, None, environments, preference, cache).map(|result| {
                 result
@@ -976,7 +979,7 @@ pub fn find_best_python_installation(
 
     // If a Python version was requested but cannot be fulfilled, just take any version
     debug!("Looking for Python installation with any version");
-    let request = PythonRequest::Any;
+    let request = PythonRequest::Default;
     Ok(
         find_python_installation(&request, environments, preference, cache)?.map_err(|err| {
             // Use a more general error in this case since we looked for multiple versions
@@ -1142,7 +1145,7 @@ impl PythonRequest {
     pub fn parse(value: &str) -> Self {
         // e.g. `any`
         if value.eq_ignore_ascii_case("any") {
-            return Self::Any;
+            return Self::Default;
         }
 
         // e.g. `3.12.1`, `312`, or `>=3.12`
@@ -1246,7 +1249,7 @@ impl PythonRequest {
         }
 
         match self {
-            PythonRequest::Any => true,
+            PythonRequest::Default => true,
             PythonRequest::Version(version_request) => {
                 version_request.matches_interpreter(interpreter)
             }
@@ -1330,7 +1333,7 @@ impl PythonRequest {
 
     pub(crate) fn allows_prereleases(&self) -> bool {
         match self {
-            Self::Any => false,
+            Self::Default => false,
             Self::Version(version) => version.allows_prereleases(),
             Self::Directory(_) | Self::File(_) | Self::ExecutableName(_) => true,
             Self::Implementation(_) => false,
@@ -1348,7 +1351,7 @@ impl PythonRequest {
     /// [`Self::parse`] should always return the same request when given the output of this method.
     pub fn to_canonical_string(&self) -> String {
         match self {
-            Self::Any => "any".to_string(),
+            Self::Default => "any".to_string(),
             Self::Version(version) => version.to_string(),
             Self::Directory(path) => path.display().to_string(),
             Self::File(path) => path.display().to_string(),
@@ -1801,7 +1804,7 @@ impl fmt::Display for VersionRequest {
 impl fmt::Display for PythonRequest {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Any => write!(f, "any Python"),
+            Self::Default => write!(f, "any Python"),
             Self::Version(version) => write!(f, "Python {version}"),
             Self::Directory(path) => write!(f, "directory `{}`", path.user_display()),
             Self::File(path) => write!(f, "path `{}`", path.user_display()),
@@ -1883,7 +1886,7 @@ impl fmt::Display for PythonNotFound {
         };
 
         match self.request {
-            PythonRequest::Any => {
+            PythonRequest::Default => {
                 write!(f, "No interpreter found in {sources}")
             }
             _ => {
@@ -1961,7 +1964,7 @@ mod tests {
 
     #[test]
     fn interpreter_request_from_str() {
-        assert_eq!(PythonRequest::parse("any"), PythonRequest::Any);
+        assert_eq!(PythonRequest::parse("any"), PythonRequest::Default);
         assert_eq!(
             PythonRequest::parse("3.12"),
             PythonRequest::Version(VersionRequest::from_str("3.12").unwrap())
@@ -2123,7 +2126,7 @@ mod tests {
 
     #[test]
     fn interpreter_request_to_canonical_string() {
-        assert_eq!(PythonRequest::Any.to_canonical_string(), "any");
+        assert_eq!(PythonRequest::Default.to_canonical_string(), "any");
         assert_eq!(
             PythonRequest::Version(VersionRequest::from_str("3.12").unwrap()).to_canonical_string(),
             "3.12"

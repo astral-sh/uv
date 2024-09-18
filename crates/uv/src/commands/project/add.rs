@@ -139,7 +139,7 @@ pub(crate) async fn add(
                 request
             } else {
                 // (3) Assume any Python version
-                PythonRequest::Any
+                PythonRequest::Default
             };
 
             let interpreter = PythonInstallation::find_or_download(

@@ -66,7 +66,7 @@ pub(crate) async fn list(
     };
 
     let installed = find_python_installations(
-        &PythonRequest::Any,
+        &PythonRequest::Default,
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,
