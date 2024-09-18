@@ -75,9 +75,13 @@ impl<T: Serialize + DeserializeOwned> Cacheable for SerdeCacheable<T> {
 /// All `OwnedArchive` values are cacheable.
 impl<A> Cacheable for OwnedArchive<A>
 where
-    A: rkyv::Archive + rkyv::Serialize<crate::rkyvutil::Serializer<4096>>,
-    A::Archived: for<'a> rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'a>>
-        + rkyv::Deserialize<A, rkyv::de::deserializers::SharedDeserializeMap>,
+    // A: rkyv::Archive + rkyv::Serialize<crate::rkyvutil::Serializer<4096>>,
+    // A::Archived: for<'a> rkyv::bytecheck::CheckBytes<rkyv::validation::validators::DefaultValidator<'a>>
+    // + rkyv::Deserialize<A, rkyv::de::deserializers::SharedDeserializeMap>,
+    A: rkyv::Archive + for<'a> rkyv::Serialize<crate::rkyvutil::Serializer<'a>>,
+    A::Archived: rkyv::Portable
+        + rkyv::Deserialize<A, crate::rkyvutil::Deserializer>
+        + for<'a> rkyv::bytecheck::CheckBytes<crate::rkyvutil::Validator<'a>>,
 {
     type Target = Self;
 
