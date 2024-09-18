@@ -4863,6 +4863,7 @@ dependencies = [
  "fs2",
  "junction",
  "path-slash",
+ "schemars",
  "serde",
  "tempfile",
  "tokio",
