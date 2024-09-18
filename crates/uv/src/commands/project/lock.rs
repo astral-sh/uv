@@ -528,7 +528,11 @@ async fn do_lock(
                     .collect(),
                 dev,
                 source_trees,
-                None,
+                workspace
+                    .pyproject_toml()
+                    .project
+                    .as_ref()
+                    .map(|proj| proj.name.clone()),
                 Some(workspace.packages().keys().cloned().collect()),
                 &extras,
                 preferences,
