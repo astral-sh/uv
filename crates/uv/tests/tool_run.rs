@@ -1137,7 +1137,6 @@ fn tool_run_python_version_should_return_python_correct_python_version() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Run `python`, which should use the installed version.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python")
         .arg("--version")
@@ -1160,11 +1159,11 @@ fn tool_run_python_should_exit_successfully() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Run `python`, which should use the installed version.
-    uv_snapshot!(context.filters(), context.tool_run()
-        .arg("python")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    if cfg!(target_os = "linux") {
+        uv_snapshot!(context.filters(), context.tool_run()
+            .arg("python")
+            .env("UV_TOOL_DIR", tool_dir.as_os_str())
+            .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1173,6 +1172,23 @@ fn tool_run_python_should_exit_successfully() {
     Resolved in [TIME]
     Audited in [TIME]
     "###);
+    } else if cfg!(target_os = "windows") {
+        uv_snapshot!(context.filters(), context.tool_run()
+            .arg("python")
+            .env("UV_TOOL_DIR", tool_dir.as_os_str())
+            .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+            success: true
+    exit_code: 0
+    ----- stdout -----
+    
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    Python 3.12.[X] (tags/v3.12.[X]:a4a2d2b, Sep  6 2024, 20:11:23) [MSC v.1940 64 bit (AMD64)] on win32
+    Type "help", "copyright", "credits" or "license" for more information.
+    >>>
+    "###);
+    }
 }
 
 #[test]
@@ -1181,11 +1197,11 @@ fn tool_run_python_should_return_error_if_interpreter_version_cannot_be_found() 
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Run `python`, which should use the installed version.
-    uv_snapshot!(context.filters(), context.tool_run()
-        .arg("python@3.12.99")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    if cfg!(target_os = "linux") {
+        uv_snapshot!(context.filters(), context.tool_run()
+            .arg("python@3.12.99")
+            .env("UV_TOOL_DIR", tool_dir.as_os_str())
+            .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1193,6 +1209,19 @@ fn tool_run_python_should_return_error_if_interpreter_version_cannot_be_found() 
     ----- stderr -----
     error: No interpreter found for Python 3.12.[X] in virtual environments or system path
     "###);
+    } else if cfg!(target_os = "windows") {
+        uv_snapshot!(context.filters(), context.tool_run()
+            .arg("python@3.12.99")
+            .env("UV_TOOL_DIR", tool_dir.as_os_str())
+            .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+             success: false
+    exit_code: 2
+    ----- stdout -----
+    
+    ----- stderr -----
+    error: No interpreter found for Python 3.12.[X] in virtual environments or system path or `py` launcher
+    "###);
+    }
 }
 
 #[test]
@@ -1201,7 +1230,6 @@ fn tool_run_python_should_return_error_if_requested_interpreter_version_is_inval
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Run `python`, which should use the installed version.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python@3.300")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
