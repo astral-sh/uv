@@ -1899,6 +1899,9 @@ async fn read_egg_info(
     let egg_info = match find_egg_info(directory.as_ref()) {
         Ok(Some(path)) => path,
         Ok(None) => return Err(Error::MissingEggInfo),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::MissingEggInfo)
+        }
         Err(err) => return Err(Error::CacheRead(err)),
     };
 
