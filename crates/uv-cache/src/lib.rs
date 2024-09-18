@@ -740,8 +740,7 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            // Note, next time we change the version we should change the name of this bucket to `source-dists-v0`
-            Self::SourceDistributions => "built-wheels-v3",
+            Self::SourceDistributions => "source-dists-v0",
             Self::FlatIndex => "flat-index-v0",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v2",

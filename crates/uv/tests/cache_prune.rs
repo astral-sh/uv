@@ -321,7 +321,7 @@ fn prune_stale_revision() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling source revision: [CACHE_DIR]/built-wheels-v3/[ENTRY]
+    DEBUG Removing dangling source revision: [CACHE_DIR]/source-dists-v0/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed 8 files ([SIZE])
     "###);
