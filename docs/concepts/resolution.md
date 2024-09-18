@@ -227,28 +227,35 @@ For more details, see
 
 ## Dependency constraints
 
-uv supports constraints files (`--constraint constraints.txt`), like pip, which narrow the set of
-acceptable versions for the given packages. Constraint files are like a regular requirements files,
-but they do not add packages to the requirements — they only take affect if the package is requested
-in a direct or transitive dependency. Constraints are often useful for reducing the range of
-available versions for a transitive dependency without adding a direct requirement on the package.
+Like pip, uv supports constraint files (`--constraint constraints.txt`) which narrow the set of
+acceptable versions for the given packages. Constraint files are similar to requirements files, but
+being listed as a constraint alone will not cause a package to be included to the resolution.
+Instead, constraints only take effect if a requested package is already pulled in as a direct or
+transitive dependency. Constraints are useful for reducing the range of available versions for a
+transitive dependency. They can also be used to keep a resolution in sync with some other set of
+resolved versions, regardless of which packages are overlapping between the two.
 
 ## Dependency overrides
 
-Overrides allow bypassing failing or undesirable resolutions by overriding the declared dependencies
-of a package. Overrides are a useful last resort for cases in which the you know that a dependency
-is compatible with a newer version of a package than it declares, but the it has not yet been
-updated to declare that compatibility.
+Dependency overrides allow bypassing failing or undesirable resolutions by overriding a package's
+declared dependencies. Overrides are a useful last resort for cases in which you _know_ that a
+dependency is compatible with a certain version of a package, despite the metadata indicating
+otherwise.
 
-For example, if a transitive dependency declares the requirement `pydantic>=1.0,<2.0`, but _works_
-with `pydantic>=2.0`, the user can override the declared dependency with `pydantic>=1.0,<3` to allow
-the resolver to installer a newer version of `pydantic`.
+For example, if a transitive dependency declares the requirement `pydantic>=1.0,<2.0`, but _does_
+work with `pydantic>=2.0`, the user can override the declared dependency by including
+`pydantic>=1.0,<3` in the overrides, thereby allowing the resolver to choose a newer version of
+`pydantic`.
 
-While constraints and dependencies are purely additive, and thus cannot expand the set of acceptable
-versions for a package, overrides can expand the set of acceptable versions for a package, providing
-an escape hatch for erroneous upper version bounds. As with constraints, overrides do not add a
-dependency on the package and only take affect if the package is requested in a direct or transitive
-dependency.
+Concretely, if `pydantic>=1.0,<3` is included as an override, uv will ignore all declared
+requirements on `pydantic`, replacing them with the override. In the above example, the
+`pydantic>=1.0,<2.0` requirement would be ignored completely, and would instead be replaced with
+`pydantic>=1.0,<3`.
+
+While constraints can only _reduce_ the set of acceptable versions for a package, overrides can
+_expand_ the set of acceptable versions, providing an escape hatch for erroneous upper version
+bounds. As with constraints, overrides do not add a dependency on the package and only take effect
+if the package is requested in a direct or transitive dependency.
 
 In a `pyproject.toml`, use `tool.uv.override-dependencies` to define a list of overrides. In the
 pip-compatible interface, the `--override` option can be used to pass files with the same format as
@@ -257,6 +264,60 @@ constraints files.
 If multiple overrides are provided for the same package, they must be differentiated with
 [markers](#platform-markers). If a package has a dependency with a marker, it is replaced
 unconditionally when using overrides — it does not matter if the marker evaluates to true or false.
+
+## Dependency metadata
+
+During resolution, uv needs to resolve the metadata for each package it encounters, in order to
+determine its dependencies. This metadata is often available as a static file in the package index;
+however, for packages that only provide source distributions, the metadata may not be available
+upfront.
+
+In such cases, uv has to build the package to determine its metadata (e.g., by invoking `setup.py`).
+This can introduce a performance penalty during resolution. Further, it imposes the requirement that
+the package can be built on all platforms, which may not be true.
+
+For example, you may have a package that should only be built and installed on Linux, but doesn't
+build successfully on macOS or Windows. While uv can construct a perfectly valid lockfile for this
+scenario, doing so would require building the package, which would fail on non-Linux platforms.
+
+The `tool.uv.dependency-metadata` table can be used to provide static metadata for such dependencies
+upfront, thereby allowing uv to skip the build step and use the provided metadata instead.
+
+For example, to provide metadata for `chumpy` upfront, include its `dependency-metadata` in the
+`pyproject.toml`:
+
+```toml
+[[tool.uv.dependency-metadata]]
+name = "chumpy"
+version = "0.70"
+requires-dist = ["numpy>=1.8.1", "scipy>=0.13.0", "six>=1.11.0"]
+```
+
+These declarations are intended for cases in which a package does _not_ declare static metadata
+upfront, though they are also useful for packages that require disabling build isolation. In such
+cases, it may be easier to declare the package metadata upfront, rather than creating a custom build
+environment prior to resolving the package.
+
+For example, you can declare the metadata for `flash-attn`, allowing uv to resolve without building
+the package from source (which itself requires installing `torch`):
+
+```toml
+[[tool.uv.dependency-metadata]]
+name = "flash-attn"
+version = "2.6.3"
+requires-dist = ["torch", "einops"]
+```
+
+Like dependency overrides, `tool.uv.dependency-metadata` can also be used for cases in which a
+package's metadata is incorrect or incomplete, or when a package is not available in the package
+index. While dependency overrides allow overriding the allowed versions of a package globally,
+metadata overrides allow overriding the declared metadata of a _specific package_.
+
+Entries in the `tool.uv.dependency-metadata` table follow the
+[Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) specification,
+though only `name`, `version`, `requires-dist`, `requires-python`, and `provides-extra` are read by
+uv. The `version` field is also considered optional. If omitted, the metadata will be used for all
+versions of the specified package.
 
 ## Lower bounds
 

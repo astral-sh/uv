@@ -17,11 +17,11 @@ use url::Url;
 use cache_key::RepositoryUrl;
 use distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use distribution_types::{
-    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
-    DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
+    BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
+    Dist, DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
     IndexLocations, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
-    UrlString,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, StaticMetadata,
+    ToUrlError, UrlString,
 };
 use pep440_rs::Version;
 use pep508_rs::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
@@ -795,6 +795,40 @@ impl Lock {
                 manifest_table.insert("overrides", value(overrides));
             }
 
+            if !self.manifest.dependency_metadata.is_empty() {
+                let mut tables = ArrayOfTables::new();
+                for metadata in &self.manifest.dependency_metadata {
+                    let mut table = Table::new();
+                    table.insert("name", value(metadata.name.to_string()));
+                    if let Some(version) = metadata.version.as_ref() {
+                        table.insert("version", value(version.to_string()));
+                    }
+                    if !metadata.requires_dist.is_empty() {
+                        table.insert(
+                            "requires-dist",
+                            value(serde::Serialize::serialize(
+                                &metadata.requires_dist,
+                                toml_edit::ser::ValueSerializer::new(),
+                            )?),
+                        );
+                    }
+                    if let Some(requires_python) = metadata.requires_python.as_ref() {
+                        table.insert("requires-python", value(requires_python.to_string()));
+                    }
+                    if !metadata.provides_extras.is_empty() {
+                        table.insert(
+                            "provides-extras",
+                            value(serde::Serialize::serialize(
+                                &metadata.provides_extras,
+                                toml_edit::ser::ValueSerializer::new(),
+                            )?),
+                        );
+                    }
+                    tables.push(table);
+                }
+                manifest_table.insert("dependency-metadata", Item::ArrayOfTables(tables));
+            }
+
             if !manifest_table.is_empty() {
                 doc.insert("manifest", Item::Table(manifest_table));
             }
@@ -881,6 +915,7 @@ impl Lock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
+        dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
         build_options: &BuildOptions,
         tags: &Tags,
@@ -992,6 +1027,18 @@ impl Lock {
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
+            }
+        }
+
+        // Validate that the lockfile was generated with the same static metadata.
+        {
+            let expected = dependency_metadata
+                .values()
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            let actual = &self.manifest.dependency_metadata;
+            if expected != *actual {
+                return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
             }
         }
 
@@ -1249,6 +1296,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    /// The lockfile uses different static metadata.
+    MismatchedStaticMetadata(BTreeSet<StaticMetadata>, &'lock BTreeSet<StaticMetadata>),
     /// The lockfile is missing a workspace member.
     MissingRoot(PackageName),
     /// The lockfile referenced a remote index that was not provided
@@ -1302,6 +1351,9 @@ pub struct ResolverManifest {
     /// The overrides provided to the resolver.
     #[serde(default)]
     overrides: BTreeSet<Requirement>,
+    /// The static metadata provided to the resolver.
+    #[serde(default)]
+    dependency_metadata: BTreeSet<StaticMetadata>,
 }
 
 impl ResolverManifest {
@@ -1312,12 +1364,14 @@ impl ResolverManifest {
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Requirement>,
+        dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {
         Self {
             members: members.into_iter().collect(),
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
             overrides: overrides.into_iter().collect(),
+            dependency_metadata: dependency_metadata.into_iter().collect(),
         }
     }
 
@@ -1340,6 +1394,7 @@ impl ResolverManifest {
                 .into_iter()
                 .map(|requirement| requirement.relative_to(workspace.install_path()))
                 .collect::<Result<BTreeSet<_>, _>>()?,
+            dependency_metadata: self.dependency_metadata,
         })
     }
 }

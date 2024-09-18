@@ -8,7 +8,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{
-    IndexCapabilities, IndexLocations, NameRequirementSpecification,
+    DependencyMetadata, IndexCapabilities, IndexLocations, NameRequirementSpecification,
     UnresolvedRequirementSpecification, Verbatim,
 };
 use install_wheel_rs::linker::LinkMode;
@@ -75,6 +75,7 @@ pub(crate) async fn pip_compile(
     include_index_annotation: bool,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
+    dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     config_settings: ConfigSettings,
@@ -335,6 +336,7 @@ pub(crate) async fn pip_compile(
         &interpreter,
         &index_locations,
         &flat_index,
+        &dependency_metadata,
         &source_index,
         &git,
         &capabilities,
