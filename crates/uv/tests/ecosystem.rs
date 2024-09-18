@@ -1,9 +1,11 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use crate::common::get_bin;
 use anyhow::Result;
-use insta::assert_snapshot;
-
 use common::TestContext;
+use insta::assert_snapshot;
+use std::path::Path;
+use std::process::Command;
 
 mod common;
 
@@ -96,15 +98,37 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
     let context = TestContext::new(python_version);
     context.copy_ecosystem_project(name);
 
-    let mut cmd = context.lock();
-    cmd.env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER);
+    // Cache source distribution builds to speed up the tests.
+    let cache_dir =
+        std::path::absolute(Path::new("../../target/ecosystem-test-caches").join(name))?;
+
+    // Custom command since we need to change the cache dir.
+    let mut command = Command::new(get_bin());
+    command
+        .arg("lock")
+        .arg("--cache-dir")
+        .arg(&cache_dir)
+        // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
+        .env_remove("VIRTUAL_ENV")
+        .env("UV_NO_WRAP", "1")
+        .env("HOME", context.home_dir.as_os_str())
+        .env("UV_PYTHON_INSTALL_DIR", "")
+        .env("UV_TEST_PYTHON_PATH", context.python_path())
+        .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+        .current_dir(context.temp_dir.path());
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
     let (snapshot, _) = common::run_and_format(
-        &mut cmd,
+        &mut command,
         context.filters(),
         name,
         Some(common::WindowsFilters::Platform),
     );
-    insta::assert_snapshot!(format!("{name}-uv-lock-output"), snapshot);
+    assert_snapshot!(format!("{name}-uv-lock-output"), snapshot);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     insta::with_settings!({
@@ -112,5 +136,6 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
     }, {
         assert_snapshot!(format!("{name}-lock-file"), lock);
     });
+
     Ok(())
 }
