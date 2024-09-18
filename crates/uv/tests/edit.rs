@@ -4822,35 +4822,46 @@ fn add_error_local_cycle() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.8.7"), @r###"
+    // Pinned constrained, check for a direct dependency loop.
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.6.13"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of dagster-webserver==1.8.7 and your project depends on dagster-webserver==1.8.7, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
 
           hint: Resolution failed on a dependency ('dagster') which has the same name as your local package ('dagster'). Consider checking your project for possible name conflicts with packages in the index.
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
     "###);
 
-    uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @r###"
-    success: true
-    exit_code: 0
+    // Constraint with several available versions, check for an indirect dependency loop.
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @r###"
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of dagster-webserver are available:
+              dagster-webserver<=1.6.13
+              dagster-webserver>1.7.0
+          and dagster-webserver==1.6.11 depends on your project, we can conclude that all of:
+              dagster-webserver>=1.6.11,<1.6.12
+              dagster-webserver>1.6.13,<1.7.0
+          depend on your project.
+          And because dagster-webserver==1.6.12 depends on your project, we can conclude that all of:
+              dagster-webserver>=1.6.11,<1.6.13
+              dagster-webserver>1.6.13,<1.7.0
+          depend on your project.
+          And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11,<1.7.0, we can conclude that your project's requirements are unsatisfiable.
 
-    let lock = context.temp_dir.join("uv.lock");
-    assert!(!lock.exists());
+          hint: Resolution failed on a dependency ('dagster') which has the same name as your local package ('dagster'). Consider checking your project for possible name conflicts with packages in the index.
+      help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
+    "###);
 
     Ok(())
 }
