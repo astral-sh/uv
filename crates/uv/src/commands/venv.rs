@@ -244,7 +244,7 @@ async fn venv_impl(
 
     writeln!(
         printer.stderr(),
-        "Creating virtualenv {}at: {}",
+        "Creating virtual environment {}at: {}",
         if seed { "with seed packages " } else { "" },
         path.user_display().cyan()
     )

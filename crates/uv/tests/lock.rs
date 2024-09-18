@@ -7166,7 +7166,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/workspace)
@@ -7282,7 +7282,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/workspace)
@@ -8444,7 +8444,7 @@ fn lock_mixed_extras() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + leaf1==0.1.0 (from file://[TEMP_DIR]/workspace1/packages/leaf1)
@@ -8623,7 +8623,7 @@ fn lock_transitive_extra() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + leaf==0.1.0 (from file://[TEMP_DIR]/workspace/packages/leaf)
