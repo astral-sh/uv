@@ -979,6 +979,9 @@ jobs:
     env:
       # No dbus in GitHub Actions
       PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+    permissions:
+      # For trusted publishing
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:

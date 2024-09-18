@@ -9,7 +9,7 @@ use url::Url;
 use uv_cache_info::CacheKey;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
-    TrustedHost,
+    TrustedHost, TrustedPublishing,
 };
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
@@ -1501,6 +1501,7 @@ pub struct OptionsWire {
     no_binary: Option<bool>,
     no_binary_package: Option<Vec<PackageName>>,
     publish_url: Option<Url>,
+    trusted_publishing: Option<TrustedPublishing>,
 
     pip: Option<PipOptions>,
     cache_keys: Option<Vec<CacheKey>>,
@@ -1569,6 +1570,7 @@ impl From<OptionsWire> for Options {
             constraint_dependencies,
             environments,
             publish_url,
+            trusted_publishing,
             workspace: _,
             sources: _,
             dev_dependencies: _,
@@ -1616,7 +1618,10 @@ impl From<OptionsWire> for Options {
                 no_binary,
                 no_binary_package,
             },
-            publish: PublishOptions { publish_url },
+            publish: PublishOptions {
+                publish_url,
+                trusted_publishing,
+            },
             pip,
             cache_keys,
             override_dependencies,
@@ -1642,4 +1647,18 @@ pub struct PublishOptions {
         "#
     )]
     pub publish_url: Option<Url>,
+
+    /// Configure trusted publishing via GitHub Actions.
+    ///
+    /// By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
+    /// if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
+    /// from a fork).
+    #[option(
+        default = "automatic",
+        value_type = "str",
+        example = r#"
+            trusted-publishing = "always"
+        "#
+    )]
+    pub trusted_publishing: Option<TrustedPublishing>,
 }

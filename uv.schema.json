@@ -398,6 +398,17 @@
         }
       ]
     },
+    "trusted-publishing": {
+      "description": "Configure trusted publishing via GitHub Actions.\n\nBy default, uv checks for trusted publishing when running in GitHub Actions, but ignores it if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request from a fork).",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TrustedPublishing"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "upgrade": {
       "description": "Allow package upgrades, ignoring pinned versions in any existing output file.",
       "type": [
@@ -1586,6 +1597,24 @@
     "TrustedHost": {
       "description": "A host or host-port pair.",
       "type": "string"
+    },
+    "TrustedPublishing": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "always",
+            "never"
+          ]
+        },
+        {
+          "description": "Try trusted publishing when we're already in GitHub Actions, continue if that fails.",
+          "type": "string",
+          "enum": [
+            "automatic"
+          ]
+        }
+      ]
     }
   }
 }

@@ -13,8 +13,10 @@ license.workspace = true
 distribution-filename = { workspace = true }
 pypi-types = { workspace = true }
 uv-client = { workspace = true }
+uv-configuration = { workspace = true }
 uv-fs = { workspace = true }
 uv-metadata = { workspace = true }
+uv-warnings = { workspace = true }
 
 async-compression = { workspace = true }
 base64 = { workspace = true }
