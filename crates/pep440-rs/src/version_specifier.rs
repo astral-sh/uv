@@ -47,8 +47,7 @@ use crate::{
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 #[cfg_attr(feature = "pyo3", pyclass(sequence))]
 pub struct VersionSpecifiers(Vec<VersionSpecifier>);
 
@@ -293,8 +292,7 @@ impl std::error::Error for VersionSpecifiersParseError {}
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct VersionSpecifier {
     /// ~=|==|!=|<=|>=|<|>|===, plus whether the version ended with a star

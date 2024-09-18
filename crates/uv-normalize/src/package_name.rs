@@ -26,8 +26,7 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
     rkyv::Serialize,
 )]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 pub struct PackageName(String);
 
 impl PackageName {
