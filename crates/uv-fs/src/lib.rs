@@ -2,9 +2,7 @@ use fs2::FileExt;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
-use tracing::{debug, error, trace, warn};
-
-use uv_warnings::warn_user;
+use tracing::{debug, error, info, trace, warn};
 
 pub use crate::path::*;
 
@@ -329,8 +327,8 @@ impl LockedFile {
                 // Log error code and enum kind to help debugging more exotic failures
                 // TODO(zanieb): When `raw_os_error` stabilizes, use that to avoid displaying
                 // the error when it is `WouldBlock`, which is expected and noisy otherwise.
-                trace!("Try lock error, waiting for exclusive lock: {:?}", err);
-                warn_user!(
+                trace!("Try lock error: {err:?}");
+                info!(
                     "Waiting to acquire lock for `{resource}` at `{}`",
                     file.path().user_display(),
                 );
