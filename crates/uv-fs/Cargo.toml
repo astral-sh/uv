@@ -13,7 +13,6 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-uv-warnings = { workspace = true }
 
 backoff = { workspace = true }
 cachedir = { workspace = true }

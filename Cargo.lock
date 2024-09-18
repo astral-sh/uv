@@ -4884,7 +4884,6 @@ dependencies = [
  "tokio",
  "tracing",
  "urlencoding",
- "uv-warnings",
 ]
 
 [[package]]
