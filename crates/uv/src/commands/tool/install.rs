@@ -198,6 +198,13 @@ pub(crate) async fn install(
 
             from_requirement
         }
+        // `python` or `python@3.13`
+        Target::Python | Target::FromPythonVersion(_) => {
+            bail!(
+                "`python` is not a valid tool name. Did you mean to install a Python interpreter?
+            If so, please use `uv python install` instead."
+            );
+        }
     };
 
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.

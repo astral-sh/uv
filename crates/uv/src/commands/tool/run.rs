@@ -21,9 +21,10 @@ use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Concurrency;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
+use uv_python::Interpreter;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest,
+    DiscoveryError, EnvironmentPreference, Error, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_tool::{entrypoint_paths, InstalledTools};
@@ -101,7 +102,6 @@ pub(crate) async fn run(
     } else {
         cache
     };
-
     // Get or create a compatible environment in which to execute the tool.
     let result = get_or_create_environment(
         &target,
@@ -170,47 +170,51 @@ pub(crate) async fn run(
 
     // We check if the provided command is not part of the executables for the `from` package.
     // If the command is found in other packages, we warn the user about the correct package to use.
-    warn_executable_not_provided_by_package(
-        executable,
-        &from.name,
-        &site_packages,
-        invocation_source,
-    );
+    if let Some(ref from) = from {
+        warn_executable_not_provided_by_package(
+            executable,
+            &from.name,
+            &site_packages,
+            invocation_source,
+        );
+    }
 
     let mut handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            match get_entrypoints(&from.name, &site_packages) {
-                Ok(entrypoints) => {
-                    writeln!(
-                        printer.stdout(),
-                        "The executable `{}` was not found.",
-                        executable.cyan(),
-                    )?;
-                    if entrypoints.is_empty() {
-                        warn_user!(
-                            "Package `{}` does not provide any executables.",
-                            from.name.red()
-                        );
-                    } else {
-                        warn_user!(
-                            "An executable named `{}` is not provided by package `{}`.",
-                            executable.cyan(),
-                            from.name.red()
-                        );
+            if let Some(from) = from {
+                match get_entrypoints(&from.name, &site_packages) {
+                    Ok(entrypoints) => {
                         writeln!(
                             printer.stdout(),
-                            "The following executables are provided by `{}`:",
-                            from.name.green()
+                            "The executable `{}` was not found.",
+                            executable.cyan(),
                         )?;
-                        for (name, _) in entrypoints {
-                            writeln!(printer.stdout(), "- {}", name.cyan())?;
+                        if entrypoints.is_empty() {
+                            warn_user!(
+                                "Package `{}` does not provide any executables.",
+                                from.name.red()
+                            );
+                        } else {
+                            warn_user!(
+                                "An executable named `{}` is not provided by package `{}`.",
+                                executable.cyan(),
+                                from.name.red()
+                            );
+                            writeln!(
+                                printer.stdout(),
+                                "The following executables are provided by `{}`:",
+                                from.name.green()
+                            )?;
+                            for (name, _) in entrypoints {
+                                writeln!(printer.stdout(), "- {}", name.cyan())?;
+                            }
                         }
+                        return Ok(ExitStatus::Failure);
                     }
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(err) => {
-                    warn!("Failed to get entrypoints for `{from}`: {err}");
+                    Err(err) => {
+                        warn!("Failed to get entrypoints for `{from}`: {err}");
+                    }
                 }
             }
             Err(err)
@@ -329,27 +333,26 @@ async fn get_or_create_environment(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<(Requirement, PythonEnvironment), ProjectError> {
+) -> Result<(Option<Requirement>, PythonEnvironment), ProjectError> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls);
 
     let reporter = PythonDownloadReporter::single(printer);
 
-    let python_request = python.map(PythonRequest::parse);
+    let python_request = resolve_python_request(target, python)
+        .map_err(|err| Error::Discovery(DiscoveryError::InvalidVersionRequest(err)))?;
 
-    // Discover an interpreter.
-    let interpreter = PythonInstallation::find_or_download(
-        python_request.as_ref(),
-        EnvironmentPreference::OnlySystem,
+    let interpreter = discover_python_interpreter(
+        target,
+        &python_request,
         python_preference,
         python_downloads,
         &client_builder,
         cache,
-        Some(&reporter),
+        &reporter,
     )
-    .await?
-    .into_interpreter();
+    .await?;
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -357,7 +360,7 @@ async fn get_or_create_environment(
     // Resolve the `--from` requirement.
     let from = match target {
         // Ex) `ruff`
-        Target::Unspecified(name) => Requirement {
+        Target::Unspecified(name) => Some(Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
             marker: MarkerTree::default(),
@@ -366,22 +369,24 @@ async fn get_or_create_environment(
                 index: None,
             },
             origin: None,
-        },
+        }),
         // Ex) `ruff@0.6.0`
-        Target::Version(name, version) | Target::FromVersion(_, name, version) => Requirement {
-            name: PackageName::from_str(name)?,
-            extras: vec![],
-            marker: MarkerTree::default(),
-            source: RequirementSource::Registry {
-                specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
-                    version.clone(),
-                )),
-                index: None,
-            },
-            origin: None,
-        },
+        Target::Version(name, version) | Target::FromVersion(_, name, version) => {
+            Some(Requirement {
+                name: PackageName::from_str(name)?,
+                extras: vec![],
+                marker: MarkerTree::default(),
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
+                        version.clone(),
+                    )),
+                    index: None,
+                },
+                origin: None,
+            })
+        }
         // Ex) `ruff@latest`
-        Target::Latest(name) | Target::FromLatest(_, name) => Requirement {
+        Target::Latest(name) | Target::FromLatest(_, name) => Some(Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
             marker: MarkerTree::default(),
@@ -390,22 +395,27 @@ async fn get_or_create_environment(
                 index: None,
             },
             origin: None,
-        },
+        }),
         // Ex) `ruff>=0.6.0`
-        Target::From(_, from) => resolve_names(
-            vec![RequirementsSpecification::parse_package(from)?],
-            &interpreter,
-            settings,
-            &state,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?
-        .pop()
-        .unwrap(),
+        Target::From(_, from) => Some(
+            resolve_names(
+                vec![RequirementsSpecification::parse_package(from)?],
+                &interpreter,
+                settings,
+                &state,
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?
+            .pop()
+            .unwrap(),
+        ),
+
+        // `python` or `python@3.13`
+        Target::Python | Target::FromPythonVersion(_) => None,
     };
 
     // Read the `--with` requirements.
@@ -417,9 +427,12 @@ async fn get_or_create_environment(
     };
 
     // Resolve the `--from` and `--with` requirements.
+    let from_clone = from.clone();
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
-        requirements.push(from.clone());
+        if let Some(from) = from_clone {
+            requirements.push(from);
+        }
         requirements.extend(
             resolve_names(
                 spec.requirements.clone(),
@@ -437,41 +450,19 @@ async fn get_or_create_environment(
         requirements
     };
 
-    // Check if the tool is already installed in a compatible environment.
-    if !isolated && !target.is_latest() {
-        let installed_tools = InstalledTools::from_settings()?.init()?;
-        let _lock = installed_tools.lock().await?;
-
-        let existing_environment =
-            installed_tools
-                .get_environment(&from.name, cache)?
-                .filter(|environment| {
-                    python_request.as_ref().map_or(true, |python_request| {
-                        python_request.satisfied(environment.interpreter(), cache)
-                    })
-                });
-        if let Some(environment) = existing_environment {
-            // Check if the installed packages meet the requirements.
-            let site_packages = SitePackages::from_environment(&environment)?;
-
-            let requirements = requirements
-                .iter()
-                .cloned()
-                .map(UnresolvedRequirementSpecification::from)
-                .collect::<Vec<_>>();
-            let constraints = [];
-
-            if matches!(
-                site_packages.satisfies(
-                    &requirements,
-                    &constraints,
-                    &interpreter.resolver_markers()
-                ),
-                Ok(SatisfiesResult::Fresh { .. })
-            ) {
-                debug!("Using existing tool `{}`", from.name);
-                return Ok((from, environment));
-            }
+    if let Some(from) = from.clone() {
+        if let (Some(from), Some(environment)) = check_if_tool_already_installed(
+            target,
+            from,
+            isolated,
+            &python_request,
+            &interpreter,
+            &requirements,
+            cache,
+        )
+        .await?
+        {
+            return Ok((Some(from), environment));
         }
     }
 
@@ -511,4 +502,104 @@ async fn get_or_create_environment(
     .await?;
 
     Ok((from, environment.into()))
+}
+
+async fn check_if_tool_already_installed(
+    target: &Target<'_>,
+    from: Requirement,
+    isolated: bool,
+    python_request: &PythonRequest,
+    interpreter: &Interpreter,
+    requirements: &[Requirement],
+    cache: &Cache,
+) -> Result<(Option<Requirement>, Option<PythonEnvironment>), ProjectError> {
+    if !isolated && !target.is_latest() {
+        let installed_tools = InstalledTools::from_settings()?.init()?;
+        let _lock = installed_tools.lock().await?;
+
+        let existing_environment = installed_tools
+            .get_environment(&from.name, cache)?
+            .filter(|environment| python_request.satisfied(environment.interpreter(), cache));
+        if let Some(environment) = existing_environment {
+            // Check if the installed packages meet the requirements.
+            let site_packages = SitePackages::from_environment(&environment)?;
+
+            let requirements = requirements
+                .iter()
+                .cloned()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect::<Vec<_>>();
+            let constraints = [];
+
+            if matches!(
+                site_packages.satisfies(
+                    &requirements,
+                    &constraints,
+                    &interpreter.resolver_markers()
+                ),
+                Ok(SatisfiesResult::Fresh { .. })
+            ) {
+                debug!("Using existing tool `{}`", from.name);
+                return Ok((Some(from), Some(environment)));
+            }
+        }
+    }
+
+    Ok((None, None))
+}
+
+fn resolve_python_request(
+    target: &Target<'_>,
+    python: Option<&str>,
+) -> Result<PythonRequest, String> {
+    match target {
+        Target::FromPythonVersion(version) => {
+            match uv_python::VersionRequest::from_str(&version.to_string()) {
+                Ok(version_request) => Ok(PythonRequest::Version(version_request)),
+                Err(_) => Err(format!("{version}")),
+            }
+        }
+        _ => Ok(python
+            .map(PythonRequest::parse)
+            .unwrap_or_else(|| PythonRequest::Any)),
+    }
+}
+
+async fn discover_python_interpreter(
+    target: &Target<'_>,
+    python_request: &PythonRequest,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    client_builder: &BaseClientBuilder<'_>,
+    cache: &Cache,
+    reporter: &PythonDownloadReporter,
+) -> Result<Interpreter, ProjectError> {
+    if let Target::FromPythonVersion(_) = target {
+        let interpreter = PythonInstallation::find_or_download(
+            Some(python_request),
+            EnvironmentPreference::Any,
+            python_preference,
+            python_downloads,
+            client_builder,
+            cache,
+            Some(reporter),
+        )
+        .await?
+        .into_interpreter();
+        Ok(interpreter)
+    } else {
+        let interpreter = PythonInstallation::find_or_download(
+            Some(python_request),
+            EnvironmentPreference::OnlySystem,
+            python_preference,
+            python_downloads,
+            client_builder,
+            cache,
+            Some(reporter),
+        )
+        .await?
+        .into_interpreter();
+
+        Ok(interpreter)
+    }
 }
