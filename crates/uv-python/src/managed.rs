@@ -305,7 +305,7 @@ impl ManagedPythonInstallation {
     pub fn satisfies(&self, request: &PythonRequest) -> bool {
         match request {
             PythonRequest::File(path) => self.executable() == *path,
-            PythonRequest::Default => true,
+            PythonRequest::Default | PythonRequest::Any => true,
             PythonRequest::Directory(path) => self.path() == *path,
             PythonRequest::ExecutableName(name) => self
                 .executable()
