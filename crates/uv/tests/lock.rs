@@ -6035,7 +6035,7 @@ fn lock_redact_https() -> Result<()> {
 /// However, we don't currently avoid persisting Git credentials in `uv.lock`.
 #[test]
 fn lock_redact_git_pep508() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let filters: Vec<_> = [(token.as_str(), "***")]
@@ -6129,7 +6129,7 @@ fn lock_redact_git_pep508() -> Result<()> {
 /// However, we don't currently avoid persisting Git credentials in `uv.lock`.
 #[test]
 fn lock_redact_git_sources() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let filters: Vec<_> = [(token.as_str(), "***")]
