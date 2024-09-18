@@ -5,16 +5,25 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::Connectivity;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Concurrency;
 use uv_normalize::PackageName;
+use uv_python::{
+    EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
+    PythonRequest,
+};
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 
-use crate::commands::pip::loggers::{SummaryResolveLogger, UpgradeInstallLogger};
+use crate::commands::pip::loggers::{
+    DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger, UpgradeInstallLogger,
+};
 use crate::commands::pip::operations::Changelog;
-use crate::commands::project::{update_environment, EnvironmentUpdate};
+use crate::commands::project::{
+    resolve_environment, sync_environment, update_environment, EnvironmentUpdate,
+};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -23,9 +32,12 @@ use crate::settings::ResolverInstallerSettings;
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
     name: Vec<PackageName>,
+    python: Option<String>,
     connectivity: Connectivity,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
@@ -52,6 +64,31 @@ pub(crate) async fn upgrade(
         return Ok(ExitStatus::Success);
     }
 
+    let reporter = PythonDownloadReporter::single(printer);
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
+
+    let python_request = python.as_deref().map(PythonRequest::parse);
+
+    let interpreter = if python_request.is_some() {
+        Some(
+            PythonInstallation::find_or_download(
+                python_request.as_ref(),
+                EnvironmentPreference::OnlySystem,
+                python_preference,
+                python_downloads,
+                &client_builder,
+                &cache,
+                Some(&reporter),
+            )
+            .await?
+            .into_interpreter(),
+        )
+    } else {
+        None
+    };
+
     // Determine whether we applied any upgrades.
     let mut did_upgrade = false;
 
@@ -62,6 +99,8 @@ pub(crate) async fn upgrade(
         debug!("Upgrading tool: `{name}`");
         let changelog = upgrade_tool(
             name,
+            &interpreter,
+            &python_request,
             printer,
             &installed_tools,
             &args,
@@ -106,6 +145,8 @@ pub(crate) async fn upgrade(
 
 async fn upgrade_tool(
     name: &PackageName,
+    interpreter: &Option<Interpreter>,
+    python_request: &Option<PythonRequest>,
     printer: Printer,
     installed_tools: &InstalledTools,
     args: &ResolverInstallerOptions,
@@ -136,7 +177,7 @@ async fn upgrade_tool(
         }
     };
 
-    let existing_environment = match installed_tools.get_environment(name, cache) {
+    let mut environment = match installed_tools.get_environment(name, cache) {
         Ok(Some(environment)) => environment,
         Ok(None) => {
             let install_command = format!("uv tool install {name}");
@@ -155,6 +196,14 @@ async fn upgrade_tool(
             ));
         }
     };
+
+    // If a specific Python version was requested, create a new environment
+    // for this package
+    if let (Some(python_request), Some(interpreter)) = (python_request, interpreter) {
+        if !python_request.satisfied(environment.interpreter(), &cache) {
+            environment = installed_tools.create_environment(name, interpreter.clone())?;
+        }
+    }
 
     // Resolve the appropriate settings, preferring: CLI > receipt > user.
     let options = args.clone().combine(
@@ -176,7 +225,7 @@ async fn upgrade_tool(
         environment,
         changelog,
     } = update_environment(
-        existing_environment,
+        environment,
         spec,
         &settings,
         &state,

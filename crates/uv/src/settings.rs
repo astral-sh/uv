@@ -425,6 +425,7 @@ impl ToolInstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUpgradeSettings {
     pub(crate) name: Vec<PackageName>,
+    pub(crate) python: Option<String>,
     pub(crate) args: ResolverInstallerOptions,
     pub(crate) filesystem: ResolverInstallerOptions,
 }
@@ -435,6 +436,7 @@ impl ToolUpgradeSettings {
     pub(crate) fn resolve(args: ToolUpgradeArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let ToolUpgradeArgs {
             name,
+            python,
             all,
             mut installer,
             build,
@@ -456,6 +458,7 @@ impl ToolUpgradeSettings {
 
         Self {
             name: if all { vec![] } else { name },
+            python,
             args,
             filesystem,
         }

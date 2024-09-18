@@ -936,9 +936,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
             commands::tool_upgrade(
                 args.name,
+                args.python,
                 globals.connectivity,
                 args.args,
                 args.filesystem,
+                globals.python_preference,
+                globals.python_downloads,
                 globals.concurrency,
                 globals.native_tls,
                 &cache,

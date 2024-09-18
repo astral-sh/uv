@@ -3362,6 +3362,20 @@ pub struct ToolUpgradeArgs {
     #[arg(long, conflicts_with("name"))]
     pub all: bool,
 
+    /// The Python interpreter to use to build the tool environment.
+    ///
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        conflicts_with = "name",
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
+    pub python: Option<String>,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 
