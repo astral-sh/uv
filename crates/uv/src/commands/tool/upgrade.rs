@@ -197,8 +197,7 @@ async fn upgrade_tool(
         }
     };
 
-    // If a specific Python version was requested, create a new environment
-    // for this package
+    // If a new Python version was requested for this package, create a new environment
     if let (Some(python_request), Some(interpreter)) = (python_request, interpreter) {
         if !python_request.satisfied(environment.interpreter(), &cache) {
             environment = installed_tools.create_environment(name, interpreter.clone())?;

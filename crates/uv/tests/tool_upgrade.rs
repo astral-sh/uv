@@ -3,6 +3,7 @@
 use assert_fs::prelude::*;
 
 use common::{uv_snapshot, TestContext};
+use insta::assert_snapshot;
 
 mod common;
 
@@ -576,4 +577,63 @@ fn test_tool_upgrade_with() {
      - pytz==2018.5
      + pytz==2024.1
     "###);
+}
+
+#[test]
+fn test_tool_upgrade_python() {
+    let context = TestContext::new_with_versions(&["3.12", "3.13"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+    .arg("babel==2.6.0")
+    .arg("--index-url")
+    .arg("https://test.pypi.org/simple/")
+    .arg("--python").arg("3.12")
+    .env("UV_TOOL_DIR", tool_dir.as_os_str())
+    .env("XDG_BIN_HOME", bin_dir.as_os_str())
+    .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    "###);
+
+    uv_snapshot!(
+        context.filters(),
+        context.tool_upgrade()
+        .arg("--python").arg("3.13")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Added babel v2.6.0
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    "###
+    );
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
+        let lines: Vec<&str> = content.split('\n').collect();
+        assert_snapshot!(lines[lines.len() - 3], @r###"
+        version_info = 3.13.[X]rc2
+        "###);
+    });
 }
