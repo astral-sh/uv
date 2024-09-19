@@ -759,15 +759,16 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            // Note, next time we change the version we should change the name of this bucket to `source-dists-v0`
-            Self::SourceDistributions => "built-wheels-v3",
+            Self::SourceDistributions => "sdists-v4",
             Self::FlatIndex => "flat-index-v0",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v2",
             // Note that when bumping this, you'll also need to bump it
             // in crates/uv/tests/cache_clean.rs.
             Self::Simple => "simple-v13",
-            Self::Wheels => "wheels-v1",
+            // Note that when bumping this, you'll also need to bump it
+            // in crates/uv/tests/cache_prune.rs.
+            Self::Wheels => "wheels-v2",
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v1",
