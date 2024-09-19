@@ -44,9 +44,9 @@ jobs:
               - "docs/reference/cli.md"
               - "docs/reference/settings.md"
               - "uv.schema.json"
-  cargo-fmt:
+  lint:
     timeout-minutes: 10
-    name: "cargo fmt"
+    name: "lint"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +57,9 @@ jobs:
 
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
+
+      - name: "Install uv"
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
       - name: "rustfmt"
         run: cargo fmt --all --check
@@ -69,27 +72,13 @@ jobs:
       - name: "README check"
         run: python scripts/transform_readme.py --target pypi
 
-  python-lint:
-    timeout-minutes: 10
-    name: "Python lint"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
-
-      - name: "Install uv"
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-
-      - name: "Format"
+      - name: "Python format"
         run: uvx ruff format --diff .
 
-      - name: "Lint"
+      - name: "Python lint"
         run: uvx ruff check .
 
-      - name: "Type check"
+      - name: "Python type check"
         run: uvx mypy
 
   cargo-clippy:
