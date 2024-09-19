@@ -1747,9 +1747,7 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Ignoring existing virtual environment linked to non-existent Python interpreter: foo/[BIN]/python
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: Project virtual environment directory `[TEMP_DIR]/foo` cannot be used because it has existing, non-virtual environment content
+    error: Project virtual environment directory `[TEMP_DIR]/foo` cannot be used because it is not a virtual environment and is non-empty
     "###);
 
     // But if it's just an incompatible virtual environment...

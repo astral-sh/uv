@@ -78,6 +78,9 @@ pub enum Error {
 
     #[error(transparent)]
     MissingEnvironment(#[from] environment::EnvironmentNotFound),
+
+    #[error(transparent)]
+    InvalidEnvironment(#[from] environment::InvalidEnvironment),
 }
 
 // The mock interpreters are not valid on Windows so we don't have unit test coverage there
