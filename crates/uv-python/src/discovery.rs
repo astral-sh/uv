@@ -134,8 +134,9 @@ pub enum EnvironmentPreference {
 /// A Python discovery version request.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum VersionRequest {
+    /// Allow an appropriate default Python version.
     #[default]
-    Any,
+    Default,
     Major(u8),
     MajorMinor(u8, u8),
     MajorMinorPatch(u8, u8, u8),
@@ -425,7 +426,7 @@ fn python_executables_from_search_path<'a>(
     let search_path =
         env::var_os("UV_TEST_PYTHON_PATH").unwrap_or(env::var_os("PATH").unwrap_or_default());
 
-    let version_request = version.unwrap_or(&VersionRequest::Any);
+    let version_request = version.unwrap_or(&VersionRequest::Default);
     let possible_names: Vec<_> = version_request.possible_names(implementation).collect();
 
     trace!(
@@ -487,7 +488,7 @@ fn find_all_minor(
     dir: &Path,
 ) -> impl Iterator<Item = PathBuf> {
     match version_request {
-        VersionRequest::Any | VersionRequest::Major(_) | VersionRequest::Range(_) => {
+        VersionRequest::Default | VersionRequest::Major(_) | VersionRequest::Range(_) => {
             let regex = if let Some(implementation) = implementation {
                 Regex::new(&format!(
                     r"^({}|python3)\.(?<minor>\d\d?){}$",
@@ -1452,7 +1453,7 @@ impl VersionRequest {
         };
 
         match self {
-            Self::Any | Self::Range(_) => [Some(python3), Some(python), None, None],
+            Self::Default | Self::Range(_) => [Some(python3), Some(python), None, None],
             Self::Major(major) => [
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
@@ -1503,7 +1504,7 @@ impl VersionRequest {
                 };
 
                 match self {
-                    Self::Any | Self::Range(_) => [Some(python3), Some(python), None, None],
+                    Self::Default | Self::Range(_) => [Some(python3), Some(python), None, None],
                     Self::Major(major) => [
                         Some(Cow::Owned(format!("{name}{major}{extension}"))),
                         Some(python),
@@ -1540,7 +1541,7 @@ impl VersionRequest {
 
     pub(crate) fn check_supported(&self) -> Result<(), String> {
         match self {
-            Self::Any => (),
+            Self::Default => (),
             Self::Major(major) => {
                 if *major < 3 {
                     return Err(format!(
@@ -1579,7 +1580,7 @@ impl VersionRequest {
     /// Check if a interpreter matches the requested Python version.
     pub(crate) fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
         match self {
-            Self::Any => true,
+            Self::Default => true,
             Self::Major(major) => interpreter.python_major() == *major,
             Self::MajorMinor(major, minor) => {
                 (interpreter.python_major(), interpreter.python_minor()) == (*major, *minor)
@@ -1611,7 +1612,7 @@ impl VersionRequest {
 
     pub(crate) fn matches_version(&self, version: &PythonVersion) -> bool {
         match self {
-            Self::Any => true,
+            Self::Default => true,
             Self::Major(major) => version.major() == *major,
             Self::MajorMinor(major, minor) => {
                 (version.major(), version.minor()) == (*major, *minor)
@@ -1630,7 +1631,7 @@ impl VersionRequest {
 
     fn matches_major_minor(&self, major: u8, minor: u8) -> bool {
         match self {
-            Self::Any => true,
+            Self::Default => true,
             Self::Major(self_major) => *self_major == major,
             Self::MajorMinor(self_major, self_minor) => {
                 (*self_major, *self_minor) == (major, minor)
@@ -1649,7 +1650,7 @@ impl VersionRequest {
 
     pub(crate) fn matches_major_minor_patch(&self, major: u8, minor: u8, patch: u8) -> bool {
         match self {
-            Self::Any => true,
+            Self::Default => true,
             Self::Major(self_major) => *self_major == major,
             Self::MajorMinor(self_major, self_minor) => {
                 (*self_major, *self_minor) == (major, minor)
@@ -1672,7 +1673,7 @@ impl VersionRequest {
     /// Return true if a patch version is present in the request.
     fn has_patch(&self) -> bool {
         match self {
-            Self::Any => false,
+            Self::Default => false,
             Self::Major(..) => false,
             Self::MajorMinor(..) => false,
             Self::MajorMinorPatch(..) => true,
@@ -1687,7 +1688,7 @@ impl VersionRequest {
     #[must_use]
     fn without_patch(self) -> Self {
         match self {
-            Self::Any => Self::Any,
+            Self::Default => Self::Default,
             Self::Major(major) => Self::Major(major),
             Self::MajorMinor(major, minor) => Self::MajorMinor(major, minor),
             Self::MajorMinorPatch(major, minor, _) => Self::MajorMinor(major, minor),
@@ -1701,7 +1702,7 @@ impl VersionRequest {
     /// Whether this request should allow selection of pre-release versions.
     pub(crate) fn allows_prereleases(&self) -> bool {
         match self {
-            Self::Any => false,
+            Self::Default => false,
             Self::Major(_) => true,
             Self::MajorMinor(..) => true,
             Self::MajorMinorPatch(..) => true,
@@ -1787,7 +1788,7 @@ impl From<&PythonVersion> for VersionRequest {
 impl fmt::Display for VersionRequest {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Any => f.write_str("default"),
+            Self::Default => f.write_str("default"),
             Self::Major(major) => write!(f, "{major}"),
             Self::MajorMinor(major, minor) => write!(f, "{major}.{minor}"),
             Self::MajorMinorPatch(major, minor, patch) => {
