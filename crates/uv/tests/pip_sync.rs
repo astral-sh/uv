@@ -5585,7 +5585,7 @@ fn sync_seed() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    Creating virtualenv with seed packages at: .venv
+    Creating virtual environment with seed packages at: .venv
      + pip==24.0
      + setuptools==69.2.0
      + wheel==0.43.0

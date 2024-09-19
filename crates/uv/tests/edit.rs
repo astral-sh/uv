@@ -2040,7 +2040,7 @@ fn add_path() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]

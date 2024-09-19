@@ -503,7 +503,7 @@ pub(crate) async fn get_or_init_environment(
 
             writeln!(
                 printer.stderr(),
-                "Creating virtualenv at: {}",
+                "Creating virtual environment at: {}",
                 venv.user_display().cyan()
             )?;
 
