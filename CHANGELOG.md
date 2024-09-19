@@ -24,6 +24,10 @@
 - Compute resolver hints using the final reduced derivation tree ([#7546](https://github.com/astral-sh/uv/pull/7546))
 - Bump the wheel and sdist cache versions ([#7560](https://github.com/astral-sh/uv/pull/7560))
 
+### Other
+
+- Bump minimum supported Rust version from 1.80 -> 1.81
+
 ### Documentation
 
 - Add `UV_LINK_MODE` to Docker caching example ([#7510](https://github.com/astral-sh/uv/pull/7510))
