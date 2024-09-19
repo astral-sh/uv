@@ -59,7 +59,7 @@ jobs:
         run: rustup component add rustfmt
 
       - name: "Install uv"
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+        uses: astral-sh/setup-uv@v3
 
       - name: "rustfmt"
         run: cargo fmt --all --check
@@ -173,10 +173,11 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v3
+
       - name: "Install required Python versions"
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv python install
+        run: uv python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -213,10 +214,11 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v3
+
       - name: "Install required Python versions"
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv python install
+        run: uv python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
