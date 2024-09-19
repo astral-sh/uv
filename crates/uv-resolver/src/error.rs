@@ -251,7 +251,7 @@ impl std::fmt::Display for NoSolutionError {
         // Include any additional hints.
         let mut additional_hints = IndexSet::default();
         formatter.generate_hints(
-            &self.error,
+            &tree,
             &self.selector,
             &self.index_locations,
             &self.unavailable_packages,
