@@ -230,6 +230,10 @@ pub struct ToolUv {
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of any constituent packages.
     ///
+    /// Including a package as an override will _not_ trigger installation of the package on its
+    /// own; instead, the package must be requested elsewhere in the project's first-party or
+    /// transitive dependencies.
+    ///
     /// !!! note
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
