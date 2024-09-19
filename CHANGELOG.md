@@ -23,8 +23,9 @@
 - Use portable paths when serializing sources ([#7504](https://github.com/astral-sh/uv/pull/7504))
 - Compute resolver hints using the final reduced derivation tree ([#7546](https://github.com/astral-sh/uv/pull/7546))
 - Bump the wheel and sdist cache versions ([#7560](https://github.com/astral-sh/uv/pull/7560))
+- Heal cache entries with missing source distributions ([#7559](https://github.com/astral-sh/uv/pull/7559))
 
-### Other
+### Rust libraries
 
 - Bump minimum supported Rust version from 1.80 -> 1.81
 
