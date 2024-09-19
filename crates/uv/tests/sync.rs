@@ -1613,7 +1613,9 @@ fn convert_to_package() -> Result<()> {
 
 #[test]
 fn sync_custom_environment_path() -> Result<()> {
-    let mut context = TestContext::new("3.12");
+    let mut context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1633,6 +1635,8 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1732,6 +1736,52 @@ fn sync_custom_environment_path() -> Result<()> {
     ChildPath::new(tempdir.path())
         .child(".venv")
         .assert(predicate::path::is_dir());
+
+    // If the directory already exists and is not a virtual environment we should fail with an error
+    fs_err::remove_dir_all(context.temp_dir.join("foo"))?;
+    fs_err::create_dir(context.temp_dir.join("foo"))?;
+    fs_err::write(context.temp_dir.join("foo").join("file"), b"")?;
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Ignoring existing virtual environment linked to non-existent Python interpreter: foo/[BIN]/python
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: Project virtual environment directory `[TEMP_DIR]/foo` cannot be used because it has existing, non-virtual environment content
+    "###);
+
+    // But if it's just an incompatible virtual environment...
+    fs_err::remove_dir_all(context.temp_dir.join("foo"))?;
+    uv_snapshot!(context.filters(), context.venv().arg("foo").arg("--python").arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: foo
+    Activate with: source foo/[BIN]/activate
+    "###);
+
+    // Even with some extraneous content...
+    fs_err::write(context.temp_dir.join("foo").join("file"), b"")?;
+
+    // We can delete and use it
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: foo
+    Creating virtual environment at: foo
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
 
     Ok(())
 }

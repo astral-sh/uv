@@ -120,6 +120,9 @@ pub(crate) enum ProjectError {
     #[error("Environment marker is empty")]
     EmptyEnvironment,
 
+    #[error("Project virtual environment directory `{0}` cannot be used because it has existing, non-virtual environment content")]
+    InvalidProjectEnvironmentDir(PathBuf),
+
     #[error("Failed to parse `pyproject.toml`")]
     TomlParse(#[source] toml::de::Error),
 
@@ -487,6 +490,14 @@ pub(crate) async fn get_or_init_environment(
         // Otherwise, create a virtual environment with the discovered interpreter.
         FoundInterpreter::Interpreter(interpreter) => {
             let venv = workspace.venv();
+
+            // Before deleting the target directory, we confirm that it is either (1) a virtual
+            // environment or (2) an empty directory.
+            if PythonEnvironment::from_root(&venv, cache).is_err()
+                && fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some())
+            {
+                return Err(ProjectError::InvalidProjectEnvironmentDir(venv));
+            }
 
             // Remove the existing virtual environment if it doesn't meet the requirements.
             match fs_err::remove_dir_all(&venv) {
