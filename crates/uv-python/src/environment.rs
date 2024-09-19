@@ -34,6 +34,12 @@ pub struct EnvironmentNotFound {
     preference: EnvironmentPreference,
 }
 
+#[derive(Clone, Debug, Error)]
+pub struct InvalidEnvironment {
+    path: PathBuf,
+    reason: String,
+}
+
 impl From<PythonNotFound> for EnvironmentNotFound {
     fn from(value: PythonNotFound) -> Self {
         Self {
@@ -98,6 +104,17 @@ impl fmt::Display for EnvironmentNotFound {
     }
 }
 
+impl std::fmt::Display for InvalidEnvironment {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "Invalid environment at `{}`: {}",
+            self.path.user_display(),
+            self.reason
+        )
+    }
+}
+
 impl PythonEnvironment {
     /// Find a [`PythonEnvironment`] matching the given request and preference.
     ///
@@ -133,6 +150,23 @@ impl PythonEnvironment {
             }
             Err(err) => return Err(Error::Discovery(err.into())),
         };
+
+        if venv.is_file() {
+            return Err(InvalidEnvironment {
+                path: venv,
+                reason: "expected directory but found a file".to_string(),
+            }
+            .into());
+        }
+
+        if !venv.join("pyvenv.cfg").is_file() {
+            return Err(InvalidEnvironment {
+                path: venv,
+                reason: "missing a `pyvenv.cfg` marker".to_string(),
+            }
+            .into());
+        }
+
         let executable = virtualenv_python_executable(venv);
         let interpreter = Interpreter::query(executable, cache)?;
 

@@ -120,7 +120,7 @@ pub(crate) enum ProjectError {
     #[error("Environment marker is empty")]
     EmptyEnvironment,
 
-    #[error("Project virtual environment directory `{0}` cannot be used because it has existing, non-virtual environment content")]
+    #[error("Project virtual environment directory `{0}` cannot be used because it is not a virtual environment and is non-empty")]
     InvalidProjectEnvironmentDir(PathBuf),
 
     #[error("Failed to parse `pyproject.toml`")]
@@ -275,14 +275,6 @@ pub(crate) fn validate_requires_python(
     }
 }
 
-/// Find the virtual environment for the current project.
-fn find_environment(
-    workspace: &Workspace,
-    cache: &Cache,
-) -> Result<PythonEnvironment, uv_python::Error> {
-    PythonEnvironment::from_root(workspace.venv(), cache)
-}
-
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum FoundInterpreter {
@@ -374,7 +366,8 @@ impl FoundInterpreter {
         } = WorkspacePython::from_request(python_request, workspace).await?;
 
         // Read from the virtual environment first.
-        match find_environment(workspace, cache) {
+        let venv = workspace.venv();
+        match PythonEnvironment::from_root(&venv, cache) {
             Ok(venv) => {
                 if python_request.as_ref().map_or(true, |request| {
                     if request.satisfied(venv.interpreter(), cache) {
@@ -400,6 +393,13 @@ impl FoundInterpreter {
                 }
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
+            Err(uv_python::Error::InvalidEnvironment(_)) => {
+                // If there's an invalid environment with existing content, we error instead of
+                // deleting it later on.
+                if fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some()) {
+                    return Err(ProjectError::InvalidProjectEnvironmentDir(venv));
+                }
+            }
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
                 warn_user!(
                     "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
@@ -490,14 +490,6 @@ pub(crate) async fn get_or_init_environment(
         // Otherwise, create a virtual environment with the discovered interpreter.
         FoundInterpreter::Interpreter(interpreter) => {
             let venv = workspace.venv();
-
-            // Before deleting the target directory, we confirm that it is either (1) a virtual
-            // environment or (2) an empty directory.
-            if PythonEnvironment::from_root(&venv, cache).is_err()
-                && fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some())
-            {
-                return Err(ProjectError::InvalidProjectEnvironmentDir(venv));
-            }
 
             // Remove the existing virtual environment if it doesn't meet the requirements.
             match fs_err::remove_dir_all(&venv) {
