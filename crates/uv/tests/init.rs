@@ -417,7 +417,7 @@ fn init_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Initialized script `hello.py`
+    Initialized script at `hello.py`
     "###);
 
     let script = fs_err::read_to_string(&script)?;
@@ -468,7 +468,7 @@ fn init_script_python_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Initialized script `version.py`
+    Initialized script at `version.py`
     "###);
 
     let script = fs_err::read_to_string(&script)?;
@@ -510,7 +510,7 @@ fn init_script_create_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Initialized script `test/dir.py`
+    Initialized script at `test/dir.py`
     "###);
 
     let script = fs_err::read_to_string(&script)?;
@@ -550,7 +550,7 @@ fn init_script_file_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Initialized script `name_conflict.py`
+    Initialized script at `name_conflict.py`
     "###);
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("name_conflict.py"), @r###"
@@ -559,7 +559,7 @@ fn init_script_file_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Script name_conflict.py already exists
+    error: Script already exists at name_conflict.py
     "###);
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("new_issue"), @r###"

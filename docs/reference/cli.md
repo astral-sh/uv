@@ -510,6 +510,10 @@ uv init [OPTIONS] [PATH]
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
+</dd><dt><code>--script</code></dt><dd><p>Create a script with inline metadata.</p>
+
+<p>A Python script is a file intended for standalone execution with or without dependencies.</p>
+
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>

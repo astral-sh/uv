@@ -64,7 +64,7 @@ pub(crate) async fn init(
 
             writeln!(
                 printer.stderr(),
-                "Initialized script `{}`",
+                "Initialized script at `{}`",
                 script_path.cyan()
             )?;
             return Ok(ExitStatus::Success);
@@ -647,8 +647,8 @@ impl InitProjectKind {
 
         let reporter = PythonDownloadReporter::single(printer);
 
-        if let Ok(_) = fs_err::tokio::metadata(script_path).await {
-            anyhow::bail!("Script {} already exists", script_path.to_str().unwrap());
+        if script_path.try_exists()? {
+            anyhow::bail!("Script already exists at {}", script_path.to_str().unwrap());
         }
 
         let requires_python = get_python_requirement_for_new_script(

@@ -186,10 +186,7 @@ impl InitSettings {
             (false, true, false) => InitProjectKind::Library,
             (false, false, true) => InitProjectKind::Script,
             (false, false, false) => InitProjectKind::default(),
-            (true, true, false) => unreachable!("`app` and `lib` are mutually exclusive"),
-            (true, false, true) => unreachable!("`app` and `script` are mutually exclusive"),
-            (false, true, true) => unreachable!("`lib` and `script` are mutually exclusive"),
-            (true, true, true) => unreachable!("`app`, `lib`, and `script` are mutually exclusive"),
+            (_, _, _) => unreachable!("`app`, `lib`, and `script` are mutually exclusive"),
         };
 
         let package = flag(package || r#virtual, no_package).unwrap_or(kind.packaged_by_default());
