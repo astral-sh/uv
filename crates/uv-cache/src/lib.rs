@@ -45,6 +45,11 @@ impl CacheEntry {
         Self(path.into())
     }
 
+    /// Return the cache entry's parent directory.
+    pub fn shard(&self) -> CacheShard {
+        CacheShard(self.dir().to_path_buf())
+    }
+
     /// Convert the [`CacheEntry`] into a [`PathBuf`].
     #[inline]
     pub fn into_path_buf(self) -> PathBuf {
