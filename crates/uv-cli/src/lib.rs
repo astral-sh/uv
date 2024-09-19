@@ -3362,7 +3362,7 @@ pub struct ToolUpgradeArgs {
     #[arg(long, conflicts_with("name"))]
     pub all: bool,
 
-    /// The Python interpreter to use to build the tool environment.
+    /// Upgrade all tools to use the given Python interpreter to build their environment.
     ///
     /// See `uv help python` for details on Python discovery and supported
     /// request formats.
