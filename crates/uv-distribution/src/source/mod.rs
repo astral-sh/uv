@@ -1806,8 +1806,7 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
             // directories.
             let revision = entry.path().join("revision.http");
             if revision.is_file() {
-                let pointer = HttpRevisionPointer::read_from(revision)?;
-                if let Some(pointer) = pointer {
+                if let Ok(Some(pointer)) = HttpRevisionPointer::read_from(revision) {
                     // Remove all sibling directories that are not referenced by the pointer.
                     for sibling in entry.path().read_dir().map_err(Error::CacheRead)? {
                         let sibling = sibling.map_err(Error::CacheRead)?;
@@ -1832,8 +1831,7 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
             // directories.
             let revision = entry.path().join("revision.rev");
             if revision.is_file() {
-                let pointer = LocalRevisionPointer::read_from(revision)?;
-                if let Some(pointer) = pointer {
+                if let Ok(Some(pointer)) = LocalRevisionPointer::read_from(revision) {
                     // Remove all sibling directories that are not referenced by the pointer.
                     for sibling in entry.path().read_dir().map_err(Error::CacheRead)? {
                         let sibling = sibling.map_err(Error::CacheRead)?;
