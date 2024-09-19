@@ -22,6 +22,7 @@
 - Treat invalid platform as more compatible than invalid Python ([#7556](https://github.com/astral-sh/uv/pull/7556))
 - Use portable paths when serializing sources ([#7504](https://github.com/astral-sh/uv/pull/7504))
 - Compute resolver hints using the final reduced derivation tree ([#7546](https://github.com/astral-sh/uv/pull/7546))
+- Bump the wheel and sdist cache versions ([#7560](https://github.com/astral-sh/uv/pull/7560))
 
 ### Documentation
 
