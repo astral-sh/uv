@@ -5,7 +5,7 @@ use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use insta::assert_snapshot;
 
-use common::{uv_snapshot, TestContext};
+use common::{uv_snapshot, venv_bin_path, TestContext};
 use predicates::prelude::predicate;
 use tempfile::tempdir_in;
 
@@ -2609,6 +2609,109 @@ fn sync_scripts_project_not_packaged() -> Result<()> {
     warning: Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
     Resolved 1 package in [TIME]
     Audited in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_invalid_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // If the directory already exists and is not a virtual environment we should fail with an error
+    fs_err::create_dir(context.temp_dir.join(".venv"))?;
+    fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project virtual environment directory `[VENV]/` cannot be used because it is not a virtual environment and is non-empty
+    "###);
+
+    // But if it's just an incompatible virtual environment...
+    fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###);
+
+    // Even with some extraneous content...
+    fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
+
+    // We can delete and use it
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let bin = venv_bin_path(context.temp_dir.join(".venv"));
+
+    // If it's there's a broken symlink, we should warn
+    #[cfg(unix)]
+    {
+        fs_err::remove_file(bin.join("python"))?;
+        uv_snapshot!(context.filters(), context.sync(), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/python -> python
+        Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+        Removed virtual environment at: .venv
+        Creating virtual environment at: .venv
+        Resolved 2 packages in [TIME]
+        Installed 1 package in [TIME]
+         + iniconfig==2.0.0
+        "###);
+    }
+
+    // And if the Python executable is missing entirely we should warn
+    fs_err::remove_dir_all(&bin)?;
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Ignoring existing virtual environment with missing Python interpreter: .venv/[BIN]/python
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     "###);
 
     Ok(())
