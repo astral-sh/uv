@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
 
-use distribution_types::IndexLocations;
+use distribution_types::{DependencyMetadata, IndexLocations};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{ExtraName, RequirementOrigin};
 use pypi_types::{Requirement, SupportedEnvironments};
@@ -22,9 +22,9 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExportFormat, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SourceStrategy, TargetTriple, TrustedHost, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, DevMode, EditableMode, ExportFormat,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
+    NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost, Upgrade,
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
@@ -211,7 +211,8 @@ pub(crate) struct RunSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: bool,
+    pub(crate) dev: DevMode,
+    pub(crate) editable: EditableMode,
     pub(crate) with: Vec<String>,
     pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
@@ -235,6 +236,8 @@ impl RunSettings {
             no_all_extras,
             dev,
             no_dev,
+            only_dev,
+            no_editable,
             command: _,
             with,
             with_editable,
@@ -259,7 +262,8 @@ impl RunSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: flag(dev, no_dev).unwrap_or(true),
+            dev: DevMode::from_args(dev, no_dev, only_dev),
+            editable: EditableMode::from_args(no_editable),
             with,
             with_editable,
             with_requirements: with_requirements
@@ -288,6 +292,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) command: Option<ExternalCommand>,
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
+    pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
@@ -308,6 +313,7 @@ impl ToolRunSettings {
             command,
             from,
             with,
+            with_editable,
             with_requirements,
             isolated,
             show_resolution,
@@ -339,6 +345,7 @@ impl ToolRunSettings {
             command,
             from,
             with,
+            with_editable,
             with_requirements: with_requirements
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -661,7 +668,8 @@ pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: bool,
+    pub(crate) dev: DevMode,
+    pub(crate) editable: EditableMode,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
     pub(crate) package: Option<PackageName>,
@@ -680,6 +688,8 @@ impl SyncSettings {
             no_all_extras,
             dev,
             no_dev,
+            only_dev,
+            no_editable,
             inexact,
             exact,
             no_install_project,
@@ -706,7 +716,8 @@ impl SyncSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: flag(dev, no_dev).unwrap_or(true),
+            dev: DevMode::from_args(dev, no_dev, only_dev),
+            editable: EditableMode::from_args(no_editable),
             install_options: InstallOptions::new(
                 no_install_project,
                 no_install_workspace,
@@ -960,7 +971,8 @@ pub(crate) struct ExportSettings {
     pub(crate) format: ExportFormat,
     pub(crate) package: Option<PackageName>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: bool,
+    pub(crate) dev: DevMode,
+    pub(crate) editable: EditableMode,
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
     pub(crate) output_file: Option<PathBuf>,
@@ -983,6 +995,8 @@ impl ExportSettings {
             no_all_extras,
             dev,
             no_dev,
+            only_dev,
+            no_editable,
             hashes,
             no_hashes,
             output_file,
@@ -1004,7 +1018,8 @@ impl ExportSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: flag(dev, no_dev).unwrap_or(true),
+            dev: DevMode::from_args(dev, no_dev, only_dev),
+            editable: EditableMode::from_args(no_editable),
             hashes: flag(hashes, no_hashes).unwrap_or(true),
             install_options: InstallOptions::new(
                 no_emit_project,
@@ -1771,6 +1786,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) allow_insecure_host: &'a [TrustedHost],
+    pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: &'a [PackageName],
@@ -1795,6 +1811,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
@@ -1813,6 +1830,7 @@ pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) allow_insecure_host: &'a [TrustedHost],
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: &'a [PackageName],
@@ -1844,6 +1862,7 @@ impl ResolverSettings {
             allow_insecure_host: &self.allow_insecure_host,
             resolution: self.resolution,
             prerelease: self.prerelease,
+            dependency_metadata: &self.dependency_metadata,
             config_setting: &self.config_setting,
             no_build_isolation: self.no_build_isolation,
             no_build_isolation_package: &self.no_build_isolation_package,
@@ -1867,6 +1886,9 @@ impl From<ResolverOptions> for ResolverSettings {
             ),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
+            dependency_metadata: DependencyMetadata::from_entries(
+                value.dependency_metadata.into_iter().flatten(),
+            ),
             index_strategy: value.index_strategy.unwrap_or_default(),
             keyring_provider: value.keyring_provider.unwrap_or_default(),
             allow_insecure_host: value.allow_insecure_host.unwrap_or_default(),
@@ -1901,6 +1923,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) allow_insecure_host: &'a [TrustedHost],
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: &'a [PackageName],
@@ -1919,8 +1942,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
 /// Represents the shared settings that are used across all uv commands outside the `pip` API.
 /// Analogous to the settings contained in the `[tool.uv]` table, combined with [`ResolverInstallerArgs`].
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct ResolverInstallerSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
@@ -1928,6 +1950,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
@@ -1964,6 +1987,7 @@ impl ResolverInstallerSettings {
             allow_insecure_host: &self.allow_insecure_host,
             resolution: self.resolution,
             prerelease: self.prerelease,
+            dependency_metadata: &self.dependency_metadata,
             config_setting: &self.config_setting,
             no_build_isolation: self.no_build_isolation,
             no_build_isolation_package: &self.no_build_isolation_package,
@@ -1989,6 +2013,9 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
             ),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
+            dependency_metadata: DependencyMetadata::from_entries(
+                value.dependency_metadata.into_iter().flatten(),
+            ),
             index_strategy: value.index_strategy.unwrap_or_default(),
             keyring_provider: value.keyring_provider.unwrap_or_default(),
             allow_insecure_host: value.allow_insecure_host.unwrap_or_default(),
@@ -2045,6 +2072,7 @@ pub(crate) struct PipSettings {
     pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) output_file: Option<PathBuf>,
     pub(crate) no_strip_extras: bool,
     pub(crate) no_strip_markers: bool,
@@ -2104,6 +2132,7 @@ impl PipSettings {
             allow_empty_requirements,
             resolution,
             prerelease,
+            dependency_metadata,
             output_file,
             no_strip_extras,
             no_strip_markers,
@@ -2144,6 +2173,7 @@ impl PipSettings {
             allow_insecure_host: top_level_allow_insecure_host,
             resolution: top_level_resolution,
             prerelease: top_level_prerelease,
+            dependency_metadata: top_level_dependency_metadata,
             config_settings: top_level_config_settings,
             no_build_isolation: top_level_no_build_isolation,
             no_build_isolation_package: top_level_no_build_isolation_package,
@@ -2174,6 +2204,7 @@ impl PipSettings {
         let allow_insecure_host = allow_insecure_host.combine(top_level_allow_insecure_host);
         let resolution = resolution.combine(top_level_resolution);
         let prerelease = prerelease.combine(top_level_prerelease);
+        let dependency_metadata = dependency_metadata.combine(top_level_dependency_metadata);
         let config_settings = config_settings.combine(top_level_config_settings);
         let no_build_isolation = no_build_isolation.combine(top_level_no_build_isolation);
         let no_build_isolation_package =
@@ -2207,6 +2238,11 @@ impl PipSettings {
             },
             resolution: args.resolution.combine(resolution).unwrap_or_default(),
             prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
+            dependency_metadata: DependencyMetadata::from_entries(
+                args.dependency_metadata
+                    .combine(dependency_metadata)
+                    .unwrap_or_default(),
+            ),
             output_file: args.output_file.combine(output_file),
             no_strip_extras: args
                 .no_strip_extras
@@ -2351,6 +2387,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
             allow_insecure_host: settings.allow_insecure_host,
             resolution: settings.resolution,
             prerelease: settings.prerelease,
+            dependency_metadata: settings.dependency_metadata,
             config_setting: settings.config_setting,
             no_build_isolation: settings.no_build_isolation,
             no_build_isolation_package: settings.no_build_isolation_package,
@@ -2370,6 +2407,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for InstallerSettingsRef<'a> {
             index_strategy: settings.index_strategy,
             keyring_provider: settings.keyring_provider,
             allow_insecure_host: settings.allow_insecure_host,
+            dependency_metadata: settings.dependency_metadata,
             config_setting: settings.config_setting,
             no_build_isolation: settings.no_build_isolation,
             no_build_isolation_package: settings.no_build_isolation_package,

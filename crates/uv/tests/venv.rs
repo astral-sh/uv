@@ -4,6 +4,7 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use predicates::prelude::*;
 use uv_python::{PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME};
 
 use crate::common::{uv_snapshot, TestContext};
@@ -913,7 +914,7 @@ fn verify_pyvenv_cfg() {
     pyvenv_cfg.assert(predicates::str::contains(search_string));
 
     // Not relocatable by default.
-    pyvenv_cfg.assert(predicates::str::contains("relocatable = false"));
+    pyvenv_cfg.assert(predicates::str::contains("relocatable").not());
 }
 
 #[test]

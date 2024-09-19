@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use distribution_types::{
-    CachedDist, IndexCapabilities, IndexLocations, InstalledDist, Resolution, SourceDist,
+    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, InstalledDist, Resolution,
+    SourceDist,
 };
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
@@ -61,6 +62,9 @@ pub trait BuildContext {
 
     /// Return a reference to the discovered registry capabilities.
     fn capabilities(&self) -> &IndexCapabilities;
+
+    /// Return a reference to any pre-defined static metadata.
+    fn dependency_metadata(&self) -> &DependencyMetadata;
 
     /// Whether source distribution building or pre-built wheels is disabled.
     ///

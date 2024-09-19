@@ -7,7 +7,10 @@ use std::path::PathBuf;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, ExportFormat, ExtrasSpecification, InstallOptions};
+use uv_configuration::{
+    Concurrency, DevMode, DevSpecification, EditableMode, ExportFormat, ExtrasSpecification,
+    InstallOptions,
+};
 use uv_fs::CWD;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
@@ -30,7 +33,8 @@ pub(crate) async fn export(
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
-    dev: bool,
+    dev: DevMode,
+    editable: EditableMode,
     locked: bool,
     frozen: bool,
     python: Option<String>,
@@ -111,10 +115,10 @@ pub(crate) async fn export(
     };
 
     // Include development dependencies, if requested.
-    let dev = if dev {
-        vec![DEV_DEPENDENCIES.clone()]
-    } else {
-        vec![]
+    let dev = match dev {
+        DevMode::Include => DevSpecification::Include(std::slice::from_ref(&DEV_DEPENDENCIES)),
+        DevMode::Exclude => DevSpecification::Exclude,
+        DevMode::Only => DevSpecification::Only(std::slice::from_ref(&DEV_DEPENDENCIES)),
     };
 
     // Write the resolved dependencies to the output channel.
@@ -127,7 +131,8 @@ pub(crate) async fn export(
                 &lock,
                 project.project_name(),
                 &extras,
-                &dev,
+                dev,
+                editable,
                 hashes,
                 &install_options,
             )?;

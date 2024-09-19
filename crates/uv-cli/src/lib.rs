@@ -77,6 +77,13 @@ pub struct Cli {
     pub command: Box<Commands>,
 
     #[command(flatten)]
+    pub top_level: TopLevelArgs,
+}
+
+#[derive(Parser)]
+#[command(disable_help_flag = true, disable_version_flag = true)]
+pub struct TopLevelArgs {
+    #[command(flatten)]
     pub cache_args: Box<CacheArgs>,
 
     #[command(flatten)]
@@ -2406,6 +2413,17 @@ pub struct RunArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
+    /// Omit non-development dependencies.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("no_dev"))]
+    pub only_dev: bool,
+
+    /// Install any editable dependencies, including the project and any workspace members, as
+    /// non-editable.
+    #[arg(long)]
+    pub no_editable: bool,
+
     /// The command to run.
     ///
     /// If the path to a Python script (i.e., ending in `.py`), it will be
@@ -2551,6 +2569,17 @@ pub struct SyncArgs {
     /// Omit development dependencies.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
+
+    /// Omit non-development dependencies.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("no_dev"))]
+    pub only_dev: bool,
+
+    /// Install any editable dependencies, including the project and any workspace members, as
+    /// non-editable.
+    #[arg(long)]
+    pub no_editable: bool,
 
     /// Do not remove extraneous packages present in the environment.
     ///
@@ -2988,6 +3017,17 @@ pub struct ExportArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
+    /// Omit non-development dependencies.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("no_dev"))]
+    pub only_dev: bool,
+
+    /// Install any editable dependencies, including the project and any workspace members, as
+    /// non-editable.
+    #[arg(long)]
+    pub no_editable: bool,
+
     /// Include hashes for all dependencies.
     #[arg(long, overrides_with("no_hashes"), hide = true)]
     pub hashes: bool,
@@ -3174,6 +3214,14 @@ pub struct ToolRunArgs {
     /// Run with the given packages installed.
     #[arg(long)]
     pub with: Vec<String>,
+
+    /// Run with the given packages installed as editables
+    ///
+    /// When used in a project, these dependencies will be layered on top of
+    /// the uv tool's environment in a separate, ephemeral environment. These
+    /// dependencies are allowed to conflict with those specified.
+    #[arg(long)]
+    pub with_editable: Vec<String>,
 
     /// Run with all packages listed in the given `requirements.txt` files.
     #[arg(long, value_parser = parse_maybe_file_path)]

@@ -14,7 +14,9 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions, SourceStrategy};
+use uv_configuration::{
+    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, SourceStrategy,
+};
 use uv_distribution::LoweredRequirement;
 use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -57,7 +59,8 @@ pub(crate) async fn run(
     no_project: bool,
     no_config: bool,
     extras: ExtrasSpecification,
-    dev: bool,
+    dev: DevMode,
+    editable: EditableMode,
     python: Option<String>,
     settings: ResolverInstallerSettings,
     python_preference: PythonPreference,
@@ -247,6 +250,7 @@ pub(crate) async fn run(
                 false,
                 false,
                 false,
+                false,
             )?;
 
             Some(environment.into_interpreter())
@@ -267,8 +271,11 @@ pub(crate) async fn run(
         if !extras.is_empty() {
             warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
-        if !dev {
+        if matches!(dev, DevMode::Exclude) {
             warn_user!("`--no-dev` is not supported for Python scripts with inline metadata");
+        }
+        if matches!(dev, DevMode::Only) {
+            warn_user!("`--only-dev` is not supported for Python scripts with inline metadata");
         }
         if package.is_some() {
             warn_user!(
@@ -341,8 +348,11 @@ pub(crate) async fn run(
             if !extras.is_empty() {
                 warn_user!("Extras have no effect when used alongside `--no-project`");
             }
-            if !dev {
+            if matches!(dev, DevMode::Exclude) {
                 warn_user!("`--no-dev` has no effect when used alongside `--no-project`");
+            }
+            if matches!(dev, DevMode::Only) {
+                warn_user!("`--only-dev` has no effect when used alongside `--no-project`");
             }
             if locked {
                 warn_user!("`--locked` has no effect when used alongside `--no-project`");
@@ -358,8 +368,11 @@ pub(crate) async fn run(
             if !extras.is_empty() {
                 warn_user!("Extras have no effect when used outside of a project");
             }
-            if !dev {
+            if matches!(dev, DevMode::Exclude) {
                 warn_user!("`--no-dev` has no effect when used outside of a project");
+            }
+            if matches!(dev, DevMode::Only) {
+                warn_user!("`--only-dev` has no effect when used outside of a project");
             }
             if locked {
                 warn_user!("`--locked` has no effect when used outside of a project");
@@ -432,6 +445,7 @@ pub(crate) async fn run(
                     false,
                     false,
                     false,
+                    false,
                 )?
             } else {
                 // If we're not isolating the environment, reuse the base environment for the
@@ -490,6 +504,7 @@ pub(crate) async fn run(
                     result.lock(),
                     &extras,
                     dev,
+                    editable,
                     install_options,
                     Modifications::Sufficient,
                     settings.as_ref().into(),
@@ -554,6 +569,7 @@ pub(crate) async fn run(
                     false,
                     false,
                     false,
+                    false,
                 )?;
                 venv.into_interpreter()
             } else {
@@ -602,6 +618,7 @@ pub(crate) async fn run(
                     false,
                     false,
                     false,
+                    false,
                 )?
             }
             Some(spec) => {
@@ -646,10 +663,7 @@ pub(crate) async fn run(
                         eprint!("{err:?}");
                         return Ok(ExitStatus::Failure);
                     }
-
-                    Err(err) => {
-                        return Err(err.into());
-                    }
+                    Err(err) => return Err(err.into()),
                 };
 
                 environment.into()

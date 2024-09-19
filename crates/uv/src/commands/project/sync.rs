@@ -1,13 +1,24 @@
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
+use crate::commands::pip::operations::Modifications;
+use crate::commands::project::lock::do_safe_lock;
+use crate::commands::project::{ProjectError, SharedState};
+use crate::commands::{pip, project, ExitStatus};
+use crate::printer::Printer;
+use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 use anyhow::{Context, Result};
+use distribution_types::{DirectorySourceDist, Dist, ResolvedDist, SourceDist};
 use itertools::Itertools;
-
-use distribution_types::{Dist, ResolvedDist, SourceDist};
-use pep508_rs::MarkerTree;
-use uv_auth::store_credentials_from_url;
+use pep508_rs::{MarkerTree, Requirement, VersionOrUrl};
+use pypi_types::{
+    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
+};
+use std::borrow::Cow;
+use std::str::FromStr;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, ExtrasSpecification, HashCheckingMode, InstallOptions,
+    Concurrency, Constraints, DevMode, DevSpecification, EditableMode, ExtrasSpecification,
+    HashCheckingMode, InstallOptions,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
@@ -16,15 +27,9 @@ use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
+use uv_warnings::warn_user;
+use uv_workspace::pyproject::{Source, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
-
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::Modifications;
-use crate::commands::project::lock::do_safe_lock;
-use crate::commands::project::{ProjectError, SharedState};
-use crate::commands::{pip, project, ExitStatus};
-use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -33,7 +38,8 @@ pub(crate) async fn sync(
     frozen: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: bool,
+    dev: DevMode,
+    editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
@@ -73,6 +79,14 @@ pub(crate) async fn sync(
     } else {
         InstallTarget::from(&project)
     };
+
+    // TODO(lucab): improve warning content
+    // <https://github.com/astral-sh/uv/issues/7428>
+    if project.workspace().pyproject_toml().has_scripts()
+        && !project.workspace().pyproject_toml().is_package()
+    {
+        warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
+    }
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
@@ -123,6 +137,7 @@ pub(crate) async fn sync(
         &lock,
         &extras,
         dev,
+        editable,
         install_options,
         modifications,
         settings.as_ref().into(),
@@ -146,7 +161,8 @@ pub(super) async fn do_sync(
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: &ExtrasSpecification,
-    dev: bool,
+    dev: DevMode,
+    editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
@@ -164,6 +180,7 @@ pub(super) async fn do_sync(
         index_strategy,
         keyring_provider,
         allow_insecure_host,
+        dependency_metadata,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -209,10 +226,10 @@ pub(super) async fn do_sync(
     }
 
     // Include development dependencies, if requested.
-    let dev = if dev {
-        vec![DEV_DEPENDENCIES.clone()]
-    } else {
-        vec![]
+    let dev = match dev {
+        DevMode::Include => DevSpecification::Include(std::slice::from_ref(&DEV_DEPENDENCIES)),
+        DevMode::Exclude => DevSpecification::Exclude,
+        DevMode::Only => DevSpecification::Only(std::slice::from_ref(&DEV_DEPENDENCIES)),
     };
 
     // Determine the tags to use for resolution.
@@ -224,7 +241,7 @@ pub(super) async fn do_sync(
         &markers,
         tags,
         extras,
-        &dev,
+        dev,
         build_options,
         &install_options,
     )?;
@@ -232,10 +249,16 @@ pub(super) async fn do_sync(
     // Always skip virtual projects, which shouldn't be built or installed.
     let resolution = apply_no_virtual_project(resolution);
 
+    // If necessary, convert editable to non-editable distributions.
+    let resolution = apply_editable_mode(resolution, editable);
+
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
-        store_credentials_from_url(url);
+        uv_auth::store_credentials_from_url(url);
     }
+
+    // Populate credentials from the workspace.
+    store_credentials_from_workspace(target.workspace());
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -282,6 +305,7 @@ pub(super) async fn do_sync(
         venv.interpreter(),
         index_locations,
         &flat_index,
+        dependency_metadata,
         &state.index,
         &state.git,
         &state.capabilities,
@@ -347,4 +371,120 @@ fn apply_no_virtual_project(
 
         !dist.r#virtual
     })
+}
+
+/// If necessary, convert any editable requirements to non-editable.
+fn apply_editable_mode(
+    resolution: distribution_types::Resolution,
+    editable: EditableMode,
+) -> distribution_types::Resolution {
+    match editable {
+        // No modifications are necessary for editable mode; retain any editable distributions.
+        EditableMode::Editable => resolution,
+
+        // Filter out any editable distributions.
+        EditableMode::NonEditable => resolution.map(|dist| {
+            let ResolvedDist::Installable(Dist::Source(SourceDist::Directory(
+                DirectorySourceDist {
+                    name,
+                    install_path,
+                    editable: true,
+                    r#virtual: false,
+                    url,
+                },
+            ))) = dist
+            else {
+                return dist;
+            };
+
+            ResolvedDist::Installable(Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                install_path,
+                editable: false,
+                r#virtual: false,
+                url,
+            })))
+        }),
+    }
+}
+
+/// Extract any credentials that are defined on the workspace dependencies themselves. While we
+/// don't store plaintext credentials in the `uv.lock`, we do respect credentials that are defined
+/// in the `pyproject.toml`.
+///
+/// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
+/// `project.dependencies`, and `project.optional-dependencies`.
+fn store_credentials_from_workspace(workspace: &Workspace) {
+    for member in workspace.packages().values() {
+        // Iterate over the `tool.uv.sources`.
+        for source in member
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .map(ToolUvSources::inner)
+            .iter()
+            .flat_map(|sources| sources.values())
+        {
+            match source {
+                Source::Git { git, .. } => {
+                    uv_git::store_credentials_from_url(git);
+                }
+                Source::Url { url, .. } => {
+                    uv_auth::store_credentials_from_url(url);
+                }
+                _ => {}
+            }
+        }
+
+        // Iterate over all dependencies.
+        let dependencies = member
+            .pyproject_toml()
+            .project
+            .as_ref()
+            .and_then(|project| project.dependencies.as_ref())
+            .into_iter()
+            .flatten();
+        let optional_dependencies = member
+            .pyproject_toml()
+            .project
+            .as_ref()
+            .and_then(|project| project.optional_dependencies.as_ref())
+            .into_iter()
+            .flat_map(|optional| optional.values())
+            .flatten();
+        let dev_dependencies = member
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.dev_dependencies.as_ref())
+            .into_iter()
+            .flatten();
+
+        for requirement in dependencies
+            .chain(optional_dependencies)
+            .filter_map(|requires_dist| {
+                LenientRequirement::<VerbatimParsedUrl>::from_str(requires_dist)
+                    .map(Requirement::from)
+                    .map(Cow::Owned)
+                    .ok()
+            })
+            .chain(dev_dependencies.map(Cow::Borrowed))
+        {
+            let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
+                continue;
+            };
+            match &url.parsed_url {
+                ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
+                    uv_git::store_credentials_from_url(url.repository());
+                }
+                ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
+                    uv_auth::store_credentials_from_url(url);
+                }
+                _ => {}
+            }
+        }
+    }
 }

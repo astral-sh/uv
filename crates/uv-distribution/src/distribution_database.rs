@@ -360,6 +360,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        // If the metadata was provided by the user directly, prefer it.
+        if let Some(metadata) = self
+            .build_context
+            .dependency_metadata()
+            .get(dist.name(), dist.version())
+        {
+            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
+        }
+
         // If hash generation is enabled, and the distribution isn't hosted on an index, get the
         // entire wheel to ensure that the hashes are included in the response. If the distribution
         // is hosted on an index, the hashes will be included in the simple metadata response.
@@ -415,6 +424,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         source: &BuildableSource<'_>,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        // If the metadata was provided by the user directly, prefer it.
+        if let Some(dist) = source.as_dist() {
+            if let Some(version) = dist.version() {
+                if let Some(metadata) = self
+                    .build_context
+                    .dependency_metadata()
+                    .get(dist.name(), version)
+                {
+                    return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
+                }
+            }
+        }
+
         // Optimization: Skip source dist download when we must not build them anyway.
         if self
             .build_context

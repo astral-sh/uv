@@ -249,6 +249,8 @@ uv run [OPTIONS] <COMMAND>
 
 <p>This option is only available when running in a project.</p>
 
+</dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
+
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
@@ -272,6 +274,10 @@ uv run [OPTIONS] <COMMAND>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--only-dev</code></dt><dd><p>Omit non-development dependencies.</p>
+
+<p>The project itself will also be omitted.</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Run the command in a specific package in the workspace.</p>
 
@@ -1313,6 +1319,8 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit development dependencies</p>
 
+</dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
+
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
 </dd><dt><code>--no-install-package</code> <i>no-install-package</i></dt><dd><p>Do not install the given package(s).</p>
@@ -1338,6 +1346,10 @@ uv sync [OPTIONS]
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--only-dev</code></dt><dd><p>Omit non-development dependencies.</p>
+
+<p>The project itself will also be omitted.</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
 
@@ -1865,6 +1877,8 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit development dependencies</p>
 
+</dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
+
 </dd><dt><code>--no-emit-package</code> <i>no-emit-package</i></dt><dd><p>Do not emit the given package(s).</p>
 
 <p>By default, all of the project&#8217;s dependencies are included in the exported requirements file. The <code>--no-install-package</code> option allows exclusion of specific packages.</p>
@@ -1892,6 +1906,10 @@ uv export [OPTIONS]
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--only-dev</code></dt><dd><p>Omit non-development dependencies.</p>
+
+<p>The project itself will also be omitted.</p>
 
 </dd><dt><code>--output-file</code>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the exported requirements to the given file</p>
 
@@ -2578,6 +2596,10 @@ uv tool run [OPTIONS] [COMMAND]
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd><dt><code>--with</code> <i>with</i></dt><dd><p>Run with the given packages installed</p>
+
+</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed as editables</p>
+
+<p>When used in a project, these dependencies will be layered on top of the uv tool&#8217;s environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified.</p>
 
 </dd><dt><code>--with-requirements</code> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files</p>
 

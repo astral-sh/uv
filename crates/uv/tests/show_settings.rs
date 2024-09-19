@@ -140,6 +140,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -279,6 +282,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -419,6 +425,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -591,6 +600,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -709,6 +721,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -859,6 +874,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -1046,6 +1064,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -1232,6 +1253,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -1396,6 +1420,9 @@ fn resolve_find_links() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -1536,6 +1563,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -1714,6 +1744,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -1875,6 +1908,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -2015,6 +2051,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -2138,6 +2177,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -2261,6 +2303,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -2386,6 +2431,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -2509,6 +2557,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                 LowestDirect,
             ),
             prerelease: None,
+            dependency_metadata: None,
             config_settings: None,
             no_build_isolation: None,
             no_build_isolation_package: None,
@@ -2543,6 +2592,9 @@ fn resolve_tool() -> anyhow::Result<()> {
             allow_insecure_host: [],
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             config_setting: ConfigSettings(
                 {},
             ),
@@ -2683,6 +2735,9 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -2857,6 +2912,9 @@ fn resolve_both() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -3022,6 +3080,9 @@ fn resolve_config_file() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -3240,6 +3301,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -3366,6 +3430,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -3511,6 +3578,9 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,

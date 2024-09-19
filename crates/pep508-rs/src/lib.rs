@@ -135,7 +135,7 @@ create_exception!(
 );
 
 /// A PEP 508 dependency specifier.
-#[derive(Hash, Debug, Clone, Eq, PartialEq)]
+#[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// The distribution name such as `requests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
@@ -480,7 +480,9 @@ impl<T: Pep508Url> schemars::JsonSchema for Requirement<T> {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("A PEP 508 dependency specifier".to_string()),
+                description: Some(
+                    "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`".to_string(),
+                ),
                 ..schemars::schema::Metadata::default()
             })),
             ..schemars::schema::SchemaObject::default()
@@ -535,7 +537,7 @@ impl Extras {
 }
 
 /// The actual version specifier or URL to install.
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum VersionOrUrl<T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier set
     VersionSpecifier(VersionSpecifiers),

@@ -348,7 +348,7 @@ jobs:
       - name: "Clippy"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
         if: matrix.target-arch == 'x86_64'
-        run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
+        run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
         env:
           XWIN_ARCH: "x86_64"
           XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"

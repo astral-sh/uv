@@ -21,7 +21,7 @@ $ docker run ghcr.io/astral-sh/uv --help
 uv provides a distroless Docker image including the `uv` binary. The following tags are published:
 
 - `uv:latest`
-- `uv:{major}.{minor}.{patch}`, e.g., `uv:0.4.10`
+- `uv:{major}.{minor}.{patch}`, e.g., `uv:0.4.11`
 - `uv:{major}.{minor}`, e.g., `uv:0.4` (the latest patch version)
 
 In addition, uv publishes the following images:
@@ -56,7 +56,7 @@ In addition, uv publishes the following images:
     - `uv:python3.8-bookworm-slim`
 
 As with the distroless image, each image is published with uv version tags as
-`uv:{major}.{minor}.{patch}-{base}` and `uv:{major}.{minor}-{base}`, e.g., `uv:0.4.10-alpine`.
+`uv:{major}.{minor}.{patch}-{base}` and `uv:{major}.{minor}-{base}`, e.g., `uv:0.4.11-alpine`.
 
 For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
 page.
@@ -94,13 +94,13 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.4.10 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.4.11 /uv /bin/uv
 ```
 
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.4.10/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.4.11/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -359,6 +359,50 @@ _contents_ are not copied into the image until the final `uv sync` command.
     `--no-install-workspace` flag which excludes the project _and_ any workspace members.
 
     If you want to remove specific packages from the sync, use `--no-install-package <name>`.
+
+### Non-editable installs
+
+By default, uv installs projects and workspace members in editable mode, such that changes to the
+source code are immediately reflected in the environment.
+
+`uv sync` and `uv run` both accept a `--no-editable` flag, which instructs uv to install the project
+in non-editable mode, removing any dependency on the source code.
+
+In the context of a multi-stage Docker image, `--no-editable` can be used to include the project in
+the synced virtual environment from one stage, then copy the virtual environment alone (and not the
+source code) into the final image.
+
+For example:
+
+```dockerfile title="Dockerfile"
+# Install uv
+FROM python:3.12-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Change the working directory to the `app` directory
+WORKDIR /app
+
+# Install dependencies
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --no-editable
+
+# Copy the project into the intermediate image
+ADD . /app
+
+# Sync the project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-editable
+
+FROM python:3.12-slim
+
+# Copy the environment, but not the source code
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
+
+# Run the application
+CMD ["/app/.venv/bin/hello"]
+```
 
 ### Using uv temporarily
 

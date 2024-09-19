@@ -67,9 +67,9 @@ project should be packaged and installed.
 uv uses the presence of a build system to determine if a project contains a package that should be
 installed in the project virtual environment. If a build system is not defined, uv will not attempt
 to build or install the project itself, just its dependencies. If a build system is defined, uv will
-build and install the project into the project environment. Projects are installed in
+build and install the project into the project environment. By default, projects are installed in
 [editable mode](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) so changes to
-the source code are reflected immediately, without reinstallation.
+the source code are reflected immediately, without re-installation.
 
 ### Configuring project packaging
 
@@ -237,7 +237,7 @@ def hello() -> None:
 
 And the `pyproject.toml` includes a script entrypoint:
 
-```python title="pyproject.toml" hl_lines="9 10"
+```toml title="pyproject.toml" hl_lines="9 10"
 [project]
 name = "example-packaged-app"
 version = "0.1.0"
@@ -296,6 +296,12 @@ use [`uvx`](../guides/tools.md) or
     [tool.uv]
     managed = false
     ```
+
+By default, the project will be installed in editable mode, such that changes to the source code are
+immediately reflected in the environment. `uv sync` and `uv run` both accept a `--no-editable` flag,
+which instructs uv to install the project in non-editable mode. `--no-editable` is intended for
+deployment use-cases, such as building a Docker container, in which the project should be included
+in the deployed environment without a dependency on the originating source code.
 
 ### Configuring the project environment path
 
@@ -485,6 +491,38 @@ To add a dependency source, e.g., to use `httpx` from GitHub during development:
 ```console
 $ uv add git+https://github.com/encode/httpx
 ```
+
+### Platform-specific dependencies
+
+To ensure that a dependency is only installed on a specific platform or on specific Python versions,
+use Python's standardized
+[environment markers](https://peps.python.org/pep-0508/#environment-markers) syntax.
+
+For example, to install `jax` on Linux, but not on Windows or macOS:
+
+```console
+$ uv add 'jax; sys_platform == "linux"'
+```
+
+The resulting `pyproject.toml` will then include the environment marker in the dependency
+definition:
+
+```toml title="pyproject.toml" hl_lines="6"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["jax; sys_platform == 'linux'"]
+```
+
+Similarly, to include `numpy` on Python 3.11 and later:
+
+```console
+$ uv add 'numpy; python_version >= "3.11"'
+```
+
+See Python's [environment marker](https://peps.python.org/pep-0508/#environment-markers)
+documentation for a complete enumeration of the available markers and operators.
 
 ## Running commands
 
@@ -677,8 +715,8 @@ $ uv sync --extra build
 $ uv sync --extra build --extra compile
 ```
 
-Some packages, like `cchardet`, only require build dependencies for the _installation_ phase of
-`uv sync`. Others, like `flash-attn`, require their build dependencies to be present even just to
+Some packages, like `cchardet` above, only require build dependencies for the _installation_ phase
+of `uv sync`. Others, like `flash-attn`, require their build dependencies to be present even just to
 resolve the project's lockfile during the _resolution_ phase.
 
 In such cases, the build dependencies must be installed prior to running any `uv lock` or `uv sync`
@@ -697,10 +735,64 @@ dependencies = ["flash-attn"]
 no-build-isolation-package = ["flash-attn"]
 ```
 
-You could run the following sequence of commands:
+You could run the following sequence of commands to sync `flash-attn`:
 
 ```console
 $ uv venv
 $ uv pip install torch
 $ uv sync
+```
+
+Alternatively, you can provide the `flash-attn` metadata upfront via the
+[`dependency-metadata`](../reference/settings.md#dependency-metadata) setting, thereby forgoing the
+need to build the package during the dependency resolution phase. For example, to provide the
+`flash-attn` metadata upfront, include the following in your `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[[tool.uv.dependency-metadata]]
+name = "flash-attn"
+version = "2.6.3"
+requires-dist = ["torch", "einops"]
+```
+
+!!! tip
+
+    To determine the package metadata for a package like `flash-attn`, navigate to the appropriate Git repository,
+    or look it up on [PyPI](https://pypi.org/project/flash-attn) and download the package's source distribution.
+    The package requirements can typically be found in the `setup.py` or `setup.cfg` file.
+
+    (If the package includes a built distribution, you can unzip it to find the `METADATA` file; however, the presence
+    of a built distribution would negate the need to provide the metadata upfront, since it would already be available
+    to uv.)
+
+Once included, you can again use the two-step `uv sync` process to install the build dependencies.
+Given the following `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[project]
+name = "project"
+version = "0.1.0"
+description = "..."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+build = ["torch", "setuptools", "packaging"]
+compile = ["flash-attn"]
+
+[tool.uv]
+no-build-isolation-package = ["flash-attn"]
+
+[[tool.uv.dependency-metadata]]
+name = "flash-attn"
+version = "2.6.3"
+requires-dist = ["torch", "einops"]
+```
+
+You could run the following sequence of commands to sync `flash-attn`:
+
+```console
+$ uv sync --extra build
+$ uv sync --extra build --extra compile
 ```

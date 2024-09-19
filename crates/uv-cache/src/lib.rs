@@ -447,12 +447,31 @@ impl Cache {
                 Err(err) => return Err(err),
             }
 
-            // Remove any unzipped wheels (i.e., symlinks) from the built wheels cache.
             for entry in walkdir::WalkDir::new(self.bucket(CacheBucket::SourceDistributions)) {
                 let entry = entry?;
-                if entry.file_type().is_symlink() {
-                    debug!("Removing unzipped wheel entry: {}", entry.path().display());
-                    summary += rm_rf(entry.path())?;
+
+                // If the directory contains a `metadata.msgpack`, then it's a built wheel revision.
+                if !entry.file_type().is_dir() {
+                    continue;
+                }
+
+                if !entry.path().join("metadata.msgpack").exists() {
+                    continue;
+                }
+
+                // Remove any symlinks and directories in the revision. The symlinks represent
+                // unzipped wheels, and the directories represent the source distribution archives.
+                for entry in fs_err::read_dir(entry.path())? {
+                    let entry = entry?;
+                    let path = entry.path();
+
+                    if path.is_dir() {
+                        debug!("Removing unzipped built wheel entry: {}", path.display());
+                        summary += rm_rf(path)?;
+                    } else if path.is_symlink() {
+                        debug!("Removing unzipped built wheel entry: {}", path.display());
+                        summary += rm_rf(path)?;
+                    }
                 }
             }
         }

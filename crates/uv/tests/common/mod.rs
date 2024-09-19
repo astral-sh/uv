@@ -419,13 +419,15 @@ impl TestContext {
     /// * Don't wrap text output based on the terminal we're in, the test output doesn't get printed
     ///   but snapshotted to a string.
     /// * Use a fake `HOME` to avoid accidentally changing the developer's machine.
-    /// * Hide other Python python with `UV_PYTHON_INSTALL_DIR` and installed interpreters with
-    ///   `UV_TEST_PYTHON_PATH`.
+    /// * Hide other Pythons with `UV_PYTHON_INSTALL_DIR` and installed interpreters with
+    ///   `UV_TEST_PYTHON_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
     pub fn add_shared_args(&self, command: &mut Command, activate_venv: bool) {
         command
             .arg("--cache-dir")
             .arg(self.cache_dir.path())
+            // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
+            .env_remove("VIRTUAL_ENV")
             .env("UV_NO_WRAP", "1")
             .env("HOME", self.home_dir.as_os_str())
             .env("UV_PYTHON_INSTALL_DIR", "")
@@ -440,7 +442,7 @@ impl TestContext {
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
             // default windows stack of 1MB
-            command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
         }
     }
 
@@ -531,7 +533,7 @@ impl TestContext {
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
             // default windows stack of 1MB
-            command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
         }
 
         command

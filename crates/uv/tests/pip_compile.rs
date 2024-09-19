@@ -686,7 +686,7 @@ build-backend = "poetry.core.masonry.api"
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to extract static metadata from `pyproject.toml`
+    error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 13, column 1
        |
     13 | [project.dependencies]

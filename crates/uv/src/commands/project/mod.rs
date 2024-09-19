@@ -22,7 +22,9 @@ use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
-use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
+use uv_requirements::{
+    NamedRequirementsError, NamedRequirementsResolver, RequirementsSpecification,
+};
 use uv_resolver::{
     FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph, ResolverMarkers,
 };
@@ -531,6 +533,7 @@ pub(crate) async fn get_or_init_environment(
                 false,
                 false,
                 false,
+                false,
             )?)
         }
     }
@@ -547,7 +550,7 @@ pub(crate) async fn resolve_names(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> anyhow::Result<Vec<Requirement>> {
+) -> Result<Vec<Requirement>, NamedRequirementsError> {
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
         requirements
@@ -572,6 +575,7 @@ pub(crate) async fn resolve_names(
         allow_insecure_host,
         resolution: _,
         prerelease: _,
+        dependency_metadata,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -628,6 +632,7 @@ pub(crate) async fn resolve_names(
         interpreter,
         index_locations,
         &flat_index,
+        dependency_metadata,
         &state.index,
         &state.git,
         &state.capabilities,
@@ -681,6 +686,7 @@ pub(crate) async fn resolve_environment<'a>(
         allow_insecure_host,
         resolution,
         prerelease,
+        dependency_metadata,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -771,6 +777,7 @@ pub(crate) async fn resolve_environment<'a>(
         interpreter,
         index_locations,
         &flat_index,
+        dependency_metadata,
         &state.index,
         &state.git,
         &state.capabilities,
@@ -834,6 +841,7 @@ pub(crate) async fn sync_environment(
         index_strategy,
         keyring_provider,
         allow_insecure_host,
+        dependency_metadata,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -900,6 +908,7 @@ pub(crate) async fn sync_environment(
         interpreter,
         index_locations,
         &flat_index,
+        dependency_metadata,
         &state.index,
         &state.git,
         &state.capabilities,
@@ -986,6 +995,7 @@ pub(crate) async fn update_environment(
         allow_insecure_host,
         resolution,
         prerelease,
+        dependency_metadata,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -1101,6 +1111,7 @@ pub(crate) async fn update_environment(
         interpreter,
         index_locations,
         &flat_index,
+        dependency_metadata,
         &state.index,
         &state.git,
         &state.capabilities,

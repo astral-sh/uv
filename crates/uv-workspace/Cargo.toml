@@ -40,8 +40,8 @@ itertools = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-assert_fs = { version = "1.1.0" }
-insta = { version = "1.39.0", features = ["filters", "json", "redactions"] }
+assert_fs = { version = "1.1.2" }
+insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
 regex = { workspace = true }
 tempfile = { workspace = true }
 
