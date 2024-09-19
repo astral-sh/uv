@@ -4795,6 +4795,7 @@ dependencies = [
  "indoc",
  "insta",
  "nanoid",
+ "owo-colors",
  "pep440_rs",
  "pep508_rs",
  "platform-tags",

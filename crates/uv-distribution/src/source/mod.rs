@@ -425,6 +425,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
+        let source_dist_entry = cache_shard.entry(filename);
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
@@ -439,13 +440,29 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(built_wheel.with_hashes(revision.into_hashes()));
         }
 
+        // Otherwise, we need to build a wheel. Before building, ensure that the source is present.
+        let revision = if source_dist_entry.path().is_dir() {
+            revision
+        } else {
+            self.heal_url_revision(
+                source,
+                filename,
+                ext,
+                url,
+                &source_dist_entry,
+                revision,
+                hashes,
+                client,
+            )
+            .await?
+        };
+
         let task = self
             .reporter
             .as_ref()
             .map(|reporter| reporter.on_build_start(source));
 
         // Build the source distribution.
-        let source_dist_entry = cache_shard.entry(filename);
         let (disk_filename, wheel_filename, metadata) = self
             .build_distribution(source, source_dist_entry.path(), subdirectory, &cache_shard)
             .await?;
@@ -526,6 +543,23 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 hashes: revision.into_hashes(),
             });
         }
+
+        // Otherwise, we need a wheel.
+        let revision = if source_dist_entry.path().is_dir() {
+            revision
+        } else {
+            self.heal_url_revision(
+                source,
+                filename,
+                ext,
+                url,
+                &source_dist_entry,
+                revision,
+                hashes,
+                client,
+            )
+            .await?
+        };
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
@@ -611,6 +645,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 // new revision, to collect the source and built artifacts.
                 let revision = Revision::new();
 
+                // Download the source distribution.
                 debug!("Downloading source distribution: {source}");
                 let entry = cache_shard.shard(revision.id()).entry(filename);
                 let hashes = self
@@ -636,8 +671,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             })?;
 
         // If the archive is missing the required hashes, force a refresh.
-        if !revision.has_digests(hashes) {
-            return client
+        if revision.has_digests(hashes) {
+            Ok(revision)
+        } else {
+            client
                 .managed(|client| async move {
                     client
                         .cached_client()
@@ -648,41 +685,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             CachedClientError::Client(err) => Error::Client(err),
                         })
                 })
-                .await;
+                .await
         }
-
-        // If the archive is missing its source, force a refresh, but write to the same revision.
-        let entry = cache_shard.shard(revision.id()).entry(filename);
-        if !entry.path().is_dir() {
-            warn!("Re-downloading missing source distribution: {source}");
-
-            let download = |response| {
-                async {
-                    debug!("Downloading source distribution: {source}");
-                    let hashes = self
-                        .download_archive(response, source, filename, ext, entry.path(), hashes)
-                        .await?;
-                    Ok(revision.with_hashes(hashes))
-                }
-                .boxed_local()
-                .instrument(info_span!("download", source_dist = %source))
-            };
-
-            return client
-                .managed(|client| async move {
-                    client
-                        .cached_client()
-                        .skip_cache(Self::request(url.clone(), client)?, &cache_entry, download)
-                        .await
-                        .map_err(|err| match err {
-                            CachedClientError::Callback(err) => err,
-                            CachedClientError::Client(err) => Error::Client(err),
-                        })
-                })
-                .await;
-        }
-
-        Ok(revision)
     }
 
     /// Build a source distribution from a local archive (e.g., `.tar.gz` or `.zip`).
@@ -716,6 +720,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
+        let source_entry = cache_shard.entry("source");
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
@@ -730,9 +735,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(built_wheel);
         }
 
-        let source_entry = cache_shard.entry("source");
+        // Otherwise, we need to build a wheel, which requires a source distribution.
+        let revision = if source_entry.path().is_dir() {
+            revision
+        } else {
+            self.heal_archive_revision(source, resource, &source_entry, revision, hashes)
+                .await?
+        };
 
-        // Otherwise, we need to build a wheel.
         let task = self
             .reporter
             .as_ref()
@@ -815,6 +825,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             });
         }
 
+        // Otherwise, we need a source distribution.
+        let revision = if source_entry.path().is_dir() {
+            revision
+        } else {
+            self.heal_archive_revision(source, resource, &source_entry, revision, hashes)
+                .await?
+        };
+
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_metadata(source, source_entry.path(), None)
@@ -894,20 +912,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(pointer) = LocalRevisionPointer::read_from(&revision_entry)? {
             if *pointer.cache_info() == cache_info {
                 if pointer.revision().has_digests(hashes) {
-                    let entry = cache_shard.shard(pointer.revision().id()).entry("source");
-
-                    // If the source distribution itself is absent, we have to re-fetch it.
-                    if entry.path().is_dir() {
-                        return Ok(pointer);
-                    }
-
-                    warn!("Re-extracting missing source distribution: {source}");
-                    let hashes = self
-                        .persist_archive(&resource.path, resource.ext, entry.path(), hashes)
-                        .await?;
-                    if hashes == pointer.revision().hashes() {
-                        return Ok(pointer);
-                    }
+                    return Ok(pointer);
                 }
             }
         }
@@ -1389,6 +1394,66 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         ))
     }
 
+    /// Heal a [`Revision`] for a local archive.
+    async fn heal_archive_revision(
+        &self,
+        source: &BuildableSource<'_>,
+        resource: &PathSourceUrl<'_>,
+        entry: &CacheEntry,
+        revision: Revision,
+        hashes: HashPolicy<'_>,
+    ) -> Result<Revision, Error> {
+        warn!("Re-extracting missing source distribution: {source}");
+        let hashes = self
+            .persist_archive(&resource.path, resource.ext, entry.path(), hashes)
+            .await?;
+        if hashes != revision.hashes() {
+            return Err(Error::CacheHeal(source.to_string()));
+        }
+        Ok(revision.with_hashes(hashes))
+    }
+
+    /// Heal a [`Revision`] for a remote archive.
+    async fn heal_url_revision(
+        &self,
+        source: &BuildableSource<'_>,
+        filename: &str,
+        ext: SourceDistExtension,
+        url: &Url,
+        entry: &CacheEntry,
+        revision: Revision,
+        hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
+    ) -> Result<Revision, Error> {
+        warn!("Re-downloading missing source distribution: {source}");
+        let cache_entry = entry.shard().entry(HTTP_REVISION);
+        let download = |response| {
+            async {
+                let hashes = self
+                    .download_archive(response, source, filename, ext, entry.path(), hashes)
+                    .await?;
+                if hashes != revision.hashes() {
+                    return Err(Error::CacheHeal(source.to_string()));
+                }
+                Ok(revision.with_hashes(hashes))
+            }
+            .boxed_local()
+            .instrument(info_span!("download", source_dist = %source))
+        };
+        client
+            .managed(|client| async move {
+                client
+                    .cached_client()
+                    .skip_cache(Self::request(url.clone(), client)?, &cache_entry, download)
+                    .await
+                    .map_err(|err| match err {
+                        CachedClientError::Callback(err) => err,
+                        CachedClientError::Client(err) => Error::Client(err),
+                    })
+            })
+            .await
+    }
+
     /// Download and unzip a source distribution into the cache from an HTTP response.
     async fn download_archive(
         &self,
@@ -1438,9 +1503,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         fs_err::tokio::create_dir_all(target.parent().expect("Cache entry to have parent"))
             .await
             .map_err(Error::CacheWrite)?;
-        rename_with_retry(extracted, target)
-            .await
-            .map_err(Error::CacheWrite)?;
+        if let Err(err) = rename_with_retry(extracted, target).await {
+            // If the directory already exists, accept it.
+            if target.is_dir() {
+                warn!("Directory already exists: {}", target.display());
+            } else {
+                return Err(Error::CacheWrite(err));
+            }
+        }
 
         Ok(hashes)
     }
@@ -1491,9 +1561,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         fs_err::tokio::create_dir_all(target.parent().expect("Cache entry to have parent"))
             .await
             .map_err(Error::CacheWrite)?;
-        rename_with_retry(extracted, &target)
-            .await
-            .map_err(Error::CacheWrite)?;
+        if let Err(err) = rename_with_retry(extracted, target).await {
+            // If the directory already exists, accept it.
+            if target.is_dir() {
+                warn!("Directory already exists: {}", target.display());
+            } else {
+                return Err(Error::CacheWrite(err));
+            }
+        }
 
         Ok(hashes)
     }

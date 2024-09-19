@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use owo_colors::OwoColorize;
 use tokio::task::JoinError;
 use url::Url;
 use zip::result::ZipError;
@@ -93,6 +94,8 @@ pub enum Error {
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]
     NotFound(Url),
+    #[error("Attempted to re-extract the source distribution for `{0}`, but the hashes didn't match. Run `{}` to clear the cache.", "uv cache clean".green())]
+    CacheHeal(String),
 
     /// A generic request middleware error happened while making a request.
     /// Refer to the error message for more details.
