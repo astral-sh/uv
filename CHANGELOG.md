@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.4.13
+
+### Enhancements
+
+- Add `socks` support ([#7503](https://github.com/astral-sh/uv/pull/7503))
+- Avoid warning about bad Python interpreter links for empty project environment directories ([#7527](https://github.com/astral-sh/uv/pull/7527))
+- Improve invalid environment warning messages ([#7544](https://github.com/astral-sh/uv/pull/7544))
+- Use more verbose spelling of "virtualenv" during creation ([#7523](https://github.com/astral-sh/uv/pull/7523))
+- Do not use a user-facing warning for "Waiting to acquire lock..." message ([#7502](https://github.com/astral-sh/uv/pull/7502))
+
+### Performance
+
+- Use a single buffer for hints on resolver errors ([#7497](https://github.com/astral-sh/uv/pull/7497))
+
+### Bug fixes
+
+- Allow Python pre-releases to be used if they are first on the `PATH` ([#7470](https://github.com/astral-sh/uv/pull/7470))
+- Avoid deleting the project environment directory if it is not a virtual environment ([#7522](https://github.com/astral-sh/uv/pull/7522))
+- Do not error if the `CACHEDIR.TAG` file exists but cannot be written to ([#7550](https://github.com/astral-sh/uv/pull/7550))
+- Treat invalid platform as more compatible than invalid Python ([#7556](https://github.com/astral-sh/uv/pull/7556))
+- Use portable paths when serializing sources ([#7504](https://github.com/astral-sh/uv/pull/7504))
+- Compute resolver hints using the final reduced derivation tree ([#7546](https://github.com/astral-sh/uv/pull/7546))
+
+### Documentation
+
+- Add `UV_LINK_MODE` to Docker caching example ([#7510](https://github.com/astral-sh/uv/pull/7510))
+- Clarify behavior of of overrides in CLI reference ([#7537](https://github.com/astral-sh/uv/pull/7537))
+
 ## 0.4.12
 
 ### Enhancements
