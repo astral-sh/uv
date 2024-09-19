@@ -5589,7 +5589,7 @@ fn sync_seed() -> Result<()> {
      + pip==24.0
      + setuptools==69.2.0
      + wheel==0.43.0
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 

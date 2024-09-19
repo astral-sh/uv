@@ -27,7 +27,7 @@ fn create_venv() {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -45,7 +45,7 @@ fn create_venv() {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -65,7 +65,7 @@ fn create_venv_project_environment() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -95,7 +95,7 @@ fn create_venv_project_environment() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foo
-    Activate with: source foo/bin/activate
+    Activate with: source foo/[BIN]/activate
     "###
     );
 
@@ -116,7 +116,7 @@ fn create_venv_project_environment() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -133,7 +133,7 @@ fn create_venv_project_environment() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: bar
-    Activate with: source bar/bin/activate
+    Activate with: source bar/[BIN]/activate
     "###
     );
 
@@ -151,7 +151,7 @@ fn create_venv_project_environment() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -163,7 +163,7 @@ fn create_venv_project_environment() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -183,7 +183,7 @@ fn create_venv_defaults_to_cwd() {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -204,7 +204,7 @@ fn create_venv_ignores_virtual_env_variable() {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 }
@@ -222,7 +222,7 @@ fn create_venv_reads_request_from_python_version_file() {
     ----- stderr -----
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -241,7 +241,7 @@ fn create_venv_reads_request_from_python_version_file() {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -261,7 +261,7 @@ fn create_venv_reads_request_from_python_versions_file() {
     ----- stderr -----
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -280,7 +280,7 @@ fn create_venv_reads_request_from_python_versions_file() {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -300,7 +300,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     ----- stderr -----
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -323,7 +323,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     ----- stderr -----
     Using Python 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -346,7 +346,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     ----- stderr -----
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -369,7 +369,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     ----- stderr -----
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -403,7 +403,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     ----- stderr -----
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -426,7 +426,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     ----- stderr -----
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -449,7 +449,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -473,7 +473,7 @@ fn create_venv_ignores_missing_pyproject_metadata() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -498,7 +498,7 @@ fn create_venv_warns_user_on_requires_python_discovery_error() -> Result<()> {
     warning: Failed to parse: `pyproject.toml`
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -525,7 +525,7 @@ fn create_venv_explicit_request_takes_priority_over_python_version_file() {
     ----- stderr -----
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -548,7 +548,7 @@ fn seed() {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment with seed packages at: .venv
      + pip==24.0
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -573,7 +573,7 @@ fn seed_older_python_version() {
      + pip==24.0
      + setuptools==69.2.0
      + wheel==0.43.0
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -672,7 +672,7 @@ fn create_venv_python_patch() {
     ----- stderr -----
     Using Python 3.12.1 interpreter at: [PYTHON-3.12.1]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -724,7 +724,7 @@ fn empty_dir_exists() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -801,7 +801,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -819,7 +819,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -864,7 +864,7 @@ fn windows_shims() -> Result<()> {
     ----- stderr -----
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
@@ -891,7 +891,7 @@ fn virtualenv_compatibility() {
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment)
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Activate with: source .venv/bin/activate
+    Activate with: source .venv/[BIN]/activate
     "###
     );
 
