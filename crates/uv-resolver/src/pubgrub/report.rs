@@ -737,26 +737,59 @@ impl PubGrubReportFormatter<'_> {
         for local_package in workspace_members {
             let pkg = PubGrubPackage::from_package(local_package.clone(), None, None.into());
             if derived.terms.contains_key(&pkg) {
-                let DerivationTree::External(External::FromDependencyOf(src1, _, dst1, _)) =
+                // Check for a direct loop between two dependencies, involving a local package...
+                if let DerivationTree::External(External::FromDependencyOf(src1, _, dst1, _)) =
                     derived.cause1.borrow()
-                else {
-                    continue;
-                };
+                {
+                    let DerivationTree::External(External::FromDependencyOf(src2, _, dst2, _)) =
+                        derived.cause2.borrow()
+                    else {
+                        continue;
+                    };
 
-                let DerivationTree::External(External::FromDependencyOf(src2, _, dst2, _)) =
+                    // Detect a direct loop condition, with two opposing edges between the same
+                    // packages.
+                    let cycle_edge_first =
+                        src1.name_no_root().is_some() && src1.name_no_root() == dst2.name_no_root();
+                    let cycle_edge_second =
+                        dst1.name_no_root().is_some() && dst1.name_no_root() == src2.name_no_root();
+                    if cycle_edge_first && cycle_edge_second {
+                        output_hints.insert(PubGrubHint::WorkspacePackageNoVersions {
+                            package: pkg.clone(),
+                        });
+                    }
+                }
+                // ... otherwise, check left child for an error caused by a failed dependency
+                // on a local package...
+                else if let DerivationTree::External(External::NoVersions(_, _)) =
+                    derived.cause1.borrow()
+                {
+                    let DerivationTree::External(External::FromDependencyOf(_, _, dst, _)) =
+                        derived.cause2.borrow()
+                    else {
+                        continue;
+                    };
+                    if *dst == pkg {
+                        output_hints.insert(PubGrubHint::WorkspacePackageNoVersions {
+                            package: pkg.clone(),
+                        });
+                    }
+                }
+                // ... otherwise, check right child for an error caused by a failed dependency
+                // on a local package...
+                else if let DerivationTree::External(External::NoVersions(_, _)) =
                     derived.cause2.borrow()
-                else {
-                    continue;
-                };
-
-                let cycle_edge_first =
-                    src1.name_no_root().is_some() && src1.name_no_root() == dst2.name_no_root();
-                let cycle_edge_second =
-                    dst1.name_no_root().is_some() && dst1.name_no_root() == src2.name_no_root();
-                if cycle_edge_first && cycle_edge_second {
-                    output_hints.insert(PubGrubHint::WorkspacePackageNoVersions {
-                        package: pkg.clone(),
-                    });
+                {
+                    let DerivationTree::External(External::FromDependencyOf(_, _, dst, _)) =
+                        derived.cause1.borrow()
+                    else {
+                        continue;
+                    };
+                    if *dst == pkg {
+                        output_hints.insert(PubGrubHint::WorkspacePackageNoVersions {
+                            package: pkg.clone(),
+                        });
+                    }
                 }
             }
         }
