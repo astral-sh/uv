@@ -3309,7 +3309,7 @@ fn add_error() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
-      help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "###);
 
     uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @r###"
@@ -4835,7 +4835,7 @@ fn add_shadowed_name() -> Result<()> {
       ╰─▶ Because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
 
           hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
-      help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "###);
 
     // Constraint with several available versions, check for an indirect dependency loop.
@@ -4860,7 +4860,7 @@ fn add_shadowed_name() -> Result<()> {
           And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11,<1.7.0, we can conclude that your project's requirements are unsatisfiable.
 
           hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
-      help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "###);
 
     Ok(())
