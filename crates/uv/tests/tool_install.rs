@@ -3007,3 +3007,82 @@ fn tool_install_at_latest_upgrade() {
         "###);
     });
 }
+
+/// Test installing a tool together with some additional entrypoints
+/// from other packages.
+#[test]
+fn tool_install_additional_entrypoints() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--i-want-ponies")
+        .arg("ansible-core")
+        .arg("--i-want-ponies")
+        .arg("ansible-lint")
+        .arg("ansible==9.3.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + ansible==9.3.0
+     + ansible-compat==4.1.11
+     + ansible-core==2.16.4
+     + ansible-lint==24.2.1
+     + attrs==23.2.0
+     + black==24.3.0
+     + bracex==2.4
+     + cffi==1.16.0
+     + click==8.1.7
+     + cryptography==42.0.5
+     + filelock==3.13.1
+     + jinja2==3.1.3
+     + jsonschema==4.21.1
+     + jsonschema-specifications==2023.12.[X]
+     + markdown-it-py==3.0.0
+     + markupsafe==2.1.5
+     + mdurl==0.1.2
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + pycparser==2.21
+     + pygments==2.17.2
+     + pyyaml==6.0.1
+     + referencing==0.34.0
+     + resolvelib==1.0.1
+     + rich==13.7.1
+     + rpds-py==0.18.0
+     + ruamel-yaml==0.18.6
+     + ruamel-yaml-clib==0.2.8
+     + subprocess-tee==0.4.1
+     + wcmatch==8.5.1
+     + yamllint==1.35.1
+    Installed 11 executables: ansible, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault
+    Installed 1 executable: ansible-lint
+    Installed 1 executable: ansible-community
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_uninstall()
+        .arg("ansible")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 24 executables: ansible, ansible, ansible-community, ansible-config, ansible-config, ansible-connection, ansible-connection, ansible-console, ansible-console, ansible-doc, ansible-doc, ansible-galaxy, ansible-galaxy, ansible-inventory, ansible-inventory, ansible-lint, ansible-playbook, ansible-playbook, ansible-pull, ansible-pull, ansible-test, ansible-test, ansible-vault, ansible-vault
+    "###);
+}

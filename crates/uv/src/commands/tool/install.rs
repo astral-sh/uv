@@ -1,9 +1,13 @@
 use std::fmt::Write;
 use std::str::FromStr;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context as _, Result};
+use distribution_types::UnresolvedRequirementSpecification;
 use owo_colors::OwoColorize;
-use tracing::trace;
+use pep440_rs::{VersionSpecifier, VersionSpecifiers};
+use pep508_rs::MarkerTree;
+use pypi_types::{Requirement, RequirementSource};
+use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -27,7 +31,7 @@ use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
     EnvironmentSpecification,
 };
-use crate::commands::tool::common::remove_entrypoints;
+use crate::commands::tool::common::{remove_entrypoints, warn_out_of_path};
 use crate::commands::tool::Target;
 use crate::commands::{reporters::PythonDownloadReporter, tool::common::install_executables};
 use crate::commands::{ExitStatus, SharedState};
@@ -40,6 +44,7 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
+    extra_entrypoints_packages: &[String],
     python: Option<String>,
     force: bool,
     options: ResolverInstallerOptions,
@@ -406,14 +411,57 @@ pub(crate) async fn install(
         .await?
     };
 
+    // TODO(lucab): we support performing multiple installs in the same environment.
+    // This force-installs, maybe it can be modeled in a more graceful way instead?
+    let force_install = force || invalid_tool_receipt || !extra_entrypoints_packages.is_empty();
+
+    // Find a suitable path to install into.
+    let executable_directory = uv_tool::find_executable_directory()?;
+    fs_err::create_dir_all(&executable_directory)
+        .context("Failed to create executable directory")?;
+
+    // Install additional entrypoints from dependencies,
+    // if any was explicitly requested.
+    let mut deps_entrypoints = vec![];
+    for entry in extra_entrypoints_packages {
+        let pkg = PackageName::from_str(entry)?;
+        debug!(
+            "Installing entrypoints for {} as part of tool {}",
+            pkg, from.name
+        );
+        let tool = install_executables(
+            &environment,
+            &from.name,
+            &pkg,
+            &installed_tools,
+            &deps_entrypoints,
+            &executable_directory,
+            options.clone(),
+            force_install,
+            python.clone(),
+            requirements.clone(),
+            printer,
+        )?;
+        deps_entrypoints.append(&mut tool.into_entrypoints());
+    }
+
+    // Install entrypoints from the target package.
+    debug!("Installing entrypoints tool {}", from.name);
     install_executables(
         &environment,
         &from.name,
+        &from.name,
         &installed_tools,
+        &deps_entrypoints,
+        &executable_directory,
         options,
-        force || invalid_tool_receipt,
+        force_install,
         python,
         requirements,
         printer,
-    )
+    )?;
+
+    warn_out_of_path(&executable_directory);
+
+    Ok(ExitStatus::Success)
 }
