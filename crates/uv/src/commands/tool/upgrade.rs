@@ -75,7 +75,7 @@ pub(crate) async fn upgrade(
                 python_preference,
                 python_downloads,
                 &client_builder,
-                &cache,
+                cache,
                 Some(&reporter),
             )
             .await?
@@ -139,7 +139,7 @@ pub(crate) async fn upgrade(
     if let Some(python) = python {
         writeln!(
             printer.stderr(),
-            "Upgraded {} to python {}",
+            "Upgraded build environment for {} to Python {}",
             if names.len() == 1 {
                 format!("{}", names.first().unwrap())
             } else {
@@ -208,7 +208,7 @@ async fn upgrade_tool(
 
     // If a new Python version was requested for this package, create a new environment
     if let (Some(python_request), Some(interpreter)) = (python_request, interpreter) {
-        if !python_request.satisfied(environment.interpreter(), &cache) {
+        if !python_request.satisfied(environment.interpreter(), cache) {
             environment = installed_tools.create_environment(name, interpreter.clone())?;
         }
     }

@@ -610,7 +610,7 @@ fn test_tool_upgrade_python() {
 
     uv_snapshot!(
         context.filters(),
-        context.tool_upgrade()
+        context.tool_upgrade().arg("babel")
         .arg("--python").arg("3.13")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
@@ -624,6 +624,7 @@ fn test_tool_upgrade_python() {
      + babel==2.6.0
      + pytz==2018.5
     Installed 1 executable: pybabel
+    Upgraded build environment for babel to Python 3.13
     "###
     );
 
@@ -631,6 +632,99 @@ fn test_tool_upgrade_python() {
         filters => context.filters(),
     }, {
         let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
+        let lines: Vec<&str> = content.split('\n').collect();
+        assert_snapshot!(lines[lines.len() - 3], @r###"
+        version_info = 3.13.[X]rc2
+        "###);
+    });
+}
+
+#[test]
+fn test_tool_upgrade_python_with_all() {
+    let context = TestContext::new_with_versions(&["3.12", "3.13"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+    .arg("babel==2.6.0")
+    .arg("--index-url")
+    .arg("https://test.pypi.org/simple/")
+    .arg("--python").arg("3.12")
+    .env("UV_TOOL_DIR", tool_dir.as_os_str())
+    .env("XDG_BIN_HOME", bin_dir.as_os_str())
+    .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_install()
+    .arg("python-dotenv")
+    .arg("--index-url")
+    .arg("https://test.pypi.org/simple/")
+    .arg("--python").arg("3.12")
+    .env("UV_TOOL_DIR", tool_dir.as_os_str())
+    .env("XDG_BIN_HOME", bin_dir.as_os_str())
+    .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + python-dotenv==0.10.2.post2
+    Installed 1 executable: dotenv
+    "###);
+
+    uv_snapshot!(
+        context.filters(),
+        context.tool_upgrade().arg("--all")
+        .arg("--python").arg("3.13")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Added babel v2.6.0
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    Added python-dotenv v0.10.2.post2
+     + python-dotenv==0.10.2.post2
+    Installed 1 executable: dotenv
+    Upgraded build environment for all tools to Python 3.13
+    "###
+    );
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
+        let lines: Vec<&str> = content.split('\n').collect();
+        assert_snapshot!(lines[lines.len() - 3], @r###"
+        version_info = 3.13.[X]rc2
+        "###);
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        let content = fs_err::read_to_string(tool_dir.join("python-dotenv").join("pyvenv.cfg")).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @r###"
         version_info = 3.13.[X]rc2
