@@ -2328,4 +2328,56 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn find_python_version_prefer_non_free_threaded() -> Result<()> {
+        let mut context = TestContext::new()?;
+
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("python"),
+            &PythonVersion::from_str("3.13.0").unwrap(),
+            ImplementationName::CPython,
+            true,
+            false,
+        )?;
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("python3.13t"),
+            &PythonVersion::from_str("3.13.0").unwrap(),
+            ImplementationName::CPython,
+            true,
+            true,
+        )?;
+        context.add_to_search_path(context.tempdir.to_path_buf());
+
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("3.13"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
+
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
+            "We should find a python; got {python:?}"
+        );
+        assert_eq!(
+            &python.interpreter().python_full_version().to_string(),
+            "3.13.0",
+            "We should find the correct interpreter for the request"
+        );
+        assert!(
+            !&python.interpreter().gil_disabled(),
+            "We should prefer a python with the GIL"
+        );
+
+        Ok(())
+    }
 }
