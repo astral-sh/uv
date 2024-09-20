@@ -5026,6 +5026,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tracing",
  "url",
  "uv-client",

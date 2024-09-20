@@ -1,8 +1,10 @@
+use crate::commands::reporters::PublishReporter;
 use crate::commands::{human_readable_bytes, ExitStatus};
 use crate::printer::Printer;
 use anyhow::{bail, Result};
 use owo_colors::OwoColorize;
 use std::fmt::Write;
+use std::sync::Arc;
 use tracing::info;
 use url::Url;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -51,6 +53,7 @@ pub(crate) async fn publish(
             "Uploading".bold().green(),
             format!("({bytes:.1}{unit})").dimmed()
         )?;
+        let reporter = PublishReporter::single(printer);
         let uploaded = upload(
             &file,
             &filename,
@@ -58,6 +61,8 @@ pub(crate) async fn publish(
             &client,
             username.as_deref(),
             password.as_deref(),
+            // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
+            Arc::new(reporter),
         )
         .await?; // Filename and/or URL are already attached, if applicable.
         info!("Upload succeeded");

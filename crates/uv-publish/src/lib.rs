@@ -15,13 +15,15 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::{fmt, io};
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
+use tokio_util::io::ReaderStream;
 use tracing::{debug, enabled, trace, Level};
 use url::Url;
 use uv_client::BaseClient;
-use uv_fs::Simplified;
+use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 
 #[derive(Error, Debug)]
@@ -77,6 +79,13 @@ pub enum PublishSendError {
     /// See inline comment.
     #[error("The request was redirected, but redirects are not allowed when publishing, please use the canonical URL: `{0}`")]
     RedirectError(Url),
+}
+
+pub trait Reporter: Send + Sync + 'static {
+    fn on_progress(&self, name: &str, id: usize);
+    fn on_download_start(&self, name: &str, size: Option<u64>) -> usize;
+    fn on_download_progress(&self, id: usize, inc: u64);
+    fn on_download_complete(&self);
 }
 
 impl PublishSendError {
@@ -212,6 +221,7 @@ pub async fn upload(
     client: &BaseClient,
     username: Option<&str>,
     password: Option<&str>,
+    reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
     let form_metadata = form_metadata(file, filename)
         .await
@@ -224,6 +234,7 @@ pub async fn upload(
         username,
         password,
         form_metadata,
+        reporter,
     )
     .await
     .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
@@ -396,18 +407,23 @@ async fn build_request(
     username: Option<&str>,
     password: Option<&str>,
     form_metadata: Vec<(&'static str, String)>,
+    reporter: Arc<impl Reporter>,
 ) -> Result<RequestBuilder, PublishPrepareError> {
     let mut form = reqwest::multipart::Form::new();
     for (key, value) in form_metadata {
         form = form.text(key, value);
     }
 
-    let file: tokio::fs::File = fs_err::tokio::File::open(file).await?.into();
-    let file_reader = Body::from(file);
-    form = form.part(
-        "content",
-        Part::stream(file_reader).file_name(filename.to_string()),
-    );
+    let file = fs_err::tokio::File::open(file).await?;
+    let idx = reporter.on_download_start(&filename.to_string(), Some(file.metadata().await?.len()));
+    let reader = ProgressReader::new(file, move |read| {
+        reporter.on_download_progress(idx, read as u64);
+    });
+    // Stream wrapping puts a static lifetime requirement on the reader (so the request doesn't have
+    // a lifetime) -> callback needs to be static -> reporter reference needs to be Arc'd.
+    let file_reader = Body::wrap_stream(ReaderStream::new(reader));
+    let part = Part::stream(file_reader).file_name(filename.to_string());
+    form = form.part("content", part);
 
     let url = if let Some(username) = username {
         if password.is_none() {
@@ -525,13 +541,25 @@ async fn handle_response(registry: &Url, response: Response) -> Result<bool, Pub
 
 #[cfg(test)]
 mod tests {
-    use crate::{build_request, form_metadata};
+    use crate::{build_request, form_metadata, Reporter};
     use distribution_filename::DistFilename;
     use insta::{assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
     use std::path::PathBuf;
+    use std::sync::Arc;
     use url::Url;
     use uv_client::BaseClientBuilder;
+
+    struct DummyReporter;
+
+    impl Reporter for DummyReporter {
+        fn on_progress(&self, _name: &str, _id: usize) {}
+        fn on_download_start(&self, _name: &str, _size: Option<u64>) -> usize {
+            0
+        }
+        fn on_download_progress(&self, _id: usize, _inc: u64) {}
+        fn on_download_complete(&self) {}
+    }
 
     /// Snapshot the data we send for an upload request for a source distribution.
     #[tokio::test]
@@ -602,6 +630,7 @@ mod tests {
             Some("ferris"),
             Some("F3RR!S"),
             form_metadata,
+            Arc::new(DummyReporter),
         )
         .await
         .unwrap();
@@ -744,6 +773,7 @@ mod tests {
             Some("ferris"),
             Some("F3RR!S"),
             form_metadata,
+            Arc::new(DummyReporter),
         )
         .await
         .unwrap();
