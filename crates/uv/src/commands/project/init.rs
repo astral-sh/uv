@@ -8,7 +8,7 @@ use pep508_rs::PackageName;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_fs::{Simplified, CWD};
+use uv_fs::Simplified;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionRequest,
@@ -25,6 +25,7 @@ use crate::printer::Printer;
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
+    project_dir: &Path,
     explicit_path: Option<String>,
     name: Option<PackageName>,
     package: bool,
@@ -42,7 +43,7 @@ pub(crate) async fn init(
 ) -> Result<ExitStatus> {
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
-        None => CWD.to_path_buf(),
+        None => project_dir.to_path_buf(),
         Some(ref path) => std::path::absolute(path)?,
     };
 

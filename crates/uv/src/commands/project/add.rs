@@ -21,7 +21,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_fs::{Simplified, CWD};
+use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
 use uv_python::{
@@ -51,6 +51,7 @@ use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
+    project_dir: &Path,
     locked: bool,
     frozen: bool,
     no_sync: bool,
@@ -131,7 +132,7 @@ pub(crate) async fn add(
             let python_request = if let Some(request) = python.as_deref() {
                 // (1) Explicit request from user
                 PythonRequest::parse(request)
-            } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
+            } else if let Some(request) = PythonVersionFile::discover(project_dir, false, false)
                 .await?
                 .and_then(PythonVersionFile::into_version)
             {
@@ -162,7 +163,7 @@ pub(crate) async fn add(
         let python_request = if let Some(request) = python.as_deref() {
             // (1) Explicit request from user
             Some(PythonRequest::parse(request))
-        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
+        } else if let Some(request) = PythonVersionFile::discover(project_dir, false, false)
             .await?
             .and_then(PythonVersionFile::into_version)
         {
@@ -196,13 +197,13 @@ pub(crate) async fn add(
         // Find the project in the workspace.
         let project = if let Some(package) = package {
             VirtualProject::Project(
-                Workspace::discover(&CWD, &DiscoveryOptions::default())
+                Workspace::discover(project_dir, &DiscoveryOptions::default())
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
         };
 
         // For non-project workspace roots, allow dev dependencies, but nothing else.

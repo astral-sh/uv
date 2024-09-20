@@ -301,6 +301,14 @@ uv run [OPTIONS] <COMMAND>
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the run environment.</p>
 
 <p>If the interpreter request is satisfied by a discovered environment, the environment will be used.</p>
@@ -492,6 +500,14 @@ uv init [OPTIONS] [PATH]
 <p>This is the default behavior when using <code>--lib</code>.</p>
 
 <p>When using <code>--app</code>, this will include a <code>[project.scripts]</code> entrypoint and use a <code>src/</code> project structure.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to determine the minimum supported Python version.</p>
 
@@ -763,6 +779,14 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for resolving and syncing.</p>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
@@ -1059,6 +1083,14 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for resolving and syncing.</p>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
@@ -1371,6 +1403,14 @@ uv sync [OPTIONS]
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the project environment.</p>
 
 <p>By default, the first interpreter that meets the project&#8217;s <code>requires-python</code> constraint is used.</p>
@@ -1628,6 +1668,14 @@ uv lock [OPTIONS]
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
 
 <p>A Python interpreter is required for building source distributions to determine package metadata when there are not wheels.</p>
@@ -1931,6 +1979,14 @@ uv export [OPTIONS]
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
 
 <p>A Python interpreter is required for building source distributions to determine package metadata when there are not wheels.</p>
@@ -2191,6 +2247,14 @@ uv tree [OPTIONS]
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--prune</code> <i>prune</i></dt><dd><p>Prune the given package from the display of the dependency tree</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for locking and filtering.</p>
@@ -2536,6 +2600,14 @@ uv tool run [OPTIONS] [COMMAND]
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the run environment.</p>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
@@ -2806,6 +2878,14 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the tool environment.</p>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
@@ -3070,6 +3150,14 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -3177,6 +3265,14 @@ uv tool list [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt><code>--show-paths</code></dt><dd><p>Whether to display the path to each tool environment and installed executable</p>
@@ -3259,6 +3355,14 @@ uv tool uninstall [OPTIONS] <NAME>...
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
@@ -3352,6 +3456,14 @@ uv tool update-shell [OPTIONS]
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
@@ -3463,6 +3575,14 @@ uv tool dir [OPTIONS]
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
@@ -3635,6 +3755,14 @@ uv python list [OPTIONS]
 
 <p>By default, available downloads for the current platform are shown.</p>
 
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -3742,6 +3870,14 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -3848,6 +3984,14 @@ uv python find [OPTIONS] [REQUEST]
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
@@ -3961,6 +4105,14 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -4058,6 +4210,14 @@ uv python dir [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -4154,6 +4314,14 @@ uv python uninstall [OPTIONS] <TARGETS>...
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
@@ -4485,6 +4653,14 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
 
 <p>A Python interpreter is required for building source distributions to determine package metadata when there are not wheels.</p>
@@ -4807,6 +4983,14 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 </dd><dt><code>--prefix</code> <i>prefix</i></dt><dd><p>Install packages into <code>lib</code>, <code>bin</code>, and other top-level folders under the specified directory, as if a virtual environment were present at that location.</p>
 
 <p>In general, prefer the use of <code>--python</code> to install into an alternate environment, as scripts and other artifacts installed via <code>--prefix</code> will reference the installing interpreter, rather than any interpreter added to the <code>--prefix</code> directory, rendering them non-portable.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter into which packages should be installed.</p>
 
@@ -5170,6 +5354,14 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter into which packages should be installed.</p>
 
 <p>By default, installation requires a virtual environment. A path to an alternative Python can be provided, but it is only recommended in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
@@ -5406,6 +5598,14 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 
 </dd><dt><code>--prefix</code> <i>prefix</i></dt><dd><p>Uninstall packages from the specified <code>--prefix</code> directory</p>
 
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter from which packages should be uninstalled.</p>
 
 <p>By default, uninstallation requires a virtual environment. A path to an alternative Python can be provided, but it is only recommended in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
@@ -5512,6 +5712,14 @@ uv pip freeze [OPTIONS]
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
 
@@ -5634,6 +5842,14 @@ uv pip list [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
 
 <p>By default, uv lists packages in a virtual environment but will show packages in a system Python environment if no virtual environment is found.</p>
@@ -5742,6 +5958,14 @@ uv pip show [OPTIONS] [PACKAGE]...
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to find the package in.</p>
 
@@ -5855,6 +6079,14 @@ uv pip tree [OPTIONS]
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Display only the specified packages</p>
 
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--prune</code> <i>prune</i></dt><dd><p>Prune the given package from the display of the dependency tree</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
@@ -5961,6 +6193,14 @@ uv pip check [OPTIONS]
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be checked.</p>
 
@@ -6172,6 +6412,14 @@ uv venv [OPTIONS] [PATH]
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--prompt</code> <i>prompt</i></dt><dd><p>Provide an alternative prompt prefix for the virtual environment.</p>
 
@@ -6445,6 +6693,14 @@ uv build [OPTIONS] [SRC]
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the build environment.</p>
 
 <p>By default, builds are executed in isolated virtual environments. The discovered interpreter will be used to create those environments, and will be symlinked or copied in depending on the platform.</p>
@@ -6607,6 +6863,14 @@ uv cache clean [OPTIONS] [PACKAGE]...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -6699,6 +6963,14 @@ uv cache prune [OPTIONS]
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
@@ -6795,6 +7067,14 @@ uv cache dir [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -6882,7 +7162,15 @@ uv version [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--output-format</code> <i>output-format</i></dt><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
+</dd><dt><code>--output-format</code> <i>output-format</i></dt><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
+</dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
 
@@ -6915,7 +7203,7 @@ Generate shell completion
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv generate-shell-completion <SHELL>
+uv generate-shell-completion [OPTIONS] <SHELL>
 ```
 
 <h3 class="cli-reference">Arguments</h3>
@@ -6924,7 +7212,17 @@ uv generate-shell-completion <SHELL>
 
 </dd></dl>
 
+<h3 class="cli-reference">Options</h3>
 
+<dl class="cli-reference"><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
+</dd></dl>
 
 ## uv help
 
@@ -6992,6 +7290,14 @@ uv help [OPTIONS] [COMMAND]...
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 

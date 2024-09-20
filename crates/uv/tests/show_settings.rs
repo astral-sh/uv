@@ -3180,7 +3180,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--directory` argument instead.
+    warning: The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.
     error: Failed to parse: `[CACHE_DIR]/pyproject.toml`
       Caused by: TOML parse error at line 9, column 3
       |
