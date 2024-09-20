@@ -19,6 +19,7 @@ use crate::pubgrub::{
     PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, PubGrubSpecifierError,
 };
 use crate::python_requirement::PythonRequirement;
+use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
 
 #[derive(Debug, thiserror::Error)]
@@ -101,6 +102,9 @@ pub enum ResolveError {
 
     #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`")]
     UnhashedPackage(PackageName),
+
+    #[error("found conflicting distribution in resolution: {0}")]
+    ConflictingDistribution(ConflictingDistributionError),
 
     /// Something unexpected happened.
     #[error("{0}")]

@@ -428,7 +428,7 @@ impl Lock {
                 }
             }
         }
-        Ok(Self {
+        let lock = Self {
             version,
             fork_markers,
             supported_environments,
@@ -437,7 +437,8 @@ impl Lock {
             packages,
             by_id,
             manifest,
-        })
+        };
+        Ok(lock)
     }
 
     /// Record the requirements that were used to generate this lock.
@@ -1464,38 +1465,6 @@ impl TryFrom<LockWire> for Lock {
             supported_environments,
             fork_markers,
         )?;
-
-        /*
-        // TODO: Use the below in tests to validate we don't produce a
-        // trivially incorrect lock file.
-        let mut name_to_markers: BTreeMap<&PackageName, Vec<(&Version, &MarkerTree)>> =
-            BTreeMap::new();
-        for package in &lock.packages {
-            for dep in &package.dependencies {
-                name_to_markers
-                    .entry(&dep.package_id.name)
-                    .or_default()
-                    .push((&dep.package_id.version, &dep.marker));
-            }
-        }
-        for (name, marker_trees) in name_to_markers {
-            for (i, (version1, marker1)) in marker_trees.iter().enumerate() {
-                for (version2, marker2) in &marker_trees[i + 1..] {
-                    if version1 == version2 {
-                        continue;
-                    }
-                    if !marker1.is_disjoint(marker2) {
-                        assert!(
-                            false,
-                            "[{marker1:?}] (for version {version1}) is not disjoint with \
-                             [{marker2:?}] (for version {version2}) \
-                             for package `{name}`",
-                        );
-                    }
-                }
-            }
-        }
-        */
 
         Ok(lock)
     }
