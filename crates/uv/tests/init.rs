@@ -568,7 +568,7 @@ fn init_script_file_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Script name must end in .py extension
+    error: Script must end in .py extension
     "###);
 
     Ok(())
