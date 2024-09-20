@@ -508,6 +508,7 @@ impl PubGrubReportFormatter<'_> {
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
         markers: &ResolverMarkers,
+        workspace_members: &BTreeSet<PackageName>,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
         match derivation_tree {
@@ -526,9 +527,7 @@ impl PubGrubReportFormatter<'_> {
                             output_hints,
                         );
                     }
-                }
 
-                if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to no `--find-links` flat index
                     Self::index_hints(
                         package,
@@ -547,6 +546,22 @@ impl PubGrubReportFormatter<'_> {
                 dependency,
                 dependency_set,
             )) => {
+                // Check for a dependency on a workspace package by a non-workspace package.
+                // Generally, this indicates that the workspace package is shadowing a transitive
+                // dependency name.
+                if let (Some(package_name), Some(dependency_name)) =
+                    (package.name(), dependency.name())
+                {
+                    if workspace_members.contains(dependency_name)
+                        && !workspace_members.contains(package_name)
+                    {
+                        output_hints.insert(PubGrubHint::DependsOnWorkspacePackage {
+                            package: package.clone(),
+                            dependency: dependency.clone(),
+                            workspace: self.is_workspace() && !self.is_single_project_workspace(),
+                        });
+                    }
+                }
                 // Check for no versions due to `Requires-Python`.
                 if matches!(
                     &**dependency,
@@ -571,6 +586,7 @@ impl PubGrubReportFormatter<'_> {
                     incomplete_packages,
                     fork_urls,
                     markers,
+                    workspace_members,
                     output_hints,
                 );
                 self.generate_hints(
@@ -581,6 +597,7 @@ impl PubGrubReportFormatter<'_> {
                     incomplete_packages,
                     fork_urls,
                     markers,
+                    workspace_members,
                     output_hints,
                 );
             }
@@ -802,6 +819,11 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         package_requires_python: Range<Version>,
     },
+    DependsOnWorkspacePackage {
+        package: PubGrubPackage,
+        dependency: PubGrubPackage,
+        workspace: bool,
+    },
 }
 
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
@@ -841,6 +863,11 @@ enum PubGrubHintCore {
     RequiresPython {
         source: PythonRequirementSource,
         requires_python: RequiresPython,
+    },
+    DependsOnWorkspacePackage {
+        package: PubGrubPackage,
+        dependency: PubGrubPackage,
+        workspace: bool,
     },
 }
 
@@ -884,6 +911,15 @@ impl From<PubGrubHint> for PubGrubHintCore {
             } => Self::RequiresPython {
                 source,
                 requires_python,
+            },
+            PubGrubHint::DependsOnWorkspacePackage {
+                package,
+                dependency,
+                workspace,
+            } => Self::DependsOnWorkspacePackage {
+                package,
+                dependency,
+                workspace,
             },
         }
     }
@@ -1078,6 +1114,30 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     PackageRange::compatibility(package, package_set, None).bold(),
                     package_requires_python.bold(),
+                )
+            }
+            Self::DependsOnWorkspacePackage {
+                package,
+                dependency,
+                workspace,
+            } => {
+                let your_project = if *workspace {
+                    "one of your workspace members"
+                } else {
+                    "your project"
+                };
+                let the_project = if *workspace {
+                    "the workspace member"
+                } else {
+                    "the project"
+                };
+                write!(
+                    f,
+                    "{}{} The package `{}` depends on the package `{}` but the name is shadowed by {your_project}. Consider changing the name of {the_project}.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package,
+                    dependency,
                 )
             }
         }

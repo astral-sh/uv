@@ -4808,3 +4808,60 @@ fn update_offset() -> Result<()> {
     });
     Ok(())
 }
+
+/// Check hint for <https://github.com/astral-sh/uv/issues/7329>
+/// if there is a broken cyclic dependency on a local package.
+#[test]
+fn add_shadowed_name() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "dagster"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Pinned constrained, check for a direct dependency loop.
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.6.13"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+      help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
+    "###);
+
+    // Constraint with several available versions, check for an indirect dependency loop.
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of dagster-webserver are available:
+              dagster-webserver<=1.6.13
+              dagster-webserver>1.7.0
+          and dagster-webserver==1.6.11 depends on your project, we can conclude that all of:
+              dagster-webserver>=1.6.11,<1.6.12
+              dagster-webserver>1.6.13,<1.7.0
+          depend on your project.
+          And because dagster-webserver==1.6.12 depends on your project, we can conclude that all of:
+              dagster-webserver>=1.6.11,<1.6.13
+              dagster-webserver>1.6.13,<1.7.0
+          depend on your project.
+          And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11,<1.7.0, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+      help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
+    "###);
+
+    Ok(())
+}
