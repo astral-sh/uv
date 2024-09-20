@@ -581,7 +581,7 @@ fn test_tool_upgrade_with() {
 
 #[test]
 fn test_tool_upgrade_python() {
-    let context = TestContext::new_with_versions(&["3.12", "3.13"])
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -591,7 +591,7 @@ fn test_tool_upgrade_python() {
     .arg("babel==2.6.0")
     .arg("--index-url")
     .arg("https://test.pypi.org/simple/")
-    .arg("--python").arg("3.12")
+    .arg("--python").arg("3.11")
     .env("UV_TOOL_DIR", tool_dir.as_os_str())
     .env("XDG_BIN_HOME", bin_dir.as_os_str())
     .env("PATH", bin_dir.as_os_str()), @r###"
@@ -611,7 +611,7 @@ fn test_tool_upgrade_python() {
     uv_snapshot!(
         context.filters(),
         context.tool_upgrade().arg("babel")
-        .arg("--python").arg("3.13")
+        .arg("--python").arg("3.12")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
@@ -624,7 +624,7 @@ fn test_tool_upgrade_python() {
      + babel==2.6.0
      + pytz==2018.5
     Installed 1 executable: pybabel
-    Upgraded build environment for babel to Python 3.13
+    Upgraded build environment for babel to Python 3.12
     "###
     );
 
@@ -634,14 +634,14 @@ fn test_tool_upgrade_python() {
         let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @r###"
-        version_info = 3.13.[X]rc2
+        version_info = 3.12.[X]
         "###);
     });
 }
 
 #[test]
 fn test_tool_upgrade_python_with_all() {
-    let context = TestContext::new_with_versions(&["3.12", "3.13"])
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -651,7 +651,7 @@ fn test_tool_upgrade_python_with_all() {
     .arg("babel==2.6.0")
     .arg("--index-url")
     .arg("https://test.pypi.org/simple/")
-    .arg("--python").arg("3.12")
+    .arg("--python").arg("3.11")
     .env("UV_TOOL_DIR", tool_dir.as_os_str())
     .env("XDG_BIN_HOME", bin_dir.as_os_str())
     .env("PATH", bin_dir.as_os_str()), @r###"
@@ -672,7 +672,7 @@ fn test_tool_upgrade_python_with_all() {
     .arg("python-dotenv")
     .arg("--index-url")
     .arg("https://test.pypi.org/simple/")
-    .arg("--python").arg("3.12")
+    .arg("--python").arg("3.11")
     .env("UV_TOOL_DIR", tool_dir.as_os_str())
     .env("XDG_BIN_HOME", bin_dir.as_os_str())
     .env("PATH", bin_dir.as_os_str()), @r###"
@@ -691,7 +691,7 @@ fn test_tool_upgrade_python_with_all() {
     uv_snapshot!(
         context.filters(),
         context.tool_upgrade().arg("--all")
-        .arg("--python").arg("3.13")
+        .arg("--python").arg("3.12")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
@@ -707,7 +707,7 @@ fn test_tool_upgrade_python_with_all() {
     Added python-dotenv v0.10.2.post2
      + python-dotenv==0.10.2.post2
     Installed 1 executable: dotenv
-    Upgraded build environment for all tools to Python 3.13
+    Upgraded build environment for all tools to Python 3.12
     "###
     );
 
@@ -717,7 +717,7 @@ fn test_tool_upgrade_python_with_all() {
         let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @r###"
-        version_info = 3.13.[X]rc2
+        version_info = 3.12.[X]
         "###);
     });
 
@@ -727,7 +727,7 @@ fn test_tool_upgrade_python_with_all() {
         let content = fs_err::read_to_string(tool_dir.join("python-dotenv").join("pyvenv.cfg")).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @r###"
-        version_info = 3.13.[X]rc2
+        version_info = 3.12.[X]
         "###);
     });
 }
