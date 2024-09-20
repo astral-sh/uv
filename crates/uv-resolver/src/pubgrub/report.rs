@@ -1,4 +1,4 @@
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound;
@@ -546,6 +546,22 @@ impl PubGrubReportFormatter<'_> {
                 dependency,
                 dependency_set,
             )) => {
+                // Check for a dependency on a workspace package by a non-workspace package.
+                // Generally, this indicates that the workspace package is shadowing a transitive
+                // dependency name.
+                if let (Some(package_name), Some(dependency_name)) =
+                    (package.name(), dependency.name())
+                {
+                    if workspace_members.contains(dependency_name)
+                        && !workspace_members.contains(package_name)
+                    {
+                        output_hints.insert(PubGrubHint::DependsOnWorkspacePackage {
+                            package: package.clone(),
+                            dependency: dependency.clone(),
+                            workspace: self.is_workspace() && !self.is_single_project_workspace(),
+                        });
+                    }
+                }
                 // Check for no versions due to `Requires-Python`.
                 if matches!(
                     &**dependency,
@@ -562,7 +578,6 @@ impl PubGrubReportFormatter<'_> {
             }
             DerivationTree::External(External::NotRoot(..)) => {}
             DerivationTree::Derived(derived) => {
-                Self::local_cycle_hint(workspace_members, derived, output_hints);
                 self.generate_hints(
                     &derived.cause1,
                     selector,
@@ -724,76 +739,6 @@ impl PubGrubReportFormatter<'_> {
             }
         }
     }
-
-    /// Try to detect and warn if there is a cycle which involves a local package.
-    ///
-    /// This shouldn't usually happen, but it could be the symptom of a naming
-    /// conflict with a transitive dependency existing on the index.
-    fn local_cycle_hint(
-        workspace_members: &BTreeSet<PackageName>,
-        derived: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
-        output_hints: &mut IndexSet<PubGrubHint>,
-    ) {
-        for local_package in workspace_members {
-            let pkg = PubGrubPackage::from_package(local_package.clone(), None, None.into());
-            if derived.terms.contains_key(&pkg) {
-                // Check for a direct loop between two dependencies, involving a local package...
-                if let DerivationTree::External(External::FromDependencyOf(src1, _, dst1, _)) =
-                    derived.cause1.borrow()
-                {
-                    let DerivationTree::External(External::FromDependencyOf(src2, _, dst2, _)) =
-                        derived.cause2.borrow()
-                    else {
-                        continue;
-                    };
-
-                    // Detect a direct loop condition, with two opposing edges between the same
-                    // packages.
-                    let cycle_edge_first =
-                        src1.name_no_root().is_some() && src1.name_no_root() == dst2.name_no_root();
-                    let cycle_edge_second =
-                        dst1.name_no_root().is_some() && dst1.name_no_root() == src2.name_no_root();
-                    if cycle_edge_first && cycle_edge_second {
-                        output_hints.insert(PubGrubHint::WorkspacePackageNoVersions {
-                            package: pkg.clone(),
-                        });
-                    }
-                }
-                // ... otherwise, check left child for an error caused by a failed dependency
-                // on a local package...
-                else if let DerivationTree::External(External::NoVersions(_, _)) =
-                    derived.cause1.borrow()
-                {
-                    let DerivationTree::External(External::FromDependencyOf(_, _, dst, _)) =
-                        derived.cause2.borrow()
-                    else {
-                        continue;
-                    };
-                    if *dst == pkg {
-                        output_hints.insert(PubGrubHint::WorkspacePackageNoVersions {
-                            package: pkg.clone(),
-                        });
-                    }
-                }
-                // ... otherwise, check right child for an error caused by a failed dependency
-                // on a local package...
-                else if let DerivationTree::External(External::NoVersions(_, _)) =
-                    derived.cause2.borrow()
-                {
-                    let DerivationTree::External(External::FromDependencyOf(_, _, dst, _)) =
-                        derived.cause1.borrow()
-                    else {
-                        continue;
-                    };
-                    if *dst == pkg {
-                        output_hints.insert(PubGrubHint::WorkspacePackageNoVersions {
-                            package: pkg.clone(),
-                        });
-                    }
-                }
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -819,9 +764,7 @@ pub(crate) enum PubGrubHint {
     /// A package was not found in the registry, but network access was disabled.
     Offline,
     /// Metadata for a package could not be found.
-    MissingPackageMetadata {
-        package: PubGrubPackage,
-    },
+    MissingPackageMetadata { package: PubGrubPackage },
     /// Metadata for a package could not be parsed.
     InvalidPackageMetadata {
         package: PubGrubPackage,
@@ -876,8 +819,10 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         package_requires_python: Range<Version>,
     },
-    WorkspacePackageNoVersions {
+    DependsOnWorkspacePackage {
         package: PubGrubPackage,
+        dependency: PubGrubPackage,
+        workspace: bool,
     },
 }
 
@@ -919,8 +864,10 @@ enum PubGrubHintCore {
         source: PythonRequirementSource,
         requires_python: RequiresPython,
     },
-    WorkspacePackageNoVersions {
+    DependsOnWorkspacePackage {
         package: PubGrubPackage,
+        dependency: PubGrubPackage,
+        workspace: bool,
     },
 }
 
@@ -965,9 +912,15 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 source,
                 requires_python,
             },
-            PubGrubHint::WorkspacePackageNoVersions { package } => {
-                Self::WorkspacePackageNoVersions { package }
-            }
+            PubGrubHint::DependsOnWorkspacePackage {
+                package,
+                dependency,
+                workspace,
+            } => Self::DependsOnWorkspacePackage {
+                package,
+                dependency,
+                workspace,
+            },
         }
     }
 }
@@ -1163,14 +1116,28 @@ impl std::fmt::Display for PubGrubHint {
                     package_requires_python.bold(),
                 )
             }
-            Self::WorkspacePackageNoVersions { package } => {
+            Self::DependsOnWorkspacePackage {
+                package,
+                dependency,
+                workspace,
+            } => {
+                let your_project = if *workspace {
+                    "one of your workspace members"
+                } else {
+                    "your project"
+                };
+                let the_project = if *workspace {
+                    "the workspace member"
+                } else {
+                    "the project"
+                };
                 write!(
                     f,
-                    "{}{} Resolution failed on a dependency ('{}') which has the same name as your local package ('{}'). Consider checking your project for possible name conflicts with packages in the index.",
+                    "{}{} The package `{}` depends on the package `{}` but the name is shadowed by {your_project}. Consider changing the name of {the_project}.",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package,
-                    package,
+                    dependency,
                 )
             }
         }

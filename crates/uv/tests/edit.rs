@@ -4812,7 +4812,7 @@ fn update_offset() -> Result<()> {
 /// Check hint for <https://github.com/astral-sh/uv/issues/7329>
 /// if there is a broken cyclic dependency on a local package.
 #[test]
-fn add_error_local_cycle() -> Result<()> {
+fn add_shadowed_name() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -4834,7 +4834,7 @@ fn add_error_local_cycle() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: Resolution failed on a dependency ('dagster') which has the same name as your local package ('dagster'). Consider checking your project for possible name conflicts with packages in the index.
+          hint: The package `dagster-webserver` depends on `dagster` which is shadowed by your project. Consider changing the name of the project.
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
     "###);
 
@@ -4859,7 +4859,7 @@ fn add_error_local_cycle() -> Result<()> {
           depend on your project.
           And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11,<1.7.0, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: Resolution failed on a dependency ('dagster') which has the same name as your local package ('dagster'). Consider checking your project for possible name conflicts with packages in the index.
+          hint: The package `dagster-webserver` depends on `dagster` which is shadowed by your project. Consider changing the name of the project.
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
     "###);
 
