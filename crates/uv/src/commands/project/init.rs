@@ -68,9 +68,8 @@ pub(crate) async fn init(
                 script_path.cyan()
             )?;
             return Ok(ExitStatus::Success);
-        } else {
-            anyhow::bail!("Filename not provided for script");
         }
+        anyhow::bail!("Filename not provided for script");
     }
 
     // Default to the current directory if a path was not provided.
@@ -463,7 +462,7 @@ impl InitProjectKind {
                 .await
             }
             InitProjectKind::Script => {
-                dbg!("Script should be initialized directly via init_script");
+                debug!("Script should be initialized directly via init_script");
                 anyhow::bail!("Error during script initialization")
             }
         }
@@ -610,6 +609,7 @@ impl InitProjectKind {
         Ok(())
     }
 
+    #[allow(clippy::fn_params_excessive_bools)]
     async fn init_script(
         self,
         script_path: &PathBuf,
@@ -636,8 +636,11 @@ impl InitProjectKind {
         }
 
         if let Some(path) = script_path.to_str() {
-            if !path.ends_with(".py") {
-                anyhow::bail!("Script name must end in .py extension");
+            if !std::path::Path::new(path)
+                .extension()
+                .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
+            {
+                anyhow::bail!("Script must end in .py extension");
             }
         }
 

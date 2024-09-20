@@ -394,9 +394,9 @@ uv init [OPTIONS] [PATH]
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>PATH</code></dt><dd><p>The path to use for the project.</p>
+<dl class="cli-reference"><dt><code>PATH</code></dt><dd><p>The path to use for the project/script.</p>
 
-<p>Defaults to the current working directory. Accepts relative and absolute paths.</p>
+<p>Defaults to the current working directory when initializing an app or library; required when initializing a script. Accepts relative and absolute paths.</p>
 
 <p>If a <code>pyproject.toml</code> is found in any of the parent directories of the target path, the project will be added as a workspace member of the parent, unless <code>--no-workspace</code> is provided.</p>
 
@@ -516,9 +516,11 @@ uv init [OPTIONS] [PATH]
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
-</dd><dt><code>--script</code></dt><dd><p>Create a script with inline metadata.</p>
+</dd><dt><code>--script</code></dt><dd><p>Create a script.</p>
 
-<p>A Python script is a file intended for standalone execution with or without dependencies.</p>
+<p>A script is a standalone file which adheres to the PEP-723 specification.</p>
+
+<p>By default, the Python version the script depends on is the system version; can be manually specified with the --python argument (takes absolute precedence) or a .python-version file (ignore with --<code>no_pin_python</code>).</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 

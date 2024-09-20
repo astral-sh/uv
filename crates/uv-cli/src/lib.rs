@@ -2336,7 +2336,7 @@ pub struct InitArgs {
     ///
     /// By default, the Python version the script depends on is the system version; can be
     /// manually specified with the --python argument (takes absolute precedence) or a
-    /// .python-version file (ignore with --no_pin_python).
+    /// .python-version file (ignore with --`no_pin_python`).
     #[arg(long, alias="script", conflicts_with_all=["app", "lib", "package"])]
     pub r#script: bool,
 
