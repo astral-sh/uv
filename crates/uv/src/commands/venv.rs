@@ -199,7 +199,7 @@ async fn venv_impl(
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone()))
+                    PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
                 });
         }
     }

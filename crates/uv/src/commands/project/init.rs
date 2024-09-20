@@ -218,7 +218,8 @@ async fn init_project(
 
                 (requires_python, python_request)
             }
-            ref python_request @ PythonRequest::Version(VersionRequest::Range(ref specifiers)) => {
+            ref
+            python_request @ PythonRequest::Version(VersionRequest::Range(ref specifiers, _)) => {
                 let requires_python = RequiresPython::from_specifiers(specifiers)?;
 
                 let python_request = if no_pin_python {
@@ -279,8 +280,10 @@ async fn init_project(
         .and_then(|workspace| find_requires_python(workspace).ok().flatten())
     {
         // (2) `Requires-Python` from the workspace
-        let python_request =
-            PythonRequest::Version(VersionRequest::Range(requires_python.specifiers().clone()));
+        let python_request = PythonRequest::Version(VersionRequest::Range(
+            requires_python.specifiers().clone(),
+            false,
+        ));
 
         // Pin to the minor version.
         let python_request = if no_pin_python {

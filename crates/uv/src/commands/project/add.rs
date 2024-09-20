@@ -175,7 +175,7 @@ pub(crate) async fn add(
                 .requires_python
                 .clone()
                 .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python))
+                    PythonRequest::Version(VersionRequest::Range(requires_python, false))
                 })
         };
 

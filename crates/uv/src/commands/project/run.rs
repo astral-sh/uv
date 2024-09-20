@@ -125,7 +125,7 @@ pub(crate) async fn run(
                 .requires_python
                 .as_ref()
                 .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python.clone()))
+                    PythonRequest::Version(VersionRequest::Range(requires_python.clone(), false))
                 });
             let source = PythonRequestSource::RequiresPython;
             (source, request)

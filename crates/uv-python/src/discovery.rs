@@ -145,7 +145,7 @@ pub enum VersionRequest {
     MajorMinor(u8, u8, bool),
     MajorMinorPatch(u8, u8, u8, bool),
     MajorMinorPrerelease(u8, u8, Prerelease, bool),
-    Range(VersionSpecifiers),
+    Range(VersionSpecifiers, bool),
 }
 
 /// The result of an Python installation search.
@@ -495,7 +495,7 @@ fn find_all_minor(
         &VersionRequest::Any
         | VersionRequest::Default
         | VersionRequest::Major(_, _)
-        | VersionRequest::Range(_) => {
+        | VersionRequest::Range(_, _) => {
             let regex = if let Some(implementation) = implementation {
                 Regex::new(&format!(
                     r"^({}|python3)\.(?<minor>\d\d?)t?{}$",
@@ -1487,7 +1487,9 @@ impl VersionRequest {
         };
 
         match self {
-            Self::Any | Self::Default | Self::Range(_) => [Some(python3), Some(python), None, None],
+            Self::Any | Self::Default | Self::Range(_, _) => {
+                [Some(python3), Some(python), None, None]
+            }
             Self::Major(major, _) => [
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
@@ -1545,7 +1547,7 @@ impl VersionRequest {
                 };
 
                 match self {
-                    Self::Any | Self::Default | Self::Range(_) => {
+                    Self::Any | Self::Default | Self::Range(_, _) => {
                         [Some(python3), Some(python), None, None]
                     }
                     Self::Major(major, _) => [
@@ -1614,7 +1616,7 @@ impl VersionRequest {
                 }
             }
             // TODO(zanieb): We could do some checking here to see if the range can be satisfied
-            Self::Range(_) => (),
+            Self::Range(_, _) => (),
         }
 
         if self.is_free_threaded_requested() {
@@ -1648,7 +1650,7 @@ impl VersionRequest {
                     interpreter.python_patch(),
                 ) == (*major, *minor, *patch)
             }
-            Self::Range(specifiers) => {
+            Self::Range(specifiers, _) => {
                 let version = interpreter.python_version().only_release();
                 specifiers.contains(&version)
             }
@@ -1677,7 +1679,7 @@ impl VersionRequest {
                 (version.major(), version.minor(), version.patch())
                     == (*major, *minor, Some(*patch))
             }
-            Self::Range(specifiers) => specifiers.contains(&version.version),
+            Self::Range(specifiers, _) => specifiers.contains(&version.version),
             Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
                 (version.major(), version.minor(), version.pre())
                     == (*major, *minor, Some(*prerelease))
@@ -1695,7 +1697,7 @@ impl VersionRequest {
             Self::MajorMinorPatch(self_major, self_minor, _, _) => {
                 (*self_major, *self_minor) == (major, minor)
             }
-            Self::Range(specifiers) => {
+            Self::Range(specifiers, _) => {
                 specifiers.contains(&Version::new([u64::from(major), u64::from(minor)]))
             }
             Self::MajorMinorPrerelease(self_major, self_minor, _, _) => {
@@ -1714,7 +1716,7 @@ impl VersionRequest {
             Self::MajorMinorPatch(self_major, self_minor, self_patch, _) => {
                 (*self_major, *self_minor, *self_patch) == (major, minor, patch)
             }
-            Self::Range(specifiers) => specifiers.contains(&Version::new([
+            Self::Range(specifiers, _) => specifiers.contains(&Version::new([
                 u64::from(major),
                 u64::from(minor),
                 u64::from(patch),
@@ -1734,7 +1736,7 @@ impl VersionRequest {
             Self::MajorMinor(..) => false,
             Self::MajorMinorPatch(..) => true,
             Self::MajorMinorPrerelease(..) => false,
-            Self::Range(_) => false,
+            Self::Range(_, _) => false,
         }
     }
 
@@ -1756,7 +1758,7 @@ impl VersionRequest {
             Self::MajorMinorPrerelease(major, minor, prerelease, free_threaded) => {
                 Self::MajorMinorPrerelease(major, minor, prerelease, free_threaded)
             }
-            Self::Range(_) => self,
+            Self::Range(_, _) => self,
         }
     }
 
@@ -1769,17 +1771,18 @@ impl VersionRequest {
             Self::MajorMinor(..) => true,
             Self::MajorMinorPatch(..) => true,
             Self::MajorMinorPrerelease(..) => true,
-            Self::Range(specifiers) => specifiers.iter().any(VersionSpecifier::any_prerelease),
+            Self::Range(specifiers, _) => specifiers.iter().any(VersionSpecifier::any_prerelease),
         }
     }
 
     pub(crate) fn is_free_threaded_requested(&self) -> bool {
         match self {
-            Self::Any | Self::Default | Self::Range(_) => false,
+            Self::Any | Self::Default => false,
             Self::Major(_, free_threaded) => *free_threaded,
             Self::MajorMinor(_, _, free_threaded) => *free_threaded,
             Self::MajorMinorPatch(_, _, _, free_threaded) => *free_threaded,
             Self::MajorMinorPrerelease(_, _, _, free_threaded) => *free_threaded,
+            Self::Range(_, free_threaded) => *free_threaded,
         }
     }
 }
@@ -1797,7 +1800,7 @@ impl FromStr for VersionRequest {
         }
 
         let Ok(version) = Version::from_str(s) else {
-            return parse_version_specifiers_request(s);
+            return parse_version_specifiers_request(s, free_threaded);
         };
 
         // Split the release component if it uses the wheel tag format (e.g., `38`)
@@ -1858,14 +1861,14 @@ impl FromStr for VersionRequest {
     }
 }
 
-fn parse_version_specifiers_request(s: &str) -> Result<VersionRequest, Error> {
+fn parse_version_specifiers_request(s: &str, free_threaded: bool) -> Result<VersionRequest, Error> {
     let Ok(specifiers) = VersionSpecifiers::from_str(s) else {
         return Err(Error::InvalidVersionRequest(s.to_string()));
     };
     if specifiers.is_empty() {
         return Err(Error::InvalidVersionRequest(s.to_string()));
     }
-    Ok(VersionRequest::Range(specifiers))
+    Ok(VersionRequest::Range(specifiers, free_threaded))
 }
 
 impl From<&PythonVersion> for VersionRequest {
@@ -1896,7 +1899,7 @@ impl fmt::Display for VersionRequest {
             Self::MajorMinorPrerelease(major, minor, prerelease, true) => {
                 write!(f, "{major}.{minor}{prerelease}t")
             }
-            Self::Range(specifiers) => write!(f, "{specifiers}"),
+            Self::Range(specifiers, _) => write!(f, "{specifiers}"),
         }
     }
 }
@@ -2053,7 +2056,7 @@ mod tests {
     use std::{path::PathBuf, str::FromStr};
 
     use assert_fs::{prelude::*, TempDir};
-    use pep440_rs::{Prerelease, PrereleaseKind};
+    use pep440_rs::{Prerelease, PrereleaseKind, VersionSpecifiers};
     use test_log::test;
 
     use crate::{
@@ -2470,6 +2473,18 @@ mod tests {
         assert_eq!(
             VersionRequest::from_str("3.13t").unwrap(),
             VersionRequest::MajorMinor(3, 13, true)
+        );
+        assert_eq!(
+            VersionRequest::from_str(">=3.13t").unwrap(),
+            VersionRequest::Range(VersionSpecifiers::from_str(">=3.13").unwrap(), true)
+        );
+        assert_eq!(
+            VersionRequest::from_str(">=3.13").unwrap(),
+            VersionRequest::Range(VersionSpecifiers::from_str(">=3.13").unwrap(), false)
+        );
+        assert_eq!(
+            VersionRequest::from_str(">=3.12,<3.14t").unwrap(),
+            VersionRequest::Range(VersionSpecifiers::from_str(">=3.12,<3.14").unwrap(), true)
         );
         assert!(matches!(
             VersionRequest::from_str("3.13tt"),
