@@ -451,6 +451,15 @@ impl ToolUpgradeSettings {
             installer.upgrade = true;
         }
 
+        // If we're given a python version and neither a name nor the --all flag
+        // was passed, warn we're upgrading all packages
+        if python.is_some() && name.is_empty() && !all {
+            warn_user_once!(
+                "Specifying a python version without `--name` or `--all`
+             defaults to updating all packages."
+            );
+        }
+
         let args = resolver_installer_options(installer, build);
         let filesystem = filesystem
             .map(FilesystemOptions::into_options)

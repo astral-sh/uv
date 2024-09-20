@@ -16,13 +16,9 @@ use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 
-use crate::commands::pip::loggers::{
-    DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger, UpgradeInstallLogger,
-};
+use crate::commands::pip::loggers::{SummaryResolveLogger, UpgradeInstallLogger};
 use crate::commands::pip::operations::Changelog;
-use crate::commands::project::{
-    resolve_environment, sync_environment, update_environment, EnvironmentUpdate,
-};
+use crate::commands::project::{update_environment, EnvironmentUpdate};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
@@ -138,6 +134,19 @@ pub(crate) async fn upgrade(
 
     if !did_upgrade {
         writeln!(printer.stderr(), "Nothing to upgrade")?;
+    }
+
+    if let Some(python) = python {
+        writeln!(
+            printer.stderr(),
+            "Upgraded {} to python {}",
+            if names.len() == 1 {
+                format!("{}", names.first().unwrap())
+            } else {
+                "all tools".to_string()
+            },
+            python
+        )?;
     }
 
     Ok(ExitStatus::Success)
