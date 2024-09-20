@@ -301,6 +301,17 @@ pub struct PortablePath<'a>(&'a Path);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortablePathBuf(PathBuf);
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for PortablePathBuf {
+    fn schema_name() -> String {
+        PathBuf::schema_name()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        PathBuf::json_schema(_gen)
+    }
+}
+
 impl AsRef<Path> for PortablePath<'_> {
     fn as_ref(&self) -> &Path {
         self.0

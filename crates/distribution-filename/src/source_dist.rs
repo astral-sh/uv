@@ -20,8 +20,7 @@ use uv_normalize::{InvalidNameError, PackageName};
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 pub struct SourceDistFilename {
     pub name: PackageName,
     pub version: Version,

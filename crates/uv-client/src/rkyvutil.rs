@@ -7,38 +7,39 @@ Typical usage patterns with rkyv involve using an `&Archived<T>`, where values
 of that type are cast from a `&[u8]`. The owned archive type in this module
 effectively provides a way to use `Archive<T>` without needing to worry about
 the lifetime of the buffer it's attached to. This works by making the owned
-archive type own the buffer itself.
-
-# Custom serializer
-
-This module provides our own implementation of the `Serializer` trait.
-This involves a fair bit of boiler plate, but it was largely copied from
-`CompositeSerializer`. (Indeed, our serializer wraps a `CompositeSerializer`.)
-
-The motivation for doing this is to support the archiving of `PathBuf` types.
-Namely, for reasons AG doesn't completely understand at the time of writing,
-the serializers that rkyv bundled cannot handle the error returned by `PathBuf`
-potentially failing to serialize. Namely, since `PathBuf` has a platform
-dependent representation when its contents are not valid UTF-8, serialization
-in `rkyv` requires that it be valid UTF-8. If it isn't, serialization will
-fail.
+archive type own the buffer itself. It then provides convenient routines for
+serializing and deserializing.
 */
 
-use std::convert::Infallible;
-
 use rkyv::{
-    de::deserializers::SharedDeserializeMap,
-    ser::serializers::{
-        AlignedSerializer, AllocScratch, AllocScratchError, CompositeSerializer,
-        CompositeSerializerError, FallbackScratch, HeapScratch, SharedSerializeMap,
-        SharedSerializeMapError,
-    },
+    api::high::{HighDeserializer, HighSerializer, HighValidator},
+    bytecheck::CheckBytes,
+    rancor,
+    ser::allocator::ArenaHandle,
     util::AlignedVec,
-    validation::validators::DefaultValidator,
-    Archive, ArchiveUnsized, CheckBytes, Deserialize, Fallible, Serialize,
+    Archive, Deserialize, Portable, Serialize,
 };
 
 use crate::{Error, ErrorKind};
+
+/// A convenient alias for the rkyv serializer used by `uv-client`.
+///
+/// This utilizes rkyv's `HighSerializer` but fixes its type parameters where
+/// possible since we don't need the full flexibility of a generic serializer.
+pub type Serializer<'a> = HighSerializer<AlignedVec, ArenaHandle<'a>, rancor::Error>;
+
+/// A convenient alias for the rkyv deserializer used by `uv-client`.
+///
+/// This utilizes rkyv's `HighDeserializer` but fixes its type parameters
+/// where possible since we don't need the full flexibility of a generic
+/// deserializer.
+pub type Deserializer = HighDeserializer<rancor::Error>;
+
+/// A convenient alias for the rkyv validator used by `uv-client`.
+///
+/// This utilizes rkyv's `HighValidator` but fixes its type parameters where
+/// possible since we don't need the full flexibility of a generic validator.
+pub type Validator<'a> = HighValidator<'a, rancor::Error>;
 
 /// An owned archived type.
 ///
@@ -60,14 +61,14 @@ use crate::{Error, ErrorKind};
 /// will likely need to be copied from here.
 #[derive(Debug)]
 pub struct OwnedArchive<A> {
-    raw: rkyv::util::AlignedVec,
+    raw: AlignedVec,
     archive: std::marker::PhantomData<A>,
 }
 
 impl<A> OwnedArchive<A>
 where
-    A: Archive + Serialize<Serializer<4096>>,
-    A::Archived: (for<'a> CheckBytes<DefaultValidator<'a>>) + Deserialize<A, SharedDeserializeMap>,
+    A: Archive + for<'a> Serialize<Serializer<'a>>,
+    A::Archived: Portable + Deserialize<A, Deserializer> + for<'a> CheckBytes<Validator<'a>>,
 {
     /// Create a new owned archived value from the raw aligned bytes of the
     /// serialized representation of an `A`.
@@ -80,7 +81,7 @@ where
         // We convert the error to a simple string because... the error type
         // does not implement Send. And I don't think we really need to keep
         // the error type around anyway.
-        let _ = rkyv::validation::validators::check_archived_root::<A>(&raw)
+        let _ = rkyv::access::<A::Archived, rkyv::rancor::Error>(&raw)
             .map_err(|e| ErrorKind::ArchiveRead(e.to_string()))?;
         Ok(Self {
             raw,
@@ -110,13 +111,8 @@ where
     /// Currently, this, at minimum, includes cases where an `A` contains a
     /// `PathBuf` that is not valid UTF-8.
     pub fn from_unarchived(unarchived: &A) -> Result<Self, Error> {
-        use rkyv::ser::Serializer;
-
-        let mut serializer = crate::rkyvutil::Serializer::<4096>::default();
-        serializer
-            .serialize_value(unarchived)
-            .map_err(ErrorKind::ArchiveWrite)?;
-        let raw = serializer.into_serializer().into_inner();
+        let raw = rkyv::to_bytes::<rancor::Error>(unarchived)
+            .map_err(|e| ErrorKind::ArchiveWrite(e.to_string()))?;
         Ok(Self {
             raw,
             archive: std::marker::PhantomData,
@@ -154,16 +150,14 @@ where
     /// fully-qualified syntax. So, if `o` is an `OwnedValue`, then use
     /// `OwnedValue::deserialize(&o)`.
     pub fn deserialize(this: &Self) -> A {
-        (**this)
-            .deserialize(&mut SharedDeserializeMap::new())
-            .expect("valid archive must deserialize correctly")
+        rkyv::deserialize(&**this).expect("valid archive must deserialize correctly")
     }
 }
 
 impl<A> std::ops::Deref for OwnedArchive<A>
 where
-    A: Archive + Serialize<Serializer<4096>>,
-    A::Archived: (for<'a> CheckBytes<DefaultValidator<'a>>) + Deserialize<A, SharedDeserializeMap>,
+    A: Archive + for<'a> Serialize<Serializer<'a>>,
+    A::Archived: Portable + Deserialize<A, Deserializer> + for<'a> CheckBytes<Validator<'a>>,
 {
     type Target = A::Archived;
 
@@ -174,175 +168,7 @@ where
         // is guaranteed to be correct.
         #[allow(unsafe_code)]
         unsafe {
-            rkyv::archived_root::<A>(&self.raw)
+            rkyv::access_unchecked::<A::Archived>(&self.raw)
         }
-    }
-}
-
-#[derive(Default)]
-pub struct Serializer<const N: usize> {
-    composite: CompositeSerializer<
-        AlignedSerializer<AlignedVec>,
-        FallbackScratch<HeapScratch<N>, AllocScratch>,
-        SharedSerializeMap,
-    >,
-}
-
-impl<const N: usize> Serializer<N> {
-    fn into_serializer(self) -> AlignedSerializer<AlignedVec> {
-        self.composite.into_serializer()
-    }
-}
-
-impl<const N: usize> Fallible for Serializer<N> {
-    type Error = SerializerError;
-}
-
-impl<const N: usize> rkyv::ser::Serializer for Serializer<N> {
-    #[inline]
-    fn pos(&self) -> usize {
-        self.composite.pos()
-    }
-
-    #[inline]
-    fn write(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
-        self.composite
-            .write(bytes)
-            .map_err(SerializerError::Composite)
-    }
-
-    #[inline]
-    fn pad(&mut self, padding: usize) -> Result<(), Self::Error> {
-        self.composite
-            .pad(padding)
-            .map_err(SerializerError::Composite)
-    }
-
-    #[inline]
-    fn align(&mut self, align: usize) -> Result<usize, Self::Error> {
-        self.composite
-            .align(align)
-            .map_err(SerializerError::Composite)
-    }
-
-    #[inline]
-    fn align_for<T>(&mut self) -> Result<usize, Self::Error> {
-        self.composite
-            .align_for::<T>()
-            .map_err(SerializerError::Composite)
-    }
-
-    #[inline]
-    #[allow(unsafe_code)]
-    unsafe fn resolve_aligned<T: Archive + ?Sized>(
-        &mut self,
-        value: &T,
-        resolver: T::Resolver,
-    ) -> Result<usize, Self::Error> {
-        self.composite
-            .resolve_aligned::<T>(value, resolver)
-            .map_err(SerializerError::Composite)
-    }
-
-    #[inline]
-    #[allow(unsafe_code)]
-    unsafe fn resolve_unsized_aligned<T: ArchiveUnsized + ?Sized>(
-        &mut self,
-        value: &T,
-        to: usize,
-        metadata_resolver: T::MetadataResolver,
-    ) -> Result<usize, Self::Error> {
-        self.composite
-            .resolve_unsized_aligned(value, to, metadata_resolver)
-            .map_err(SerializerError::Composite)
-    }
-}
-
-impl<const N: usize> rkyv::ser::ScratchSpace for Serializer<N> {
-    #[inline]
-    #[allow(unsafe_code)]
-    unsafe fn push_scratch(
-        &mut self,
-        layout: std::alloc::Layout,
-    ) -> Result<std::ptr::NonNull<[u8]>, Self::Error> {
-        self.composite
-            .push_scratch(layout)
-            .map_err(SerializerError::Composite)
-    }
-
-    #[inline]
-    #[allow(unsafe_code)]
-    unsafe fn pop_scratch(
-        &mut self,
-        ptr: std::ptr::NonNull<u8>,
-        layout: std::alloc::Layout,
-    ) -> Result<(), Self::Error> {
-        self.composite
-            .pop_scratch(ptr, layout)
-            .map_err(SerializerError::Composite)
-    }
-}
-
-impl<const N: usize> rkyv::ser::SharedSerializeRegistry for Serializer<N> {
-    #[inline]
-    fn get_shared_ptr(&self, value: *const u8) -> Option<usize> {
-        self.composite.get_shared_ptr(value)
-    }
-
-    #[inline]
-    fn add_shared_ptr(&mut self, value: *const u8, pos: usize) -> Result<(), Self::Error> {
-        self.composite
-            .add_shared_ptr(value, pos)
-            .map_err(SerializerError::Composite)
-    }
-}
-
-#[derive(Debug)]
-pub enum SerializerError {
-    Composite(CompositeSerializerError<Infallible, AllocScratchError, SharedSerializeMapError>),
-    AsString(rkyv::with::AsStringError),
-}
-
-impl std::fmt::Display for SerializerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match *self {
-            Self::Composite(ref e) => e.fmt(f),
-            Self::AsString(ref e) => e.fmt(f),
-        }
-    }
-}
-
-impl std::error::Error for SerializerError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match *self {
-            Self::Composite(ref e) => Some(e),
-            Self::AsString(ref e) => Some(e),
-        }
-    }
-}
-
-/// Provides a way to build a serializer error if converting an
-/// `OsString`/`PathBuf` to a `String` fails. i.e., It's invalid UTF-8.
-///
-/// This impl is the entire point of this module. For whatever reason, none of
-/// the serializers in rkyv handle this particular error case. Apparently, the
-/// only way to use `rkyv::with::AsString` with `PathBuf` is to create one's
-/// own serializer and provide a `From` impl for the `AsStringError` type.
-/// Specifically, from the [AsString] docs:
-///
-/// > Regular serializers don’t support the custom error handling needed for
-/// > this type by default. To use this wrapper, a custom serializer with an
-/// > error type satisfying <S as Fallible>`::Error`: From<AsStringError> must be
-/// > provided.
-///
-/// If we didn't need to use `rkyv::with::AsString` (which we do for
-/// serializing `PathBuf` at time of writing), then we could just
-/// use an `AllocSerializer` directly (which is a type alias for
-/// `CompositeSerializer<...>`.
-///
-/// [AsString]: https://docs.rs/rkyv/0.7.43/rkyv/with/struct.AsString.html
-impl From<rkyv::with::AsStringError> for SerializerError {
-    fn from(e: rkyv::with::AsStringError) -> Self {
-        Self::AsString(e)
     }
 }

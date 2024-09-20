@@ -88,20 +88,20 @@ impl LoweredRequirement {
                 if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                     return Err(LoweringError::ConflictingUrls);
                 }
-                git_source(&git, subdirectory, rev, tag, branch)?
+                git_source(&git, subdirectory.map(PathBuf::from), rev, tag, branch)?
             }
             Source::Url { url, subdirectory } => {
                 if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                     return Err(LoweringError::ConflictingUrls);
                 }
-                url_source(url, subdirectory)?
+                url_source(url, subdirectory.map(PathBuf::from))?
             }
             Source::Path { path, editable } => {
                 if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                     return Err(LoweringError::ConflictingUrls);
                 }
                 path_source(
-                    path,
+                    PathBuf::from(path),
                     origin,
                     project_dir,
                     workspace.install_path(),
@@ -203,19 +203,25 @@ impl LoweredRequirement {
                 if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                     return Err(LoweringError::ConflictingUrls);
                 }
-                git_source(&git, subdirectory, rev, tag, branch)?
+                git_source(&git, subdirectory.map(PathBuf::from), rev, tag, branch)?
             }
             Source::Url { url, subdirectory } => {
                 if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                     return Err(LoweringError::ConflictingUrls);
                 }
-                url_source(url, subdirectory)?
+                url_source(url, subdirectory.map(PathBuf::from))?
             }
             Source::Path { path, editable } => {
                 if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                     return Err(LoweringError::ConflictingUrls);
                 }
-                path_source(path, Origin::Project, dir, dir, editable.unwrap_or(false))?
+                path_source(
+                    PathBuf::from(path),
+                    Origin::Project,
+                    dir,
+                    dir,
+                    editable.unwrap_or(false),
+                )?
             }
             Source::Registry { index } => registry_source(&requirement, index)?,
             Source::Workspace { .. } => {

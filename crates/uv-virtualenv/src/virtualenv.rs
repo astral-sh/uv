@@ -108,7 +108,7 @@ pub(crate) fn create(
                     return Err(Error::Io(io::Error::new(
                         io::ErrorKind::AlreadyExists,
                         format!(
-                            "The directory `{}` exists, but it's not a virtualenv",
+                            "The directory `{}` exists, but it's not a virtual environment",
                             location.user_display()
                         ),
                     )));

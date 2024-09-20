@@ -379,7 +379,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Resolved 8 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
@@ -439,7 +439,7 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Resolved 8 packages in [TIME]
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
@@ -484,7 +484,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Resolved 8 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
@@ -549,7 +549,7 @@ fn test_uv_run_isolate() -> Result<()> {
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Resolved 8 packages in [TIME]
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
