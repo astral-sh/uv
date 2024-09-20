@@ -1796,7 +1796,7 @@ impl FromStr for VersionRequest {
 
         if free_threaded && s.ends_with('t') {
             // More than one trailing "t" is not allowed
-            return Err(Error::InvalidVersionRequest(format!("{}t", s)));
+            return Err(Error::InvalidVersionRequest(format!("{s}t")));
         }
 
         let Ok(version) = Version::from_str(s) else {
