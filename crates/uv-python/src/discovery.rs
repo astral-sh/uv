@@ -1,7 +1,6 @@
 use itertools::{Either, Itertools};
 use regex::Regex;
 use same_file::is_same_file;
-use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
 use std::fmt::{self, Debug, Formatter};
 use std::{env, io, iter};
@@ -431,7 +430,7 @@ fn python_executables_from_search_path<'a>(
         env::var_os("UV_TEST_PYTHON_PATH").unwrap_or(env::var_os("PATH").unwrap_or_default());
 
     let version_request = version.unwrap_or(&VersionRequest::Default);
-    let possible_names: Vec<_> = version_request.possible_names(implementation).collect();
+    let possible_names: Vec<_> = version_request.executable_names(implementation);
 
     trace!(
         "Searching PATH for executables: {}",
@@ -1475,113 +1474,111 @@ impl EnvironmentPreference {
 }
 
 impl VersionRequest {
-    pub(crate) fn default_names(&self) -> [Option<Cow<'static, str>>; 4] {
-        let (python, python3, extension) = if cfg!(windows) {
-            (
-                Cow::Borrowed("python.exe"),
-                Cow::Borrowed("python3.exe"),
-                ".exe",
-            )
+    pub(crate) fn executable_names(
+        &self,
+        implementation: Option<&ImplementationName>,
+    ) -> Vec<String> {
+        let exe = std::env::consts::EXE_SUFFIX;
+        let prerelease = if let Self::MajorMinorPrerelease(_, _, prerelease, _) = self {
+            // Include the prerelease version, e.g., `python3.8a`
+            Some(prerelease)
         } else {
-            (Cow::Borrowed("python"), Cow::Borrowed("python3"), "")
+            None
         };
 
-        match self {
-            Self::Any | Self::Default | Self::Range(_, _) => {
-                [Some(python3), Some(python), None, None]
+        let mut versions = Vec::new();
+        let major = self.major();
+        let minor = self.minor();
+        let patch = self.patch();
+        // No version numbers, e.g., `python`
+        versions.push(vec![]);
+        if let Some(major) = major.as_ref() {
+            // Collect each variant depending on the number of versions, e.g. `python3`
+            versions.push(vec![major]);
+            if let Some(minor) = minor.as_ref() {
+                // `python3.12`
+                versions.push(vec![major, minor]);
+                if let Some(patch) = patch.as_ref() {
+                    // `python3.12.1`
+                    versions.push(vec![major, minor, patch]);
+                }
             }
-            Self::Major(major, _) => [
-                Some(Cow::Owned(format!("python{major}{extension}"))),
-                Some(python),
-                None,
-                None,
-            ],
-            Self::MajorMinor(major, minor, _) => [
-                Some(Cow::Owned(format!("python{major}.{minor}{extension}"))),
-                Some(Cow::Owned(format!("python{major}{extension}"))),
-                Some(python),
-                None,
-            ],
-            Self::MajorMinorPatch(major, minor, patch, false) => [
-                Some(Cow::Owned(format!(
-                    "python{major}.{minor}.{patch}{extension}",
-                ))),
-                Some(Cow::Owned(format!("python{major}.{minor}{extension}"))),
-                Some(Cow::Owned(format!("python{major}{extension}"))),
-                Some(python),
-            ],
-            Self::MajorMinorPrerelease(major, minor, prerelease, false) => [
-                Some(Cow::Owned(format!(
-                    "python{major}.{minor}{prerelease}{extension}",
-                ))),
-                Some(Cow::Owned(format!("python{major}{extension}"))),
-                Some(python),
-                None,
-            ],
-            Self::MajorMinorPatch(major, minor, _, true)
-            | Self::MajorMinorPrerelease(major, minor, _, true) => [
-                Some(Cow::Owned(format!("python{major}.{minor}t{extension}",))),
-                Some(Cow::Owned(format!("python{major}.{minor}{extension}"))),
-                Some(Cow::Owned(format!("python{major}{extension}"))),
-                Some(python),
-            ],
+        } else {
+            // Include `3` by default, e.g., `python3`
+            versions.push(vec![&3]);
+        }
+
+        let mut basenames = Vec::new();
+        basenames.push("python");
+
+        // Collect all the implementation-specific names
+        if let Some(implementation) = implementation {
+            basenames.push(implementation.into());
+        } else {
+            // TODO: Reabse on main and do `matches!(Self::All)`
+            if true {
+                for name in ImplementationName::possible_names() {
+                    basenames.push(name);
+                }
+            }
+        }
+
+        // Create all possible suffixes
+        let mut suffixes = Vec::new();
+        if self.is_free_threaded_requested() {
+            suffixes.push("t".to_string());
+        }
+        if let Some(prerelease) = prerelease {
+            suffixes.push(prerelease.to_string());
+            if self.is_free_threaded_requested() {
+                suffixes.push(format!("{prerelease}t"));
+            }
+        }
+
+        let mut result = Vec::new();
+        for suffix in &suffixes {
+            for name in &basenames {
+                for version in &versions {
+                    let mut name = (*name).to_string();
+                    name.push_str(&version.iter().map(ToString::to_string).join("."));
+                    name.push_str(suffix);
+                    name.push_str(exe);
+                    result.push(name);
+                }
+            }
+        }
+
+        result
+    }
+
+    pub(crate) fn major(&self) -> Option<u8> {
+        match self {
+            Self::Any | Self::Default | Self::Range(_, _) => None,
+            Self::Major(major, _) => Some(*major),
+            Self::MajorMinor(major, _, _) => Some(*major),
+            Self::MajorMinorPatch(major, _, _, _) => Some(*major),
+            Self::MajorMinorPrerelease(major, _, _, _) => Some(*major),
         }
     }
 
-    pub(crate) fn possible_names<'a>(
-        &'a self,
-        implementation: Option<&'a ImplementationName>,
-    ) -> impl Iterator<Item = Cow<'static, str>> + 'a {
-        implementation
-            .into_iter()
-            .flat_map(move |implementation| {
-                let extension = std::env::consts::EXE_SUFFIX;
-                let name: &str = implementation.into();
-                let (python, python3) = if extension.is_empty() {
-                    (Cow::Borrowed(name), Cow::Owned(format!("{name}3")))
-                } else {
-                    (
-                        Cow::Owned(format!("{name}{extension}")),
-                        Cow::Owned(format!("{name}3{extension}")),
-                    )
-                };
+    pub(crate) fn minor(&self) -> Option<u8> {
+        match self {
+            Self::Any | Self::Default | Self::Range(_, _) => None,
+            Self::Major(_, _) => None,
+            Self::MajorMinor(_, minor, _) => Some(*minor),
+            Self::MajorMinorPatch(_, minor, _, _) => Some(*minor),
+            Self::MajorMinorPrerelease(_, minor, _, _) => Some(*minor),
+        }
+    }
 
-                match self {
-                    Self::Any | Self::Default | Self::Range(_, _) => {
-                        [Some(python3), Some(python), None, None]
-                    }
-                    Self::Major(major, _) => [
-                        Some(Cow::Owned(format!("{name}{major}{extension}"))),
-                        Some(python),
-                        None,
-                        None,
-                    ],
-                    Self::MajorMinor(major, minor, _) => [
-                        Some(Cow::Owned(format!("{name}{major}.{minor}{extension}"))),
-                        Some(Cow::Owned(format!("{name}{major}{extension}"))),
-                        Some(python),
-                        None,
-                    ],
-                    Self::MajorMinorPatch(major, minor, patch, _) => [
-                        Some(Cow::Owned(format!(
-                            "{name}{major}.{minor}.{patch}{extension}",
-                        ))),
-                        Some(Cow::Owned(format!("{name}{major}.{minor}{extension}"))),
-                        Some(Cow::Owned(format!("{name}{major}{extension}"))),
-                        Some(python),
-                    ],
-                    Self::MajorMinorPrerelease(major, minor, prerelease, _) => [
-                        Some(Cow::Owned(format!(
-                            "{name}{major}.{minor}{prerelease}{extension}",
-                        ))),
-                        Some(Cow::Owned(format!("{name}{major}{extension}"))),
-                        Some(python),
-                        None,
-                    ],
-                }
-            })
-            .chain(self.default_names())
-            .flatten()
+    pub(crate) fn patch(&self) -> Option<u8> {
+        match self {
+            Self::Any | Self::Default | Self::Range(_, _) => None,
+            Self::Major(_, _) => None,
+            Self::MajorMinor(_, _, _) => None,
+            Self::MajorMinorPatch(_, _, patch, _) => Some(*patch),
+            Self::MajorMinorPrerelease(_, _, _, _) => None,
+        }
     }
 
     pub(crate) fn check_supported(&self) -> Result<(), String> {

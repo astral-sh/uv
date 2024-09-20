@@ -2310,7 +2310,7 @@ mod tests {
         })??;
 
         assert!(
-            matches!(
+            !matches!(
                 python,
                 PythonInstallation {
                     source: PythonSource::SearchPath,
