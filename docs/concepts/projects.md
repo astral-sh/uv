@@ -224,7 +224,7 @@ example-packaged-app
 ├── README.md
 ├── pyproject.toml
 └── src
-    └── example_packaged-app
+    └── example_packaged_app
         └── __init__.py
 ```
 
