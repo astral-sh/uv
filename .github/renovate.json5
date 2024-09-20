@@ -26,6 +26,14 @@
       enabled: false,
     },
     {
+      // Create dedicated branches to update references to dependencies in the documentation.
+      matchPaths: ["docs/**/*.md"],
+      commitMessageTopic: "references to {{{depName}}}",
+      semanticCommitType: "docs",
+      semanticCommitScope: null,
+      additionalBranchPrefix: "docs-",
+    },
+    {
       // Group upload/download artifact updates, the versions are dependent
       groupName: "Artifact GitHub Actions dependencies",
       matchManagers: ["github-actions"],
