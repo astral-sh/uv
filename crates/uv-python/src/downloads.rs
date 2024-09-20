@@ -264,7 +264,7 @@ impl PythonDownloadRequest {
             if !version.matches_major_minor_patch(key.major, key.minor, key.patch) {
                 return false;
             }
-            if matches!(version, VersionRequest::FreeThreaded(_)) {
+            if version.is_free_threaded_requested() {
                 debug!("Installing managed free-threaded Python is not yet supported");
                 return false;
             }
