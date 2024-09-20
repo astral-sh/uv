@@ -634,16 +634,6 @@ impl InitProjectKind {
         if package {
             warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
         }
-
-        if let Some(path) = script_path.to_str() {
-            if !std::path::Path::new(path)
-                .extension()
-                .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
-            {
-                anyhow::bail!("Script must end in .py extension");
-            }
-        }
-
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
             .native_tls(native_tls);

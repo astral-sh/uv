@@ -536,7 +536,7 @@ fn init_script_create_directory() -> Result<()> {
     Ok(())
 }
 
-// Init script should fail if file path exists or doesn't end with .py
+// Init script should fail if file path exists
 #[test]
 fn init_script_file_conflicts() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -560,15 +560,6 @@ fn init_script_file_conflicts() -> Result<()> {
 
     ----- stderr -----
     error: Script already exists at name_conflict.py
-    "###);
-
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("new_issue"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Script must end in .py extension
     "###);
 
     Ok(())
