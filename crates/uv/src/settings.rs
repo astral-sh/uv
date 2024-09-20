@@ -319,6 +319,7 @@ impl ToolRunSettings {
             build,
             refresh,
             python,
+            generate_shell_completion: _,
         } = args;
 
         // If `--upgrade` was passed explicitly, warn.

@@ -197,6 +197,13 @@ jobs:
           $uv venv
           $uv pip install ruff
 
+      - name: "Smoke test completion"
+        run: |
+          uv="./target/debug/uv"
+          uvx="./target/debug/uvx"
+          eval "$($uv generate-shell-completion bash)"
+          eval "$($uvx --generate-shell-completion bash)"
+
   cargo-test-macos:
     timeout-minutes: 10
     needs: determine_changes
@@ -295,6 +302,18 @@ jobs:
           Set-Alias -Name uv -Value ./target/debug/uv
           uv venv
           uv pip install ruff
+
+      - name: "Smoke test completion"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        shell: powershell
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 2000000
+        run: |
+          Set-Alias -Name uv -Value ./target/debug/uv
+          Set-Alias -Name uvx -Value ./target/debug/uvx
+          (& uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+          (& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:

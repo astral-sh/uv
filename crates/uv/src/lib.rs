@@ -780,30 +780,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             Ok(ExitStatus::Success)
         }
         Commands::GenerateShellCompletion(args) => {
-            // uv
             args.shell.generate(&mut Cli::command(), &mut stdout());
-
-            // uvx: combine `uv tool uvx` with the top-level arguments
-            let mut uvx = Cli::command()
-                .find_subcommand("tool")
-                .unwrap()
-                .find_subcommand("uvx")
-                .unwrap()
-                .clone()
-                // Avoid duplicating the `--help` and `--version` flags from the top-level arguments.
-                .disable_help_flag(true)
-                .disable_version_flag(true)
-                .version(env!("CARGO_PKG_VERSION"));
-
-            // Copy the top-level arguments into the `uvx` command. (Like `Args::augment_args`, but
-            // expanded to skip collisions.)
-            for arg in TopLevelArgs::command().get_arguments() {
-                if arg.get_id() != "isolated" {
-                    uvx = uvx.arg(arg);
-                }
-            }
-            args.shell.generate(&mut uvx, &mut stdout());
-
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
@@ -815,6 +792,30 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 // OK guarded by the outer match statement
                 _ => unreachable!(),
             };
+
+            if let Some(shell) = args.generate_shell_completion {
+                // uvx: combine `uv tool uvx` with the top-level arguments
+                let mut uvx = Cli::command()
+                    .find_subcommand("tool")
+                    .unwrap()
+                    .find_subcommand("uvx")
+                    .unwrap()
+                    .clone()
+                    // Avoid duplicating the `--help` and `--version` flags from the top-level arguments.
+                    .disable_help_flag(true)
+                    .disable_version_flag(true)
+                    .version(env!("CARGO_PKG_VERSION"));
+
+                // Copy the top-level arguments into the `uvx` command. (Like `Args::augment_args`, but
+                // expanded to skip collisions.)
+                for arg in TopLevelArgs::command().get_arguments() {
+                    if arg.get_id() != "isolated" {
+                        uvx = uvx.arg(arg);
+                    }
+                }
+                shell.generate(&mut uvx, &mut stdout());
+                return Ok(ExitStatus::Success);
+            }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::ToolRunSettings::resolve(args, filesystem, invocation_source);
