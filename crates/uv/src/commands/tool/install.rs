@@ -276,13 +276,25 @@ pub(crate) async fn install(
         installed_tools
             .get_environment(&from.name, &cache)?
             .filter(|environment| {
+                let same_interpreter: bool;
+
                 // NOTE(lucab): this compares `base_prefix` paths as a proxy for
                 // detecting interpreters mismatches. Directly comparing interpreters
                 // (by paths or binaries on-disk) would result in several false
                 // positives on Windows due to file-copying and shims.
-                let old_base_prefix = environment.interpreter().sys_base_prefix();
-                let selected_base_prefix = interpreter.sys_base_prefix();
-                if old_base_prefix == selected_base_prefix {
+                #[cfg(target_os="windows")]
+                {
+                    let old_base_prefix = environment.interpreter().sys_base_prefix();
+                    let selected_base_prefix = interpreter.sys_base_prefix();
+                    same_interpreter = old_base_prefix == selected_base_prefix;
+                }
+                #[cfg(not(target_os="windows"))]
+                {
+                    same_interpreter = environment.interpreter().sys_executable() == interpreter.sys_executable()
+                        || same_file::is_same_file(environment.interpreter().sys_executable(), interpreter.sys_executable()).unwrap_or(false);
+                }
+
+                if same_interpreter {
                     trace!(
                         "Existing interpreter matches the requested interpreter for `{}`: {}",
                         from.name,
