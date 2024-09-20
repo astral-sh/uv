@@ -1,0 +1,151 @@
+[project]
+name = "saleor"
+version = "3.21.0-a.0"
+description = "A modular, high performance, headless e-commerce platform built with Python, GraphQL, Django, and React."
+authors = [ "Saleor Commerce <hello@saleor.io>" ]
+license = "BSD-3-Clause"
+readme = "README.md"
+homepage = "https://saleor.io/"
+repository = "https://github.com/saleor/saleor"
+documentation = "https://docs.saleor.io/"
+requires-python = ">=3.12"
+
+dependencies = [
+  "chevron-blue>=0.2.1,<0.3.0",
+  "hatchling>=1.20.0,<2.0.0",
+  "msgspec>=0.18.4,<0.19.0",
+  "pypiserver>=2.0.1,<3.0.0",
+  "pyyaml>=6.0.1,<7.0.0",
+  "setuptools>=71.1.0,<72.0.0",
+  "twine>=4.0.2,<5.0.0",
+  "watchfiles>=0.21.0,<0.22.0",
+  "adyen>=4.0.0,<5.0.0",
+  "authlib>=1.3.1,<2.0.0",
+  "rx>=1.6.3,<2.0.0",
+  "aniso8601>=7.0.0,<8.0.0",
+  "asgiref>=3.7.2,<4.0.0",
+  "azure-common>=1.1.28,<2.0.0",
+  "azure-storage-blob>=12.12.0,<13.0.0",
+  "azure-storage-common>=2.1.0,<3.0.0",
+  "babel>=2.8,<2.15",
+  "boto3>=1.28,<2.0",
+  "botocore>=1.34,<2.0",
+  "braintree>=4.2,<4.30",
+  "celery[redis]>=4.4.5,<6.0.0",
+  "cryptography>=42.0.5,<43.0.0",
+  "dj-database-url>=2,<3",
+  "dj-email-url>=1,<2",
+  "django-cache-url>=3.1.2,<4.0.0",
+  "django-celery-beat>=2.2.1,<3.0.0",
+  "django-countries>=7.2,<8.0",
+  "django-filter>=23.1,<24.0",
+  "django-measurement>=3.0,<4.0",
+  "django-mptt>=0,<1",
+  "django-phonenumber-field>=4,<8",
+  "django-prices>=2.3,<3.0",
+  "django-storages[google]>=1.11,<2.0",
+  "django-stubs-ext>=4.2.1,<5.0.0",
+  "django[bcrypt]>=4.2,<5.0",
+  "draftjs-sanitizer>=1.0.0,<2.0.0",
+  "faker>=26.0.0,<27.0",
+  "google-cloud-pubsub>=1.7,<3.0",
+  "google-cloud-storage>=2.0.0,<3.0.0",
+  "google-i18n-address>=3.1.0,<4.0.0",
+  "graphene<3.0",
+  "graphql-core>=2.3.2,<3.0.0",
+  "graphql-relay>=2.0.1,<3.0.0",
+  "gunicorn>=22.0.0,<23.0.0",
+  "html-to-draftjs>=1.0.1,<2.0.0",
+  "html2text>=2024.2.26,<2025.0.0",
+  "jaeger-client>=4.5.0,<5.0.0",
+  "lxml>=4.9.3,<5.0.0",
+  "markdown>=3.1.1,<4.0.0",
+  "measurement>=3.2.2,<4.0.0",
+  "micawber>=0.5.5,<0.6.0",
+  "oauthlib>=3.1,<4.0",
+  "opentracing>=2.3.0,<3.0.0",
+  "petl==1.7.15",
+  "phonenumberslite>=8.12.25,<9.0.0",
+  "pillow>=10.3.0,<11.0.0",
+  "pillow-avif-plugin>=1.3.1,<2.0.0",
+  "posuto>=2024.7.0,<2025.0.0",
+  "prices>=1.0,<2.0",
+  "promise>=2.3,<3.0",
+  "psycopg[binary]>=3.1.8,<4.0.0",
+  "pybars3>=0.9.7,<0.10.0",
+  "pyjwt>=2.9.0,<3.0.0",
+  "python-dateutil>=2.8.2,<3.0.0",
+  "python-http-client>=3.3.7,<4.0.0",
+  "python-json-logger>=0.1.11,<2.1.0",
+  "python-magic>=0.4.27,<0.5.0 ; sys_platform != 'win32'",
+  "python-magic-bin>=0.4.14,<0.5.0 ; sys_platform == 'win32'",
+  "pytimeparse>=1.1.8,<2.0.0",
+  "pytz>=2024.1,<2025.0",
+  "razorpay>=1.2,<2.0",
+  "redis>=5.0.1,<6.0.0",
+  "requests>=2.32,<3.0",
+  "requests-hardened==1.0.0b3",
+  "semantic-version>=2.10.0,<3.0.0",
+  "sendgrid>=6.7.1,<7.0.0",
+  "sentry-sdk>=2.12,<3.0",
+  "stripe>=3.0.0,<4.0.0",
+  "text-unidecode>=1.2,<2.0",
+  "urllib3>=1.26.19,<2.0.0",
+  "uvicorn[standard]>=0.23.1,<0.24.0",
+]
+
+[tool.deptry]
+extend_exclude = ["conftest\\.py", ".*/conftest\\.py", ".*/tests/.*", "vendored/.*"]
+
+[tool.deptry.package_module_name_map]
+graphql-core = "graphql"
+pillow = "PIL"
+python-magic-bin = "magic"
+
+[tool.deptry.per_rule_ignores]
+DEP001 = ["pkg_resources"]
+DEP002 = ["azure-common", "azure-storage-blob", "azure-storage-common", "django-redis", "gunicorn", "psycopg", "pyxb"]
+DEP004 = ["debug_toolbar", "graphiql_debug_toolbar"]
+
+[tool.django-stubs]
+django_settings_module = "saleor.settings"
+
+[tool.mypy]
+allow_untyped_globals = true
+allow_redefinition = true
+check_untyped_defs = true
+ignore_missing_imports = true
+pretty = true
+show_column_numbers = true
+show_error_codes = true
+show_error_context = true
+show_traceback = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+plugins = [
+  "mypy_django_plugin.main"
+]
+
+exclude = [
+  "tests/",
+  "vendored/"
+]
+
+[[tool.mypy.overrides]]
+module = ["saleor.*.migrations.*"]
+ignore_errors = true
+
+
+[tool.ruff]
+extend-exclude = ["vendored"]
+lint.extend-select = ["D", "I", "ISC001", "ISC002", "PIE", "PT", "T20", "UP"]
+lint.ignore = ["D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107", "D202", "D203", "D206", "D213", "D407", "PT019"]
+target-version = "py39"
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[tool.ruff.lint.isort]
+known-first-party = ["saleor"]
