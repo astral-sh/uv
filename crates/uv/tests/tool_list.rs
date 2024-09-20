@@ -159,7 +159,7 @@ fn tool_list_bad_environment() -> Result<()> {
     - ruff
 
     ----- stderr -----
-    Python interpreter not found at `[TEMP_DIR]/tools/black/[BIN]/python`
+    Invalid environment at `tools/black`: missing Python executable at `tools/black/[BIN]/python`
     "###
     );
 
