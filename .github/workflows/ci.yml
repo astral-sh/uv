@@ -44,9 +44,9 @@ jobs:
               - "docs/reference/cli.md"
               - "docs/reference/settings.md"
               - "uv.schema.json"
-  cargo-fmt:
+  lint:
     timeout-minutes: 10
-    name: "cargo fmt"
+    name: "lint"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +57,9 @@ jobs:
 
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v3
 
       - name: "rustfmt"
         run: cargo fmt --all --check
@@ -69,27 +72,13 @@ jobs:
       - name: "README check"
         run: python scripts/transform_readme.py --target pypi
 
-  python-lint:
-    timeout-minutes: 10
-    name: "Python lint"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
-
-      - name: "Install uv"
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-
-      - name: "Format"
+      - name: "Python format"
         run: uvx ruff format --diff .
 
-      - name: "Lint"
+      - name: "Python lint"
         run: uvx ruff check .
 
-      - name: "Type check"
+      - name: "Python type check"
         run: uvx mypy
 
   cargo-clippy:
@@ -186,6 +175,7 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
+          # astral-sh/setup-uv sets `UV_CACHE_DIR` which disrupts the help message check
           curl -LsSf https://astral.sh/uv/install.sh | sh
           uv python install
 
@@ -207,6 +197,13 @@ jobs:
           $uv venv
           $uv pip install ruff
 
+      - name: "Smoke test completion"
+        run: |
+          uv="./target/debug/uv"
+          uvx="./target/debug/uvx"
+          eval "$($uv generate-shell-completion bash)"
+          eval "$($uvx --generate-shell-completion bash)"
+
   cargo-test-macos:
     timeout-minutes: 10
     needs: determine_changes
@@ -226,6 +223,7 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
+          # astral-sh/setup-uv sets `UV_CACHE_DIR` which disrupts the help message check
           curl -LsSf https://astral.sh/uv/install.sh | sh
           uv python install
 
@@ -304,6 +302,18 @@ jobs:
           Set-Alias -Name uv -Value ./target/debug/uv
           uv venv
           uv pip install ruff
+
+      - name: "Smoke test completion"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        shell: powershell
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 2000000
+        run: |
+          Set-Alias -Name uv -Value ./target/debug/uv
+          Set-Alias -Name uvx -Value ./target/debug/uvx
+          (& uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+          (& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
@@ -1362,7 +1372,7 @@ jobs:
         run: echo $(which python)
 
       - name: "Validate global Python install"
-        run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe --python 3.13
+        run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-choco:
     timeout-minutes: 10
@@ -1441,7 +1451,7 @@ jobs:
         run: echo $(which python3.13)
 
       - name: "Validate global Python install"
-        run: python3.13 scripts/check_system_python.py --uv ./uv --python 3.13
+        run: python3.13 scripts/check_system_python.py --uv ./uv
 
   system-test-conda:
     timeout-minutes: 10

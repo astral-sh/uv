@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
 use std::sync::Arc;
 
+use indexmap::IndexSet;
 use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Range, Reporter};
 use rustc_hash::FxHashMap;
 
@@ -248,15 +249,18 @@ impl std::fmt::Display for NoSolutionError {
         write!(f, "{report}")?;
 
         // Include any additional hints.
-        for hint in formatter.hints(
-            &self.error,
+        let mut additional_hints = IndexSet::default();
+        formatter.generate_hints(
+            &tree,
             &self.selector,
             &self.index_locations,
             &self.unavailable_packages,
             &self.incomplete_packages,
             &self.fork_urls,
             &self.markers,
-        ) {
+            &mut additional_hints,
+        );
+        for hint in additional_hints {
             write!(f, "\n\n{hint}")?;
         }
 

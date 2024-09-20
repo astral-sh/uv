@@ -227,7 +227,7 @@ pub enum ErrorKind {
     ArchiveRead(String),
 
     #[error("Writing to cache archive failed: {0}")]
-    ArchiveWrite(#[source] crate::rkyvutil::SerializerError),
+    ArchiveWrite(String),
 
     #[error("Network connectivity is disabled, but the requested data wasn't found in the cache for: `{0}`")]
     Offline(String),

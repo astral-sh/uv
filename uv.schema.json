@@ -1230,9 +1230,13 @@
             },
             "subdirectory": {
               "description": "The path to the directory with the `pyproject.toml`, if it's not in the archive root.",
-              "type": [
-                "string",
-                "null"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/String"
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "tag": {
@@ -1253,9 +1257,13 @@
           "properties": {
             "subdirectory": {
               "description": "For source distributions, the path to the directory with the `pyproject.toml`, if it's not in the archive root.",
-              "type": [
-                "string",
-                "null"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/String"
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "url": {
@@ -1280,7 +1288,7 @@
               ]
             },
             "path": {
-              "type": "string"
+              "$ref": "#/definitions/String"
             }
           },
           "additionalProperties": false
@@ -1336,7 +1344,7 @@
               "type": "string"
             },
             "path": {
-              "type": "string"
+              "$ref": "#/definitions/String"
             },
             "rev": {
               "type": [
@@ -1345,9 +1353,13 @@
               ]
             },
             "subdirectory": {
-              "type": [
-                "string",
-                "null"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/String"
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "tag": {

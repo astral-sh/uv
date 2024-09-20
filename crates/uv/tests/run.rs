@@ -56,7 +56,7 @@ fn run_with_python_version() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -106,7 +106,7 @@ fn run_with_python_version() -> Result<()> {
     ----- stderr -----
     Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
     Removed virtual environment at: .venv
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 4 packages in [TIME]
@@ -1364,7 +1364,7 @@ fn run_from_directory() -> Result<()> {
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1463,7 +1463,7 @@ fn run_isolated_python_version() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]

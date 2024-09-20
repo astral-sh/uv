@@ -5,6 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
+use std::path::Path;
 
 use crate::common::{decode_token, packse_index_url};
 use common::{uv_snapshot, TestContext};
@@ -2019,7 +2020,7 @@ fn add_path() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    let child = workspace.child("child");
+    let child = workspace.child("packages").child("child");
     child.child("pyproject.toml").write_str(indoc! {r#"
         [project]
         name = "child"
@@ -2032,18 +2033,18 @@ fn add_path() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("./child").current_dir(workspace.path()), @r###"
+    uv_snapshot!(context.filters(), context.add().arg(Path::new("packages").join("child")).current_dir(workspace.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/workspace/child)
+     + child==0.1.0 (from file://[TEMP_DIR]/workspace/packages/child)
      + parent==0.1.0 (from file://[TEMP_DIR]/workspace)
     "###);
 
@@ -2067,7 +2068,7 @@ fn add_path() -> Result<()> {
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
-        child = { path = "child" }
+        child = { path = "packages/child" }
         "###
         );
     });
@@ -2089,7 +2090,7 @@ fn add_path() -> Result<()> {
         [[package]]
         name = "child"
         version = "0.1.0"
-        source = { directory = "child" }
+        source = { directory = "packages/child" }
 
         [[package]]
         name = "parent"
@@ -2100,7 +2101,7 @@ fn add_path() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "child", directory = "child" }]
+        requires-dist = [{ name = "child", directory = "packages/child" }]
         "###
         );
     });

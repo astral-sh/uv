@@ -36,8 +36,13 @@ use crate::{Interpreter, PythonVersion};
 /// See [`PythonRequest::from_str`].
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum PythonRequest {
-    /// Use any discovered Python installation
+    /// An appropriate default Python installation
+    ///
+    /// This may skip some Python installations, such as pre-release versions or alternative
+    /// implementations.
     #[default]
+    Default,
+    /// Any Python installation
     Any,
     /// A Python version without an implementation name e.g. `3.10` or `>=3.12,<3.13`
     Version(VersionRequest),
@@ -131,7 +136,10 @@ pub enum EnvironmentPreference {
 /// A Python discovery version request.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum VersionRequest {
+    /// Allow an appropriate default Python version.
     #[default]
+    Default,
+    /// Allow any Python version.
     Any,
     Major(u8, bool),
     MajorMinor(u8, u8, bool),
@@ -422,7 +430,7 @@ fn python_executables_from_search_path<'a>(
     let search_path =
         env::var_os("UV_TEST_PYTHON_PATH").unwrap_or(env::var_os("PATH").unwrap_or_default());
 
-    let version_request = version.unwrap_or(&VersionRequest::Any);
+    let version_request = version.unwrap_or(&VersionRequest::Default);
     let possible_names: Vec<_> = version_request.possible_names(implementation).collect();
 
     trace!(
@@ -484,7 +492,10 @@ fn find_all_minor(
     dir: &Path,
 ) -> impl Iterator<Item = PathBuf> {
     match version_request {
-        VersionRequest::Any | VersionRequest::Major(_, _) | VersionRequest::Range(_) => {
+        &VersionRequest::Any
+        | VersionRequest::Default
+        | VersionRequest::Major(_, _)
+        | VersionRequest::Range(_) => {
             let regex = if let Some(implementation) = implementation {
                 Regex::new(&format!(
                     r"^({}|python3)\.(?<minor>\d\d?)t?{}$",
@@ -777,8 +788,30 @@ pub fn find_python_installations<'a>(
             }
         }
         PythonRequest::Any => Box::new({
-            debug!("Searching for Python interpreter in {preference}");
-            python_interpreters(None, None, environments, preference, cache).map(|result| {
+            debug!("Searching for any Python interpreter in {preference}");
+            python_interpreters(
+                Some(&VersionRequest::Any),
+                None,
+                environments,
+                preference,
+                cache,
+            )
+            .map(|result| {
+                result
+                    .map(PythonInstallation::from_tuple)
+                    .map(FindPythonResult::Ok)
+            })
+        }),
+        PythonRequest::Default => Box::new({
+            debug!("Searching for default Python interpreter in {preference}");
+            python_interpreters(
+                Some(&VersionRequest::Default),
+                None,
+                environments,
+                preference,
+                cache,
+            )
+            .map(|result| {
                 result
                     .map(PythonInstallation::from_tuple)
                     .map(FindPythonResult::Ok)
@@ -975,8 +1008,8 @@ pub fn find_best_python_installation(
     }
 
     // If a Python version was requested but cannot be fulfilled, just take any version
-    debug!("Looking for Python installation with any version");
-    let request = PythonRequest::Any;
+    debug!("Looking for a default Python installation");
+    let request = PythonRequest::Default;
     Ok(
         find_python_installation(&request, environments, preference, cache)?.map_err(|err| {
             // Use a more general error in this case since we looked for multiple versions
@@ -1140,9 +1173,12 @@ impl PythonRequest {
     ///
     /// This cannot fail, which means weird inputs will be parsed as [`PythonRequest::File`] or [`PythonRequest::ExecutableName`].
     pub fn parse(value: &str) -> Self {
-        // e.g. `any`
+        // Literals, e.g. `any` or `default`
         if value.eq_ignore_ascii_case("any") {
             return Self::Any;
+        }
+        if value.eq_ignore_ascii_case("default") {
+            return Self::Default;
         }
 
         // e.g. `3.12.1`, `312`, or `>=3.12`
@@ -1246,7 +1282,7 @@ impl PythonRequest {
         }
 
         match self {
-            PythonRequest::Any => true,
+            PythonRequest::Default | PythonRequest::Any => true,
             PythonRequest::Version(version_request) => {
                 version_request.matches_interpreter(interpreter)
             }
@@ -1330,7 +1366,8 @@ impl PythonRequest {
 
     pub(crate) fn allows_prereleases(&self) -> bool {
         match self {
-            Self::Any => false,
+            Self::Default => false,
+            Self::Any => true,
             Self::Version(version) => version.allows_prereleases(),
             Self::Directory(_) | Self::File(_) | Self::ExecutableName(_) => true,
             Self::Implementation(_) => false,
@@ -1349,6 +1386,7 @@ impl PythonRequest {
     pub fn to_canonical_string(&self) -> String {
         match self {
             Self::Any => "any".to_string(),
+            Self::Default => "default".to_string(),
             Self::Version(version) => version.to_string(),
             Self::Directory(path) => path.display().to_string(),
             Self::File(path) => path.display().to_string(),
@@ -1370,8 +1408,9 @@ impl PythonSource {
     /// Whether a pre-release Python installation from the source should be used without opt-in.
     pub(crate) fn allows_prereleases(self) -> bool {
         match self {
-            Self::Managed | Self::Registry | Self::SearchPath | Self::MicrosoftStore => false,
-            Self::CondaPrefix
+            Self::Managed | Self::Registry | Self::MicrosoftStore => false,
+            Self::SearchPath
+            | Self::CondaPrefix
             | Self::ProvidedPath
             | Self::ParentInterpreter
             | Self::ActiveEnvironment
@@ -1448,7 +1487,7 @@ impl VersionRequest {
         };
 
         match self {
-            Self::Any | Self::Range(_) => [Some(python3), Some(python), None, None],
+            Self::Any | Self::Default | Self::Range(_) => [Some(python3), Some(python), None, None],
             Self::Major(major, false) => [
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
@@ -1527,7 +1566,9 @@ impl VersionRequest {
                 };
 
                 match self {
-                    Self::Any | Self::Range(_) => [Some(python3), Some(python), None, None],
+                    Self::Any | Self::Default | Self::Range(_) => {
+                        [Some(python3), Some(python), None, None]
+                    }
                     Self::Major(major, _) => [
                         Some(Cow::Owned(format!("{name}{major}{extension}"))),
                         Some(python),
@@ -1564,7 +1605,7 @@ impl VersionRequest {
 
     pub(crate) fn check_supported(&self) -> Result<(), String> {
         match self {
-            Self::Any => (),
+            Self::Any | Self::Default => (),
             Self::Major(major, _) => {
                 if *major < 3 {
                     return Err(format!(
@@ -1604,7 +1645,7 @@ impl VersionRequest {
     pub(crate) fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
         // TODO allow free_threaded when their is no other option
         match self {
-            Self::Any => true,
+            Self::Any | Self::Default => true,
             Self::Major(major, free_threaded) => interpreter.python_major() == *major,
             Self::MajorMinor(major, minor, free_threaded) => {
                 (
@@ -1642,7 +1683,7 @@ impl VersionRequest {
 
     pub(crate) fn matches_version(&self, version: &PythonVersion) -> bool {
         match self {
-            Self::Any => true,
+            Self::Any | Self::Default => true,
             Self::Major(major, _) => version.major() == *major,
             Self::MajorMinor(major, minor, _) => {
                 (version.major(), version.minor()) == (*major, *minor)
@@ -1661,7 +1702,7 @@ impl VersionRequest {
 
     fn matches_major_minor(&self, major: u8, minor: u8) -> bool {
         match self {
-            Self::Any => true,
+            Self::Any | Self::Default => true,
             Self::Major(self_major, _) => *self_major == major,
             Self::MajorMinor(self_major, self_minor, _) => {
                 (*self_major, *self_minor) == (major, minor)
@@ -1680,7 +1721,7 @@ impl VersionRequest {
 
     pub(crate) fn matches_major_minor_patch(&self, major: u8, minor: u8, patch: u8) -> bool {
         match self {
-            Self::Any => true,
+            Self::Any | Self::Default => true,
             Self::Major(self_major, _) => *self_major == major,
             Self::MajorMinor(self_major, self_minor, _) => {
                 (*self_major, *self_minor) == (major, minor)
@@ -1703,7 +1744,7 @@ impl VersionRequest {
     /// Return true if a patch version is present in the request.
     fn has_patch(&self) -> bool {
         match self {
-            Self::Any => false,
+            Self::Any | Self::Default => false,
             Self::Major(..) => false,
             Self::MajorMinor(..) => false,
             Self::MajorMinorPatch(..) => true,
@@ -1718,6 +1759,7 @@ impl VersionRequest {
     #[must_use]
     fn without_patch(self) -> Self {
         match self {
+            Self::Default => Self::Default,
             Self::Any => Self::Any,
             Self::Major(major, free_threaded) => Self::Major(major, free_threaded),
             Self::MajorMinor(major, minor, free_threaded) => {
@@ -1736,7 +1778,8 @@ impl VersionRequest {
     /// Whether this request should allow selection of pre-release versions.
     pub(crate) fn allows_prereleases(&self) -> bool {
         match self {
-            Self::Any => false,
+            Self::Default => false,
+            Self::Any => true,
             Self::Major(_) => true,
             Self::MajorMinor(..) => true,
             Self::MajorMinorPatch(..) => true,
@@ -1840,7 +1883,8 @@ impl From<&PythonVersion> for VersionRequest {
 impl fmt::Display for VersionRequest {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Any => f.write_str("default"),
+            Self::Any => f.write_str("any"),
+            Self::Default => f.write_str("default"),
             Self::Major(major, false) => write!(f, "{major}"),
             Self::Major(major, true) => write!(f, "{major}t"),
             Self::MajorMinor(major, minor, false) => write!(f, "{major}.{minor}"),
@@ -1865,6 +1909,7 @@ impl fmt::Display for VersionRequest {
 impl fmt::Display for PythonRequest {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Default => write!(f, "a default Python"),
             Self::Any => write!(f, "any Python"),
             Self::Version(version) => write!(f, "Python {version}"),
             Self::Directory(path) => write!(f, "directory `{}`", path.user_display()),
@@ -1947,7 +1992,7 @@ impl fmt::Display for PythonNotFound {
         };
 
         match self.request {
-            PythonRequest::Any => {
+            PythonRequest::Default | PythonRequest::Any => {
                 write!(f, "No interpreter found in {sources}")
             }
             _ => {
@@ -2026,6 +2071,7 @@ mod tests {
     #[test]
     fn interpreter_request_from_str() {
         assert_eq!(PythonRequest::parse("any"), PythonRequest::Any);
+        assert_eq!(PythonRequest::parse("default"), PythonRequest::Default);
         assert_eq!(
             PythonRequest::parse("3.12"),
             PythonRequest::Version(VersionRequest::from_str("3.12").unwrap())
@@ -2191,6 +2237,7 @@ mod tests {
 
     #[test]
     fn interpreter_request_to_canonical_string() {
+        assert_eq!(PythonRequest::Default.to_canonical_string(), "default");
         assert_eq!(PythonRequest::Any.to_canonical_string(), "any");
         assert_eq!(
             PythonRequest::Version(VersionRequest::from_str("3.12").unwrap()).to_canonical_string(),

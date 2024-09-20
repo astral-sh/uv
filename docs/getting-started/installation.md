@@ -186,6 +186,24 @@ To enable shell autocompletion for uv commands, run one of the following:
     Add-Content -Path $PROFILE -Value '(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression'
     ```
 
+To enable shell autocompletion for uvx, run one of the following:
+
+=== "Linux and macOS"
+
+    ```bash
+    # Determine your shell (e.g., with `echo $SHELL`), then run one of:
+    echo 'eval "$(uvx --generate-shell-completion bash)"' >> ~/.bashrc
+    echo 'eval "$(uvx --generate-shell-completion zsh)"' >> ~/.zshrc
+    echo 'uvx --generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    echo 'eval (uvx --generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
+    ```
+
+=== "Windows"
+
+    ```powershell
+    Add-Content -Path $PROFILE -Value '(& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression'
+    ```
+
 Then restart the shell or source the shell config file.
 
 ## Uninstallation

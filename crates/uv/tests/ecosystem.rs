@@ -73,6 +73,12 @@ fn warehouse() -> Result<()> {
     lock_ecosystem_package("3.11", "warehouse")
 }
 
+// Source: https://github.com/saleor/saleor/blob/6e6f3eee4f6a33b64c3d05348215062ca732c1ca/pyproject.toml
+#[test]
+fn saleor() -> Result<()> {
+    lock_ecosystem_package("3.12", "saleor")
+}
+
 // Currently ignored because the project doesn't build with `uv` yet.
 //
 // Source: https://github.com/apache/airflow/blob/c55438d9b2eb9b6680641eefdd0cbc67a28d1d29/pyproject.toml
@@ -80,15 +86,6 @@ fn warehouse() -> Result<()> {
 #[test]
 fn airflow() -> Result<()> {
     lock_ecosystem_package("3.12", "airflow")
-}
-
-// Currently ignored because the project doesn't build with `uv` yet.
-//
-// Source: https://github.com/pretix/pretix/blob/a682eab18e9421dc0aff18a6ed8495aa3c75c39b/pyproject.toml
-#[ignore]
-#[test]
-fn pretix() -> Result<()> {
-    lock_ecosystem_package("3.12", "pretix")
 }
 
 /// Does a lock on the given ecosystem package for the given name. That

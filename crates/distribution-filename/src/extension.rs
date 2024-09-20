@@ -25,8 +25,7 @@ pub enum DistExtension {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 pub enum SourceDistExtension {
     Zip,
     TarGz,
