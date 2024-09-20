@@ -2752,3 +2752,54 @@ fn sync_invalid_environment() -> Result<()> {
 
     Ok(())
 }
+
+/// Avoid validating workspace members when `--no-sources` is provided. Rather than reporting that
+/// `./anyio` is missing, install `anyio` from the registry.
+#[test]
+fn sync_no_sources_missing_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        anyio = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["anyio"]
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + root==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
