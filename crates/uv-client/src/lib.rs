@@ -7,7 +7,7 @@ pub use registry_client::{
     Connectivity, RegistryClient, RegistryClientBuilder, SimpleMetadata, SimpleMetadatum,
     VersionFiles,
 };
-pub use rkyvutil::OwnedArchive;
+pub use rkyvutil::{Deserializer, OwnedArchive, Serializer, Validator};
 
 mod base_client;
 mod cached_client;

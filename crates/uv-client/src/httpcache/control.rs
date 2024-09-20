@@ -20,8 +20,7 @@ use crate::rkyvutil::OwnedArchive;
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 #[allow(clippy::struct_excessive_bools)]
 pub struct CacheControl {
     // directives for requests and responses

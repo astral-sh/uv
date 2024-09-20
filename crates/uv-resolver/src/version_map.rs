@@ -1,5 +1,4 @@
 use pubgrub::Range;
-use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::sync::OnceLock;
 use tracing::instrument;
@@ -57,9 +56,7 @@ impl VersionMap {
         // from a `VersionFiles` to a PrioritizedDist for each version
         // isn't done until that specific version is requested.
         for (datum_index, datum) in simple_metadata.iter().enumerate() {
-            let version: Version = datum
-                .version
-                .deserialize(&mut SharedDeserializeMap::new())
+            let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)
                 .expect("archived version always deserializes");
             stable |= version.is_stable();
             map.insert(
@@ -375,13 +372,14 @@ impl VersionMapLazy {
         simple: &'p SimplePrioritizedDist,
     ) -> Option<&'p PrioritizedDist> {
         let get_or_init = || {
-            let files: VersionFiles = self
-                .simple_metadata
-                .datum(simple.datum_index)
-                .expect("index to lazy dist is correct")
-                .files
-                .deserialize(&mut SharedDeserializeMap::new())
-                .expect("archived version files should deserialize");
+            let files = rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(
+                &self
+                    .simple_metadata
+                    .datum(simple.datum_index)
+                    .expect("index to lazy dist is correct")
+                    .files,
+            )
+            .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
             for (filename, file) in files.all() {
                 // Support resolving as if it were an earlier timestamp, at least as long files have

@@ -351,11 +351,11 @@ impl TestContext {
         // Make virtual environment activation cross-platform and shell-agnostic
         filters.push((
             r"Activate with: (.*)\\Scripts\\activate".to_string(),
-            "Activate with: source $1/bin/activate".to_string(),
+            "Activate with: source $1/[BIN]/activate".to_string(),
         ));
         filters.push((
-            r"Activate with: source .venv/bin/activate(?:\.\w+)".to_string(),
-            "Activate with: source .venv/bin/activate".to_string(),
+            r"Activate with: source (.*)/bin/activate(?:\.\w+)?".to_string(),
+            "Activate with: source $1/[BIN]/activate".to_string(),
         ));
 
         // Account for [`Simplified::user_display`] which is relative to the command working directory

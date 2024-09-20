@@ -24,8 +24,7 @@ pub enum FileConversionError {
 #[derive(
     Debug, Clone, Hash, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 pub struct File {
     pub dist_info_metadata: bool,
     pub filename: String,
@@ -72,8 +71,7 @@ impl File {
 #[derive(
     Debug, Clone, Hash, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 pub enum FileLocation {
     /// URL relative to the base URL.
     RelativeUrl(String, String),
@@ -150,8 +148,7 @@ impl Display for FileLocation {
     rkyv::Serialize,
 )]
 #[serde(transparent)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 pub struct UrlString(String);
 
 impl UrlString {
