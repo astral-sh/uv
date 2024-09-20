@@ -5,7 +5,7 @@ pub use crate::discovery::{
     find_python_installations, EnvironmentPreference, Error as DiscoveryError, PythonDownloads,
     PythonNotFound, PythonPreference, PythonRequest, PythonSource, VersionRequest,
 };
-pub use crate::environment::PythonEnvironment;
+pub use crate::environment::{InvalidEnvironment, InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::ImplementationName;
 pub use crate::installation::{PythonInstallation, PythonInstallationKey};
 pub use crate::interpreter::{Error as InterpreterError, Interpreter};

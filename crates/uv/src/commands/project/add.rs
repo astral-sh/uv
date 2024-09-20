@@ -571,7 +571,7 @@ pub(crate) async fn add(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
             let header = err.header();
-            let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If this is intentional, run `uv add --frozen` to skip the lock and sync steps.") });
+            let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.") });
             anstream::eprint!("{report:?}");
 
             // Revert the changes to the `pyproject.toml`, if necessary.

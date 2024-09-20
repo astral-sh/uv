@@ -1509,14 +1509,15 @@ impl VersionRequest {
         }
 
         let mut basenames = Vec::new();
+        // Always search for `python` executables
         basenames.push("python");
 
         // Collect all the implementation-specific names
         if let Some(implementation) = implementation {
             basenames.push(implementation.into());
         } else {
-            // TODO: Reabse on main and do `matches!(Self::All)`
-            if true {
+            // When looking for all implementations, include all possible names
+            if matches!(self, Self::Any) {
                 for name in ImplementationName::possible_names() {
                     basenames.push(name);
                 }

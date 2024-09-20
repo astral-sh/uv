@@ -258,6 +258,7 @@ impl std::fmt::Display for NoSolutionError {
             &self.incomplete_packages,
             &self.fork_urls,
             &self.markers,
+            &self.workspace_members,
             &mut additional_hints,
         );
         for hint in additional_hints {

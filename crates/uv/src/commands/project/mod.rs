@@ -19,8 +19,8 @@ use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{
     NamedRequirementsError, NamedRequirementsResolver, RequirementsSpecification,
@@ -120,8 +120,8 @@ pub(crate) enum ProjectError {
     #[error("Environment marker is empty")]
     EmptyEnvironment,
 
-    #[error("Project virtual environment directory `{0}` cannot be used because it is not a virtual environment and is non-empty")]
-    InvalidProjectEnvironmentDir(PathBuf),
+    #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
+    InvalidProjectEnvironmentDir(PathBuf, String),
 
     #[error("Failed to parse `pyproject.toml`")]
     TomlParse(#[source] toml::de::Error),
@@ -393,12 +393,26 @@ impl FoundInterpreter {
                 }
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
-            Err(uv_python::Error::InvalidEnvironment(_)) => {
+            Err(uv_python::Error::InvalidEnvironment(inner)) => {
                 // If there's an invalid environment with existing content, we error instead of
-                // deleting it later on.
-                if fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some()) {
-                    return Err(ProjectError::InvalidProjectEnvironmentDir(venv));
-                }
+                // deleting it later on
+                match inner.kind {
+                    InvalidEnvironmentKind::NotDirectory => {
+                        return Err(ProjectError::InvalidProjectEnvironmentDir(
+                            venv,
+                            inner.kind.to_string(),
+                        ))
+                    }
+                    InvalidEnvironmentKind::MissingExecutable(_) => {
+                        if fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some()) {
+                            return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                venv,
+                                "because it is not a valid Python environment (no Python executable was found)"
+                                    .to_string(),
+                            ));
+                        }
+                    }
+                };
             }
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
                 if path.is_symlink() {
@@ -407,11 +421,6 @@ impl FoundInterpreter {
                         "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
                         path.user_display().cyan(),
                         target_path.user_display().cyan(),
-                    );
-                } else {
-                    warn_user!(
-                        "Ignoring existing virtual environment with missing Python interpreter: {}",
-                        path.user_display().cyan()
                     );
                 }
             }
@@ -499,6 +508,14 @@ pub(crate) async fn get_or_init_environment(
         // Otherwise, create a virtual environment with the discovered interpreter.
         FoundInterpreter::Interpreter(interpreter) => {
             let venv = workspace.venv();
+
+            // Avoid removing things that are not virtual environments
+            if venv.exists() && !venv.join("pyvenv.cfg").exists() {
+                return Err(ProjectError::InvalidProjectEnvironmentDir(
+                    venv,
+                    "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                ));
+            }
 
             // Remove the existing virtual environment if it doesn't meet the requirements.
             match fs_err::remove_dir_all(&venv) {
