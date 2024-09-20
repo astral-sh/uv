@@ -4834,7 +4834,7 @@ fn add_shadowed_name() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The package `dagster-webserver` depends on `dagster` which is shadowed by your project. Consider changing the name of the project.
+          hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
     "###);
 
@@ -4859,7 +4859,7 @@ fn add_shadowed_name() -> Result<()> {
           depend on your project.
           And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11,<1.7.0, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The package `dagster-webserver` depends on `dagster` which is shadowed by your project. Consider changing the name of the project.
+          hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
     "###);
 
