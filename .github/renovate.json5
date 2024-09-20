@@ -64,6 +64,18 @@
       enabled: false,
     },
   ],
+  customManagers: [
+    // Update major GitHub actions references in documentation.
+    {
+      customType: "regex",
+      fileMatch: ["^docs/.*\\.md$"],
+      matchStrings: [
+        "\\suses: (?<depName>[\\w-]+/[\\w-]+)(?<path>/.*)?@(?<currentValue>.+?)\\s",
+      ],
+      datasourceTemplate: "github-tags",
+      versioningTemplate: "regex:^v(?<major>\\d+)$",
+    },
+  ],
   vulnerabilityAlerts: {
     commitMessageSuffix: "",
     labels: ["internal", "security"],
