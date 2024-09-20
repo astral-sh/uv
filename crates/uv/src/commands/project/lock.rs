@@ -528,6 +528,8 @@ async fn do_lock(
                     .collect(),
                 dev,
                 source_trees,
+                // Omit passing a single package name to accommodate for
+                // workspaces with multiple members.
                 None,
                 Some(workspace.packages().keys().cloned().collect()),
                 &extras,
