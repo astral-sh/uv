@@ -28,7 +28,7 @@
     {
       // Create dedicated branches to update references to dependencies in the documentation.
       matchPaths: ["docs/**/*.md"],
-      commitMessageTopic: "references to {{{depName}}}",
+      commitMessageTopic: "documentation references to {{{depName}}}",
       semanticCommitType: "docs",
       semanticCommitScope: null,
       additionalBranchPrefix: "docs-",
