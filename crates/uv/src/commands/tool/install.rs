@@ -276,13 +276,23 @@ pub(crate) async fn install(
         installed_tools
             .get_environment(&from.name, &cache)?
             .filter(|environment| {
-                // NOTE(lucab): this compares `base_prefix` paths as a proxy for
-                // detecting interpreters mismatches. Directly comparing interpreters
-                // (by paths or binaries on-disk) would result in several false
-                // positives on Windows due to file-copying and shims.
-                let old_base_prefix = environment.interpreter().sys_base_prefix();
-                let selected_base_prefix = interpreter.sys_base_prefix();
-                if old_base_prefix == selected_base_prefix {
+                // TODO(zanieb): Consider using `sysconfig.get_path("stdlib")` instead, which
+                // should be generally robust.
+                // TODO(zanieb): Move this into a utility on `Interpreter` since it's non-trivial.
+                let same_interpreter = if cfg!(windows) {
+                    // On Windows, we can't canonicalize an interpreter based on its executable path
+                    // because the executables are separate shim files (not links). Instead, we
+                    // compare the `sys.base_prefix`.
+                    let old_base_prefix = environment.interpreter().sys_base_prefix();
+                    let selected_base_prefix = interpreter.sys_base_prefix();
+                    old_base_prefix == selected_base_prefix
+                } else {
+                    // On Unix, we can see if the canonicalized executable is the same file.
+                    environment.interpreter().sys_executable() == interpreter.sys_executable()
+                        || same_file::is_same_file(environment.interpreter().sys_executable(), interpreter.sys_executable()).unwrap_or(false)
+                };
+
+                if same_interpreter {
                     trace!(
                         "Existing interpreter matches the requested interpreter for `{}`: {}",
                         from.name,
