@@ -141,9 +141,9 @@ pub(crate) async fn upgrade(
             printer.stderr(),
             "Upgraded build environment for {} to Python {}",
             if names.len() == 1 {
-                format!("{}", names.first().unwrap())
+                format!("{}", names.first().unwrap().bold())
             } else {
-                "all tools".to_string()
+                "all tools".bold().to_string()
             },
             python
         )?;
