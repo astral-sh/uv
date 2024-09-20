@@ -499,7 +499,7 @@ impl PubGrubReportFormatter<'_> {
     ///
     /// The [`PubGrubHints`] help users resolve errors by providing additional context or modifying
     /// their requirements.
-    pub(crate) fn hints(
+    pub(crate) fn generate_hints(
         &self,
         derivation_tree: &ErrorTree,
         selector: &CandidateSelector,
@@ -508,8 +508,9 @@ impl PubGrubReportFormatter<'_> {
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
         markers: &ResolverMarkers,
-    ) -> IndexSet<PubGrubHint> {
-        let mut hints = IndexSet::default();
+        workspace_members: &BTreeSet<PackageName>,
+        output_hints: &mut IndexSet<PubGrubHint>,
+    ) {
         match derivation_tree {
             DerivationTree::External(
                 External::Custom(package, set, _) | External::NoVersions(package, set),
@@ -518,12 +519,15 @@ impl PubGrubReportFormatter<'_> {
                     // Check for no versions due to pre-release options.
                     if !fork_urls.contains_key(name) {
                         self.prerelease_available_hint(
-                            package, name, set, selector, markers, &mut hints,
+                            package,
+                            name,
+                            set,
+                            selector,
+                            markers,
+                            output_hints,
                         );
                     }
-                }
 
-                if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to no `--find-links` flat index
                     Self::index_hints(
                         package,
@@ -532,7 +536,7 @@ impl PubGrubReportFormatter<'_> {
                         index_locations,
                         unavailable_packages,
                         incomplete_packages,
-                        &mut hints,
+                        output_hints,
                     );
                 }
             }
@@ -542,12 +546,28 @@ impl PubGrubReportFormatter<'_> {
                 dependency,
                 dependency_set,
             )) => {
+                // Check for a dependency on a workspace package by a non-workspace package.
+                // Generally, this indicates that the workspace package is shadowing a transitive
+                // dependency name.
+                if let (Some(package_name), Some(dependency_name)) =
+                    (package.name(), dependency.name())
+                {
+                    if workspace_members.contains(dependency_name)
+                        && !workspace_members.contains(package_name)
+                    {
+                        output_hints.insert(PubGrubHint::DependsOnWorkspacePackage {
+                            package: package.clone(),
+                            dependency: dependency.clone(),
+                            workspace: self.is_workspace() && !self.is_single_project_workspace(),
+                        });
+                    }
+                }
                 // Check for no versions due to `Requires-Python`.
                 if matches!(
                     &**dependency,
                     PubGrubPackageInner::Python(PubGrubPython::Target)
                 ) {
-                    hints.insert(PubGrubHint::RequiresPython {
+                    output_hints.insert(PubGrubHint::RequiresPython {
                         source: self.python_requirement.source(),
                         requires_python: self.python_requirement.target().clone(),
                         package: package.clone(),
@@ -558,7 +578,7 @@ impl PubGrubReportFormatter<'_> {
             }
             DerivationTree::External(External::NotRoot(..)) => {}
             DerivationTree::Derived(derived) => {
-                hints.extend(self.hints(
+                self.generate_hints(
                     &derived.cause1,
                     selector,
                     index_locations,
@@ -566,8 +586,10 @@ impl PubGrubReportFormatter<'_> {
                     incomplete_packages,
                     fork_urls,
                     markers,
-                ));
-                hints.extend(self.hints(
+                    workspace_members,
+                    output_hints,
+                );
+                self.generate_hints(
                     &derived.cause2,
                     selector,
                     index_locations,
@@ -575,10 +597,11 @@ impl PubGrubReportFormatter<'_> {
                     incomplete_packages,
                     fork_urls,
                     markers,
-                ));
+                    workspace_members,
+                    output_hints,
+                );
             }
-        }
-        hints
+        };
     }
 
     fn index_hints(
@@ -796,6 +819,11 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         package_requires_python: Range<Version>,
     },
+    DependsOnWorkspacePackage {
+        package: PubGrubPackage,
+        dependency: PubGrubPackage,
+        workspace: bool,
+    },
 }
 
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
@@ -835,6 +863,11 @@ enum PubGrubHintCore {
     RequiresPython {
         source: PythonRequirementSource,
         requires_python: RequiresPython,
+    },
+    DependsOnWorkspacePackage {
+        package: PubGrubPackage,
+        dependency: PubGrubPackage,
+        workspace: bool,
     },
 }
 
@@ -878,6 +911,15 @@ impl From<PubGrubHint> for PubGrubHintCore {
             } => Self::RequiresPython {
                 source,
                 requires_python,
+            },
+            PubGrubHint::DependsOnWorkspacePackage {
+                package,
+                dependency,
+                workspace,
+            } => Self::DependsOnWorkspacePackage {
+                package,
+                dependency,
+                workspace,
             },
         }
     }
@@ -1072,6 +1114,30 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     PackageRange::compatibility(package, package_set, None).bold(),
                     package_requires_python.bold(),
+                )
+            }
+            Self::DependsOnWorkspacePackage {
+                package,
+                dependency,
+                workspace,
+            } => {
+                let your_project = if *workspace {
+                    "one of your workspace members"
+                } else {
+                    "your project"
+                };
+                let the_project = if *workspace {
+                    "the workspace member"
+                } else {
+                    "the project"
+                };
+                write!(
+                    f,
+                    "{}{} The package `{}` depends on the package `{}` but the name is shadowed by {your_project}. Consider changing the name of {the_project}.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package,
+                    dependency,
                 )
             }
         }

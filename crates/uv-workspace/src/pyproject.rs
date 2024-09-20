@@ -17,7 +17,7 @@ use url::Url;
 
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
-use uv_fs::relative_to;
+use uv_fs::{relative_to, PortablePathBuf};
 use uv_git::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, PackageName};
@@ -230,6 +230,10 @@ pub struct ToolUv {
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of any constituent packages.
     ///
+    /// Including a package as an override will _not_ trigger installation of the package on its
+    /// own; instead, the package must be requested elsewhere in the project's first-party or
+    /// transitive dependencies.
+    ///
     /// !!! note
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
@@ -413,7 +417,7 @@ pub enum Source {
         /// The repository URL (without the `git+` prefix).
         git: Url,
         /// The path to the directory with the `pyproject.toml`, if it's not in the archive root.
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<PortablePathBuf>,
         // Only one of the three may be used; we'll validate this later and emit a custom error.
         rev: Option<String>,
         tag: Option<String>,
@@ -430,13 +434,13 @@ pub enum Source {
         url: Url,
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<PortablePathBuf>,
     },
     /// The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or
     /// `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
     /// `setup.py` file in the root).
     Path {
-        path: PathBuf,
+        path: PortablePathBuf,
         /// `false` by default.
         editable: Option<bool>,
     },
@@ -454,12 +458,12 @@ pub enum Source {
     /// A catch-all variant used to emit precise error messages when deserializing.
     CatchAll {
         git: String,
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<PortablePathBuf>,
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
         url: String,
-        path: PathBuf,
+        path: PortablePathBuf,
         index: String,
         workspace: bool,
     },
@@ -534,15 +538,17 @@ impl Source {
             RequirementSource::Path { install_path, .. }
             | RequirementSource::Directory { install_path, .. } => Source::Path {
                 editable,
-                path: relative_to(&install_path, root)
-                    .or_else(|_| std::path::absolute(&install_path))
-                    .map_err(SourceError::Absolute)?,
+                path: PortablePathBuf::from(
+                    relative_to(&install_path, root)
+                        .or_else(|_| std::path::absolute(&install_path))
+                        .map_err(SourceError::Absolute)?,
+                ),
             },
             RequirementSource::Url {
                 subdirectory, url, ..
             } => Source::Url {
                 url: url.to_url(),
-                subdirectory,
+                subdirectory: subdirectory.map(PortablePathBuf::from),
             },
             RequirementSource::Git {
                 repository,
@@ -566,7 +572,7 @@ impl Source {
                         tag,
                         branch,
                         git: repository,
-                        subdirectory,
+                        subdirectory: subdirectory.map(PortablePathBuf::from),
                     }
                 } else {
                     Source::Git {
@@ -574,7 +580,7 @@ impl Source {
                         tag,
                         branch,
                         git: repository,
-                        subdirectory,
+                        subdirectory: subdirectory.map(PortablePathBuf::from),
                     }
                 }
             }

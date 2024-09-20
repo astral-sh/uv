@@ -3247,6 +3247,9 @@ pub struct ToolRunArgs {
     /// By default, environment modifications are omitted, but enabled under `--verbose`.
     #[arg(long, env = "UV_SHOW_RESOLUTION", value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
     pub show_resolution: bool,
+
+    #[arg(long, hide = true)]
+    pub generate_shell_completion: Option<clap_complete_command::Shell>,
 }
 
 #[derive(Args)]

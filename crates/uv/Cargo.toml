@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.4.11"
+version = "0.4.13"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -66,6 +66,7 @@ owo-colors = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
+same-file = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

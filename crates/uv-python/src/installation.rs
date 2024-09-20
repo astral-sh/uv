@@ -87,7 +87,7 @@ impl PythonInstallation {
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, Error> {
-        let request = request.unwrap_or_else(|| &PythonRequest::Any);
+        let request = request.unwrap_or_else(|| &PythonRequest::Default);
 
         // Search for the installation
         match Self::find(request, environments, preference, cache) {

@@ -23,7 +23,6 @@
     },
     "cache-keys": {
       "description": "The keys to consider when caching builds for the project.\n\nCache keys enable you to specify the files or directories that should trigger a rebuild when modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`, or `setup.cfg` files in the project directory are modified, i.e.:\n\n```toml cache-keys = [{ file = \"pyproject.toml\" }, { file = \"setup.py\" }, { file = \"setup.cfg\" }] ```\n\nAs an example: if a project uses dynamic metadata to read its dependencies from a `requirements.txt` file, you can specify `cache-keys = [{ file = \"requirements.txt\" }, { file = \"pyproject.toml\" }]` to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in addition to watching the `pyproject.toml`).\n\nGlobs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html) crate. For example, to invalidate the cache whenever a `.toml` file in the project directory or any of its subdirectories is modified, you can specify `cache-keys = [{ file = \"**/*.toml\" }]`. Note that the use of globs can be expensive, as uv may need to walk the filesystem to determine whether any files have changed.\n\nCache keys can also include version control information. For example, if a project uses `setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }, { file = \"pyproject.toml\" }]` to include the current Git commit hash in the cache key (in addition to the `pyproject.toml`).\n\nCache keys only affect the project defined by the `pyproject.toml` in which they're specified (as opposed to, e.g., affecting all members in a workspace), and all paths and globs are interpreted as relative to the project directory.",
-      "writeOnly": true,
       "type": [
         "array",
         "null"
@@ -1230,9 +1229,13 @@
             },
             "subdirectory": {
               "description": "The path to the directory with the `pyproject.toml`, if it's not in the archive root.",
-              "type": [
-                "string",
-                "null"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/String"
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "tag": {
@@ -1253,9 +1256,13 @@
           "properties": {
             "subdirectory": {
               "description": "For source distributions, the path to the directory with the `pyproject.toml`, if it's not in the archive root.",
-              "type": [
-                "string",
-                "null"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/String"
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "url": {
@@ -1280,7 +1287,7 @@
               ]
             },
             "path": {
-              "type": "string"
+              "$ref": "#/definitions/String"
             }
           },
           "additionalProperties": false
@@ -1336,7 +1343,7 @@
               "type": "string"
             },
             "path": {
-              "type": "string"
+              "$ref": "#/definitions/String"
             },
             "rev": {
               "type": [
@@ -1345,9 +1352,13 @@
               ]
             },
             "subdirectory": {
-              "type": [
-                "string",
-                "null"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/String"
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "tag": {

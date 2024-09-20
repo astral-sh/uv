@@ -34,6 +34,17 @@ pub struct EnvironmentNotFound {
     preference: EnvironmentPreference,
 }
 
+#[derive(Clone, Debug, Error)]
+pub struct InvalidEnvironment {
+    path: PathBuf,
+    pub kind: InvalidEnvironmentKind,
+}
+#[derive(Debug, Clone)]
+pub enum InvalidEnvironmentKind {
+    NotDirectory,
+    MissingExecutable(PathBuf),
+}
+
 impl From<PythonNotFound> for EnvironmentNotFound {
     fn from(value: PythonNotFound) -> Self {
         Self {
@@ -80,7 +91,7 @@ impl fmt::Display for EnvironmentNotFound {
             EnvironmentPreference::OnlyVirtual => SearchType::Virtual,
         };
 
-        if matches!(self.request, PythonRequest::Any) {
+        if matches!(self.request, PythonRequest::Default | PythonRequest::Any) {
             write!(f, "No {search_type} found")?;
         } else {
             write!(f, "No {search_type} found for {}", self.request)?;
@@ -95,6 +106,28 @@ impl fmt::Display for EnvironmentNotFound {
         }
 
         Ok(())
+    }
+}
+
+impl std::fmt::Display for InvalidEnvironment {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "Invalid environment at `{}`: {}",
+            self.path.user_display(),
+            self.kind
+        )
+    }
+}
+
+impl std::fmt::Display for InvalidEnvironmentKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::NotDirectory => write!(f, "expected directory but found a file"),
+            Self::MissingExecutable(path) => {
+                write!(f, "missing Python executable at `{}`", path.user_display())
+            }
+        }
     }
 }
 
@@ -122,6 +155,8 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] from the virtual environment at the given root.
+    ///
+    /// N.B. This function also works for system Python environments and users depend on this.
     pub fn from_root(root: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
         let venv = match fs_err::canonicalize(root.as_ref()) {
             Ok(venv) => venv,
@@ -133,7 +168,28 @@ impl PythonEnvironment {
             }
             Err(err) => return Err(Error::Discovery(err.into())),
         };
-        let executable = virtualenv_python_executable(venv);
+
+        if venv.is_file() {
+            return Err(InvalidEnvironment {
+                path: venv,
+                kind: InvalidEnvironmentKind::NotDirectory,
+            }
+            .into());
+        }
+
+        let executable = virtualenv_python_executable(&venv);
+
+        // Check if the executable exists before querying so we can provide a more specific error
+        // Note we intentionally don't require a resolved link to exist here, we're just trying to
+        // tell if this _looks_ like a Python environment.
+        if !(executable.is_symlink() || executable.is_file()) {
+            return Err(InvalidEnvironment {
+                path: venv,
+                kind: InvalidEnvironmentKind::MissingExecutable(executable.clone()),
+            }
+            .into());
+        };
+
         let interpreter = Interpreter::query(executable, cache)?;
 
         Ok(Self(Arc::new(PythonEnvironmentShared {

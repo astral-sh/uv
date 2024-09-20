@@ -27,8 +27,7 @@ use std::{
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Operator {
     /// `== 1.2.3`
@@ -288,15 +287,13 @@ impl std::fmt::Display for OperatorParseError {
 /// let version = Version::from_str("1.19").unwrap();
 /// ```
 #[derive(Clone, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 pub struct Version {
     inner: Arc<VersionInner>,
 }
 
 #[derive(Clone, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 enum VersionInner {
     Small { small: VersionSmall },
     Full { full: VersionFull },
@@ -885,8 +882,7 @@ impl FromStr for Version {
 /// Thankfully, such versions are incredibly rare. Virtually all versions have
 /// zero or one pre, dev or post release components.
 #[derive(Clone, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 struct VersionSmall {
     /// The representation discussed above.
     repr: u64,
@@ -1227,8 +1223,7 @@ impl VersionSmall {
 /// In general, the "full" representation is rarely used in practice since most
 /// versions will fit into the "small" representation.
 #[derive(Clone, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 struct VersionFull {
     /// The [versioning
     /// epoch](https://peps.python.org/pep-0440/#version-epochs). Normally
@@ -1361,8 +1356,7 @@ impl FromStr for VersionPattern {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Prerelease {
     /// The kind of pre-release.
@@ -1387,8 +1381,7 @@ pub struct Prerelease {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum PrereleaseKind {
     /// alpha pre-release
@@ -1431,8 +1424,7 @@ impl std::fmt::Display for Prerelease {
 ///
 /// Luckily the default `Ord` implementation for `Vec<LocalSegment>` matches the PEP 440 rules.
 #[derive(Eq, PartialEq, Debug, Clone, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 pub enum LocalSegment {
     /// Not-parseable as integer segment of local version
     String(String),

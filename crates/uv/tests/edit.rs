@@ -5,6 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
+use std::path::Path;
 
 use crate::common::{decode_token, packse_index_url};
 use common::{uv_snapshot, TestContext};
@@ -2019,7 +2020,7 @@ fn add_path() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    let child = workspace.child("child");
+    let child = workspace.child("packages").child("child");
     child.child("pyproject.toml").write_str(indoc! {r#"
         [project]
         name = "child"
@@ -2032,18 +2033,18 @@ fn add_path() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("./child").current_dir(workspace.path()), @r###"
+    uv_snapshot!(context.filters(), context.add().arg(Path::new("packages").join("child")).current_dir(workspace.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/workspace/child)
+     + child==0.1.0 (from file://[TEMP_DIR]/workspace/packages/child)
      + parent==0.1.0 (from file://[TEMP_DIR]/workspace)
     "###);
 
@@ -2067,7 +2068,7 @@ fn add_path() -> Result<()> {
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
-        child = { path = "child" }
+        child = { path = "packages/child" }
         "###
         );
     });
@@ -2089,7 +2090,7 @@ fn add_path() -> Result<()> {
         [[package]]
         name = "child"
         version = "0.1.0"
-        source = { directory = "child" }
+        source = { directory = "packages/child" }
 
         [[package]]
         name = "parent"
@@ -2100,7 +2101,7 @@ fn add_path() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "child", directory = "child" }]
+        requires-dist = [{ name = "child", directory = "packages/child" }]
         "###
         );
     });
@@ -3308,7 +3309,7 @@ fn add_error() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
-      help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "###);
 
     uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @r###"
@@ -4805,5 +4806,62 @@ fn update_offset() -> Result<()> {
         "###
         );
     });
+    Ok(())
+}
+
+/// Check hint for <https://github.com/astral-sh/uv/issues/7329>
+/// if there is a broken cyclic dependency on a local package.
+#[test]
+fn add_shadowed_name() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "dagster"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Pinned constrained, check for a direct dependency loop.
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.6.13"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "###);
+
+    // Constraint with several available versions, check for an indirect dependency loop.
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of dagster-webserver are available:
+              dagster-webserver<=1.6.13
+              dagster-webserver>1.7.0
+          and dagster-webserver==1.6.11 depends on your project, we can conclude that all of:
+              dagster-webserver>=1.6.11,<1.6.12
+              dagster-webserver>1.6.13,<1.7.0
+          depend on your project.
+          And because dagster-webserver==1.6.12 depends on your project, we can conclude that all of:
+              dagster-webserver>=1.6.11,<1.6.13
+              dagster-webserver>1.6.13,<1.7.0
+          depend on your project.
+          And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11,<1.7.0, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "###);
+
     Ok(())
 }
