@@ -880,7 +880,6 @@ jobs:
     name: "integration test | github actions"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -904,9 +903,34 @@ jobs:
       - name: Configure uv to use the system Python by default
         run: echo "UV_SYSTEM_PYTHON=1" >> $GITHUB_ENV
 
-      - name: "Install a package with environment system opt-in"
+      - name: "Install a package with system opt-in via the environment"
         run: |
           ./uv pip install anyio --reinstall
+
+      - name: "Create a project"
+        run: |
+          # Use Python 3.11 as the minimum required version
+          ./uv init --python 3.11
+          ./uv add anyio
+
+      - name: "Sync to the system Python"
+        run: ./uv sync --python 3.12
+        env:
+          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.6/x64"
+
+      - name: "Attempt to sync to the system Python with an incompatible version"
+        run: |
+          ./uv sync --python 3.11 && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
+        env:
+          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.6/x64"
+
+      - name: "Attempt to sync to a non-Python environment directory"
+        run: |
+          mkdir -p /home/runner/example
+          touch /home/runner/example/some-file
+          ./uv sync && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
+        env:
+          UV_PROJECT_ENVIRONMENT: "/home/runner/example"
 
   cache-test-ubuntu:
     timeout-minutes: 10
