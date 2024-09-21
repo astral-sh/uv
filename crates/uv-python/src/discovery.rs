@@ -430,7 +430,11 @@ fn python_executables_from_search_path<'a>(
         env::var_os("UV_TEST_PYTHON_PATH").unwrap_or(env::var_os("PATH").unwrap_or_default());
 
     let version_request = version.unwrap_or(&VersionRequest::Default);
-    let possible_names: Vec<_> = version_request.executable_names(implementation);
+    let possible_names: Vec<_> = version_request
+        .executable_names(implementation)
+        .into_iter()
+        .map(|name| name.to_string())
+        .collect();
 
     trace!(
         "Searching PATH for executables: {}",
@@ -1473,12 +1477,95 @@ impl EnvironmentPreference {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ExecutableName {
+    name: &'static str,
+    major: Option<u8>,
+    minor: Option<u8>,
+    patch: Option<u8>,
+    prerelease: Option<Prerelease>,
+    free_threaded: bool,
+}
+
+impl ExecutableName {
+    #[must_use]
+    fn with_name(mut self, name: &'static str) -> Self {
+        self.name = name;
+        self
+    }
+
+    #[must_use]
+    fn with_major(mut self, major: u8) -> Self {
+        self.major = Some(major);
+        self
+    }
+
+    #[must_use]
+    fn with_minor(mut self, minor: u8) -> Self {
+        self.minor = Some(minor);
+        self
+    }
+
+    #[must_use]
+    fn with_patch(mut self, patch: u8) -> Self {
+        self.patch = Some(patch);
+        self
+    }
+
+    #[must_use]
+    fn with_prerelease(mut self, prerelease: Prerelease) -> Self {
+        self.prerelease = Some(prerelease);
+        self
+    }
+
+    #[must_use]
+    fn with_free_threaded(mut self, free_threaded: bool) -> Self {
+        self.free_threaded = free_threaded;
+        self
+    }
+}
+
+impl Default for ExecutableName {
+    fn default() -> Self {
+        Self {
+            name: "python",
+            major: None,
+            minor: None,
+            patch: None,
+            prerelease: None,
+            free_threaded: false,
+        }
+    }
+}
+
+impl std::fmt::Display for ExecutableName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)?;
+        if let Some(major) = self.major {
+            write!(f, "{major}")?;
+            if let Some(minor) = self.minor {
+                write!(f, ".{minor}")?;
+                if let Some(patch) = self.patch {
+                    write!(f, ".{patch}")?;
+                }
+            }
+        }
+        if let Some(prerelease) = &self.prerelease {
+            write!(f, "{prerelease}")?;
+        }
+        if self.free_threaded {
+            f.write_str("t")?;
+        }
+        f.write_str(std::env::consts::EXE_SUFFIX)?;
+        Ok(())
+    }
+}
+
 impl VersionRequest {
     pub(crate) fn executable_names(
         &self,
         implementation: Option<&ImplementationName>,
-    ) -> Vec<String> {
-        let exe = std::env::consts::EXE_SUFFIX;
+    ) -> Vec<ExecutableName> {
         let prerelease = if let Self::MajorMinorPrerelease(_, _, prerelease, _) = self {
             // Include the prerelease version, e.g., `python3.8a`
             Some(prerelease)
@@ -1486,70 +1573,76 @@ impl VersionRequest {
             None
         };
 
-        let mut versions = Vec::new();
-        let major = self.major();
-        let minor = self.minor();
-        let patch = self.patch();
-        // No version numbers, e.g., `python`
-        versions.push(vec![]);
-        if let Some(major) = major.as_ref() {
-            // Collect each variant depending on the number of versions, e.g. `python3`
-            versions.push(vec![major]);
-            if let Some(minor) = minor.as_ref() {
-                // `python3.12`
-                versions.push(vec![major, minor]);
-                if let Some(patch) = patch.as_ref() {
-                    // `python3.12.1`
-                    versions.push(vec![major, minor, patch]);
+        // Push a default one
+        let mut names = Vec::new();
+        names.push(ExecutableName::default());
+
+        // Collect each variant depending on the number of versions
+        if let Some(major) = self.major() {
+            // e.g. `python3`
+            names.push(ExecutableName::default().with_major(major));
+            if let Some(minor) = self.minor() {
+                // e.g., `python3.12`
+                names.push(
+                    ExecutableName::default()
+                        .with_major(major)
+                        .with_minor(minor),
+                );
+                if let Some(patch) = self.patch() {
+                    // e.g, `python3.12.1`
+                    names.push(
+                        ExecutableName::default()
+                            .with_major(major)
+                            .with_minor(minor)
+                            .with_patch(patch),
+                    );
                 }
             }
         } else {
             // Include `3` by default, e.g., `python3`
-            versions.push(vec![&3]);
+            names.push(ExecutableName::default().with_major(3));
         }
 
-        let mut basenames = Vec::new();
-        // Always search for `python` executables
-        basenames.push("python");
+        if let Some(prerelease) = prerelease {
+            // Include the prerelease version, e.g., `python3.8a`
+            for i in 0..names.len() {
+                let name = names[i];
+                if name.minor.is_none() {
+                    // We don't want to include the pre-release marker here
+                    // e.g. `pythonrc1` and `python3rc1` don't make sense
+                    continue;
+                }
+                names.push(name.with_prerelease(*prerelease));
+            }
+        }
 
-        // Collect all the implementation-specific names
+        // Add all the implementation-specific names
         if let Some(implementation) = implementation {
-            basenames.push(implementation.into());
+            for i in 0..names.len() {
+                let name = names[i].with_name(implementation.into());
+                names.push(name);
+            }
         } else {
             // When looking for all implementations, include all possible names
             if matches!(self, Self::Any) {
-                for name in ImplementationName::possible_names() {
-                    basenames.push(name);
+                for implementation in ImplementationName::possible_names() {
+                    for i in 0..names.len() {
+                        let name = names[i].with_name(implementation);
+                        names.push(name);
+                    }
                 }
             }
         }
 
-        // Create all possible suffixes
-        let mut suffixes = Vec::new();
+        // Include free-threaded variants
         if self.is_free_threaded_requested() {
-            suffixes.push("t".to_string());
-        }
-        if let Some(prerelease) = prerelease {
-            suffixes.push(prerelease.to_string());
-            if self.is_free_threaded_requested() {
-                suffixes.push(format!("{prerelease}t"));
+            for i in 0..names.len() {
+                let name = names[i].with_free_threaded(true);
+                names.push(name);
             }
         }
 
-        let mut result = Vec::new();
-        for suffix in &suffixes {
-            for name in &basenames {
-                for version in &versions {
-                    let mut name = (*name).to_string();
-                    name.push_str(&version.iter().map(ToString::to_string).join("."));
-                    name.push_str(suffix);
-                    name.push_str(exe);
-                    result.push(name);
-                }
-            }
-        }
-
-        result
+        names
     }
 
     pub(crate) fn major(&self) -> Option<u8> {
@@ -1789,6 +1882,13 @@ impl FromStr for VersionRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "any" {
+            return Ok(Self::Any);
+        }
+        if s == "default" {
+            return Ok(Self::Default);
+        }
+
         // Check if the version request is for a free-threaded Python version
         let (s, free_threaded) = s.strip_suffix('t').map_or((s, false), |s| (s, true));
 
@@ -2488,5 +2588,90 @@ mod tests {
             VersionRequest::from_str("3.13tt"),
             Err(Error::InvalidVersionRequest(_))
         ));
+    }
+
+    #[test]
+    fn executable_names_from_request() {
+        fn case(request: &str, expected: &[&str]) {
+            let (implementation, version) = match PythonRequest::parse(request) {
+                PythonRequest::Any => (None, VersionRequest::Any),
+                PythonRequest::Default => (None, VersionRequest::Default),
+                PythonRequest::Version(version) => (None, version),
+                PythonRequest::ImplementationVersion(implementation, version) => {
+                    (Some(implementation), version)
+                }
+                PythonRequest::Implementation(implementation) => {
+                    (Some(implementation), VersionRequest::Default)
+                }
+                _ => panic!("Test cases should request versions or implemtnations"),
+            };
+
+            let result: Vec<_> = version
+                .executable_names(implementation.as_ref())
+                .into_iter()
+                .map(|name| name.to_string())
+                .collect();
+
+            let expected: Vec<_> = expected
+                .into_iter()
+                .map(|name| format!("{name}{exe}", exe = std::env::consts::EXE_SUFFIX))
+                .collect();
+
+            assert_eq!(result, expected, "mismatch for case \"{request}\"");
+        }
+
+        case(
+            "any",
+            &[
+                "python", "python3", "cpython", "cpython3", "pypy", "pypy3", "pypy", "pypy3",
+                "graalpy", "graalpy3", "graalpy", "graalpy3", "graalpy", "graalpy3", "graalpy",
+                "graalpy3", "cp", "cp3", "cp", "cp3", "cp", "cp3", "cp", "cp3", "cp", "cp3", "cp",
+                "cp3", "cp", "cp3", "cp", "cp3", "pp", "pp3", "pp", "pp3", "pp", "pp3", "pp",
+                "pp3", "pp", "pp3", "pp", "pp3", "pp", "pp3", "pp", "pp3", "pp", "pp3", "pp",
+                "pp3", "pp", "pp3", "pp", "pp3", "pp", "pp3", "pp", "pp3", "pp", "pp3", "pp",
+                "pp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp",
+                "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp",
+                "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp",
+                "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp",
+                "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp", "gp3", "gp",
+                "gp3", "gp", "gp3", "gp", "gp3",
+            ],
+        );
+
+        case("default", &["python", "python3"]);
+
+        case("3", &["python", "python3"]);
+
+        case("4", &["python", "python4"]);
+
+        case("3.13", &["python", "python3", "python3.13"]);
+
+        case(
+            "3.13t",
+            &[
+                "python",
+                "python3",
+                "python3.13",
+                "pythont",
+                "python3t",
+                "python3.13t",
+            ],
+        );
+
+        case(
+            "3.13.2",
+            &["python", "python3", "python3.13", "python3.13.2"],
+        );
+
+        case(
+            "3.13rc2",
+            &[
+                "python",
+                "python3",
+                "python3.13",
+                "python3rc2",
+                "python3.13rc2",
+            ],
+        );
     }
 }
