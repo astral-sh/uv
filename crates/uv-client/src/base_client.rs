@@ -36,6 +36,7 @@ pub struct BaseClientBuilder<'a> {
     client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
+    only_authenticated: bool,
 }
 
 impl Default for BaseClientBuilder<'_> {
@@ -55,6 +56,7 @@ impl BaseClientBuilder<'_> {
             client: None,
             markers: None,
             platform: None,
+            only_authenticated: false,
         }
     }
 }
@@ -105,6 +107,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn platform(mut self, platform: &'a Platform) -> Self {
         self.platform = Some(platform);
+        self
+    }
+
+    #[must_use]
+    pub fn only_authenticated(mut self, only_authenticated: bool) -> Self {
+        self.only_authenticated = only_authenticated;
         self
     }
 
@@ -230,20 +238,26 @@ impl<'a> BaseClientBuilder<'a> {
     fn apply_middleware(&self, client: Client) -> ClientWithMiddleware {
         match self.connectivity {
             Connectivity::Online => {
-                let client = reqwest_middleware::ClientBuilder::new(client);
+                let mut client = reqwest_middleware::ClientBuilder::new(client);
 
-                // Initialize the retry strategy.
-                let retry_policy =
-                    ExponentialBackoff::builder().build_with_max_retries(self.retries);
-                let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
-                    retry_policy,
-                    UvRetryableStrategy,
-                );
-                let client = client.with(retry_strategy);
+                // Avoid uncloneable errors with a streaming body during publish.
+                if self.retries > 0 {
+                    // Initialize the retry strategy.
+                    let retry_policy =
+                        ExponentialBackoff::builder().build_with_max_retries(self.retries);
+                    let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
+                        retry_policy,
+                        UvRetryableStrategy,
+                    );
+                    client = client.with(retry_strategy);
+                }
 
                 // Initialize the authentication middleware to set headers.
-                let client =
-                    client.with(AuthMiddleware::new().with_keyring(self.keyring.to_provider()));
+                client = client.with(
+                    AuthMiddleware::new()
+                        .with_keyring(self.keyring.to_provider())
+                        .with_only_authenticated(self.only_authenticated),
+                );
 
                 client.build()
             }
