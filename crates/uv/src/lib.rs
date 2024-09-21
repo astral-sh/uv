@@ -1098,20 +1098,18 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 allow_insecure_host,
             } = PublishSettings::resolve(args, filesystem);
 
-            todo!(
-                "{:?}",
-                (
-                    files,
-                    publish_url,
-                    keyring_provider,
-                    allow_insecure_host,
-                    username,
-                    password,
-                    globals.connectivity,
-                    globals.native_tls,
-                    printer,
-                )
+            commands::publish(
+                files,
+                publish_url,
+                keyring_provider,
+                allow_insecure_host,
+                username,
+                password,
+                globals.connectivity,
+                globals.native_tls,
+                printer,
             )
+            .await
         }
     }
 }

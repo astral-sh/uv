@@ -45,6 +45,7 @@ uv-metadata = { path = "crates/uv-metadata" }
 uv-normalize = { path = "crates/uv-normalize" }
 uv-options-metadata = { path = "crates/uv-options-metadata" }
 uv-pubgrub = { path = "crates/uv-pubgrub" }
+uv-publish = { path = "crates/uv-publish" }
 uv-python = { path = "crates/uv-python" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-resolver = { path = "crates/uv-resolver" }
@@ -119,12 +120,13 @@ proc-macro2 = { version = "1.0.86" }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "388685a8711092971930986644cfed152d1a1f6c" }
 pyo3 = { version = "0.21.2" }
 pyo3-log = { version = "0.10.0" }
+python-pkginfo = { version = "0.6.3" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
-reqwest = { version = "0.12.7", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots", "socks"] }
-reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
+reqwest = { version = "0.12.7", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart"] }
+reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913", features = ["multipart"] }
 reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
 rkyv = { version = "0.8.8", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }

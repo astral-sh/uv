@@ -35,6 +35,7 @@ uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-installer = { workspace = true }
 uv-normalize = { workspace = true }
+uv-publish = { workspace = true }
 uv-python = { workspace = true, features = ["schemars"]}
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true }
