@@ -1496,7 +1496,7 @@ impl VersionRequest {
                 None,
                 None,
             ],
-            Self::MajorMinor(major, minor, _) => [
+            Self::MajorMinor(major, minor, false) => [
                 Some(Cow::Owned(format!("python{major}.{minor}{extension}"))),
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
@@ -1518,7 +1518,8 @@ impl VersionRequest {
                 Some(python),
                 None,
             ],
-            Self::MajorMinorPatch(major, minor, _, true)
+            Self::MajorMinor(major, minor, true)
+            | Self::MajorMinorPatch(major, minor, _, true)
             | Self::MajorMinorPrerelease(major, minor, _, true) => [
                 Some(Cow::Owned(format!("python{major}.{minor}t{extension}",))),
                 Some(Cow::Owned(format!("python{major}.{minor}{extension}"))),
