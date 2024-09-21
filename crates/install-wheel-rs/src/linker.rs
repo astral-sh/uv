@@ -365,7 +365,7 @@ fn clone_recursive(
 
     debug!("Cloning {} to {}", from.display(), to.display());
 
-    if cfg!(windows) && from.is_dir() {
+    if (cfg!(windows) || cfg!(target_os = "linux")) && from.is_dir() {
         // On Windows, reflinking directories is not supported, so we copy each file instead.
         fs::create_dir_all(&to)?;
         for entry in fs::read_dir(from)? {
