@@ -141,6 +141,7 @@ pub(crate) fn pip_list(
 struct Entry {
     name: String,
     version: String,
+    dependencies: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     editable_project_location: Option<String>,
 }
@@ -153,6 +154,13 @@ impl From<&InstalledDist> for Entry {
             editable_project_location: dist
                 .as_editable()
                 .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
+            dependencies: dist
+                .metadata()
+                .unwrap()
+                .requires_dist
+                .into_iter()
+                .map(|r| r.name.to_string())
+                .collect(),
         }
     }
 }
