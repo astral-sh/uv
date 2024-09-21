@@ -136,7 +136,7 @@ pub(crate) async fn upgrade(
         writeln!(printer.stderr(), "Nothing to upgrade")?;
     }
 
-    if let Some(python) = python {
+    if let (true, Some(python)) = (did_upgrade, python) {
         writeln!(
             printer.stderr(),
             "Upgraded build environment for {} to Python {}",
