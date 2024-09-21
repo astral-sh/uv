@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.15
+
+### Bug fixes
+
+- Revert "Treat invalid platform as more compatible than invalid Python (#7556)" ([#7608](https://github.com/astral-sh/uv/pull/7608))
+
+### Documentation
+
+- Add the execution policy to powershell installs for single versions ([#7602](https://github.com/astral-sh/uv/pull/7602))
+
 ## 0.4.14
 
 ### Breaking
