@@ -1,11 +1,11 @@
 use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
 
-use serde::{Deserialize, Serialize};
-
 use distribution_types::{FlatIndexLocation, IndexUrl, StaticMetadata};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
+use serde::{Deserialize, Serialize};
+use url::Url;
 use uv_cache_info::CacheKey;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
@@ -41,6 +41,9 @@ pub struct Options {
 
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
+
+    #[serde(flatten)]
+    pub publish: PublishOptions,
 
     #[option_group]
     pub pip: Option<PipOptions>,
@@ -1497,6 +1500,7 @@ pub struct OptionsWire {
     no_build_package: Option<Vec<PackageName>>,
     no_binary: Option<bool>,
     no_binary_package: Option<Vec<PackageName>>,
+    publish_url: Option<Url>,
 
     pip: Option<PipOptions>,
     cache_keys: Option<Vec<CacheKey>>,
@@ -1564,6 +1568,7 @@ impl From<OptionsWire> for Options {
             override_dependencies,
             constraint_dependencies,
             environments,
+            publish_url,
             workspace: _,
             sources: _,
             dev_dependencies: _,
@@ -1611,6 +1616,7 @@ impl From<OptionsWire> for Options {
                 no_binary,
                 no_binary_package,
             },
+            publish: PublishOptions { publish_url },
             pip,
             cache_keys,
             override_dependencies,
@@ -1618,4 +1624,22 @@ impl From<OptionsWire> for Options {
             environments,
         }
     }
+}
+
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata,
+)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct PublishOptions {
+    /// The URL for publishing packages to the Python package index (by default:
+    /// <https://upload.pypi.org/legacy/>).
+    #[option(
+        default = "\"https://upload.pypi.org/legacy/\"",
+        value_type = "str",
+        example = r#"
+            publish-url = "https://test.pypi.org/legacy/"
+        "#
+    )]
+    pub publish_url: Option<Url>,
 }

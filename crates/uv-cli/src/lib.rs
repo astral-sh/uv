@@ -10,6 +10,7 @@ use clap::{Args, Parser, Subcommand};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
+use url::Url;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
@@ -380,6 +381,8 @@ pub enum Commands {
         after_long_help = ""
     )]
     Build(BuildArgs),
+    /// Upload distributions to an index.
+    Publish(PublishArgs),
     /// Manage uv's cache.
     #[command(
         after_help = "Use `uv help cache` for more details.",
@@ -4302,4 +4305,66 @@ pub struct DisplayTreeArgs {
     /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct PublishArgs {
+    /// The paths to the files to uploads, as glob expressions.
+    #[arg(default_value = "dist/*")]
+    pub files: Vec<String>,
+
+    /// The URL to the upload endpoint. Note: This is usually not the same as the index URL.
+    ///
+    /// The default value is publish URL for PyPI (<https://upload.pypi.org/legacy/>).
+    #[arg(long, env = "UV_PUBLISH_URL")]
+    pub publish_url: Option<Url>,
+
+    /// The username for the upload.
+    #[arg(short, long, env = "UV_PUBLISH_USERNAME")]
+    pub username: Option<String>,
+
+    /// The password for the upload.
+    #[arg(short, long, env = "UV_PUBLISH_PASSWORD")]
+    pub password: Option<String>,
+
+    /// The token for the upload.
+    ///
+    /// Using a token is equivalent to using `__token__` as username and using the token as
+    /// password.
+    #[arg(
+        short,
+        long,
+        env = "UV_PUBLISH_TOKEN",
+        conflicts_with = "username",
+        conflicts_with = "password"
+    )]
+    pub token: Option<String>,
+
+    /// Attempt to use `keyring` for authentication for remote requirements files.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to
+    /// use the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    pub keyring_provider: Option<KeyringProviderType>,
+
+    /// Allow insecure connections to a host.
+    ///
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[arg(
+        long,
+        alias = "trusted-host",
+        env = "UV_INSECURE_HOST",
+        value_delimiter = ' ',
+        value_parser = parse_insecure_host,
+    )]
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 }

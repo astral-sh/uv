@@ -33,6 +33,7 @@ use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
     PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
+    PublishSettings,
 };
 
 #[cfg(target_os = "windows")]
@@ -1084,6 +1085,33 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }) => {
             commands::python_dir()?;
             Ok(ExitStatus::Success)
+        }
+        Commands::Publish(args) => {
+            show_settings!(args);
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let PublishSettings {
+                files,
+                username,
+                password,
+                publish_url,
+                keyring_provider,
+                allow_insecure_host,
+            } = PublishSettings::resolve(args, filesystem);
+
+            todo!(
+                "{:?}",
+                (
+                    files,
+                    publish_url,
+                    keyring_provider,
+                    allow_insecure_host,
+                    username,
+                    password,
+                    globals.connectivity,
+                    globals.native_tls,
+                    printer,
+                )
+            )
         }
     }
 }
