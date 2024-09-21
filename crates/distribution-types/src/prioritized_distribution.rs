@@ -569,7 +569,7 @@ impl IncompatibleWheel {
             },
             Self::Tag(tag_self) => match other {
                 Self::ExcludeNewer(_) => false,
-                Self::Tag(tag_other) => tag_self > tag_other,
+                Self::Tag(tag_other) => tag_other > tag_self,
                 Self::NoBinary | Self::RequiresPython(_, _) | Self::Yanked(_) => true,
             },
             Self::RequiresPython(_, _) => match other {
