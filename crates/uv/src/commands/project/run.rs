@@ -18,7 +18,7 @@ use uv_configuration::{
     Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, SourceStrategy,
 };
 use uv_distribution::LoweredRequirement;
-use uv_fs::{PythonExt, Simplified, CWD};
+use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
@@ -47,6 +47,7 @@ use crate::settings::ResolverInstallerSettings;
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
+    project_dir: &Path,
     script: Option<Pep723Script>,
     command: RunCommand,
     requirements: Vec<RequirementsSource>,
@@ -113,7 +114,7 @@ pub(crate) async fn run(
             let source = PythonRequestSource::UserRequest;
             let request = Some(PythonRequest::parse(request));
             (source, request)
-        } else if let Some(file) = PythonVersionFile::discover(&*CWD, false, false).await? {
+        } else if let Some(file) = PythonVersionFile::discover(&project_dir, false, false).await? {
             // (2) Request from `.python-version`
             let source = PythonRequestSource::DotPythonVersion(file.file_name().to_string());
             let request = file.into_version();
@@ -309,13 +310,13 @@ pub(crate) async fn run(
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
-                Workspace::discover(&CWD, &DiscoveryOptions::default())
+                Workspace::discover(project_dir, &DiscoveryOptions::default())
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             ))
         } else {
-            match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
+            match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
                 Ok(project) => {
                     if no_project {
                         debug!("Ignoring discovered project due to `--no-project`");
@@ -537,7 +538,7 @@ pub(crate) async fn run(
                     Some(PythonRequest::parse(request))
                 // (2) Request from `.python-version`
                 } else {
-                    PythonVersionFile::discover(&*CWD, no_config, false)
+                    PythonVersionFile::discover(&project_dir, no_config, false)
                         .await?
                         .and_then(PythonVersionFile::into_version)
                 };

@@ -3,7 +3,7 @@ use std::env;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
@@ -11,7 +11,6 @@ use uv_configuration::{
     Concurrency, DevMode, DevSpecification, EditableMode, ExportFormat, ExtrasSpecification,
     InstallOptions,
 };
-use uv_fs::CWD;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::RequirementsTxtExport;
@@ -27,6 +26,7 @@ use crate::settings::ResolverSettings;
 /// Export the project's `uv.lock` in an alternate format.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn export(
+    project_dir: &Path,
     format: ExportFormat,
     package: Option<PackageName>,
     hashes: bool,
@@ -51,14 +51,14 @@ pub(crate) async fn export(
     // Identify the project.
     let project = if let Some(package) = package {
         VirtualProject::Project(
-            Workspace::discover(&CWD, &DiscoveryOptions::default())
+            Workspace::discover(project_dir, &DiscoveryOptions::default())
                 .await?
                 .with_current_project(package.clone())
                 .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
     } else if frozen {
         VirtualProject::discover(
-            &CWD,
+            project_dir,
             &DiscoveryOptions {
                 members: MemberDiscovery::None,
                 ..DiscoveryOptions::default()
@@ -66,7 +66,7 @@ pub(crate) async fn export(
         )
         .await?
     } else {
-        VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+        VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
 
     let VirtualProject::Project(project) = project else {

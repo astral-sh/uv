@@ -235,6 +235,19 @@ pub struct GlobalArgs {
     /// Change to the given directory prior to running the command.
     #[arg(global = true, long, hide = true)]
     pub directory: Option<PathBuf>,
+
+    /// Run the command within the given project directory.
+    ///
+    /// All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
+    /// up the directory tree from the project root, as will the project's virtual environment
+    /// (`.venv`).
+    ///
+    /// Other command-line arguments (such as relative paths) will be resolved relative
+    /// to the current working directory.
+    ///
+    /// This setting has no effect when used in the `uv pip` interface.
+    #[arg(global = true, long)]
+    pub project: Option<PathBuf>,
 }
 
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]

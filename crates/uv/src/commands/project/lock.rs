@@ -1,11 +1,11 @@
 #![allow(clippy::single_match_else)]
 
-use std::collections::BTreeSet;
-use std::fmt::Write;
-
 use anstream::eprint;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
+use std::collections::BTreeSet;
+use std::fmt::Write;
+use std::path::Path;
 use tracing::debug;
 
 use distribution_types::{
@@ -22,7 +22,6 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -68,6 +67,7 @@ impl LockResult {
 
 /// Resolve the project requirements into a lockfile.
 pub(crate) async fn lock(
+    project_dir: &Path,
     locked: bool,
     frozen: bool,
     python: Option<String>,
@@ -81,7 +81,7 @@ pub(crate) async fn lock(
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     // Find the project requirements.
-    let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
+    let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(

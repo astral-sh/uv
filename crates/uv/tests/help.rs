@@ -55,6 +55,7 @@ fn help() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
@@ -119,6 +120,7 @@ fn help_flag() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
@@ -182,6 +184,7 @@ fn help_short_flag() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
@@ -333,6 +336,18 @@ fn help_subcommand() {
               
               For example, spinners or progress bars.
 
+          --project <PROJECT>
+              Run the command within the given project directory.
+              
+              All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
+              up the directory tree from the project root, as will the project's virtual environment
+              (`.venv`).
+              
+              Other command-line arguments (such as relative paths) will be resolved relative to the
+              current working directory.
+              
+              This setting has no effect when used in the `uv pip` interface.
+
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration.
               
@@ -482,6 +497,18 @@ fn help_subsubcommand() {
               
               For example, spinners or progress bars.
 
+          --project <PROJECT>
+              Run the command within the given project directory.
+              
+              All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
+              up the directory tree from the project root, as will the project's virtual environment
+              (`.venv`).
+              
+              Other command-line arguments (such as relative paths) will be resolved relative to the
+              current working directory.
+              
+              This setting has no effect when used in the `uv pip` interface.
+
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration.
               
@@ -550,6 +577,7 @@ fn help_flag_subcommand() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
@@ -602,6 +630,7 @@ fn help_flag_subsubcommand() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
@@ -740,6 +769,7 @@ fn help_with_global_option() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
@@ -841,6 +871,7 @@ fn help_with_no_pager() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,

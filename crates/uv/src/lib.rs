@@ -1,6 +1,8 @@
+use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
+use std::path::Path;
 use std::process::ExitCode;
 
 use anstream::eprintln;
@@ -67,6 +69,17 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         std::env::set_current_dir(directory)?;
     }
 
+    // Determine the project directory.
+    let project_dir = cli
+        .top_level
+        .global_args
+        .project
+        .as_deref()
+        .map(std::path::absolute)
+        .transpose()?
+        .map(Cow::Owned)
+        .unwrap_or_else(|| Cow::Borrowed(&*CWD));
+
     // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
     let deprecated_isolated = if cli.top_level.global_args.isolated {
         match &*cli.command {
@@ -111,7 +124,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             .file_name()
             .is_some_and(|file_name| file_name == "pyproject.toml")
         {
-            warn_user!("The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--directory` argument instead.");
+            warn_user!("The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.");
         }
         Some(FilesystemOptions::from_file(config_file)?)
     } else if deprecated_isolated || cli.top_level.no_config {
@@ -119,12 +132,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     } else if matches!(&*cli.command, Commands::Tool(_)) {
         // For commands that operate at the user-level, ignore local configuration.
         FilesystemOptions::user()?
-    } else if let Ok(workspace) = Workspace::discover(&CWD, &DiscoveryOptions::default()).await {
+    } else if let Ok(workspace) =
+        Workspace::discover(&project_dir, &DiscoveryOptions::default()).await
+    {
         let project = FilesystemOptions::find(workspace.install_path())?;
         let user = FilesystemOptions::user()?;
         project.combine(user)
     } else {
-        let project = FilesystemOptions::find(&*CWD)?;
+        let project = FilesystemOptions::find(&project_dir)?;
         let user = FilesystemOptions::user()?;
         project.combine(user)
     };
@@ -680,6 +695,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
 
             commands::build(
+                &project_dir,
                 args.src,
                 args.package,
                 args.out_dir,
@@ -728,6 +744,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             });
 
             commands::venv(
+                &project_dir,
                 args.path,
                 args.settings.python.as_deref(),
                 globals.python_preference,
@@ -757,6 +774,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Project(project) => {
             Box::pin(run_project(
                 project,
+                &project_dir,
                 run_command,
                 script,
                 globals,
@@ -1001,6 +1019,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             commands::python_install(
+                &project_dir,
                 args.targets,
                 args.reinstall,
                 globals.python_downloads,
@@ -1030,6 +1049,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?;
 
             commands::python_find(
+                &project_dir,
                 args.request,
                 args.no_project,
                 cli.top_level.no_config,
@@ -1049,6 +1069,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?;
 
             commands::python_pin(
+                &project_dir,
                 args.request,
                 args.resolved,
                 globals.python_preference,
@@ -1070,6 +1091,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 /// Run a [`ProjectCommand`].
 async fn run_project(
     project_command: Box<ProjectCommand>,
+    project_dir: &Path,
     command: Option<RunCommand>,
     script: Option<Pep723Script>,
     globals: GlobalSettings,
@@ -1104,6 +1126,7 @@ async fn run_project(
             let cache = cache.init()?;
 
             commands::init(
+                project_dir,
                 args.path,
                 args.name,
                 args.package,
@@ -1153,6 +1176,7 @@ async fn run_project(
             let command = command.expect("run command is required");
 
             Box::pin(commands::run(
+                project_dir,
                 script,
                 command,
                 requirements,
@@ -1192,6 +1216,7 @@ async fn run_project(
             );
 
             commands::sync(
+                project_dir,
                 args.locked,
                 args.frozen,
                 args.package,
@@ -1224,6 +1249,7 @@ async fn run_project(
             );
 
             commands::lock(
+                project_dir,
                 args.locked,
                 args.frozen,
                 args.python,
@@ -1262,6 +1288,7 @@ async fn run_project(
                 .collect::<Vec<_>>();
 
             Box::pin(commands::add(
+                project_dir,
                 args.locked,
                 args.frozen,
                 args.no_sync,
@@ -1300,6 +1327,7 @@ async fn run_project(
             );
 
             commands::remove(
+                project_dir,
                 args.locked,
                 args.frozen,
                 args.no_sync,
@@ -1328,6 +1356,7 @@ async fn run_project(
             let cache = cache.init()?;
 
             commands::tree(
+                project_dir,
                 args.locked,
                 args.frozen,
                 args.universal,
@@ -1359,6 +1388,7 @@ async fn run_project(
             let cache = cache.init()?;
 
             commands::export(
+                project_dir,
                 args.format,
                 args.package,
                 args.hashes,
