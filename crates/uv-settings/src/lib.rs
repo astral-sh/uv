@@ -1,10 +1,10 @@
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
-use tracing::{debug, warn};
+use tracing::debug;
 
 use uv_fs::Simplified;
-use uv_warnings::owo_colors::OwoColorize;
+use uv_warnings::warn_user;
 
 pub use crate::combine::*;
 pub use crate::settings::*;
@@ -74,7 +74,7 @@ impl FilesystemOptions {
                 }
                 Err(Error::PyprojectToml(file, err)) => {
                     // If we see an invalid `pyproject.toml`, warn but continue.
-                    warn!(
+                    warn_user!(
                         "Failed to parse `{}` during settings discovery:\n{}",
                         file.cyan(),
                         textwrap::indent(&err.to_string(), "  ")
@@ -107,7 +107,7 @@ impl FilesystemOptions {
                     .and_then(|content| toml::from_str::<PyProjectToml>(&content).ok())
                 {
                     if pyproject.tool.is_some_and(|tool| tool.uv.is_some()) {
-                        warn!(
+                        warn_user!(
                             "Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The `[tool.uv]` section will be ignored in favor of the `uv.toml` file."
                         );
                     }

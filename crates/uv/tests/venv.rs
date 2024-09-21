@@ -495,6 +495,13 @@ fn create_venv_warns_user_on_requires_python_discovery_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 1, column 9
+        |
+      1 | invalid toml
+        |         ^
+      expected `.`, `=`
+
     warning: Failed to parse: `pyproject.toml`
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
