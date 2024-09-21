@@ -19,6 +19,7 @@ fn username_password_no_longer_supported() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `uv.sources` is experimental and may change without warning
     Publishing 1 file
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to `https://upload.pypi.org/legacy/`
@@ -42,6 +43,7 @@ fn invalid_token() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `uv.sources` is experimental and may change without warning
     Publishing 1 file
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to `https://upload.pypi.org/legacy/`

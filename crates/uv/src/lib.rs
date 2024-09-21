@@ -1088,6 +1088,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Publish(args) => {
             show_settings!(args);
+
+            if globals.preview.is_disabled() {
+                warn_user_once!("`uv.sources` is experimental and may change without warning");
+            }
+
             // Resolve the settings from the command-line arguments and workspace configuration.
             let PublishSettings {
                 files,
