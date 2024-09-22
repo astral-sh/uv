@@ -110,6 +110,7 @@ nav:
   - Integration guides:
       - guides/integration/index.md
       - Docker: guides/integration/docker.md
+      - Jupyter: guides/integration/jupyter.md
       - GitHub Actions: guides/integration/github.md
       - Pre-commit: guides/integration/pre-commit.md
       - FastAPI: guides/integration/fastapi.md
