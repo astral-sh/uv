@@ -181,7 +181,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             EmptyInstalledPackages,
             DistributionDatabase::new(self.client, self, self.concurrency.downloads),
         )?;
-        let graph = resolver.resolve().await.with_context(|| {
+        let graph = resolver.resolve(Vec::new()).await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
                 requirements.iter().map(ToString::to_string).join(", "),

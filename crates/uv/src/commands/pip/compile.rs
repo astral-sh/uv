@@ -376,6 +376,7 @@ pub(crate) async fn pip_compile(
         &Reinstall::None,
         &upgrade,
         tags.as_deref(),
+        Vec::new(),
         markers.clone(),
         python_requirement,
         &client,

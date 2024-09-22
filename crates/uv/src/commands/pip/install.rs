@@ -379,6 +379,7 @@ pub(crate) async fn pip_install(
         &reinstall,
         &upgrade,
         Some(&tags),
+        Vec::new(),
         ResolverMarkers::specific_environment(markers.clone()),
         python_requirement,
         &client,

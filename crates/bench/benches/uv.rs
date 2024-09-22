@@ -215,6 +215,6 @@ mod resolver {
             DistributionDatabase::new(client, &build_context, concurrency.downloads),
         )?;
 
-        Ok(resolver.resolve().await?)
+        Ok(resolver.resolve(Vec::new()).await?)
     }
 }

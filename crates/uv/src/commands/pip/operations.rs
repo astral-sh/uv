@@ -101,6 +101,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     reinstall: &Reinstall,
     upgrade: &Upgrade,
     tags: Option<&Tags>,
+    prefetch_packages: Vec<PackageName>,
     markers: ResolverMarkers,
     python_requirement: PythonRequirement,
     client: &RegistryClient,
@@ -302,7 +303,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         )?
         .with_reporter(reporter);
 
-        resolver.resolve().await?
+        resolver.resolve(prefetch_packages).await?
     };
 
     logger.on_complete(resolution.len(), start, printer)?;

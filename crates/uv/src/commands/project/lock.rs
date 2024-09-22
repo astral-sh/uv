@@ -475,12 +475,21 @@ async fn do_lock(
         _ => {
             debug!("Starting clean resolution");
 
-            // Determine whether we can reuse the existing package versions.
-            let reusable_lock = existing_lock.as_ref().and_then(|lock| match &lock {
-                ValidatedLock::Preferable(lock) => Some(lock),
-                ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Unusable(_) => None,
-            });
+            // Determine whether we can reuse the existing package versions, or whether we should
+            // prefetch the version lists.
+            let (reusable_lock, package_prefetches) = match &existing_lock {
+                Some(ValidatedLock::Preferable(lock) | ValidatedLock::Satisfies(lock)) => {
+                    (Some(lock), Vec::new())
+                }
+                Some(ValidatedLock::Unusable(lock)) => (
+                    None,
+                    lock.packages()
+                        .iter()
+                        .map(|package| package.name().clone())
+                        .collect(),
+                ),
+                None => (None, Vec::new()),
+            };
 
             // If an existing lockfile exists, build up a set of preferences.
             let LockedRequirements { preferences, git } = reusable_lock
@@ -537,6 +546,7 @@ async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
+                package_prefetches,
                 resolver_markers,
                 python_requirement,
                 &client,

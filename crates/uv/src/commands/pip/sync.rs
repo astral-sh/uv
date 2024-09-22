@@ -330,6 +330,7 @@ pub(crate) async fn pip_sync(
         &reinstall,
         &upgrade,
         Some(&tags),
+        Vec::new(),
         ResolverMarkers::specific_environment(markers.clone()),
         python_requirement,
         &client,
