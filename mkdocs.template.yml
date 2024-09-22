@@ -42,11 +42,12 @@ site_dir: site/uv
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - toc:
-      permalink: "#"
   - pymdownx.snippets:
   - pymdownx.magiclink:
   - attr_list:
+  - toc:
+      anchorlink: true
+      anchorlink_class: "toclink"
   - md_in_html:
   - pymdownx.inlinehilite:
   - pymdownx.superfences:
