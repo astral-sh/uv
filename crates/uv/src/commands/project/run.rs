@@ -26,6 +26,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_resolver::Lock;
 use uv_scripts::Pep723Script;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace, WorkspaceError};
@@ -37,7 +38,8 @@ use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{
-    validate_requires_python, ProjectError, PythonRequestSource, WorkspacePython,
+    validate_requires_python, EnvironmentSpecification, ProjectError, PythonRequestSource,
+    WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{project, ExitStatus, SharedState};
@@ -205,7 +207,7 @@ pub(crate) async fn run(
                 .collect::<Result<_, _>>()?;
             let spec = RequirementsSpecification::from_requirements(requirements);
             let result = CachedEnvironment::get_or_create(
-                spec,
+                EnvironmentSpecification::from(spec),
                 interpreter,
                 &settings,
                 &state,
@@ -259,6 +261,9 @@ pub(crate) async fn run(
     } else {
         None
     };
+
+    // The lockfile used for the base environment.
+    let mut lock: Option<Lock> = None;
 
     // Discover and sync the base environment.
     let temp_dir;
@@ -466,6 +471,15 @@ pub(crate) async fn run(
 
             if no_sync {
                 debug!("Skipping environment synchronization due to `--no-sync`");
+
+                // If we're not syncing, we should still attempt to respect the locked preferences
+                // in any `--with` requirements.
+                if !isolated && !requirements.is_empty() {
+                    lock = project::lock::read(project.workspace())
+                        .await
+                        .ok()
+                        .flatten();
+                }
             } else {
                 let result = match project::lock::do_safe_lock(
                     locked,
@@ -522,6 +536,8 @@ pub(crate) async fn run(
                     printer,
                 )
                 .await?;
+
+                lock = Some(result.into_lock());
             }
 
             venv.into_interpreter()
@@ -626,7 +642,7 @@ pub(crate) async fn run(
                 debug!("Syncing ephemeral requirements");
 
                 let result = CachedEnvironment::get_or_create(
-                    spec,
+                    EnvironmentSpecification::from(spec).with_lock(lock.as_ref()),
                     base_interpreter.clone(),
                     &settings,
                     &state,
