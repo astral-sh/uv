@@ -9940,7 +9940,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     Ok(())
 }
 
-/// Lock a `pyproject.toml`, then rename the project, and  ensure that the lockfile is updated on
+/// Lock a `pyproject.toml`, then rename the project, and ensure that the lockfile is updated on
 /// the next run.
 #[test]
 fn lock_rename_project() -> Result<()> {
