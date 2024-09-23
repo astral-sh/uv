@@ -16,7 +16,8 @@ use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::platform::{Arch, Libc, Os};
 use crate::{
-    downloads, Error, Interpreter, PythonDownloads, PythonPreference, PythonSource, PythonVersion,
+    downloads, Error, ImplementationName, Interpreter, PythonDownloads, PythonPreference,
+    PythonSource, PythonVersion,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -174,6 +175,16 @@ impl PythonInstallation {
     /// Return the [`LenientImplementationName`] of the Python installation as reported by its interpreter.
     pub fn implementation(&self) -> LenientImplementationName {
         LenientImplementationName::from(self.interpreter.implementation_name())
+    }
+
+    /// Whether this is a CPython installation.
+    ///
+    /// Returns false if it is an alternative implementation, e.g., PyPy.
+    pub(crate) fn is_alternative_implementation(&self) -> bool {
+        !matches!(
+            self.implementation(),
+            LenientImplementationName::Known(ImplementationName::CPython)
+        )
     }
 
     /// Return the [`Arch`] of the Python installation as reported by its interpreter.

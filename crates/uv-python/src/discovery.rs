@@ -934,13 +934,36 @@ pub(crate) fn find_python_installation(
             return result;
         };
 
-        // If it's a pre-release, and pre-releases aren't allowed skip it but store it for later
+        // Check if we need to skip the interpreter because it is "not allowed", e.g., if it is a
+        // pre-release version or an alternative implementation, using it requires opt-in.
+
+        // If the interpreter has a default executable name, e.g. `python`, and was found on the
+        // search path, we consider this opt-in to use it.
+        let has_default_executable_name = installation.interpreter.has_default_executable_name()
+            && installation.source == PythonSource::SearchPath;
+
+        // If it's a pre-release and pre-releases aren't allowed, skip it — but store it for later
+        // since we'll use a pre-release if no other versions are available.
         if installation.python_version().pre().is_some()
             && !request.allows_prereleases()
             && !installation.source.allows_prereleases()
+            && !has_default_executable_name
         {
             debug!("Skipping pre-release {}", installation.key());
             first_prerelease = Some(installation.clone());
+            continue;
+        }
+
+        // If it's an alternative implementation and alternative implementations aren't allowed,
+        // skip it. Note we avoid querying these interpreters at all if they're on the search path
+        // and are not requested, but other sources such as the managed installations will include
+        // them.
+        if installation.is_alternative_implementation()
+            && !request.allows_alternative_implementations()
+            && !installation.source.allows_alternative_implementations()
+            && !has_default_executable_name
+        {
+            debug!("Skipping alternative implementation {}", installation.key());
             continue;
         }
 
@@ -948,7 +971,7 @@ pub(crate) fn find_python_installation(
         return result;
     }
 
-    // If we only found pre-releases, they're implicitly allowed and we should return the first one
+    // If we only found pre-releases, they're implicitly allowed and we should return the first one.
     if let Some(installation) = first_prerelease {
         return Ok(Ok(installation));
     }
@@ -1205,10 +1228,7 @@ impl PythonRequest {
         for implementation in
             ImplementationName::long_names().chain(ImplementationName::short_names())
         {
-            if let Some(remainder) = value
-                .to_ascii_lowercase()
-                .strip_prefix(Into::<&str>::into(implementation))
-            {
+            if let Some(remainder) = value.to_ascii_lowercase().strip_prefix(implementation) {
                 // e.g. `pypy`
                 if remainder.is_empty() {
                     return Self::Implementation(
@@ -1369,6 +1389,7 @@ impl PythonRequest {
         }
     }
 
+    /// Whether this request opts-in to a pre-release Python version.
     pub(crate) fn allows_prereleases(&self) -> bool {
         match self {
             Self::Default => false,
@@ -1378,6 +1399,19 @@ impl PythonRequest {
             Self::Implementation(_) => false,
             Self::ImplementationVersion(_, _) => true,
             Self::Key(request) => request.allows_prereleases(),
+        }
+    }
+
+    /// Whether this request opts-in to an alternative Python implementation, e.g., PyPy.
+    pub(crate) fn allows_alternative_implementations(&self) -> bool {
+        match self {
+            Self::Default => false,
+            Self::Any => true,
+            Self::Version(_) => false,
+            Self::Directory(_) | Self::File(_) | Self::ExecutableName(_) => true,
+            Self::Implementation(_) => true,
+            Self::ImplementationVersion(_, _) => true,
+            Self::Key(request) => request.allows_alternative_implementations(),
         }
     }
 
@@ -1410,12 +1444,24 @@ impl PythonSource {
         matches!(self, Self::Managed)
     }
 
-    /// Whether a pre-release Python installation from the source should be used without opt-in.
+    /// Whether a pre-release Python installation from this source can be used without opt-in.
     pub(crate) fn allows_prereleases(self) -> bool {
         match self {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
             Self::SearchPath
             | Self::CondaPrefix
+            | Self::ProvidedPath
+            | Self::ParentInterpreter
+            | Self::ActiveEnvironment
+            | Self::DiscoveredEnvironment => true,
+        }
+    }
+
+    /// Whether an alternative Python implementation from this source can be used without opt-in.
+    pub(crate) fn allows_alternative_implementations(self) -> bool {
+        match self {
+            Self::Managed | Self::Registry | Self::SearchPath | Self::MicrosoftStore => false,
+            Self::CondaPrefix
             | Self::ProvidedPath
             | Self::ParentInterpreter
             | Self::ActiveEnvironment

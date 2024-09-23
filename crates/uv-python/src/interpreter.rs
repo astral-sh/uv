@@ -25,7 +25,9 @@ use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 use crate::implementation::LenientImplementationName;
 use crate::platform::{Arch, Libc, Os};
 use crate::pointer_size::PointerSize;
-use crate::{Prefix, PythonInstallationKey, PythonVersion, Target, VirtualEnvironment};
+use crate::{
+    Prefix, PythonInstallationKey, PythonVersion, Target, VersionRequest, VirtualEnvironment,
+};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -493,6 +495,21 @@ impl Interpreter {
         } else {
             (version.major(), version.minor()) == self.python_tuple()
         }
+    }
+
+    /// Whether or not this Python interpreter is from a default Python executable name, like
+    /// `python`, `python3`, or `python.exe`.
+    pub(crate) fn has_default_executable_name(&self) -> bool {
+        let Some(file_name) = self.sys_executable().file_name() else {
+            return false;
+        };
+        let Some(name) = file_name.to_str() else {
+            return false;
+        };
+        VersionRequest::Default
+            .executable_names(None)
+            .into_iter()
+            .any(|default_name| name == default_name.to_string())
     }
 }
 

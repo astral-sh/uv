@@ -1793,7 +1793,7 @@ mod tests {
         })?;
         assert!(
             matches!(result, Err(PythonNotFound { .. })),
-            "We should not the pypy interpreter if not named `python` or requested; got {result:?}"
+            "We should not find the pypy interpreter if not named `python` or requested; got {result:?}"
         );
 
         // But we should find it
