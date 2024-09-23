@@ -857,7 +857,7 @@ pub(crate) enum PubGrubHint {
     },
     /// A package was available on an index, but not at the correct version, and at least one
     /// subsequent index was not queried. As such, a compatible version may be available on an
-    // one of the remaining indexes.
+    /// one of the remaining indexes.
     UncheckedIndex {
         package: PubGrubPackage,
         // excluded from `PartialEq` and `Hash`
@@ -1195,7 +1195,7 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} `{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). If both indexes are equally trusted, use `{}` to consider all indexes that list `{}`.",
+                    "{}{} `{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `{}` to consider all versions from all indexes, regardless of the order in which they were defined.",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package,
@@ -1203,7 +1203,6 @@ impl std::fmt::Display for PubGrubHint {
                     PackageRange::compatibility(package, range, None).cyan(),
                     next_index.cyan(),
                     "--index-strategy unsafe-best-match".green(),
-                    package,
                 )
             }
         }
