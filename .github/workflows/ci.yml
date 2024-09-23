@@ -614,6 +614,42 @@ jobs:
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
 
+  integration-test-free-threaded-linux:
+    timeout-minutes: 5
+    needs: build-binary-linux
+    name: "integration test | free-threaded on linux"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "install python3.13-nogil"
+        run: |
+          sudo add-apt-repository ppa:deadsnakes
+          sudo apt-get update
+          sudo apt-get install python3.13-nogil
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create a virtual environment"
+        run: |
+          ./uv venv -p 3.13t --python-preference only-system
+
+      - name: "Check version"
+        run: |
+          .venv/bin/python --version
+
+      - name: "Check is free-threaded"
+        run: |
+          .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install anyio
+
   integration-test-pypy-linux:
     timeout-minutes: 10
     needs: build-binary-linux

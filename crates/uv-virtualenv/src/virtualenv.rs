@@ -481,19 +481,20 @@ impl WindowsExecutable {
     }
 
     /// The name of the launcher shim.
-    fn launcher(self) -> &'static str {
+    fn launcher(self, interpreter: &Interpreter) -> &'static str {
         match self {
-            WindowsExecutable::Python => "venvlauncher.exe",
-            WindowsExecutable::PythonMajor => "venvlauncher.exe",
-            WindowsExecutable::PythonMajorMinor => "venvlauncher.exe",
-            WindowsExecutable::Pythonw => "venvwlauncher.exe",
+            Self::Python | Self::PythonMajor | Self::PythonMajorMinor
+                if interpreter.gil_disabled() =>
+            {
+                "venvlaunchert.exe"
+            }
+            Self::Python | Self::PythonMajor | Self::PythonMajorMinor => "venvlauncher.exe",
+            Self::Pythonw if interpreter.gil_disabled() => "venvwlaunchert.exe",
+            Self::Pythonw => "venvwlauncher.exe",
             // From 3.13 on these should replace the `python.exe` and `pythonw.exe` shims.
             // These are not relevant as of now for PyPy as it doesn't yet support Python 3.13.
-            WindowsExecutable::PyPy => "venvlauncher.exe",
-            WindowsExecutable::PyPyMajor => "venvlauncher.exe",
-            WindowsExecutable::PyPyMajorMinor => "venvlauncher.exe",
-            WindowsExecutable::PyPyw => "venvwlauncher.exe",
-            WindowsExecutable::PyPyMajorMinorw => "venvwlauncher.exe",
+            Self::PyPy | Self::PyPyMajor | Self::PyPyMajorMinor => "venvlauncher.exe",
+            Self::PyPyw | Self::PyPyMajorMinorw => "venvwlauncher.exe",
             WindowsExecutable::GraalPy => "venvlauncher.exe",
         }
     }
@@ -534,7 +535,7 @@ fn copy_launcher_windows(
         .join("venv")
         .join("scripts")
         .join("nt")
-        .join(executable.launcher());
+        .join(executable.launcher(interpreter));
     match fs_err::copy(shim, scripts.join(executable.exe(interpreter))) {
         Ok(_) => return Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
@@ -545,7 +546,7 @@ fn copy_launcher_windows(
 
     // Third priority: on Conda at least, we can look for the launcher shim next to
     // the Python executable itself.
-    let shim = base_python.with_file_name(executable.launcher());
+    let shim = base_python.with_file_name(executable.launcher(interpreter));
     match fs_err::copy(shim, scripts.join(executable.exe(interpreter))) {
         Ok(_) => return Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}

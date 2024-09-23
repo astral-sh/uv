@@ -264,6 +264,10 @@ impl PythonDownloadRequest {
             if !version.matches_major_minor_patch(key.major, key.minor, key.patch) {
                 return false;
             }
+            if version.is_free_threaded_requested() {
+                debug!("Installing managed free-threaded Python is not yet supported");
+                return false;
+            }
         }
         // If we don't allow pre-releases, don't match a key with a pre-release tag
         if !self.allows_prereleases() && !key.prerelease.is_empty() {

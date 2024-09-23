@@ -165,7 +165,7 @@ fn pep440_version_from_request(request: &PythonRequest) -> Option<pep440_rs::Ver
         }
     };
 
-    if matches!(version_request, uv_python::VersionRequest::Range(_)) {
+    if matches!(version_request, uv_python::VersionRequest::Range(_, _)) {
         return None;
     }
 
