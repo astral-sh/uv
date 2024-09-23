@@ -5020,6 +5020,7 @@ dependencies = [
  "pypi-types",
  "reqwest",
  "reqwest-middleware",
+ "reqwest-retry",
  "rustc-hash",
  "serde",
  "serde_json",

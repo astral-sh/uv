@@ -7,7 +7,7 @@ use std::fmt::Write;
 use std::sync::Arc;
 use tracing::info;
 use url::Url;
-use uv_client::{AuthIntegration, BaseClientBuilder, Connectivity};
+use uv_client::{AuthIntegration, BaseClientBuilder, Connectivity, DEFAULT_RETRIES};
 use uv_configuration::{KeyringProviderType, TrustedHost, TrustedPublishing};
 use uv_publish::{check_trusted_publishing, files_for_publishing, upload};
 
@@ -34,9 +34,9 @@ pub(crate) async fn publish(
         n => writeln!(printer.stderr(), "Publishing {n} files {publish_url}")?,
     }
 
-    // * For the uploads themselves, we can't use retries due to
+    // * For the uploads themselves, we roll our own retries due to
     //   https://github.com/seanmonstar/reqwest/issues/2416, but for trusted publishing, we want
-    //   retires.
+    //   the default retries.
     // * We want to allow configuring TLS for the registry, while for trusted publishing we know the
     //   defaults are correct.
     // * For the uploads themselves, we know we need an authorization header and we can't nor
@@ -86,6 +86,7 @@ pub(crate) async fn publish(
             &filename,
             &publish_url,
             &upload_client.client(),
+            DEFAULT_RETRIES,
             username.as_deref(),
             password.as_deref(),
             // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
