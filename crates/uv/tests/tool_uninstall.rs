@@ -42,7 +42,9 @@ fn tool_uninstall() {
     ----- stdout -----
 
     ----- stderr -----
-    No tools installed
+    No tools installed.
+
+    See `uv tool install --help` for more information.
     "###);
 
     // After uninstalling the tool, we should be able to reinstall it.
@@ -111,7 +113,9 @@ fn tool_uninstall_multiple_names() {
     ----- stdout -----
 
     ----- stderr -----
-    No tools installed
+    No tools installed.
+
+    See `uv tool install --help` for more information.
     "###);
 }
 
