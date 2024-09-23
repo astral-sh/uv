@@ -19,7 +19,7 @@ static DEFAULT_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::Pypi(VerbatimUrl::from_url(PYPI_URL.clone())));
 
 /// The URL of an index to use for fetching packages (e.g., PyPI).
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum IndexUrl {
     Pypi(VerbatimUrl),
     Url(VerbatimUrl),
@@ -384,9 +384,14 @@ impl<'a> IndexLocations {
         }
     }
 
-    /// Return an iterator over all [`IndexUrl`] entries.
+    /// Return an iterator over all [`IndexUrl`] entries in order.
+    ///
+    /// Prioritizes the extra indexes over the main index.
+    ///
+    /// If `no_index` was enabled, then this always returns an empty
+    /// iterator.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
-        self.index().into_iter().chain(self.extra_index())
+        self.extra_index().chain(self.index())
     }
 
     /// Return an iterator over the [`FlatIndexLocation`] entries.
