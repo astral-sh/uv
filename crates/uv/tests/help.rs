@@ -209,7 +209,7 @@ fn help_subcommand() {
     Manage Python versions and installations
 
     Generally, uv first searches for Python in a virtual environment, either active or in a
-    `.venv` directory  in the current working directory or any parent directory. If a virtual
+    `.venv` directory in the current working directory or any parent directory. If a virtual
     environment is not required, uv will then search for a Python interpreter. Python
     interpreters are found by searching for Python executables in the `PATH` environment
     variable.
@@ -797,7 +797,7 @@ fn help_with_help() {
     Usage: uv help [OPTIONS] [COMMAND]...
 
     Options:
-      --no-pager  Disable pager when printing help
+      --no-pager Disable pager when printing help
 
     ----- stderr -----
     "###);
