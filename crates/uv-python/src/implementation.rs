@@ -61,6 +61,12 @@ impl From<&ImplementationName> for &'static str {
     }
 }
 
+impl From<ImplementationName> for &'static str {
+    fn from(v: ImplementationName) -> &'static str {
+        (&v).into()
+    }
+}
+
 impl<'a> From<&'a LenientImplementationName> for &'a str {
     fn from(v: &'a LenientImplementationName) -> &'a str {
         match v {
