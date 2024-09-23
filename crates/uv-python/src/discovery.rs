@@ -15,7 +15,7 @@ use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
 
 use crate::downloads::PythonDownloadRequest;
-use crate::implementation::ImplementationName;
+use crate::implementation::{ImplementationName, LenientImplementationName};
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
 use crate::managed::ManagedPythonInstallations;
@@ -944,11 +944,23 @@ pub(crate) fn find_python_installation(
             continue;
         }
 
+        // If it's an alternative implementation, and alternative implementations aren't allowed
+        // skip it
+        if !matches!(
+            installation.implementation(),
+            LenientImplementationName::Known(ImplementationName::CPython),
+        ) && !request.allows_alternative_implementations()
+            && !installation.source.allows_alternative_implementations()
+        {
+            debug!("Skipping alternative implementation {}", installation.key());
+            continue;
+        }
+
         // If we didn't skip it, this is the installation to use
         return result;
     }
 
-    // If we only found pre-releases, they're implicitly allowed and we should return the first one
+    // If we only found pre-releases, they're implicitly allowed and we should return the first one.
     if let Some(installation) = first_prerelease {
         return Ok(Ok(installation));
     }
@@ -1207,7 +1219,7 @@ impl PythonRequest {
         {
             if let Some(remainder) = value
                 .to_ascii_lowercase()
-                .strip_prefix(Into::<&str>::into(implementation))
+                .strip_prefix(Into::<&str>::into(*implementation))
             {
                 // e.g. `pypy`
                 if remainder.is_empty() {
@@ -1381,6 +1393,17 @@ impl PythonRequest {
         }
     }
 
+    pub(crate) fn allows_alternative_implementations(&self) -> bool {
+        match self {
+            Self::Any => false,
+            Self::Version(_) => false,
+            Self::Directory(_) | Self::File(_) | Self::ExecutableName(_) => true,
+            Self::Implementation(_) => true,
+            Self::ImplementationVersion(_, _) => true,
+            Self::Key(request) => request.allows_alternative_implementations(),
+        }
+    }
+
     pub(crate) fn is_explicit_system(&self) -> bool {
         matches!(self, Self::File(_) | Self::Directory(_))
     }
@@ -1416,6 +1439,18 @@ impl PythonSource {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
             Self::SearchPath
             | Self::CondaPrefix
+            | Self::ProvidedPath
+            | Self::ParentInterpreter
+            | Self::ActiveEnvironment
+            | Self::DiscoveredEnvironment => true,
+        }
+    }
+
+    /// Whether an alternative Python implementation from the source should be used without opt-in.
+    pub(crate) fn allows_alternative_implementations(self) -> bool {
+        match self {
+            Self::Managed | Self::Registry | Self::SearchPath | Self::MicrosoftStore => false,
+            Self::CondaPrefix
             | Self::ProvidedPath
             | Self::ParentInterpreter
             | Self::ActiveEnvironment
