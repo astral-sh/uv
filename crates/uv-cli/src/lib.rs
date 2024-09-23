@@ -3440,6 +3440,9 @@ pub enum PythonCommand {
     /// See `uv help python` to view supported request formats.
     Pin(PythonPinArgs),
 
+    /// Update .python-version(s) files to latest patch version
+    Patch,
+
     /// Show the uv Python installation directory.
     ///
     /// By default, Python installations are stored in the uv data directory at

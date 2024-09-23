@@ -1085,6 +1085,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             commands::python_dir()?;
             Ok(ExitStatus::Success)
         }
+        Commands::Python(PythonNamespace {
+            command: PythonCommand::Patch,
+        }) => {
+            commands::python_patch().await?;
+            Ok(ExitStatus::Success)
+        }
     }
 }
 
