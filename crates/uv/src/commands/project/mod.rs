@@ -16,17 +16,20 @@ use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall,
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
+use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
+use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::{
     NamedRequirementsError, NamedRequirementsResolver, RequirementsSpecification,
 };
 use uv_resolver::{
-    FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph, ResolverMarkers,
+    FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph,
+    ResolverMarkers,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -693,10 +696,34 @@ pub(crate) async fn resolve_names(
     Ok(requirements)
 }
 
+#[derive(Debug)]
+pub(crate) struct EnvironmentSpecification<'lock> {
+    /// The requirements to include in the environment.
+    requirements: RequirementsSpecification,
+    /// The lockfile from which to extract preferences.
+    lock: Option<&'lock Lock>,
+}
+
+impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
+    fn from(requirements: RequirementsSpecification) -> Self {
+        Self {
+            requirements,
+            lock: None,
+        }
+    }
+}
+
+impl<'lock> EnvironmentSpecification<'lock> {
+    #[must_use]
+    pub(crate) fn with_lock(self, lock: Option<&'lock Lock>) -> Self {
+        Self { lock, ..self }
+    }
+}
+
 /// Run dependency resolution for an interpreter, returning the [`ResolutionGraph`].
 pub(crate) async fn resolve_environment<'a>(
+    spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
-    spec: RequirementsSpecification,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
@@ -706,7 +733,7 @@ pub(crate) async fn resolve_environment<'a>(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ResolutionGraph, ProjectError> {
-    warn_on_requirements_txt_setting(&spec, settings);
+    warn_on_requirements_txt_setting(&spec.requirements, settings);
 
     let ResolverSettingsRef {
         index_locations,
@@ -734,7 +761,7 @@ pub(crate) async fn resolve_environment<'a>(
         overrides,
         source_trees,
         ..
-    } = spec;
+    } = spec.requirements;
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = interpreter.tags()?;
@@ -782,7 +809,6 @@ pub(crate) async fn resolve_environment<'a>(
     let dev = Vec::default();
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
-    let preferences = Vec::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
 
@@ -790,6 +816,18 @@ pub(crate) async fn resolve_environment<'a>(
     // upgrades aren't relevant.
     let reinstall = Reinstall::default();
     let upgrade = Upgrade::default();
+
+    // If an existing lockfile exists, build up a set of preferences.
+    let LockedRequirements { preferences, git } = spec
+        .lock
+        .map(|lock| read_lock_requirements(lock, &upgrade))
+        .unwrap_or_default();
+
+    // Populate the Git resolver.
+    for ResolvedRepositoryReference { reference, sha } in git {
+        debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
+        state.git.insert(reference, sha);
+    }
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

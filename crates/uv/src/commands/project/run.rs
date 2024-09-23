@@ -18,7 +18,7 @@ use uv_configuration::{
     Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, SourceStrategy,
 };
 use uv_distribution::LoweredRequirement;
-use uv_fs::{PythonExt, Simplified, CWD};
+use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
@@ -26,6 +26,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_resolver::Lock;
 use uv_scripts::Pep723Script;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace, WorkspaceError};
@@ -37,7 +38,8 @@ use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{
-    validate_requires_python, ProjectError, PythonRequestSource, WorkspacePython,
+    validate_requires_python, EnvironmentSpecification, ProjectError, PythonRequestSource,
+    WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{project, ExitStatus, SharedState};
@@ -47,6 +49,7 @@ use crate::settings::ResolverInstallerSettings;
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
+    project_dir: &Path,
     script: Option<Pep723Script>,
     command: RunCommand,
     requirements: Vec<RequirementsSource>,
@@ -113,7 +116,7 @@ pub(crate) async fn run(
             let source = PythonRequestSource::UserRequest;
             let request = Some(PythonRequest::parse(request));
             (source, request)
-        } else if let Some(file) = PythonVersionFile::discover(&*CWD, false, false).await? {
+        } else if let Some(file) = PythonVersionFile::discover(&project_dir, false, false).await? {
             // (2) Request from `.python-version`
             let source = PythonRequestSource::DotPythonVersion(file.file_name().to_string());
             let request = file.into_version();
@@ -204,7 +207,7 @@ pub(crate) async fn run(
                 .collect::<Result<_, _>>()?;
             let spec = RequirementsSpecification::from_requirements(requirements);
             let result = CachedEnvironment::get_or_create(
-                spec,
+                EnvironmentSpecification::from(spec),
                 interpreter,
                 &settings,
                 &state,
@@ -259,6 +262,9 @@ pub(crate) async fn run(
         None
     };
 
+    // The lockfile used for the base environment.
+    let mut lock: Option<Lock> = None;
+
     // Discover and sync the base environment.
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
@@ -309,13 +315,13 @@ pub(crate) async fn run(
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
-                Workspace::discover(&CWD, &DiscoveryOptions::default())
+                Workspace::discover(project_dir, &DiscoveryOptions::default())
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             ))
         } else {
-            match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
+            match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
                 Ok(project) => {
                     if no_project {
                         debug!("Ignoring discovered project due to `--no-project`");
@@ -465,6 +471,15 @@ pub(crate) async fn run(
 
             if no_sync {
                 debug!("Skipping environment synchronization due to `--no-sync`");
+
+                // If we're not syncing, we should still attempt to respect the locked preferences
+                // in any `--with` requirements.
+                if !isolated && !requirements.is_empty() {
+                    lock = project::lock::read(project.workspace())
+                        .await
+                        .ok()
+                        .flatten();
+                }
             } else {
                 let result = match project::lock::do_safe_lock(
                     locked,
@@ -521,6 +536,8 @@ pub(crate) async fn run(
                     printer,
                 )
                 .await?;
+
+                lock = Some(result.into_lock());
             }
 
             venv.into_interpreter()
@@ -537,7 +554,7 @@ pub(crate) async fn run(
                     Some(PythonRequest::parse(request))
                 // (2) Request from `.python-version`
                 } else {
-                    PythonVersionFile::discover(&*CWD, no_config, false)
+                    PythonVersionFile::discover(&project_dir, no_config, false)
                         .await?
                         .and_then(PythonVersionFile::into_version)
                 };
@@ -625,7 +642,7 @@ pub(crate) async fn run(
                 debug!("Syncing ephemeral requirements");
 
                 let result = CachedEnvironment::get_or_create(
-                    spec,
+                    EnvironmentSpecification::from(spec).with_lock(lock.as_ref()),
                     base_interpreter.clone(),
                     &settings,
                     &state,

@@ -33,7 +33,7 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations;
-use crate::commands::project::{resolve_names, ProjectError};
+use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::Target;
 use crate::commands::{
@@ -488,7 +488,7 @@ async fn get_or_create_environment(
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
     let environment = CachedEnvironment::get_or_create(
-        spec,
+        EnvironmentSpecification::from(spec),
         interpreter,
         settings,
         &state,

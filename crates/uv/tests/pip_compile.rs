@@ -10682,6 +10682,8 @@ fn compile_index_url_first_match() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of jinja2==3.1.0 and you require jinja2==3.1.0, we can conclude that your requirements are unsatisfiable.
+
+          hint: `jinja2` was found on https://download.pytorch.org/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
     "###
     );
 
@@ -12378,48 +12380,6 @@ fn prune_unreachable() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
-
-    Ok(())
-}
-
-/// See: <https://github.com/astral-sh/uv/issues/7553>
-#[test]
-fn invalid_platform() -> Result<()> {
-    let context = TestContext::new("3.10");
-    let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("open3d")?;
-
-    uv_snapshot!(context
-        .pip_compile()
-        .arg("--python-platform")
-        .arg("linux")
-        .arg("requirements.in"), @r###"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of open3d are available:
-              open3d==0.8.0.0
-              open3d==0.9.0.0
-              open3d==0.10.0.0
-              open3d==0.10.0.1
-              open3d==0.11.0
-              open3d==0.11.1
-              open3d==0.11.2
-              open3d==0.12.0
-              open3d==0.13.0
-              open3d==0.14.1
-              open3d==0.15.1
-              open3d==0.15.2
-              open3d==0.16.0
-              open3d==0.16.1
-              open3d==0.17.0
-              open3d==0.18.0
-          and open3d<=0.15.2 has no wheels with a matching Python ABI tag, we can conclude that open3d<0.9.0.0 cannot be used.
-          And because open3d>=0.16.0 has no wheels with a matching platform tag and you require open3d, we can conclude that your requirements are unsatisfiable.
     "###);
 
     Ok(())

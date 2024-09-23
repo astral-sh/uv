@@ -235,6 +235,19 @@ pub struct GlobalArgs {
     /// Change to the given directory prior to running the command.
     #[arg(global = true, long, hide = true)]
     pub directory: Option<PathBuf>,
+
+    /// Run the command within the given project directory.
+    ///
+    /// All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
+    /// up the directory tree from the project root, as will the project's virtual environment
+    /// (`.venv`).
+    ///
+    /// Other command-line arguments (such as relative paths) will be resolved relative
+    /// to the current working directory.
+    ///
+    /// This setting has no effect when used in the `uv pip` interface.
+    #[arg(global = true, long)]
+    pub project: Option<PathBuf>,
 }
 
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
@@ -276,7 +289,7 @@ pub enum Commands {
     /// Manage Python versions and installations
     ///
     /// Generally, uv first searches for Python in a virtual environment, either active or in a
-    /// `.venv` directory  in the current working directory or any parent directory. If a virtual
+    /// `.venv` directory in the current working directory or any parent directory. If a virtual
     /// environment is not required, uv will then search for a Python interpreter. Python
     /// interpreters are found by searching for Python executables in the `PATH` environment
     /// variable.
@@ -353,7 +366,7 @@ pub enum Commands {
     ///
     /// By default, if passed a directory, `uv build` will build a source
     /// distribution ("sdist") from the source directory, and a binary
-    /// distribution ("wheel") from  the source distribution.
+    /// distribution ("wheel") from the source distribution.
     ///
     /// `uv build --sdist` can be used to build only the source distribution,
     /// `uv build --wheel` can be used to build only the binary distribution,
@@ -361,7 +374,7 @@ pub enum Commands {
     /// from source.
     ///
     /// If passed a source distribution, `uv build --wheel` will build a wheel
-    /// from  the source distribution.
+    /// from the source distribution.
     #[command(
         after_help = "Use `uv help build` for more details.",
         after_long_help = ""
@@ -397,7 +410,7 @@ pub enum Commands {
 ",
         after_help = format!("\
 {heading}Options:{heading:#}
-  {option}--no-pager{option:#}  Disable pager when printing help
+  {option}--no-pager{option:#} Disable pager when printing help
 ",
             heading = Style::new().bold().underline(),
             option = Style::new().bold(),
@@ -457,7 +470,7 @@ pub enum CacheCommand {
     /// Show the cache directory.
     ///
     ///
-    /// By default, the cache is stored in  `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
+    /// By default, the cache is stored in `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
     /// `%LOCALAPPDATA%\uv\cache` on Windows.
     ///
     /// When `--no-cache` is used, the cache is stored in a temporary directory and discarded when
@@ -4005,7 +4018,7 @@ pub struct ResolverArgs {
 
     /// Disable isolation when building source distributions for a specific package.
     ///
-    /// Assumes that the packages' build dependencies specified by PEP 518  are already installed.
+    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
     #[arg(long, help_heading = "Build options")]
     pub no_build_isolation_package: Vec<PackageName>,
 
@@ -4197,7 +4210,7 @@ pub struct ResolverInstallerArgs {
 
     /// Disable isolation when building source distributions for a specific package.
     ///
-    /// Assumes that the packages' build dependencies specified by PEP 518  are already installed.
+    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
     #[arg(long, help_heading = "Build options")]
     pub no_build_isolation_package: Vec<PackageName>,
 

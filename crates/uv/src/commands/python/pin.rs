@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{bail, Result};
@@ -6,7 +7,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_fs::{Simplified, CWD};
+use uv_fs::Simplified;
 use uv_python::{
     EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
     PYTHON_VERSION_FILENAME,
@@ -19,6 +20,7 @@ use crate::printer::Printer;
 
 /// Pin to a specific Python version.
 pub(crate) async fn pin(
+    project_dir: &Path,
     request: Option<String>,
     resolved: bool,
     python_preference: PythonPreference,
@@ -29,7 +31,7 @@ pub(crate) async fn pin(
     let virtual_project = if no_project {
         None
     } else {
-        match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
             Ok(virtual_project) => Some(virtual_project),
             Err(err) => {
                 debug!("Failed to discover virtual project: {err}");
@@ -38,7 +40,7 @@ pub(crate) async fn pin(
         }
     };
 
-    let version_file = PythonVersionFile::discover(&*CWD, false, false).await;
+    let version_file = PythonVersionFile::discover(project_dir, false, false).await;
 
     let Some(request) = request else {
         // Display the current pinned Python version
@@ -124,8 +126,8 @@ pub(crate) async fn pin(
 
     let existing = version_file.ok().flatten();
     // TODO(zanieb): Allow updating the discovered version file with an `--update` flag.
-    let new =
-        PythonVersionFile::new(CWD.join(PYTHON_VERSION_FILENAME)).with_versions(vec![request]);
+    let new = PythonVersionFile::new(project_dir.join(PYTHON_VERSION_FILENAME))
+        .with_versions(vec![request]);
 
     new.write().await?;
 

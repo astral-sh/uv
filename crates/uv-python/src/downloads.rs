@@ -282,7 +282,11 @@ impl PythonDownloadRequest {
     }
 
     pub fn allows_prereleases(&self) -> bool {
-        self.prereleases.unwrap_or_else(|| self.version.is_some())
+        self.prereleases.unwrap_or_else(|| {
+            self.version
+                .as_ref()
+                .is_some_and(VersionRequest::allows_prereleases)
+        })
     }
 
     pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {

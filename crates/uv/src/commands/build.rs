@@ -15,7 +15,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{BuildKind, BuildOutput, Concurrency, Constraints, HashCheckingMode};
 use uv_dispatch::BuildDispatch;
-use uv_fs::{Simplified, CWD};
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -29,6 +29,7 @@ use uv_workspace::{DiscoveryOptions, Workspace};
 /// Build source distributions and wheels.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn build(
+    project_dir: &Path,
     src: Option<PathBuf>,
     package: Option<PackageName>,
     output_dir: Option<PathBuf>,
@@ -48,6 +49,7 @@ pub(crate) async fn build(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let assets = build_impl(
+        project_dir,
         src.as_deref(),
         package.as_ref(),
         output_dir.as_deref(),
@@ -89,6 +91,7 @@ pub(crate) async fn build(
 
 #[allow(clippy::fn_params_excessive_bools)]
 async fn build_impl(
+    project_dir: &Path,
     src: Option<&Path>,
     package: Option<&PackageName>,
     output_dir: Option<&Path>,
@@ -149,7 +152,7 @@ async fn build_impl(
             Source::Directory(Cow::Owned(src))
         }
     } else {
-        Source::Directory(Cow::Borrowed(&*CWD))
+        Source::Directory(Cow::Borrowed(project_dir))
     };
 
     // Attempt to discover the workspace; on failure, save the error for later.

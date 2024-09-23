@@ -20,7 +20,7 @@ use uv_configuration::{
     NoBinary, NoBuild, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
-use uv_fs::{Simplified, CWD};
+use uv_fs::Simplified;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionRequest,
@@ -41,6 +41,7 @@ use crate::printer::Printer;
 /// Create a virtual environment.
 #[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
 pub(crate) async fn venv(
+    project_dir: &Path,
     path: Option<PathBuf>,
     python_request: Option<&str>,
     python_preference: PythonPreference,
@@ -66,6 +67,7 @@ pub(crate) async fn venv(
     relocatable: bool,
 ) -> Result<ExitStatus> {
     match venv_impl(
+        project_dir,
         path,
         python_request,
         link_mode,
@@ -122,6 +124,7 @@ enum VenvError {
 /// Create a virtual environment.
 #[allow(clippy::fn_params_excessive_bools)]
 async fn venv_impl(
+    project_dir: &Path,
     path: Option<PathBuf>,
     python_request: Option<&str>,
     link_mode: LinkMode,
@@ -149,7 +152,7 @@ async fn venv_impl(
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
             Ok(project) => Some(project),
             Err(WorkspaceError::MissingProject(_)) => None,
             Err(WorkspaceError::MissingPyprojectToml) => None,
@@ -169,7 +172,8 @@ async fn venv_impl(
                 // Only use the project environment path if we're invoked from the root
                 // This isn't strictly necessary and we may want to change it later, but this
                 // avoids a breaking change when adding project environment support to `uv venv`.
-                (project.workspace().install_path() == &*CWD).then(|| project.workspace().venv())
+                (project.workspace().install_path() == project_dir)
+                    .then(|| project.workspace().venv())
             })
             .unwrap_or(PathBuf::from(".venv")),
     );
@@ -185,7 +189,7 @@ async fn venv_impl(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(&*CWD, no_config, false)
+        interpreter_request = PythonVersionFile::discover(project_dir, no_config, false)
             .await
             .into_diagnostic()?
             .and_then(PythonVersionFile::into_version);
