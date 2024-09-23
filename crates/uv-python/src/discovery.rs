@@ -1,7 +1,6 @@
 use itertools::{Either, Itertools};
 use regex::Regex;
 use same_file::is_same_file;
-use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
 use std::fmt::{self, Debug, Formatter};
 use std::{env, io, iter};
@@ -431,7 +430,11 @@ fn python_executables_from_search_path<'a>(
         env::var_os("UV_TEST_PYTHON_PATH").unwrap_or(env::var_os("PATH").unwrap_or_default());
 
     let version_request = version.unwrap_or(&VersionRequest::Default);
-    let possible_names: Vec<_> = version_request.possible_names(implementation).collect();
+    let possible_names: Vec<_> = version_request
+        .executable_names(implementation)
+        .into_iter()
+        .map(|name| name.to_string())
+        .collect();
 
     trace!(
         "Searching PATH for executables: {}",
@@ -1199,7 +1202,9 @@ impl PythonRequest {
                 }
             }
         }
-        for implementation in ImplementationName::possible_names() {
+        for implementation in
+            ImplementationName::long_names().chain(ImplementationName::short_names())
+        {
             if let Some(remainder) = value
                 .to_ascii_lowercase()
                 .strip_prefix(Into::<&str>::into(implementation))
@@ -1474,105 +1479,203 @@ impl EnvironmentPreference {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ExecutableName {
+    name: &'static str,
+    major: Option<u8>,
+    minor: Option<u8>,
+    patch: Option<u8>,
+    prerelease: Option<Prerelease>,
+    free_threaded: bool,
+}
+
+impl ExecutableName {
+    #[must_use]
+    fn with_name(mut self, name: &'static str) -> Self {
+        self.name = name;
+        self
+    }
+
+    #[must_use]
+    fn with_major(mut self, major: u8) -> Self {
+        self.major = Some(major);
+        self
+    }
+
+    #[must_use]
+    fn with_minor(mut self, minor: u8) -> Self {
+        self.minor = Some(minor);
+        self
+    }
+
+    #[must_use]
+    fn with_patch(mut self, patch: u8) -> Self {
+        self.patch = Some(patch);
+        self
+    }
+
+    #[must_use]
+    fn with_prerelease(mut self, prerelease: Prerelease) -> Self {
+        self.prerelease = Some(prerelease);
+        self
+    }
+
+    // Enable when we add free-threading support
+    // #[must_use]
+    // fn with_free_threaded(mut self, free_threaded: bool) -> Self {
+    //     self.free_threaded = free_threaded;
+    //     self
+    // }
+}
+
+impl Default for ExecutableName {
+    fn default() -> Self {
+        Self {
+            name: "python",
+            major: None,
+            minor: None,
+            patch: None,
+            prerelease: None,
+            free_threaded: false,
+        }
+    }
+}
+
+impl std::fmt::Display for ExecutableName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)?;
+        if let Some(major) = self.major {
+            write!(f, "{major}")?;
+            if let Some(minor) = self.minor {
+                write!(f, ".{minor}")?;
+                if let Some(patch) = self.patch {
+                    write!(f, ".{patch}")?;
+                }
+            }
+        }
+        if let Some(prerelease) = &self.prerelease {
+            write!(f, "{prerelease}")?;
+        }
+        if self.free_threaded {
+            f.write_str("t")?;
+        }
+        f.write_str(std::env::consts::EXE_SUFFIX)?;
+        Ok(())
+    }
+}
+
 impl VersionRequest {
-    pub(crate) fn default_names(&self) -> [Option<Cow<'static, str>>; 4] {
-        let (python, python3, extension) = if cfg!(windows) {
-            (
-                Cow::Borrowed("python.exe"),
-                Cow::Borrowed("python3.exe"),
-                ".exe",
-            )
+    pub(crate) fn executable_names(
+        &self,
+        implementation: Option<&ImplementationName>,
+    ) -> Vec<ExecutableName> {
+        let prerelease = if let Self::MajorMinorPrerelease(_, _, prerelease) = self {
+            // Include the prerelease version, e.g., `python3.8a`
+            Some(prerelease)
         } else {
-            (Cow::Borrowed("python"), Cow::Borrowed("python3"), "")
+            None
         };
 
+        // Push a default one
+        let mut names = Vec::new();
+        names.push(ExecutableName::default());
+
+        // Collect each variant depending on the number of versions
+        if let Some(major) = self.major() {
+            // e.g. `python3`
+            names.push(ExecutableName::default().with_major(major));
+            if let Some(minor) = self.minor() {
+                // e.g., `python3.12`
+                names.push(
+                    ExecutableName::default()
+                        .with_major(major)
+                        .with_minor(minor),
+                );
+                if let Some(patch) = self.patch() {
+                    // e.g, `python3.12.1`
+                    names.push(
+                        ExecutableName::default()
+                            .with_major(major)
+                            .with_minor(minor)
+                            .with_patch(patch),
+                    );
+                }
+            }
+        } else {
+            // Include `3` by default, e.g., `python3`
+            names.push(ExecutableName::default().with_major(3));
+        }
+
+        if let Some(prerelease) = prerelease {
+            // Include the prerelease version, e.g., `python3.8a`
+            for i in 0..names.len() {
+                let name = names[i];
+                if name.minor.is_none() {
+                    // We don't want to include the pre-release marker here
+                    // e.g. `pythonrc1` and `python3rc1` don't make sense
+                    continue;
+                }
+                names.push(name.with_prerelease(*prerelease));
+            }
+        }
+
+        // Add all the implementation-specific names
+        if let Some(implementation) = implementation {
+            for i in 0..names.len() {
+                let name = names[i].with_name(implementation.into());
+                names.push(name);
+            }
+        } else {
+            // When looking for all implementations, include all possible names
+            if matches!(self, Self::Any) {
+                for i in 0..names.len() {
+                    for implementation in ImplementationName::long_names() {
+                        let name = names[i].with_name(implementation);
+                        names.push(name);
+                    }
+                }
+            }
+        }
+
+        // Include free-threaded variants when supported
+        // if self.is_free_threaded_requested() {
+        //     for i in 0..names.len() {
+        //         let name = names[i].with_free_threaded(true);
+        //         names.push(name);
+        //     }
+        // }
+
+        names
+    }
+
+    pub(crate) fn major(&self) -> Option<u8> {
         match self {
-            Self::Any | Self::Default | Self::Range(_) => [Some(python3), Some(python), None, None],
-            Self::Major(major) => [
-                Some(Cow::Owned(format!("python{major}{extension}"))),
-                Some(python),
-                None,
-                None,
-            ],
-            Self::MajorMinor(major, minor) => [
-                Some(Cow::Owned(format!("python{major}.{minor}{extension}"))),
-                Some(Cow::Owned(format!("python{major}{extension}"))),
-                Some(python),
-                None,
-            ],
-            Self::MajorMinorPatch(major, minor, patch) => [
-                Some(Cow::Owned(format!(
-                    "python{major}.{minor}.{patch}{extension}",
-                ))),
-                Some(Cow::Owned(format!("python{major}.{minor}{extension}"))),
-                Some(Cow::Owned(format!("python{major}{extension}"))),
-                Some(python),
-            ],
-            Self::MajorMinorPrerelease(major, minor, prerelease) => [
-                Some(Cow::Owned(format!(
-                    "python{major}.{minor}{prerelease}{extension}",
-                ))),
-                Some(Cow::Owned(format!("python{major}{extension}"))),
-                Some(python),
-                None,
-            ],
+            Self::Any | Self::Default | Self::Range(_) => None,
+            Self::Major(major) => Some(*major),
+            Self::MajorMinor(major, _) => Some(*major),
+            Self::MajorMinorPatch(major, _, _) => Some(*major),
+            Self::MajorMinorPrerelease(major, _, _) => Some(*major),
         }
     }
 
-    pub(crate) fn possible_names<'a>(
-        &'a self,
-        implementation: Option<&'a ImplementationName>,
-    ) -> impl Iterator<Item = Cow<'static, str>> + 'a {
-        implementation
-            .into_iter()
-            .flat_map(move |implementation| {
-                let extension = std::env::consts::EXE_SUFFIX;
-                let name: &str = implementation.into();
-                let (python, python3) = if extension.is_empty() {
-                    (Cow::Borrowed(name), Cow::Owned(format!("{name}3")))
-                } else {
-                    (
-                        Cow::Owned(format!("{name}{extension}")),
-                        Cow::Owned(format!("{name}3{extension}")),
-                    )
-                };
+    pub(crate) fn minor(&self) -> Option<u8> {
+        match self {
+            Self::Any | Self::Default | Self::Range(_) => None,
+            Self::Major(_) => None,
+            Self::MajorMinor(_, minor) => Some(*minor),
+            Self::MajorMinorPatch(_, minor, _) => Some(*minor),
+            Self::MajorMinorPrerelease(_, minor, _) => Some(*minor),
+        }
+    }
 
-                match self {
-                    Self::Any | Self::Default | Self::Range(_) => {
-                        [Some(python3), Some(python), None, None]
-                    }
-                    Self::Major(major) => [
-                        Some(Cow::Owned(format!("{name}{major}{extension}"))),
-                        Some(python),
-                        None,
-                        None,
-                    ],
-                    Self::MajorMinor(major, minor) => [
-                        Some(Cow::Owned(format!("{name}{major}.{minor}{extension}"))),
-                        Some(Cow::Owned(format!("{name}{major}{extension}"))),
-                        Some(python),
-                        None,
-                    ],
-                    Self::MajorMinorPatch(major, minor, patch) => [
-                        Some(Cow::Owned(format!(
-                            "{name}{major}.{minor}.{patch}{extension}",
-                        ))),
-                        Some(Cow::Owned(format!("{name}{major}.{minor}{extension}"))),
-                        Some(Cow::Owned(format!("{name}{major}{extension}"))),
-                        Some(python),
-                    ],
-                    Self::MajorMinorPrerelease(major, minor, prerelease) => [
-                        Some(Cow::Owned(format!(
-                            "{name}{major}.{minor}{prerelease}{extension}",
-                        ))),
-                        Some(Cow::Owned(format!("{name}{major}{extension}"))),
-                        Some(python),
-                        None,
-                    ],
-                }
-            })
-            .chain(self.default_names())
-            .flatten()
+    pub(crate) fn patch(&self) -> Option<u8> {
+        match self {
+            Self::Any | Self::Default | Self::Range(_) => None,
+            Self::Major(_) => None,
+            Self::MajorMinor(_, _) => None,
+            Self::MajorMinorPatch(_, _, patch) => Some(*patch),
+            Self::MajorMinorPrerelease(_, _, _) => None,
+        }
     }
 
     pub(crate) fn check_supported(&self) -> Result<(), String> {
@@ -2390,6 +2493,89 @@ mod tests {
                 VersionRequest::from_str("31000"),
                 Err(Error::InvalidVersionRequest(_))
             )
+        );
+    }
+
+    #[test]
+    fn executable_names_from_request() {
+        fn case(request: &str, expected: &[&str]) {
+            let (implementation, version) = match PythonRequest::parse(request) {
+                PythonRequest::Any => (None, VersionRequest::Any),
+                PythonRequest::Default => (None, VersionRequest::Default),
+                PythonRequest::Version(version) => (None, version),
+                PythonRequest::ImplementationVersion(implementation, version) => {
+                    (Some(implementation), version)
+                }
+                PythonRequest::Implementation(implementation) => {
+                    (Some(implementation), VersionRequest::Default)
+                }
+                result => {
+                    panic!("Test cases should request versions or implementations; got {result:?}")
+                }
+            };
+
+            let result: Vec<_> = version
+                .executable_names(implementation.as_ref())
+                .into_iter()
+                .map(|name| name.to_string())
+                .collect();
+
+            let expected: Vec<_> = expected
+                .iter()
+                .map(|name| format!("{name}{exe}", exe = std::env::consts::EXE_SUFFIX))
+                .collect();
+
+            assert_eq!(result, expected, "mismatch for case \"{request}\"");
+        }
+
+        case(
+            "any",
+            &[
+                "python", "python3", "cpython", "pypy", "graalpy", "cpython3", "pypy3", "graalpy3",
+            ],
+        );
+
+        case("default", &["python", "python3"]);
+
+        case("3", &["python", "python3"]);
+
+        case("4", &["python", "python4"]);
+
+        case("3.13", &["python", "python3", "python3.13"]);
+
+        case(
+            "pypy@3.10",
+            &[
+                "python",
+                "python3",
+                "python3.10",
+                "pypy",
+                "pypy3",
+                "pypy3.10",
+            ],
+        );
+
+        // Enable when we add free-threading support
+        // case(
+        //     "3.13t",
+        //     &[
+        //         "python",
+        //         "python3",
+        //         "python3.13",
+        //         "pythont",
+        //         "python3t",
+        //         "python3.13t",
+        //     ],
+        // );
+
+        case(
+            "3.13.2",
+            &["python", "python3", "python3.13", "python3.13.2"],
+        );
+
+        case(
+            "3.13rc2",
+            &["python", "python3", "python3.13", "python3.13rc2"],
         );
     }
 }

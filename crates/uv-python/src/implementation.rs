@@ -25,8 +25,12 @@ pub enum LenientImplementationName {
 }
 
 impl ImplementationName {
-    pub(crate) fn possible_names() -> impl Iterator<Item = &'static str> {
-        ["cpython", "pypy", "graalpy", "cp", "pp", "gp"].into_iter()
+    pub(crate) fn short_names() -> impl Iterator<Item = &'static str> {
+        ["cp", "pp", "gp"].into_iter()
+    }
+
+    pub(crate) fn long_names() -> impl Iterator<Item = &'static str> {
+        ["cpython", "pypy", "graalpy"].into_iter()
     }
 
     pub fn pretty(self) -> &'static str {
