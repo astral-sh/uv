@@ -30,7 +30,8 @@ You can speed up your pipeline by re-using cache files between runs. You can rea
 UV Install:
   variables:
     UV_CACHE_DIR: /tmp/.uv-cache
-  - key:
+  cache:
+    - key:
         files:
           - uv.lock
       paths:
