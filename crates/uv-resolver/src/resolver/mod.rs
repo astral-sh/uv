@@ -29,7 +29,6 @@ pub(crate) use fork_map::{ForkMap, ForkSet};
 use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
 use pep508_rs::MarkerTree;
-use platform_tags::Tags;
 use pypi_types::{Metadata23, Requirement, VerbatimParsedUrl};
 pub use resolver_markers::ResolverMarkers;
 pub(crate) use urls::Urls;
@@ -67,7 +66,7 @@ pub use crate::resolver::provider::{
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
-use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options};
+use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options, TagPolicy};
 
 mod availability;
 mod batch_prefetch;
@@ -100,6 +99,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     urls: Urls,
     locals: Locals,
     dependency_mode: DependencyMode,
+    tags: TagPolicy,
     hasher: HashStrategy,
     markers: ResolverMarkers,
     python_requirement: PythonRequirement,
@@ -143,7 +143,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         options: Options,
         python_requirement: &'a PythonRequirement,
         markers: ResolverMarkers,
-        tags: Option<&'a Tags>,
+        tags: &'a TagPolicy,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
         hasher: &'a HashStrategy,
@@ -166,6 +166,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             manifest,
             options,
             hasher,
+            tags,
             markers,
             python_requirement,
             index,
@@ -185,6 +186,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         manifest: Manifest,
         options: Options,
         hasher: &HashStrategy,
+        tags: &TagPolicy,
         markers: ResolverMarkers,
         python_requirement: &PythonRequirement,
         index: &InMemoryIndex,
@@ -210,6 +212,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
+            tags: tags.clone(),
             markers,
             python_requirement: python_requirement.clone(),
             installed_packages,
@@ -464,6 +467,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         &self.index,
                         &self.capabilities,
                         &self.selector,
+                        &self.tags,
                         &state.markers,
                     )?;
                 }
@@ -998,6 +1002,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             preferences,
             &self.installed_packages,
             &self.exclusions,
+            &self.tags,
             fork_markers,
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
@@ -1798,6 +1803,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.preferences,
                     &self.installed_packages,
                     &self.exclusions,
+                    &self.tags,
                     // We don't have access to the fork state when prefetching, so assume that
                     // pre-release versions are allowed.
                     &ResolverMarkers::universal(vec![]),

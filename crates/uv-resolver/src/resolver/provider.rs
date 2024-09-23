@@ -1,7 +1,6 @@
 use std::future::Future;
 
 use distribution_types::{Dist, IndexLocations};
-use platform_tags::Tags;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_normalize::PackageName;
@@ -10,7 +9,7 @@ use uv_types::{BuildContext, HashStrategy};
 use crate::flat_index::FlatIndex;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
-use crate::{ExcludeNewer, RequiresPython};
+use crate::{ExcludeNewer, RequiresPython, TagPolicy};
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
 pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
@@ -76,7 +75,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     fetcher: DistributionDatabase<'a, Context>,
     /// These are the entries from `--find-links` that act as overrides for index responses.
     flat_index: FlatIndex,
-    tags: Option<Tags>,
+    tags: &'a TagPolicy,
     requires_python: RequiresPython,
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
@@ -89,7 +88,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
     pub fn new(
         fetcher: DistributionDatabase<'a, Context>,
         flat_index: &'a FlatIndex,
-        tags: Option<&'a Tags>,
+        tags: &'a TagPolicy,
         requires_python: &'a RequiresPython,
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
@@ -99,7 +98,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         Self {
             fetcher,
             flat_index: flat_index.clone(),
-            tags: tags.cloned(),
+            tags,
             requires_python: requires_python.clone(),
             allowed_yanks,
             hasher: hasher.clone(),
@@ -130,7 +129,7 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                             metadata,
                             package_name,
                             &index,
-                            self.tags.as_ref(),
+                            self.tags,
                             &self.requires_python,
                             &self.allowed_yanks,
                             &self.hasher,

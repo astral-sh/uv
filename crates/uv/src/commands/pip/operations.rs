@@ -36,7 +36,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, ResolutionGraph, Resolver, ResolverMarkers,
+    Preferences, PythonRequirement, ResolutionGraph, Resolver, ResolverMarkers, TagPolicy,
 };
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
@@ -100,7 +100,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     hasher: &HashStrategy,
     reinstall: &Reinstall,
     upgrade: &Upgrade,
-    tags: Option<&Tags>,
+    tags: &TagPolicy,
     markers: ResolverMarkers,
     python_requirement: PythonRequirement,
     client: &RegistryClient,

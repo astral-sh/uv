@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use platform_tags::{Tags, TagsError};
 use pypi_types::ResolverMarkerEnvironment;
 use uv_configuration::TargetTriple;
@@ -36,37 +34,37 @@ pub(crate) fn resolution_markers(
     }
 }
 
-pub(crate) fn resolution_tags<'env>(
+pub(crate) fn resolution_tags(
     python_version: Option<&PythonVersion>,
     python_platform: Option<&TargetTriple>,
-    interpreter: &'env Interpreter,
-) -> Result<Cow<'env, Tags>, TagsError> {
+    interpreter: &Interpreter,
+) -> Result<Tags, TagsError> {
     Ok(match (python_platform, python_version.as_ref()) {
-        (Some(python_platform), Some(python_version)) => Cow::Owned(Tags::from_env(
+        (Some(python_platform), Some(python_version)) => Tags::from_env(
             &python_platform.platform(),
             (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
             interpreter.manylinux_compatible(),
             interpreter.gil_disabled(),
-        )?),
-        (Some(python_platform), None) => Cow::Owned(Tags::from_env(
+        )?,
+        (Some(python_platform), None) => Tags::from_env(
             &python_platform.platform(),
             interpreter.python_tuple(),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
             interpreter.manylinux_compatible(),
             interpreter.gil_disabled(),
-        )?),
-        (None, Some(python_version)) => Cow::Owned(Tags::from_env(
+        )?,
+        (None, Some(python_version)) => Tags::from_env(
             interpreter.platform(),
             (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
             interpreter.manylinux_compatible(),
             interpreter.gil_disabled(),
-        )?),
-        (None, None) => Cow::Borrowed(interpreter.tags()?),
+        )?,
+        (None, None) => interpreter.tags()?,
     })
 }
 
@@ -75,33 +73,33 @@ pub(crate) fn resolution_environment(
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     interpreter: &Interpreter,
-) -> Result<(Cow<'_, Tags>, ResolverMarkerEnvironment), TagsError> {
+) -> Result<(Tags, ResolverMarkerEnvironment), TagsError> {
     let tags = match (python_platform, python_version.as_ref()) {
-        (Some(python_platform), Some(python_version)) => Cow::Owned(Tags::from_env(
+        (Some(python_platform), Some(python_version)) => Tags::from_env(
             &python_platform.platform(),
             (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
             interpreter.manylinux_compatible(),
             interpreter.gil_disabled(),
-        )?),
-        (Some(python_platform), None) => Cow::Owned(Tags::from_env(
+        )?,
+        (Some(python_platform), None) => Tags::from_env(
             &python_platform.platform(),
             interpreter.python_tuple(),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
             interpreter.manylinux_compatible(),
             interpreter.gil_disabled(),
-        )?),
-        (None, Some(python_version)) => Cow::Owned(Tags::from_env(
+        )?,
+        (None, Some(python_version)) => Tags::from_env(
             interpreter.platform(),
             (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
             interpreter.manylinux_compatible(),
             interpreter.gil_disabled(),
-        )?),
-        (None, None) => Cow::Borrowed(interpreter.tags()?),
+        )?,
+        (None, None) => interpreter.tags()?,
     };
 
     // Apply the platform tags to the markers.

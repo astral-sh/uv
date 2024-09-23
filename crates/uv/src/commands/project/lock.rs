@@ -28,7 +28,7 @@ use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreferenc
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_resolver::{
     FlatIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython, ResolverManifest,
-    ResolverMarkers, SatisfiesResult,
+    ResolverMarkers, SatisfiesResult, TagPolicy,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -353,6 +353,9 @@ async fn do_lock(
     let python_requirement =
         PythonRequirement::from_requires_python(interpreter, requires_python.clone());
 
+    // Determine the tags to use for the resolution.
+    let tags = TagPolicy::Preferred(interpreter.tags()?);
+
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
         store_credentials_from_url(url);
@@ -400,7 +403,7 @@ async fn do_lock(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, None, &hasher, build_options)
+        FlatIndex::from_entries(entries, &tags, &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -545,7 +548,7 @@ async fn do_lock(
                 &hasher,
                 &Reinstall::default(),
                 upgrade,
-                None,
+                &tags,
                 resolver_markers,
                 python_requirement,
                 &client,
@@ -718,6 +721,8 @@ impl ValidatedLock {
             Some(index_locations)
         };
 
+        let tags = interpreter.tags()?;
+
         // Determine whether the lockfile satisfies the workspace requirements.
         match lock
             .satisfies(
@@ -729,7 +734,7 @@ impl ValidatedLock {
                 dependency_metadata,
                 indexes,
                 build_options,
-                interpreter.tags()?,
+                &tags,
                 database,
             )
             .await?

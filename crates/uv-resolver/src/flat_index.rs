@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use rustc_hash::FxHashMap;
 use tracing::instrument;
 
+use crate::TagPolicy;
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{
     File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
@@ -11,7 +12,7 @@ use distribution_types::{
     WheelCompatibility,
 };
 use pep440_rs::Version;
-use platform_tags::{TagCompatibility, Tags};
+use platform_tags::TagCompatibility;
 use pypi_types::HashDigest;
 use uv_client::FlatIndexEntries;
 use uv_configuration::BuildOptions;
@@ -34,7 +35,7 @@ impl FlatIndex {
     #[instrument(skip_all)]
     pub fn from_entries(
         entries: FlatIndexEntries,
-        tags: Option<&Tags>,
+        tags: &TagPolicy,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
@@ -63,7 +64,7 @@ impl FlatIndex {
         distributions: &mut FlatDistributions,
         file: File,
         filename: DistFilename,
-        tags: Option<&Tags>,
+        tags: &TagPolicy,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         index: IndexUrl,
@@ -145,7 +146,7 @@ impl FlatIndex {
     fn wheel_compatibility(
         filename: &WheelFilename,
         hashes: &[HashDigest],
-        tags: Option<&Tags>,
+        tags: &TagPolicy,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> WheelCompatibility {
@@ -153,17 +154,6 @@ impl FlatIndex {
         if build_options.no_binary_package(&filename.name) {
             return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
         }
-
-        // Determine a compatibility for the wheel based on tags.
-        let priority = match tags {
-            Some(tags) => match filename.compatibility(tags) {
-                TagCompatibility::Incompatible(tag) => {
-                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
-                }
-                TagCompatibility::Compatible(priority) => Some(priority),
-            },
-            None => None,
-        };
 
         // Check if hashes line up.
         let hash = if let HashPolicy::Validate(required) =
@@ -178,6 +168,14 @@ impl FlatIndex {
             }
         } else {
             HashComparison::Matched
+        };
+
+        // Determine a compatibility for the wheel based on tags.
+        let priority = match filename.compatibility(tags.tags()) {
+            TagCompatibility::Incompatible(tag) => {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
+            }
+            TagCompatibility::Compatible(priority) => Some(priority),
         };
 
         // Break ties with the build tag.

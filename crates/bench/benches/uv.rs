@@ -100,7 +100,7 @@ mod resolver {
     use uv_python::Interpreter;
     use uv_resolver::{
         FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, RequiresPython,
-        ResolutionGraph, Resolver, ResolverMarkers,
+        ResolutionGraph, Resolver, ResolverMarkers, TagPolicy,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -172,6 +172,8 @@ mod resolver {
             PythonRequirement::from_interpreter(interpreter)
         };
 
+        let tags = TagPolicy::Required(TAGS.clone());
+
         let build_context = BuildDispatch::new(
             client,
             &cache,
@@ -206,7 +208,7 @@ mod resolver {
             options,
             &python_requirement,
             markers,
-            Some(&TAGS),
+            &tags,
             &flat_index,
             &index,
             &hashes,

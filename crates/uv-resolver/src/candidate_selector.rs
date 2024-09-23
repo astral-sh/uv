@@ -15,7 +15,7 @@ use crate::preferences::Preferences;
 use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
-use crate::{Exclusions, Manifest, Options, ResolverMarkers};
+use crate::{Exclusions, Manifest, Options, ResolverMarkers, TagPolicy};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_field_names)]
@@ -80,6 +80,7 @@ impl CandidateSelector {
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
         exclusions: &'a Exclusions,
+        tags: &'a TagPolicy,
         markers: &ResolverMarkers,
     ) -> Option<Candidate<'a>> {
         let is_excluded = exclusions.contains(package_name);
@@ -93,6 +94,7 @@ impl CandidateSelector {
             preferences,
             installed_packages,
             is_excluded,
+            tags,
             markers,
         ) {
             trace!("Using preference {} {}", preferred.name, preferred.version);
@@ -111,7 +113,7 @@ impl CandidateSelector {
             }
         }
 
-        self.select_no_preference(package_name, range, version_maps, markers)
+        self.select_no_preference(package_name, range, version_maps, tags, markers)
     }
 
     /// If the package has a preference, an existing version from an existing lockfile or a version
@@ -131,6 +133,7 @@ impl CandidateSelector {
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
         is_excluded: bool,
+        tags: &'a TagPolicy,
         resolver_markers: &ResolverMarkers,
     ) -> Option<Candidate> {
         // In the branches, we "sort" the preferences by marker-matching through an iterator that
@@ -159,6 +162,7 @@ impl CandidateSelector {
                     version_maps,
                     installed_packages,
                     is_excluded,
+                    tags,
                     resolver_markers,
                 )
             }
@@ -171,6 +175,7 @@ impl CandidateSelector {
                     version_maps,
                     installed_packages,
                     is_excluded,
+                    tags,
                     resolver_markers,
                 )
             }
@@ -191,6 +196,7 @@ impl CandidateSelector {
                     version_maps,
                     installed_packages,
                     is_excluded,
+                    tags,
                     resolver_markers,
                 )
             }
@@ -206,6 +212,7 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
         installed_packages: &'a InstalledPackages,
         is_excluded: bool,
+        tags: &'a TagPolicy,
         resolver_markers: &ResolverMarkers,
     ) -> Option<Candidate<'a>> {
         for (marker, version) in preferences {
@@ -267,6 +274,7 @@ impl CandidateSelector {
                     package_name,
                     version,
                     file,
+                    tags,
                     VersionChoiceKind::Preference,
                 ));
             }
@@ -317,6 +325,7 @@ impl CandidateSelector {
         package_name: &'a PackageName,
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
+        tags: &'a TagPolicy,
         markers: &ResolverMarkers,
     ) -> Option<Candidate> {
         trace!(
@@ -357,6 +366,7 @@ impl CandidateSelector {
                     package_name,
                     range,
                     allow_prerelease,
+                    tags,
                 )
             } else {
                 Self::select_candidate(
@@ -379,6 +389,7 @@ impl CandidateSelector {
                     package_name,
                     range,
                     allow_prerelease,
+                    tags,
                 )
             }
         } else {
@@ -389,6 +400,7 @@ impl CandidateSelector {
                         package_name,
                         range,
                         allow_prerelease,
+                        tags,
                     )
                 })
             } else {
@@ -398,6 +410,7 @@ impl CandidateSelector {
                         package_name,
                         range,
                         allow_prerelease,
+                        tags,
                     )
                 })
             }
@@ -423,6 +436,7 @@ impl CandidateSelector {
         package_name: &'a PackageName,
         range: &Range<Version>,
         allow_prerelease: bool,
+        tags: &'a TagPolicy,
     ) -> Option<Candidate<'a>> {
         let mut steps = 0usize;
         for (version, maybe_dist) in versions {
@@ -439,7 +453,13 @@ impl CandidateSelector {
                     continue;
                 };
                 trace!("found candidate for package {package_name:?} with range {range:?} after {steps} steps: {version:?} version");
-                Candidate::new(package_name, version, dist, VersionChoiceKind::Compatible)
+                Candidate::new(
+                    package_name,
+                    version,
+                    dist,
+                    tags,
+                    VersionChoiceKind::Compatible,
+                )
             };
 
             // If candidate is not compatible due to exclude newer, continue searching.
@@ -471,18 +491,18 @@ pub(crate) enum CandidateDist<'a> {
     Incompatible(IncompatibleDist),
 }
 
-impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
-    fn from(value: &'a PrioritizedDist) -> Self {
-        if let Some(dist) = value.get() {
+impl<'a> CandidateDist<'a> {
+    pub(crate) fn from_prioritized_dist(dist: &'a PrioritizedDist, tags: &'a TagPolicy) -> Self {
+        if let Some(dist) = dist.get(tags.is_required()) {
             CandidateDist::Compatible(dist)
         } else {
             // TODO(zanieb)
             // We always return the source distribution (if one exists) instead of the wheel
             // but in the future we may want to return both so the resolver can explain
             // why neither distribution kind can be used.
-            let dist = if let Some(incompatibility) = value.incompatible_source() {
+            let dist = if let Some(incompatibility) = dist.incompatible_source() {
                 IncompatibleDist::Source(incompatibility.clone())
-            } else if let Some(incompatibility) = value.incompatible_wheel() {
+            } else if let Some(incompatibility) = dist.incompatible_wheel() {
                 IncompatibleDist::Wheel(incompatibility.clone())
             } else {
                 IncompatibleDist::Unavailable
@@ -531,12 +551,13 @@ impl<'a> Candidate<'a> {
         name: &'a PackageName,
         version: &'a Version,
         dist: &'a PrioritizedDist,
+        tags: &'a TagPolicy,
         choice_kind: VersionChoiceKind,
     ) -> Self {
         Self {
             name,
             version,
-            dist: CandidateDist::from(dist),
+            dist: CandidateDist::from_prioritized_dist(dist, tags),
             choice_kind,
         }
     }

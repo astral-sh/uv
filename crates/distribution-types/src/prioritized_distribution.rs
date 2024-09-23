@@ -306,7 +306,7 @@ impl PrioritizedDist {
     }
 
     /// Return the highest-priority distribution for the package version, if any.
-    pub fn get(&self) -> Option<CompatibleDist> {
+    pub fn get(&self, match_tags: bool) -> Option<CompatibleDist> {
         let best_wheel = self.0.best_wheel_index.map(|i| &self.0.wheels[i]);
         match (&best_wheel, &self.0.source) {
             // If both are compatible, break ties based on the hash outcome. For example, prefer a
@@ -356,6 +356,23 @@ impl PrioritizedDist {
                     prioritized: self,
                 })
             }
+            // Otherwise, if we have a wheel that's only incompatible due to mismatching tags, but
+            // tag matches are only preferred (and not required), return it.
+            (
+                Some((
+                    wheel,
+                    WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                        IncompatibleTag::Invalid
+                        | IncompatibleTag::Python
+                        | IncompatibleTag::Platform,
+                    )),
+                )),
+                _,
+            ) if !match_tags => Some(CompatibleDist::CompatibleWheel {
+                wheel,
+                priority: None,
+                prioritized: self,
+            }),
             _ => None,
         }
     }
