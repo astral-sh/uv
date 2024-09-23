@@ -774,6 +774,8 @@ fn tool_run_list_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
+    Installed tools:
+
     black v24.2.0
     - black
     - blackd

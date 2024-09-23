@@ -69,6 +69,7 @@ pub(crate) async fn list(
             String::new()
         };
 
+        writeln!(printer.stdout(), "Installed tools:\n")?;
         if show_paths {
             writeln!(
                 printer.stdout(),

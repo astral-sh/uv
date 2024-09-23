@@ -30,6 +30,8 @@ fn tool_list() {
     success: true
     exit_code: 0
     ----- stdout -----
+    Installed tools:
+
     black v24.2.0
     - black
     - blackd
@@ -59,6 +61,8 @@ fn tool_list_paths() {
     success: true
     exit_code: 0
     ----- stdout -----
+    Installed tools:
+
     black v24.2.0 ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
@@ -155,6 +159,8 @@ fn tool_list_bad_environment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+    Installed tools:
+
     ruff v0.3.4
     - ruff
 
@@ -218,6 +224,8 @@ fn tool_list_deprecated() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+    Installed tools:
+
     black v24.2.0
     - black
     - blackd
@@ -274,6 +282,8 @@ fn tool_list_show_version_specifiers() {
     success: true
     exit_code: 0
     ----- stdout -----
+    Installed tools:
+
     black v24.2.0 [required: <24.3.0]
     - black
     - blackd
@@ -288,6 +298,8 @@ fn tool_list_show_version_specifiers() {
     success: true
     exit_code: 0
     ----- stdout -----
+    Installed tools:
+
     black v24.2.0 [required: <24.3.0] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
