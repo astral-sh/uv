@@ -56,7 +56,7 @@ fn run_with_python_version() -> Result<()> {
     3.7.0
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -105,7 +105,7 @@ fn run_with_python_version() -> Result<()> {
     3.6.0
 
     ----- stderr -----
-    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
@@ -133,7 +133,7 @@ fn run_with_python_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     error: The requested interpreter resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.11, <4`
     "###);
 
@@ -1414,7 +1414,7 @@ fn run_from_directory() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: [PROJECT_VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1489,7 +1489,7 @@ fn run_from_directory() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored
-    Using Python 3.10.[X] interpreter at: [PYTHON-3.10]
+    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     Removed virtual environment at: [PROJECT_VENV]/
     Creating virtual environment at: [PROJECT_VENV]/
     Resolved 1 package in [TIME]
@@ -1600,7 +1600,7 @@ fn run_isolated_python_version() -> Result<()> {
     (3, 8)
 
     ----- stderr -----
-    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -1908,7 +1908,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     error: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`
     "###);
 

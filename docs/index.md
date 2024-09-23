@@ -142,7 +142,7 @@ Download Python versions as needed:
 
 ```console
 $ uv venv --python 3.12.0
-Using Python 3.12.0
+Using CPython 3.12.0
 Creating virtual environment at: .venv
 Activate with: source .venv/bin/activate
 
@@ -210,7 +210,7 @@ Create a virtual environment:
 
 ```console
 $ uv venv
-Using Python 3.12.3
+Using CPython 3.12.3
 Creating virtual environment at: .venv
 Activate with: source .venv/bin/activate
 ```
