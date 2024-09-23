@@ -31,18 +31,18 @@ pub(crate) async fn patch() -> anyhow::Result<()> {
             }
         }
 
-        let patched_versions: Vec<PythonRequest> = join_all(
+        let mut patched_versions: Vec<PythonRequest> = join_all(
             versions_to_patch
                 .into_iter()
                 .map(|(major, minor, patch)| get_latest_patch_version(major, minor, patch)),
         )
         .await;
 
-        let mut all_versions = patched_versions;
-        all_versions.extend(versions_to_ignore);
-
         PythonVersionFile::new(python_versions_file.path().to_path_buf())
-            .with_versions(all_versions)
+            .with_versions({
+                patched_versions.append(&mut versions_to_ignore);
+                patched_versions
+            })
             .write()
             .await?;
     }
