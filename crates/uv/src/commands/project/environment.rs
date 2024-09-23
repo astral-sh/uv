@@ -17,6 +17,69 @@ use crate::commands::project::{
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
+/// An ephemeral [`PythonEnvironment`] for running an individual command.
+#[derive(Debug)]
+pub(crate) struct EphemeralEnvironment(PythonEnvironment);
+
+impl From<PythonEnvironment> for EphemeralEnvironment {
+    fn from(environment: PythonEnvironment) -> Self {
+        Self(environment)
+    }
+}
+
+impl From<EphemeralEnvironment> for PythonEnvironment {
+    fn from(environment: EphemeralEnvironment) -> Self {
+        environment.0
+    }
+}
+
+impl EphemeralEnvironment {
+    /// Set the ephemeral overlay for a Python environment.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn set_overlay(&self, contents: impl AsRef<[u8]>) -> Result<(), ProjectError> {
+        let site_packages = self
+            .0
+            .site_packages()
+            .next()
+            .ok_or(ProjectError::NoSitePackages)?;
+        let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
+        fs_err::write(overlay_path, contents)?;
+        Ok(())
+    }
+
+    /// Enable system site packages for a Python environment.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn set_system_site_packages(&self) -> Result<(), ProjectError> {
+        self.0
+            .set_pyvenv_cfg("include-system-site-packages", "true")?;
+        Ok(())
+    }
+
+    /// Set the `extends-environment` key in the `pyvenv.cfg` file to the given path.
+    ///
+    /// Ephemeral environments created by `uv run --with` extend a parent (virtual or system)
+    /// environment by adding a `.pth` file to the ephemeral environment's `site-packages`
+    /// directory. The `pth` file contains Python code to dynamically add the parent
+    /// environment's `site-packages` directory to Python's import search paths in addition to
+    /// the ephemeral environment's `site-packages` directory. This works well at runtime, but
+    /// is too dynamic for static analysis tools like ty to understand. As such, we
+    /// additionally write the `sys.prefix` of the parent environment to to the
+    /// `extends-environment` key of the ephemeral environment's `pyvenv.cfg` file, making it
+    /// easier for these tools to statically and reliably understand the relationship between
+    /// the two environments.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn set_parent_environment(
+        &self,
+        parent_environment_sys_prefix: &Path,
+    ) -> Result<(), ProjectError> {
+        self.0.set_pyvenv_cfg(
+            "extends-environment",
+            &parent_environment_sys_prefix.escape_for_python(),
+        )?;
+        Ok(())
+    }
+}
+
 /// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
 pub(crate) struct CachedEnvironment(PythonEnvironment);
@@ -148,76 +211,6 @@ impl CachedEnvironment {
         let root = cache.archive(&id);
 
         Ok(Self(PythonEnvironment::from_root(root, cache)?))
-    }
-
-    /// Set the ephemeral overlay for a Python environment.
-    #[allow(clippy::result_large_err)]
-    pub(crate) fn set_overlay(&self, contents: impl AsRef<[u8]>) -> Result<(), ProjectError> {
-        let site_packages = self
-            .0
-            .site_packages()
-            .next()
-            .ok_or(ProjectError::NoSitePackages)?;
-        let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
-        fs_err::write(overlay_path, contents)?;
-        Ok(())
-    }
-
-    /// Clear the ephemeral overlay for a Python environment, if it exists.
-    #[allow(clippy::result_large_err)]
-    pub(crate) fn clear_overlay(&self) -> Result<(), ProjectError> {
-        let site_packages = self
-            .0
-            .site_packages()
-            .next()
-            .ok_or(ProjectError::NoSitePackages)?;
-        let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
-        match fs_err::remove_file(overlay_path) {
-            Ok(()) => (),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
-            Err(err) => return Err(ProjectError::OverlayRemoval(err)),
-        }
-        Ok(())
-    }
-
-    /// Enable system site packages for a Python environment.
-    #[allow(clippy::result_large_err)]
-    pub(crate) fn set_system_site_packages(&self) -> Result<(), ProjectError> {
-        self.0
-            .set_pyvenv_cfg("include-system-site-packages", "true")?;
-        Ok(())
-    }
-
-    /// Disable system site packages for a Python environment.
-    #[allow(clippy::result_large_err)]
-    pub(crate) fn clear_system_site_packages(&self) -> Result<(), ProjectError> {
-        self.0
-            .set_pyvenv_cfg("include-system-site-packages", "false")?;
-        Ok(())
-    }
-
-    /// Set the `extends-environment` key in the `pyvenv.cfg` file to the given path.
-    ///
-    /// Ephemeral environments created by `uv run --with` extend a parent (virtual or system)
-    /// environment by adding a `.pth` file to the ephemeral environment's `site-packages`
-    /// directory. The `pth` file contains Python code to dynamically add the parent
-    /// environment's `site-packages` directory to Python's import search paths in addition to
-    /// the ephemeral environment's `site-packages` directory. This works well at runtime, but
-    /// is too dynamic for static analysis tools like ty to understand. As such, we
-    /// additionally write the `sys.prefix` of the parent environment to to the
-    /// `extends-environment` key of the ephemeral environment's `pyvenv.cfg` file, making it
-    /// easier for these tools to statically and reliably understand the relationship between
-    /// the two environments.
-    #[allow(clippy::result_large_err)]
-    pub(crate) fn set_parent_environment(
-        &self,
-        parent_environment_sys_prefix: &Path,
-    ) -> Result<(), ProjectError> {
-        self.0.set_pyvenv_cfg(
-            "extends-environment",
-            &parent_environment_sys_prefix.escape_for_python(),
-        )?;
-        Ok(())
     }
 
     /// Return the [`Interpreter`] to use for the cached environment, based on a given
