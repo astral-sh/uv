@@ -233,7 +233,7 @@ uv run [OPTIONS] <COMMAND>
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -725,7 +725,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -1033,7 +1033,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -1333,7 +1333,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -1624,7 +1624,7 @@ uv lock [OPTIONS]
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -1907,7 +1907,7 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -2199,7 +2199,7 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -2556,7 +2556,7 @@ uv tool run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -2834,7 +2834,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -3106,7 +3106,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -3615,7 +3615,7 @@ uv tool dir [OPTIONS]
 Manage Python versions and installations
 
 Generally, uv first searches for Python in a virtual environment, either active or in a
-`.venv` directory  in the current working directory or any parent directory. If a virtual
+`.venv` directory in the current working directory or any parent directory. If a virtual
 environment is not required, uv will then search for a Python interpreter. Python
 interpreters are found by searching for Python executables in the `PATH` environment
 variable.
@@ -4585,7 +4585,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
@@ -5293,7 +5293,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
@@ -6482,11 +6482,11 @@ Build Python packages into source distributions and wheels.
 
 `uv build` accepts a path to a directory or source distribution, which defaults to the current working directory.
 
-By default, if passed a directory, `uv build` will build a source distribution ("sdist") from the source directory, and a binary distribution ("wheel") from  the source distribution.
+By default, if passed a directory, `uv build` will build a source distribution ("sdist") from the source directory, and a binary distribution ("wheel") from the source distribution.
 
 `uv build --sdist` can be used to build only the source distribution, `uv build --wheel` can be used to build only the binary distribution, and `uv build --sdist --wheel` can be used to build both distributions from source.
 
-If passed a source distribution, `uv build --wheel` will build a wheel from  the source distribution.
+If passed a source distribution, `uv build --wheel` will build a wheel from the source distribution.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -6639,7 +6639,7 @@ uv build [OPTIONS] [SRC]
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -7002,7 +7002,7 @@ uv cache prune [OPTIONS]
 
 Show the cache directory.
 
-By default, the cache is stored in  `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and `%LOCALAPPDATA%\uv\cache` on Windows.
+By default, the cache is stored in `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and `%LOCALAPPDATA%\uv\cache` on Windows.
 
 When `--no-cache` is used, the cache is stored in a temporary directory and discarded when the process exits.
 
