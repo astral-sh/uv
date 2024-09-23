@@ -15,8 +15,8 @@ use tracing::{debug, instrument};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::{
-    compat::CompatArgs, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
-    ProjectCommand,
+    compat::CompatArgs, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
+    PipCommand, PipNamespace, ProjectCommand,
 };
 use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLevelArgs};
 #[cfg(feature = "self-update")]
@@ -1116,6 +1116,40 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Commands::BuildBackend { command } => match command {
+            BuildBackendCommand::BuildSdist { sdist_directory } => {
+                commands::build_backend::build_sdist(&sdist_directory)
+            }
+            BuildBackendCommand::BuildWheel {
+                wheel_directory,
+                metadata_directory,
+            } => commands::build_backend::build_wheel(
+                &wheel_directory,
+                metadata_directory.as_deref(),
+            ),
+            BuildBackendCommand::BuildEditable {
+                wheel_directory,
+                metadata_directory,
+            } => commands::build_backend::build_editable(
+                &wheel_directory,
+                metadata_directory.as_deref(),
+            ),
+            BuildBackendCommand::GetRequiresForBuildSdist => {
+                commands::build_backend::get_requires_for_build_sdist()
+            }
+            BuildBackendCommand::GetRequiresForBuildWheel => {
+                commands::build_backend::get_requires_for_build_wheel()
+            }
+            BuildBackendCommand::PrepareMetadataForBuildWheel { wheel_directory } => {
+                commands::build_backend::prepare_metadata_for_build_wheel(&wheel_directory)
+            }
+            BuildBackendCommand::GetRequiresForBuildEditable => {
+                commands::build_backend::get_requires_for_build_editable()
+            }
+            BuildBackendCommand::PrepareMetadataForBuildEditable { wheel_directory } => {
+                commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory)
+            }
+        },
     }
 }
 
