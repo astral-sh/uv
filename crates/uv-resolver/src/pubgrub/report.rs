@@ -8,8 +8,9 @@ use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
-use distribution_types::IndexLocations;
+use distribution_types::{IndexLocations, IndexUrl};
 use pep440_rs::Version;
+use uv_configuration::IndexStrategy;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
@@ -504,6 +505,7 @@ impl PubGrubReportFormatter<'_> {
         derivation_tree: &ErrorTree,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
+        available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
@@ -528,12 +530,14 @@ impl PubGrubReportFormatter<'_> {
                         );
                     }
 
-                    // Check for no versions due to no `--find-links` flat index
+                    // Check for no versions due to no `--find-links` flat index.
                     Self::index_hints(
                         package,
                         name,
                         set,
+                        selector,
                         index_locations,
+                        available_indexes,
                         unavailable_packages,
                         incomplete_packages,
                         output_hints,
@@ -582,6 +586,7 @@ impl PubGrubReportFormatter<'_> {
                     &derived.cause1,
                     selector,
                     index_locations,
+                    available_indexes,
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
@@ -593,6 +598,7 @@ impl PubGrubReportFormatter<'_> {
                     &derived.cause2,
                     selector,
                     index_locations,
+                    available_indexes,
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
@@ -608,7 +614,9 @@ impl PubGrubReportFormatter<'_> {
         package: &PubGrubPackage,
         name: &PackageName,
         set: &Range<Version>,
+        selector: &CandidateSelector,
         index_locations: &IndexLocations,
+        available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         hints: &mut IndexSet<PubGrubHint>,
@@ -683,6 +691,27 @@ impl PubGrubReportFormatter<'_> {
                         }
                     }
                     break;
+                }
+            }
+        }
+
+        // Add hints due to the package being available on an index, but not at the correct version,
+        // with subsequent indexes that were _not_ queried.
+        if matches!(selector.index_strategy(), IndexStrategy::FirstIndex) {
+            if let Some(found_index) = available_indexes.get(name).and_then(BTreeSet::first) {
+                // Determine whether the index is the last-available index. If not, then some
+                // indexes were not queried, and could contain a compatible version.
+                if let Some(next_index) = index_locations
+                    .indexes()
+                    .skip_while(|url| *url != found_index)
+                    .nth(1)
+                {
+                    hints.insert(PubGrubHint::UncheckedIndex {
+                        package: package.clone(),
+                        range: set.clone(),
+                        found_index: found_index.clone(),
+                        next_index: next_index.clone(),
+                    });
                 }
             }
         }
@@ -819,10 +848,24 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         package_requires_python: Range<Version>,
     },
+    /// A non-workspace package depends on a workspace package, which is likely shadowing a
+    /// transitive dependency.
     DependsOnWorkspacePackage {
         package: PubGrubPackage,
         dependency: PubGrubPackage,
         workspace: bool,
+    },
+    /// A package was available on an index, but not at the correct version, and at least one
+    /// subsequent index was not queried. As such, a compatible version may be available on an
+    // one of the remaining indexes.
+    UncheckedIndex {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        range: Range<Version>,
+        // excluded from `PartialEq` and `Hash`
+        found_index: IndexUrl,
+        // excluded from `PartialEq` and `Hash`
+        next_index: IndexUrl,
     },
 }
 
@@ -868,6 +911,9 @@ enum PubGrubHintCore {
         package: PubGrubPackage,
         dependency: PubGrubPackage,
         workspace: bool,
+    },
+    UncheckedIndex {
+        package: PubGrubPackage,
     },
 }
 
@@ -921,6 +967,7 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 dependency,
                 workspace,
             },
+            PubGrubHint::UncheckedIndex { package, .. } => Self::UncheckedIndex { package },
         }
     }
 }
@@ -1138,6 +1185,25 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     package,
                     dependency,
+                )
+            }
+            Self::UncheckedIndex {
+                package,
+                range,
+                found_index,
+                next_index,
+            } => {
+                write!(
+                    f,
+                    "{}{} `{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). If both indexes are equally trusted, use `{}` to consider all indexes that list `{}`.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package,
+                    found_index.cyan(),
+                    PackageRange::compatibility(package, range, None).cyan(),
+                    next_index.cyan(),
+                    "--index-strategy unsafe-best-match".green(),
+                    package,
                 )
             }
         }

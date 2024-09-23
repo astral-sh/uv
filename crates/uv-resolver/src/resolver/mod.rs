@@ -1944,6 +1944,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
+        let mut available_indexes = FxHashMap::default();
         let mut available_versions = FxHashMap::default();
         for package in err.packages() {
             let Some(name) = package.name() else { continue };
@@ -1956,12 +1957,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             if let Some(response) = self.index.packages().get(name) {
                 if let VersionsResponse::Found(ref version_maps) = *response {
+                    // Track the available versions, across all indexes.
                     for version_map in version_maps {
                         available_versions
                             .entry(name.clone())
                             .or_insert_with(BTreeSet::new)
                             .extend(version_map.versions().cloned());
                     }
+
+                    // Track the indexes in which the package is available.
+                    available_indexes
+                        .entry(name.clone())
+                        .or_insert(BTreeSet::new())
+                        .extend(
+                            version_maps
+                                .iter()
+                                .filter_map(|version_map| version_map.index().cloned()),
+                        );
                 }
             }
         }
@@ -1969,6 +1981,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         ResolveError::NoSolution(NoSolutionError::new(
             err,
             available_versions,
+            available_indexes,
             self.selector.clone(),
             self.python_requirement.clone(),
             index_locations.clone(),

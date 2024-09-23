@@ -10682,6 +10682,8 @@ fn compile_index_url_first_match() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of jinja2==3.1.0 and you require jinja2==3.1.0, we can conclude that your requirements are unsatisfiable.
+
+          hint: `jinja2` was found on https://download.pytorch.org/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). If both indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all indexes that list `jinja2`.
     "###
     );
 
@@ -12379,6 +12381,63 @@ fn prune_unreachable() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     "###);
+
+    Ok(())
+}
+
+/// If a package may be available on multiple indexes, we should suggest using `--index-strategy
+/// unsafe-best-match` to consider all indexes.
+#[test]
+fn unsafe_index_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "project"
+requires-python = ">=3.12"
+dependencies = ["requests==2.32.3"]
+
+[tool.uv]
+extra-index-url = ["https://download.pytorch.org/whl/cu121"]
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("pyproject.toml"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of requests==2.32.3 and project depends on requests==2.32.3, we can conclude that your requirements are unsatisfiable.
+
+          hint: `requests` was found on https://download.pytorch.org/whl/cu121, but not at the requested version (requests==2.32.3). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). If both indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all indexes that list `requests`.
+    "###
+    );
+
+    pyproject_toml.write_str(
+        r#"[project]
+name = "project"
+requires-python = ">=3.12"
+dependencies = ["requests==2.32.3"]
+
+[tool.uv]
+index-url = "https://download.pytorch.org/whl/cu121"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("pyproject.toml"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of requests==2.32.3 and project depends on requests==2.32.3, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
 
     Ok(())
 }
