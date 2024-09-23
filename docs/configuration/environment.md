@@ -117,6 +117,8 @@ In addition, uv respects the following environment variables:
 - `VIRTUAL_ENV`: Used to detect an activated virtual environment.
 - `CONDA_PREFIX`: Used to detect an activated Conda environment.
 - `PROMPT`: Used to detect the use of the Windows Command Prompt (as opposed to PowerShell).
+- `VIRTUAL_ENV_DISABLE_PROMPT`: If set to `1` before a virtual environment is activated, then the
+  virtual environment name will not be prepended to the terminal prompt.
 - `NU_VERSION`: Used to detect the use of NuShell.
 - `FISH_VERSION`: Used to detect the use of the Fish shell.
 - `BASH_VERSION`: Used to detect the use of the Bash shell.
