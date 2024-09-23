@@ -476,14 +476,15 @@ async fn do_lock(
             debug!("Starting clean resolution");
 
             // Determine whether we can reuse the existing package versions.
-            let reusable_lock = existing_lock.as_ref().and_then(|lock| match &lock {
-                ValidatedLock::Preferable(lock) => Some(lock),
+            let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
+                ValidatedLock::Preferable(lock) => Some(lock),
+                ValidatedLock::Versions(lock) => Some(lock),
                 ValidatedLock::Unusable(_) => None,
             });
 
             // If an existing lockfile exists, build up a set of preferences.
-            let LockedRequirements { preferences, git } = reusable_lock
+            let LockedRequirements { preferences, git } = versions_lock
                 .map(|lock| read_lock_requirements(lock, upgrade))
                 .unwrap_or_default();
 
@@ -493,13 +494,21 @@ async fn do_lock(
                 state.git.insert(reference, sha);
             }
 
+            // Determine whether we can reuse the existing package forks.
+            let forks_lock = existing_lock.as_ref().and_then(|lock| match &lock {
+                ValidatedLock::Satisfies(lock) => Some(lock),
+                ValidatedLock::Preferable(lock) => Some(lock),
+                ValidatedLock::Versions(_) => None,
+                ValidatedLock::Unusable(_) => None,
+            });
+
             // When we run the same resolution from the lockfile again, we could get a different result the
             // second time due to the preferences causing us to skip a fork point (see the
             // `preferences-dependent-forking` packse scenario). To avoid this, we store the forks in the
             // lockfile. We read those after all the lockfile filters, to allow the forks to change when
             // the environment changed, e.g. the python bound check above can lead to different forking.
             let resolver_markers = ResolverMarkers::universal(
-                reusable_lock
+                forks_lock
                     .map(|lock| lock.fork_markers().to_vec())
                     .unwrap_or_else(|| {
                         environments
@@ -582,13 +591,16 @@ async fn do_lock(
 
 #[derive(Debug)]
 enum ValidatedLock {
-    /// An existing lockfile was provided, but its contents should be ignored.
-    Unusable(Lock),
     /// An existing lockfile was provided, and it satisfies the workspace requirements.
     Satisfies(Lock),
-    /// An existing lockfile was provided, and the locked versions should be preferred if possible,
-    /// even though the lockfile does not satisfy the workspace requirements.
+    /// An existing lockfile was provided, but its contents should be ignored.
+    Unusable(Lock),
+    /// An existing lockfile was provided, and the locked versions and forks should be preferred if
+    /// possible, even though the lockfile does not satisfy the workspace requirements.
     Preferable(Lock),
+    /// An existing lockfile was provided, and the locked versions should be preferred if possible,
+    /// though the forks should be ignored.
+    Versions(Lock),
 }
 
 impl ValidatedLock {
@@ -666,11 +678,17 @@ impl ValidatedLock {
                 .map(SupportedEnvironments::as_markers)
                 .unwrap_or_default()
         {
-            let _ = writeln!(
-                printer.stderr(),
-                "Ignoring existing lockfile due to change in supported environments"
-            );
-            return Ok(Self::Unusable(lock));
+            return Ok(Self::Versions(lock));
+        }
+
+        // If the Requires-Python bound has changed, we have to perform a clean resolution, since
+        // the set of `resolution-markers` may no longer cover the entire supported Python range.
+        if lock.requires_python().range() != requires_python.range() {
+            return if lock.fork_markers().is_empty() {
+                Ok(Self::Preferable(lock))
+            } else {
+                Ok(Self::Versions(lock))
+            };
         }
 
         match upgrade {
@@ -685,19 +703,6 @@ impl ValidatedLock {
                 // the existing versions.
                 return Ok(Self::Preferable(lock));
             }
-        }
-
-        // If the Requires-Python bound in the lockfile is weaker or equivalent to the
-        // Requires-Python bound in the workspace, we should have the necessary wheels to perform
-        // a locked resolution.
-        if lock.requires_python().range() != requires_python.range() {
-            // On the other hand, if the bound in the lockfile is stricter, meaning the
-            // bound has since been weakened, we have to perform a clean resolution to ensure
-            // we fetch the necessary wheels.
-            debug!("Ignoring existing lockfile due to change in `requires-python`");
-
-            // It's fine to prefer the existing versions, though.
-            return Ok(Self::Preferable(lock));
         }
 
         // If the user provided at least one index URL (from the command line, or from a configuration
@@ -835,9 +840,10 @@ impl ValidatedLock {
     #[must_use]
     fn into_lock(self) -> Lock {
         match self {
-            ValidatedLock::Unusable(lock) => lock,
-            ValidatedLock::Satisfies(lock) => lock,
-            ValidatedLock::Preferable(lock) => lock,
+            Self::Unusable(lock) => lock,
+            Self::Satisfies(lock) => lock,
+            Self::Preferable(lock) => lock,
+            Self::Versions(lock) => lock,
         }
     }
 }
@@ -852,7 +858,7 @@ async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), ProjectError> 
 /// Read the lockfile from the workspace.
 ///
 /// Returns `Ok(None)` if the lockfile does not exist.
-async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
+pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
     match fs_err::tokio::read_to_string(&workspace.install_path().join("uv.lock")).await {
         Ok(encoded) => match toml::from_str(&encoded) {
             Ok(lock) => Ok(Some(lock)),

@@ -607,7 +607,7 @@ fn run_with() -> Result<()> {
         name = "foo"
         version = "1.0.0"
         requires-python = ">=3.8"
-        dependencies = ["anyio", "sniffio==1.3.1"]
+        dependencies = ["sniffio==1.3.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -628,13 +628,11 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==4.3.0
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/)
-     + idna==3.6
-     + sniffio==1.3.1
+     + sniffio==1.3.0
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -648,22 +646,56 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
     "###);
 
     // Unless the user requests a different version.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio<1.3.1").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio<1.3.0").arg("main.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
+     + sniffio==1.2.0
+    "###);
+
+    // If we request a dependency that isn't in the base environment, we should still respect any
+    // other dependencies. In this case, `sniffio==1.3.0` is not the latest-compatible version, but
+    // we should use it anyway.
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.0
+    "###);
+
+    // Even if we run with` --no-sync`.
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio==4.2.0").arg("--no-sync").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.2.0
+     + idna==3.6
      + sniffio==1.3.0
     "###);
 
@@ -674,8 +706,8 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
       × No solution found when resolving `--with` dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     "###);
