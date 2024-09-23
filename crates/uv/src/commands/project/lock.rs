@@ -858,7 +858,7 @@ async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), ProjectError> 
 /// Read the lockfile from the workspace.
 ///
 /// Returns `Ok(None)` if the lockfile does not exist.
-async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
+pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
     match fs_err::tokio::read_to_string(&workspace.install_path().join("uv.lock")).await {
         Ok(encoded) => match toml::from_str(&encoded) {
             Ok(lock) => Ok(Some(lock)),
