@@ -5,6 +5,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::env::VarError;
+use std::fmt::Display;
 use thiserror::Error;
 use tracing::{debug, trace};
 use url::Url;
@@ -25,6 +26,22 @@ pub enum TrustedPublishingError {
         "PyPI returned error code {0}, is trusted publishing correctly configured?\nResponse: {1}"
     )]
     Pypi(StatusCode, String),
+}
+
+#[derive(Deserialize)]
+#[serde(transparent)]
+pub struct TrustedPublishingToken(String);
+
+impl From<TrustedPublishingToken> for String {
+    fn from(token: TrustedPublishingToken) -> Self {
+        token.0
+    }
+}
+
+impl Display for TrustedPublishingToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 /// The response from querying `https://pypi.org/_/oidc/audience`.
@@ -48,14 +65,14 @@ struct MintTokenRequest {
 /// The response from querying `$ACTIONS_ID_TOKEN_REQUEST_URL&audience=pypi`.
 #[derive(Deserialize)]
 struct PublishToken {
-    token: String,
+    token: TrustedPublishingToken,
 }
 
 /// Returns the short-lived token to use for uploading.
 pub(crate) async fn get_token(
     registry: &Url,
     client: &ClientWithMiddleware,
-) -> Result<String, TrustedPublishingError> {
+) -> Result<TrustedPublishingToken, TrustedPublishingError> {
     // If this fails, we can skip the audience request.
     let oidc_token_request_token = env::var("ACTIONS_ID_TOKEN_REQUEST_TOKEN")?;
 
@@ -117,7 +134,7 @@ async fn get_publish_token(
     registry: &Url,
     oidc_token: &str,
     client: &ClientWithMiddleware,
-) -> Result<String, TrustedPublishingError> {
+) -> Result<TrustedPublishingToken, TrustedPublishingError> {
     let mint_token_url = Url::parse(&format!(
         "https://{}/_/oidc/mint-token",
         registry.authority()

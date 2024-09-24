@@ -30,6 +30,8 @@ use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_warnings::warn_user_once;
 
+pub use trusted_publishing::TrustedPublishingToken;
+
 #[derive(Error, Debug)]
 pub enum PublishError {
     #[error("The publish path is not a valid glob pattern: `{0}`")]
@@ -225,7 +227,7 @@ pub async fn check_trusted_publishing(
     trusted_publishing: TrustedPublishing,
     registry: &Url,
     client: &ClientWithMiddleware,
-) -> Result<Option<String>, PublishError> {
+) -> Result<Option<TrustedPublishingToken>, PublishError> {
     match trusted_publishing {
         TrustedPublishing::Automatic => {
             // If the user provided credentials, use those.

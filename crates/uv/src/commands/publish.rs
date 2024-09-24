@@ -66,7 +66,7 @@ pub(crate) async fn publish(
     )
     .await?;
     let (username, password) = if let Some(password) = trusted_publishing_token {
-        (Some("__token__".to_string()), Some(password))
+        (Some("__token__".to_string()), Some(password.into()))
     } else {
         (username, password)
     };
