@@ -294,10 +294,16 @@ fn python_executables_from_installed<'a>(
                 Ok(installations
                     .into_iter()
                     .filter(move |installation| {
-                        version.is_none()
+                        if version.is_none()
                             || version.is_some_and(|version| {
                                 version.matches_version(&installation.version())
                             })
+                        {
+                            true
+                        } else {
+                            debug!("Skipping incompatible managed installation `{installation}`");
+                            false
+                        }
                     })
                     .inspect(|installation| debug!("Found managed installation `{installation}`"))
                     .map(|installation| (PythonSource::Managed, installation.executable())))
