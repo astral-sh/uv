@@ -30,15 +30,9 @@ fn tool_list() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Provide a command to invoke with `uvx <command>` or `uvx --from <package> <command>`.
-
-    The following tools are already installed:
-
     black v24.2.0
     - black
     - blackd
-
-    See `uvx --help` for more information.
 
     ----- stderr -----
     "###);
@@ -65,15 +59,9 @@ fn tool_list_paths() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Provide a command to invoke with `uvx <command>` or `uvx --from <package> <command>`.
-
-    The following tools are already installed:
-
     black v24.2.0 ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
-
-    See `uvx --help` for more information.
 
     ----- stderr -----
     "###);
@@ -93,9 +81,7 @@ fn tool_list_empty() {
     ----- stdout -----
 
     ----- stderr -----
-    No tools installed.
-
-    See `uv tool install --help` for more information.
+    No tools installed
     "###);
 }
 
@@ -122,12 +108,6 @@ fn tool_list_missing_receipt() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Provide a command to invoke with `uvx <command>` or `uvx --from <package> <command>`.
-
-    The following tools are already installed:
-
-
-    See `uvx --help` for more information.
 
     ----- stderr -----
     warning: Ignoring malformed tool `black` (run `uv tool uninstall black` to remove)
@@ -175,14 +155,8 @@ fn tool_list_bad_environment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Provide a command to invoke with `uvx <command>` or `uvx --from <package> <command>`.
-
-    The following tools are already installed:
-
     ruff v0.3.4
     - ruff
-
-    See `uvx --help` for more information.
 
     ----- stderr -----
     Invalid environment at `tools/black`: missing Python executable at `tools/black/[BIN]/python`
@@ -244,15 +218,9 @@ fn tool_list_deprecated() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Provide a command to invoke with `uvx <command>` or `uvx --from <package> <command>`.
-
-    The following tools are already installed:
-
     black v24.2.0
     - black
     - blackd
-
-    See `uvx --help` for more information.
 
     ----- stderr -----
     "###);
@@ -277,12 +245,6 @@ fn tool_list_deprecated() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Provide a command to invoke with `uvx <command>` or `uvx --from <package> <command>`.
-
-    The following tools are already installed:
-
-
-    See `uvx --help` for more information.
 
     ----- stderr -----
     warning: Ignoring malformed tool `black` (run `uv tool uninstall black` to remove)
@@ -312,15 +274,9 @@ fn tool_list_show_version_specifiers() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Provide a command to invoke with `uvx <command>` or `uvx --from <package> <command>`.
-
-    The following tools are already installed:
-
     black v24.2.0 [required: <24.3.0]
     - black
     - blackd
-
-    See `uvx --help` for more information.
 
     ----- stderr -----
     "###);
@@ -332,15 +288,9 @@ fn tool_list_show_version_specifiers() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Provide a command to invoke with `uvx <command>` or `uvx --from <package> <command>`.
-
-    The following tools are already installed:
-
     black v24.2.0 [required: <24.3.0] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
-
-    See `uvx --help` for more information.
 
     ----- stderr -----
     "###);

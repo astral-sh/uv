@@ -753,11 +753,11 @@ fn tool_run_list_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
+    Provide a command to invoke with `uv tool run <command>` or `uv tool run --from <package> <command>`.
+
+    No tools installed. See `uv tool install --help` for more information.
 
     ----- stderr -----
-    No tools installed.
-
-    See `uv tool install --help` for more information.
     "###);
 
     // Install `black`.
@@ -776,7 +776,7 @@ fn tool_run_list_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Provide a command to invoke with `uvx <command>` or `uvx --from <package> <command>`.
+    Provide a command to invoke with `uv tool run <command>` or `uv tool run --from <package> <command>`.
 
     The following tools are already installed:
 
@@ -784,7 +784,7 @@ fn tool_run_list_installed() {
     - black
     - blackd
 
-    See `uvx --help` for more information.
+    See `uv tool run --help` for more information.
 
     ----- stderr -----
     "###);

@@ -20,12 +20,10 @@ pub(crate) async fn list(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?;
-    let no_tools_installed_msg =
-        "No tools installed.\n\nSee `uv tool install --help` for more information.";
     let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
         Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-            writeln!(printer.stderr(), "{no_tools_installed_msg}")?;
+            writeln!(printer.stderr(), "No tools installed")?;
             return Ok(ExitStatus::Success);
         }
         Err(err) => return Err(err.into()),
@@ -35,15 +33,9 @@ pub(crate) async fn list(
     tools.sort_by_key(|(name, _)| name.clone());
 
     if tools.is_empty() {
-        writeln!(printer.stderr(), "{no_tools_installed_msg}")?;
+        writeln!(printer.stderr(), "No tools installed")?;
         return Ok(ExitStatus::Success);
     }
-
-    writeln!(
-        printer.stdout(),
-        "Provide a command to invoke with `uvx <command>` or `uvx --from <package> <command>`.\n\n\
-        The following tools are already installed:\n"
-    )?;
 
     for (name, tool) in tools {
         // Skip invalid tools
@@ -107,6 +99,5 @@ pub(crate) async fn list(
         }
     }
 
-    writeln!(printer.stdout(), "\nSee `uvx --help` for more information.")?;
     Ok(ExitStatus::Success)
 }
