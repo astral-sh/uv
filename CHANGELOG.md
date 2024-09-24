@@ -10,10 +10,9 @@
 - Implement trusted publishing for `uv publish` ([#7548](https://github.com/astral-sh/uv/pull/7548))
 - Respect lockfile preferences for `--with` requirements ([#7627](https://github.com/astral-sh/uv/pull/7627))
 - Unhide the `--directory` option ([#7653](https://github.com/astral-sh/uv/pull/7653))
-
-### Preview features
-
-- Add build backend scaffolding ([#7662](https://github.com/astral-sh/uv/pull/7662))
+- Allow requesting free-threaded Python interpreters ([#7431](https://github.com/astral-sh/uv/pull/7431))
+- Show a dedicated PubGrub hint for `--unsafe-best-match` ([#7645](https://github.com/astral-sh/uv/pull/7645))
+- Add resolver error checking for conflicting distributions ([#7595](https://github.com/astral-sh/uv/pull/7595))
 
 ### Bug fixes
 
@@ -31,13 +30,9 @@
 - Remove double whitespaces from the code ([#7623](https://github.com/astral-sh/uv/pull/7623))
 - Use anchorlinks rather than permalinks ([#7626](https://github.com/astral-sh/uv/pull/7626))
 
-### Other changes
+### Preview features
 
-- Add retries to `uv publish` ([#7635](https://github.com/astral-sh/uv/pull/7635))
-- Allow creating venv with free-threaded python builds ([#7431](https://github.com/astral-sh/uv/pull/7431))
-- Show a dedicated PubGrub hint for `--unsafe-best-match` ([#7645](https://github.com/astral-sh/uv/pull/7645))
-- Split metadata parsing into a module ([#7656](https://github.com/astral-sh/uv/pull/7656))
-- uv-resolver: add error checking for conflicting distributions ([#7595](https://github.com/astral-sh/uv/pull/7595))
+- Add build backend scaffolding ([#7662](https://github.com/astral-sh/uv/pull/7662))
 
 ## 0.4.15
 
