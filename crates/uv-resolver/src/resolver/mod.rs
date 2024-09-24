@@ -30,7 +30,7 @@ use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
 use pep508_rs::MarkerTree;
 use platform_tags::Tags;
-use pypi_types::{MetadataResolver, Requirement, VerbatimParsedUrl};
+use pypi_types::{Requirement, ResolutionMetadata, VerbatimParsedUrl};
 pub use resolver_markers::ResolverMarkers;
 pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
@@ -2583,7 +2583,7 @@ enum Response {
     /// The returned metadata for an already-installed distribution.
     Installed {
         dist: InstalledDist,
-        metadata: MetadataResolver,
+        metadata: ResolutionMetadata,
     },
 }
 

@@ -4,7 +4,7 @@
 //! specification](https://packaging.python.org/en/latest/specifications/core-metadata/).
 
 use distribution_filename::WheelFilename;
-use pypi_types::MetadataResolver;
+use pypi_types::ResolutionMetadata;
 use std::io;
 use std::io::{Read, Seek};
 use std::path::Path;
@@ -233,7 +233,7 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
     filename: &WheelFilename,
     debug_path: &str,
     reader: R,
-) -> Result<MetadataResolver, Error> {
+) -> Result<ResolutionMetadata, Error> {
     let reader = futures::io::BufReader::with_capacity(128 * 1024, reader);
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(reader);
 
@@ -246,7 +246,7 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
             let mut contents = Vec::new();
             reader.read_to_end(&mut contents).await.unwrap();
 
-            let metadata = MetadataResolver::parse_metadata(&contents)
+            let metadata = ResolutionMetadata::parse_metadata(&contents)
                 .map_err(|err| Error::InvalidMetadata(debug_path.to_string(), Box::new(err)))?;
             return Ok(metadata);
         }
@@ -259,14 +259,14 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
     Err(Error::MissingDistInfo)
 }
 
-/// Read the [`MetadataResolver`] from an unzipped wheel.
+/// Read the [`ResolutionMetadata`] from an unzipped wheel.
 pub fn read_flat_wheel_metadata(
     filename: &WheelFilename,
     wheel: impl AsRef<Path>,
-) -> Result<MetadataResolver, Error> {
+) -> Result<ResolutionMetadata, Error> {
     let dist_info_prefix = find_flat_dist_info(filename, &wheel)?;
     let metadata = read_dist_info_metadata(&dist_info_prefix, &wheel)?;
-    MetadataResolver::parse_metadata(&metadata).map_err(|err| {
+    ResolutionMetadata::parse_metadata(&metadata).map_err(|err| {
         Error::InvalidMetadata(
             format!("{dist_info_prefix}.dist-info/METADATA"),
             Box::new(err),

@@ -19,7 +19,7 @@ use distribution_types::{
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_tags::Platform;
-use pypi_types::{MetadataResolver, SimpleJson};
+use pypi_types::{ResolutionMetadata, SimpleJson};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
@@ -405,7 +405,7 @@ impl RegistryClient {
         &self,
         built_dist: &BuiltDist,
         capabilities: &IndexCapabilities,
-    ) -> Result<MetadataResolver, Error> {
+    ) -> Result<ResolutionMetadata, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheels) => {
                 #[derive(Debug, Clone)]
@@ -455,7 +455,7 @@ impl RegistryClient {
                             .map_err(|err| {
                                 ErrorKind::Metadata(path.to_string_lossy().to_string(), err)
                             })?;
-                        MetadataResolver::parse_metadata(&contents).map_err(|err| {
+                        ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
                             ErrorKind::MetadataParseError(
                                 wheel.filename.clone(),
                                 built_dist.to_string(),
@@ -489,7 +489,7 @@ impl RegistryClient {
                     .map_err(|err| {
                         ErrorKind::Metadata(wheel.install_path.to_string_lossy().to_string(), err)
                     })?;
-                MetadataResolver::parse_metadata(&contents).map_err(|err| {
+                ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
                     ErrorKind::MetadataParseError(
                         wheel.filename.clone(),
                         built_dist.to_string(),
@@ -516,7 +516,7 @@ impl RegistryClient {
         file: &File,
         url: &Url,
         capabilities: &IndexCapabilities,
-    ) -> Result<MetadataResolver, Error> {
+    ) -> Result<ResolutionMetadata, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
         if file.dist_info_metadata {
@@ -541,7 +541,7 @@ impl RegistryClient {
                 let bytes = response.bytes().await.map_err(ErrorKind::from)?;
 
                 info_span!("parse_metadata21")
-                    .in_scope(|| MetadataResolver::parse_metadata(bytes.as_ref()))
+                    .in_scope(|| ResolutionMetadata::parse_metadata(bytes.as_ref()))
                     .map_err(|err| {
                         Error::from(ErrorKind::MetadataParseError(
                             filename,
@@ -582,7 +582,7 @@ impl RegistryClient {
         index: Option<&'data IndexUrl>,
         cache_shard: WheelCache<'data>,
         capabilities: &'data IndexCapabilities,
-    ) -> Result<MetadataResolver, Error> {
+    ) -> Result<ResolutionMetadata, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.wheel_dir(filename.name.as_ref()),
@@ -630,14 +630,14 @@ impl RegistryClient {
                     trace!("Getting metadata for {filename} by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
                     let metadata =
-                        MetadataResolver::parse_metadata(text.as_bytes()).map_err(|err| {
+                        ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
                             Error::from(ErrorKind::MetadataParseError(
                                 filename.clone(),
                                 url.to_string(),
                                 Box::new(err),
                             ))
                         })?;
-                    Ok::<MetadataResolver, CachedClientError<Error>>(metadata)
+                    Ok::<ResolutionMetadata, CachedClientError<Error>>(metadata)
                 }
                 .boxed_local()
                 .instrument(info_span!("read_metadata_range_request", wheel = %filename))

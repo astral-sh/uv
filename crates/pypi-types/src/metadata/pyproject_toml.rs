@@ -1,5 +1,5 @@
 use crate::{
-    LenientRequirement, LenientVersionSpecifiers, MetadataError, MetadataResolver,
+    LenientRequirement, LenientVersionSpecifiers, MetadataError, ResolutionMetadata,
     VerbatimParsedUrl,
 };
 use indexmap::IndexMap;
@@ -12,7 +12,7 @@ use std::str::FromStr;
 use uv_normalize::{ExtraName, PackageName};
 
 /// Extract the metadata from a `pyproject.toml` file, as specified in PEP 621.
-pub(crate) fn parse_pyproject_toml(contents: &str) -> Result<MetadataResolver, MetadataError> {
+pub(crate) fn parse_pyproject_toml(contents: &str) -> Result<ResolutionMetadata, MetadataError> {
     let pyproject_toml = PyProjectToml::from_toml(contents)?;
 
     let project = pyproject_toml
@@ -77,7 +77,7 @@ pub(crate) fn parse_pyproject_toml(contents: &str) -> Result<MetadataResolver, M
         provides_extras.push(extra);
     }
 
-    Ok(MetadataResolver {
+    Ok(ResolutionMetadata {
         name,
         version,
         requires_dist,
@@ -149,7 +149,7 @@ struct ToolPoetry {}
 /// Python Package Metadata 2.3 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.
 ///
-/// This is a subset of [`MetadataResolver`]; specifically, it omits the `version` and `requires-python`
+/// This is a subset of [`ResolutionMetadata`]; specifically, it omits the `version` and `requires-python`
 /// fields, which aren't necessary when extracting the requirements of a package without installing
 /// the package itself.
 #[derive(Serialize, Deserialize, Debug, Clone)]

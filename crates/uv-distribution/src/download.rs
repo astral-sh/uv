@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::Error;
 use distribution_filename::WheelFilename;
 use distribution_types::{CachedDist, Dist, Hashed};
-use pypi_types::{HashDigest, MetadataResolver};
+use pypi_types::{HashDigest, ResolutionMetadata};
 use uv_metadata::read_flat_wheel_metadata;
 
 use uv_cache_info::CacheInfo;
@@ -40,8 +40,8 @@ impl LocalWheel {
         &self.filename
     }
 
-    /// Read the [`MetadataResolver`] from a wheel.
-    pub fn metadata(&self) -> Result<MetadataResolver, Error> {
+    /// Read the [`ResolutionMetadata`] from a wheel.
+    pub fn metadata(&self) -> Result<ResolutionMetadata, Error> {
         read_flat_wheel_metadata(&self.filename, &self.archive)
             .map_err(|err| Error::WheelMetadata(self.archive.clone(), Box::new(err)))
     }
