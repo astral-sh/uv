@@ -429,7 +429,7 @@ pub(crate) async fn install(
             "Installing entrypoints for {} as part of tool {}",
             pkg, from.name
         );
-        let tool = install_executables(
+        let mut entrypoints = install_executables(
             &environment,
             &from.name,
             &pkg,
@@ -442,7 +442,7 @@ pub(crate) async fn install(
             requirements.clone(),
             printer,
         )?;
-        deps_entrypoints.append(&mut tool.into_entrypoints());
+        deps_entrypoints.append(&mut entrypoints);
     }
 
     // Install entrypoints from the target package.

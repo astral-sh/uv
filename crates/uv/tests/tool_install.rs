@@ -3083,6 +3083,6 @@ fn tool_install_additional_entrypoints() {
     ----- stdout -----
 
     ----- stderr -----
-    Uninstalled 24 executables: ansible, ansible, ansible-community, ansible-config, ansible-config, ansible-connection, ansible-connection, ansible-console, ansible-console, ansible-doc, ansible-doc, ansible-galaxy, ansible-galaxy, ansible-inventory, ansible-inventory, ansible-lint, ansible-playbook, ansible-playbook, ansible-pull, ansible-pull, ansible-test, ansible-test, ansible-vault, ansible-vault
+    Uninstalled 13 executables: ansible, ansible-community, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-lint, ansible-playbook, ansible-pull, ansible-test, ansible-vault
     "###);
 }

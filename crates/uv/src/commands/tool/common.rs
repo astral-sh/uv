@@ -74,7 +74,7 @@ pub(crate) fn install_executables(
     python: Option<String>,
     requirements: Vec<Requirement>,
     printer: Printer,
-) -> anyhow::Result<Tool> {
+) -> anyhow::Result<Vec<ToolEntrypoint>> {
     let site_packages = SitePackages::from_environment(environment)?;
     let installed = site_packages.get_packages(name);
     let Some(installed_dist) = installed.first().copied() else {
@@ -182,18 +182,21 @@ pub(crate) fn install_executables(
             .join(", ")
     )?;
 
-    debug!("Adding receipt for tool `{name}`");
+    debug!("Adding receipt for tool `{tool_name}`");
 
-    let mut entrypoints = existing_entrypoints.to_vec();
+    let mut all_entrypoints = existing_entrypoints.to_vec();
+    let mut new_entrypoints = Vec::with_capacity(target_entry_points.len());
     for (entry, _, target_path) in target_entry_points {
-        entrypoints.push(ToolEntrypoint::new(entry, target_path, name.to_string()));
+        let tool_entry = ToolEntrypoint::new(entry, target_path, name.to_string());
+        all_entrypoints.push(tool_entry.clone());
+        new_entrypoints.push(tool_entry);
     }
-    let tool = Tool::new(requirements, python, entrypoints, options);
+    let tool = Tool::new(requirements, python, all_entrypoints, options);
     installed_tools.add_tool_receipt(tool_name, tool.clone())?;
 
     warn_out_of_path(executable_directory);
 
-    Ok(tool)
+    Ok(new_entrypoints)
 }
 
 pub(crate) fn warn_out_of_path(executable_directory: &Path) {

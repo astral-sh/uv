@@ -205,11 +205,6 @@ impl Tool {
     pub fn options(&self) -> &ToolOptions {
         &self.options
     }
-
-    /// Consume a given `Tool` returning its entrypoints.
-    pub fn into_entrypoints(self) -> Vec<ToolEntrypoint> {
-        self.entrypoints
-    }
 }
 
 impl ToolEntrypoint {
