@@ -16,7 +16,7 @@ fn python_patch() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Bumped patch for version 3.12.1 to 20
+    Bumped patch for version 3.8.12 to 20
 
     ----- stderr -----
     "###);
