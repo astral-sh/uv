@@ -4309,7 +4309,7 @@ pub struct DisplayTreeArgs {
 
 #[derive(Args, Debug)]
 pub struct PublishArgs {
-    /// The paths to the files to uploads, as glob expressions.
+    /// Paths to the files to upload. Accepts glob expressions.
     #[arg(default_value = "dist/*")]
     pub files: Vec<String>,
 
