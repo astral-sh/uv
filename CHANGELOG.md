@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.4.16
+
+### Enhancements
+
+- Add `uv publish` ([#7475](https://github.com/astral-sh/uv/pull/7475))
+- Add a `--project` argument to run a command from a project directory ([#7603](https://github.com/astral-sh/uv/pull/7603))
+- Display Python implementation when creating environments ([#7652](https://github.com/astral-sh/uv/pull/7652))
+- Implement trusted publishing for `uv publish` ([#7548](https://github.com/astral-sh/uv/pull/7548))
+- Respect lockfile preferences for `--with` requirements ([#7627](https://github.com/astral-sh/uv/pull/7627))
+- Unhide the `--directory` option ([#7653](https://github.com/astral-sh/uv/pull/7653))
+
+### Preview features
+
+- Add build backend scaffolding ([#7662](https://github.com/astral-sh/uv/pull/7662))
+
+### Bug fixes
+
+- Avoid adding double-newlines for CRLF ([#7640](https://github.com/astral-sh/uv/pull/7640))
+- Avoid retaining forks when `requires-python` range changes ([#7624](https://github.com/astral-sh/uv/pull/7624))
+- Determine if pre-release Python downloads should be allowed using the version specifiers ([#7638](https://github.com/astral-sh/uv/pull/7638))
+- Fix `link-mode=clone` for directories on Linux ([#7620](https://github.com/astral-sh/uv/pull/7620))
+- Improve Python executable name discovery when using alternative implementations ([#7649](https://github.com/astral-sh/uv/pull/7649))
+- Require opt-in to use alternative Python implementations ([#7650](https://github.com/astral-sh/uv/pull/7650))
+- Use the first pre-release discovered when only pre-release Python versions are available ([#7666](https://github.com/astral-sh/uv/pull/7666))
+
+### Documentation
+
+- Document environment variable that disables printing of virtual environment name in prompt ([#7648](https://github.com/astral-sh/uv/pull/7648))
+- Remove double whitespaces from the code ([#7623](https://github.com/astral-sh/uv/pull/7623))
+- Use anchorlinks rather than permalinks ([#7626](https://github.com/astral-sh/uv/pull/7626))
+
+### Other changes
+
+- Add retries to `uv publish` ([#7635](https://github.com/astral-sh/uv/pull/7635))
+- Allow creating venv with free-threaded python builds ([#7431](https://github.com/astral-sh/uv/pull/7431))
+- Show a dedicated PubGrub hint for `--unsafe-best-match` ([#7645](https://github.com/astral-sh/uv/pull/7645))
+- Split metadata parsing into a module ([#7656](https://github.com/astral-sh/uv/pull/7656))
+- uv-resolver: add error checking for conflicting distributions ([#7595](https://github.com/astral-sh/uv/pull/7595))
+
 ## 0.4.15
 
 ### Bug fixes
