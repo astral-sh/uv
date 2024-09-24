@@ -620,7 +620,8 @@ fn test_tool_upgrade_python() {
     ----- stdout -----
 
     ----- stderr -----
-    Added babel v2.6.0
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + babel==2.6.0
      + pytz==2018.5
     Installed 1 executable: pybabel
@@ -700,11 +701,13 @@ fn test_tool_upgrade_python_with_all() {
     ----- stdout -----
 
     ----- stderr -----
-    Added babel v2.6.0
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + babel==2.6.0
      + pytz==2018.5
     Installed 1 executable: pybabel
-    Added python-dotenv v0.10.2.post2
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + python-dotenv==0.10.2.post2
     Installed 1 executable: dotenv
     Upgraded build environment for all tools to Python 3.12
