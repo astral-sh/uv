@@ -460,7 +460,7 @@ impl InitProjectKind {
         if package {
             // Since it'll be packaged, we can add a `[project.scripts]` entry
             pyproject.push('\n');
-            pyproject.push_str(&pyproject_project_scripts(name, "hello", "hello"));
+            pyproject.push_str(&pyproject_project_scripts(name, name.as_str(), "main"));
 
             // Add a build system
             pyproject.push('\n');
@@ -479,7 +479,7 @@ impl InitProjectKind {
                 fs_err::write(
                     init_py,
                     indoc::formatdoc! {r#"
-                    def hello() -> None:
+                    def main() -> None:
                         print("Hello from {name}!")
                     "#},
                 )?;
