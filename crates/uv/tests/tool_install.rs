@@ -3068,8 +3068,8 @@ fn tool_install_additional_entrypoints() {
      + subprocess-tee==0.4.1
      + wcmatch==8.5.1
      + yamllint==1.35.1
-    Installed 11 executables: ansible, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault
-    Installed 1 executable: ansible-lint
+    Installed 11 additional executables from `ansible-core`: ansible, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault
+    Installed 1 additional executable from `ansible-lint`: ansible-lint
     Installed 1 executable: ansible-community
     "###);
 

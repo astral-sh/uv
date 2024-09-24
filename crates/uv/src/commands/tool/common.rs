@@ -172,9 +172,14 @@ pub(crate) fn install_executables(
     } else {
         "s"
     };
+    let (additional, from) = if tool_name == name {
+        (String::new(), String::new())
+    } else {
+        (" additional".to_string(), format!(" from `{name}`"))
+    };
     writeln!(
         printer.stderr(),
-        "Installed {} executable{s}: {}",
+        "Installed {}{additional} executable{s}{from}: {}",
         target_entry_points.len(),
         target_entry_points
             .iter()
