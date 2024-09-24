@@ -56,6 +56,7 @@ fn help() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
@@ -122,6 +123,7 @@ fn help_flag() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
@@ -187,6 +189,7 @@ fn help_short_flag() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
@@ -339,6 +342,13 @@ fn help_subcommand() {
               
               For example, spinners or progress bars.
 
+          --directory <DIRECTORY>
+              Change to the given directory prior to running the command.
+              
+              Relative paths are resolved with the given directory as the base.
+              
+              See `--project` to only change the project root directory.
+
           --project <PROJECT>
               Run the command within the given project directory.
               
@@ -348,6 +358,8 @@ fn help_subcommand() {
               
               Other command-line arguments (such as relative paths) will be resolved relative to the
               current working directory.
+              
+              See `--directory` to change the working directory entirely.
               
               This setting has no effect when used in the `uv pip` interface.
 
@@ -500,6 +512,13 @@ fn help_subsubcommand() {
               
               For example, spinners or progress bars.
 
+          --directory <DIRECTORY>
+              Change to the given directory prior to running the command.
+              
+              Relative paths are resolved with the given directory as the base.
+              
+              See `--project` to only change the project root directory.
+
           --project <PROJECT>
               Run the command within the given project directory.
               
@@ -509,6 +528,8 @@ fn help_subsubcommand() {
               
               Other command-line arguments (such as relative paths) will be resolved relative to the
               current working directory.
+              
+              See `--directory` to change the working directory entirely.
               
               This setting has no effect when used in the `uv pip` interface.
 
@@ -580,6 +601,7 @@ fn help_flag_subcommand() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
@@ -633,6 +655,7 @@ fn help_flag_subsubcommand() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
@@ -775,6 +798,7 @@ fn help_with_global_option() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
@@ -878,6 +902,7 @@ fn help_with_no_pager() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]

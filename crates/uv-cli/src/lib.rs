@@ -234,7 +234,11 @@ pub struct GlobalArgs {
     pub no_progress: bool,
 
     /// Change to the given directory prior to running the command.
-    #[arg(global = true, long, hide = true)]
+    ///
+    /// Relative paths are resolved with the given directory as the base.
+    ///
+    /// See `--project` to only change the project root directory.
+    #[arg(global = true, long)]
     pub directory: Option<PathBuf>,
 
     /// Run the command within the given project directory.
@@ -245,6 +249,8 @@ pub struct GlobalArgs {
     ///
     /// Other command-line arguments (such as relative paths) will be resolved relative
     /// to the current working directory.
+    ///
+    /// See `--directory` to change the working directory entirely.
     ///
     /// This setting has no effect when used in the `uv pip` interface.
     #[arg(global = true, long)]
