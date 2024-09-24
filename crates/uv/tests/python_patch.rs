@@ -8,7 +8,7 @@ mod common;
 
 #[test]
 fn python_patch() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8.12", "3.8.18"]);
+    let context = TestContext::new("3.8.12");
 
     let python_version_file = context.temp_dir.child(PYTHON_VERSION_FILENAME);
     python_version_file.write_str(r"3.8.12")?;
