@@ -702,6 +702,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.out_dir,
                 args.sdist,
                 args.wheel,
+                args.backend_output,
                 build_constraints,
                 args.hash_checking,
                 args.python,
