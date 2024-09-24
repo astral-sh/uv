@@ -508,7 +508,7 @@ impl InitKind {
 
         let requires_python = get_python_requirement_for_new_script(
             python.as_deref(),
-            &*CWD,
+            &CWD,
             no_pin_python,
             python_preference,
             python_downloads,
