@@ -21,7 +21,7 @@ pub(crate) async fn publish(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if connectivity.is_offline() {
-        bail!("You cannot publish files in offline mode");
+        bail!("Unable to publish files in offline mode");
     }
 
     let files = files_for_publishing(paths)?;
