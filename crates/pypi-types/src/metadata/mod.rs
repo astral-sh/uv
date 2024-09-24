@@ -1,5 +1,6 @@
 mod metadata10;
 mod metadata12;
+mod metadata23;
 mod metadata_resolver;
 mod pyproject_toml;
 mod requires_txt;
@@ -14,6 +15,7 @@ use uv_normalize::InvalidNameError;
 
 pub use metadata10::Metadata10;
 pub use metadata12::Metadata12;
+pub use metadata23::Metadata23;
 pub use metadata_resolver::MetadataResolver;
 pub use pyproject_toml::RequiresDist;
 pub use requires_txt::RequiresTxt;
@@ -65,13 +67,17 @@ impl From<Pep508Error<VerbatimParsedUrl>> for MetadataError {
 #[derive(Debug)]
 struct Headers<'a> {
     headers: Vec<mailparse::MailHeader<'a>>,
+    body_start: usize,
 }
 
 impl<'a> Headers<'a> {
     /// Parse the headers from the given metadata file content.
     fn parse(content: &'a [u8]) -> Result<Self, MailParseError> {
-        let (headers, _) = mailparse::parse_headers(content)?;
-        Ok(Self { headers })
+        let (headers, body_start) = mailparse::parse_headers(content)?;
+        Ok(Self {
+            headers,
+            body_start,
+        })
     }
 
     /// Return the first value associated with the header with the given name.

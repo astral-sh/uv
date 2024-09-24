@@ -30,6 +30,7 @@ pub(crate) use project::remove::remove;
 pub(crate) use project::run::{run, RunCommand};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
+pub(crate) use publish::publish;
 pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
 pub(crate) use python::install::install as python_install;
@@ -70,6 +71,7 @@ pub(crate) mod reporters;
 mod tool;
 
 mod build;
+mod publish;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod venv;

@@ -1,5 +1,6 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use url::Url;
 
 use distribution_types::IndexUrl;
 use install_wheel_rs::linker::LinkMode;
@@ -71,6 +72,7 @@ impl_combine_or!(AnnotationStyle);
 impl_combine_or!(ExcludeNewer);
 impl_combine_or!(IndexStrategy);
 impl_combine_or!(IndexUrl);
+impl_combine_or!(Url);
 impl_combine_or!(KeyringProviderType);
 impl_combine_or!(LinkMode);
 impl_combine_or!(NonZeroUsize);

@@ -329,6 +329,14 @@
         "null"
       ]
     },
+    "publish-url": {
+      "description": "The URL for publishing packages to the Python package index (by default: <https://upload.pypi.org/legacy/>).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uri"
+    },
     "python-downloads": {
       "description": "Whether to allow Python downloads.",
       "anyOf": [

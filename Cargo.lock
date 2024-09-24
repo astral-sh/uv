@@ -2132,6 +2132,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
+name = "mime_guess"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
+dependencies = [
+ "mime",
+ "unicase",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3090,6 +3100,7 @@ dependencies = [
  "js-sys",
  "log",
  "mime",
+ "mime_guess",
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
@@ -4291,6 +4302,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed646292ffc8188ef8ea4d1e0e0150fb15a5c2e12ad9b8fc191ae7a8a7f3c4b9"
 
 [[package]]
+name = "unicase"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7d2d4dafb69621809a81864c9c1b864479e1235c0dd4e199924b9742439ed89"
+dependencies = [
+ "version_check",
+]
+
+[[package]]
 name = "unicode-bidi"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4511,6 +4531,7 @@ dependencies = [
  "uv-git",
  "uv-installer",
  "uv-normalize",
+ "uv-publish",
  "uv-python",
  "uv-requirements",
  "uv-resolver",
@@ -4984,6 +5005,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-publish"
+version = "0.1.0"
+dependencies = [
+ "async-compression",
+ "base64 0.22.1",
+ "distribution-filename",
+ "fs-err",
+ "futures",
+ "glob",
+ "insta",
+ "itertools 0.13.0",
+ "krata-tokio-tar",
+ "pypi-types",
+ "reqwest",
+ "reqwest-middleware",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+ "uv-client",
+ "uv-fs",
+ "uv-metadata",
+]
+
+[[package]]
 name = "uv-python"
 version = "0.0.1"
 dependencies = [
@@ -5156,6 +5206,7 @@ dependencies = [
  "thiserror",
  "toml",
  "tracing",
+ "url",
  "uv-cache-info",
  "uv-configuration",
  "uv-fs",

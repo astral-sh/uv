@@ -38,6 +38,8 @@ uv [OPTIONS] <COMMAND>
 </dd>
 <dt><a href="#uv-build"><code>uv build</code></a></dt><dd><p>Build Python packages into source distributions and wheels</p>
 </dd>
+<dt><a href="#uv-publish"><code>uv publish</code></a></dt><dd><p>Upload distributions to an index</p>
+</dd>
 <dt><a href="#uv-cache"><code>uv cache</code></a></dt><dd><p>Manage uv&#8217;s cache</p>
 </dd>
 <dt><a href="#uv-version"><code>uv version</code></a></dt><dd><p>Display uv&#8217;s version</p>
@@ -6773,6 +6775,152 @@ uv build [OPTIONS] [SRC]
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd><dt><code>--wheel</code></dt><dd><p>Build a binary distribution (&quot;wheel&quot;) from the given directory</p>
+
+</dd></dl>
+
+## uv publish
+
+Upload distributions to an index
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+uv publish [OPTIONS] [FILES]...
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt><code>FILES</code></dt><dd><p>Paths to the files to upload. Accepts glob expressions.</p>
+
+<p>Defaults to the <code>dist</code> directory. Selects only wheels and source distributions, while ignoring other files.</p>
+
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
+</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+
+<p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
+
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
+</dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+
+<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
+
+<p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
+
+<p>Defaults to <code>disabled</code>.</p>
+
+<p>May also be set with the <code>UV_KEYRING_PROVIDER</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
+</dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
+
+<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
+
+<p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
+
+<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
+</dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+
+<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
+</dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+
+<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
+
+<p>For example, spinners or progress bars.</p>
+
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
+
+</dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
+
+<p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--password</code>, <code>-p</code> <i>password</i></dt><dd><p>The password for the upload</p>
+
+<p>May also be set with the <code>UV_PUBLISH_PASSWORD</code> environment variable.</p>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
+</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint.</p>
+
+<p>Note that this typically differs from the index URL.</p>
+
+<p>Defaults to PyPI&#8217;s publish URL (&lt;https://upload.pypi.org/legacy/&gt;).</p>
+
+<p>The default value is publish URL for PyPI (&lt;https://upload.pypi.org/legacy/&gt;).</p>
+
+<p>May also be set with the <code>UV_PUBLISH_URL</code> environment variable.</p>
+</dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
+
+<p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
+
+<p>May also be set with the <code>UV_PYTHON_PREFERENCE</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
+</dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+
+</dd><dt><code>--token</code>, <code>-t</code> <i>token</i></dt><dd><p>The token for the upload.</p>
+
+<p>Using a token is equivalent to passing <code>__token__</code> as <code>--username</code> and the token as <code>--password</code>. password.</p>
+
+<p>May also be set with the <code>UV_PUBLISH_TOKEN</code> environment variable.</p>
+</dd><dt><code>--username</code>, <code>-u</code> <i>username</i></dt><dd><p>The username for the upload</p>
+
+<p>May also be set with the <code>UV_PUBLISH_USERNAME</code> environment variable.</p>
+</dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+
+<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
+
+</dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
