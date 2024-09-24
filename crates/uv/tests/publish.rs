@@ -23,7 +23,7 @@ fn username_password_no_longer_supported() {
     Publishing 1 file
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://upload.pypi.org/legacy/
-      Caused by: Incorrect credentials (status code 403 Forbidden): 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://pypi.org/help/#apitoken and https://pypi.org/help/#trusted-publishers
+      Caused by: Permission denied (status code 403 Forbidden): 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://pypi.org/help/#apitoken and https://pypi.org/help/#trusted-publishers
     "###
     );
 }
@@ -47,7 +47,7 @@ fn invalid_token() {
     Publishing 1 file
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://upload.pypi.org/legacy/
-      Caused by: Incorrect credentials (status code 403 Forbidden): 403 Invalid or non-existent authentication information. See https://pypi.org/help/#invalid-auth for more information.
+      Caused by: Permission denied (status code 403 Forbidden): 403 Invalid or non-existent authentication information. See https://pypi.org/help/#invalid-auth for more information.
     "###
     );
 }
