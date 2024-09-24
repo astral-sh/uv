@@ -65,7 +65,7 @@ impl Pep723Script {
     /// Reads a Python script and generates a default PEP 723 metadata table.
     ///
     /// See: <https://peps.python.org/pep-0723/>
-    pub async fn create(
+    pub async fn init(
         file: impl AsRef<Path>,
         requires_python: &VersionSpecifiers,
     ) -> Result<Self, Pep723Error> {
@@ -95,15 +95,16 @@ impl Pep723Script {
         })
     }
 
-    pub async fn create_new_script(
-        script_path: impl AsRef<Path>,
+    pub async fn create(
+        script_path: &PathBuf,
         requires_python: &VersionSpecifiers,
     ) -> Result<(), Pep723Error> {
         let script_name = script_path
-            .as_ref()
             .file_name()
             .and_then(|name| name.to_str())
-            .ok_or_else(|| Pep723Error::InvalidFilename)?;
+            .ok_or_else(|| {
+                Pep723Error::InvalidFilename(script_path.to_string_lossy().into_owned())
+            })?;
 
         let default_metadata = indoc::formatdoc! {r#"
             requires-python = "{requires_python}"
@@ -115,7 +116,7 @@ impl Pep723Script {
 
         let script = indoc::formatdoc! {r#"
             {metadata}
-            def main():
+            def main() -> None:
                 print("Hello from {name}!")
 
             if __name__ == "__main__":
@@ -194,8 +195,8 @@ pub enum Pep723Error {
     Utf8(#[from] std::str::Utf8Error),
     #[error(transparent)]
     Toml(#[from] toml::de::Error),
-    #[error("Invalid filename supplied")]
-    InvalidFilename,
+    #[error("Invalid filename `{0}` supplied")]
+    InvalidFilename(String),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

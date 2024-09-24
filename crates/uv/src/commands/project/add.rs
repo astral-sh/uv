@@ -48,7 +48,7 @@ use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 
-use super::init::get_python_requirement_for_new_script;
+use super::get_python_requirement_for_new_script;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -131,7 +131,7 @@ pub(crate) async fn add(
             script
         } else {
             let requires_python = get_python_requirement_for_new_script(
-                &python,
+                python.as_deref(),
                 false,
                 python_preference,
                 python_downloads,
@@ -140,7 +140,7 @@ pub(crate) async fn add(
                 &reporter,
             )
             .await?;
-            Pep723Script::create(&script, requires_python.specifiers()).await?
+            Pep723Script::init(&script, requires_python.specifiers()).await?
         };
 
         let python_request = if let Some(request) = python.as_deref() {

@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::io::Write as FileWrite;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
@@ -24,13 +25,15 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
+use super::get_python_requirement_for_new_script;
+
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
     explicit_path: Option<String>,
     name: Option<PackageName>,
     package: bool,
-    project_kind: InitProjectKind,
+    init_kind: InitKind,
     no_readme: bool,
     no_pin_python: bool,
     python: Option<String>,
@@ -43,108 +46,112 @@ pub(crate) async fn init(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // If user seeks to initialize a new script, process the request immediately
-    if let InitProjectKind::Script = project_kind {
-        if let Some(script_path) = explicit_path {
-            project_kind
-                .init_script(
-                    &PathBuf::from(&script_path),
-                    python,
-                    connectivity,
-                    python_preference,
-                    python_downloads,
-                    cache,
-                    printer,
-                    no_workspace,
-                    no_readme,
-                    no_pin_python,
-                    package,
-                    native_tls,
-                )
-                .await?;
+    match init_kind {
+        InitKind::Script => {
+            if let Some(script_path) = explicit_path {
+                init_kind
+                    .init_script(
+                        &PathBuf::from(&script_path),
+                        python,
+                        connectivity,
+                        python_preference,
+                        python_downloads,
+                        cache,
+                        printer,
+                        no_workspace,
+                        no_readme,
+                        no_pin_python,
+                        package,
+                        native_tls,
+                    )
+                    .await?;
 
-            writeln!(
-                printer.stderr(),
-                "Initialized script at `{}`",
-                script_path.cyan()
-            )?;
-            return Ok(ExitStatus::Success);
+                writeln!(
+                    printer.stderr(),
+                    "Initialized script at `{}`",
+                    script_path.cyan()
+                )?;
+                return Ok(ExitStatus::Success);
+            }
+            anyhow::bail!("Filename not provided for script");
         }
-        anyhow::bail!("Filename not provided for script");
+        InitKind::Project(project_kind) => {
+            // Default to the current directory if a path was not provided.
+            let path = match explicit_path {
+                None => CWD.to_path_buf(),
+                Some(ref path) => std::path::absolute(path)?,
+            };
+
+            // Make sure a project does not already exist in the given directory.
+            if path.join("pyproject.toml").exists() {
+                let path =
+                    std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
+                anyhow::bail!(
+                    "Project is already initialized in `{}` (`pyproject.toml` file exists)",
+                    path.display().cyan()
+                );
+            }
+
+            // Default to the directory name if a name was not provided.
+            let name = match name {
+                Some(name) => name,
+                None => {
+                    let name = path
+                        .file_name()
+                        .and_then(|path| path.to_str())
+                        .context("Missing directory name")?;
+
+                    PackageName::new(name.to_string())?
+                }
+            };
+
+            init_project(
+                &path,
+                &name,
+                package,
+                project_kind,
+                no_readme,
+                no_pin_python,
+                python,
+                no_workspace,
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?;
+
+            // Create the `README.md` if it does not already exist.
+            if !no_readme {
+                let readme = path.join("README.md");
+                if !readme.exists() {
+                    fs_err::write(readme, String::new())?;
+                }
+            }
+
+            match explicit_path {
+                // Initialized a project in the current directory.
+                None => {
+                    writeln!(printer.stderr(), "Initialized project `{}`", name.cyan())?;
+                }
+                // Initialized a project in the given directory.
+                Some(path) => {
+                    let path = std::path::absolute(&path)
+                        .unwrap_or_else(|_| path.simplified().to_path_buf());
+                    writeln!(
+                        printer.stderr(),
+                        "Initialized project `{}` at `{}`",
+                        name.cyan(),
+                        path.display().cyan()
+                    )?;
+                }
+            }
+
+            Ok(ExitStatus::Success)
+        }
     }
-
-    // Default to the current directory if a path was not provided.
-    let path = match explicit_path {
-        None => CWD.to_path_buf(),
-        Some(ref path) => std::path::absolute(path)?,
-    };
-
-    // Make sure a project does not already exist in the given directory.
-    if path.join("pyproject.toml").exists() {
-        let path = std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
-        anyhow::bail!(
-            "Project is already initialized in `{}` (`pyproject.toml` file exists)",
-            path.display().cyan()
-        );
-    }
-
-    // Default to the directory name if a name was not provided.
-    let name = match name {
-        Some(name) => name,
-        None => {
-            let name = path
-                .file_name()
-                .and_then(|path| path.to_str())
-                .context("Missing directory name")?;
-
-            PackageName::new(name.to_string())?
-        }
-    };
-
-    init_project(
-        &path,
-        &name,
-        package,
-        project_kind,
-        no_readme,
-        no_pin_python,
-        python,
-        no_workspace,
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?;
-
-    // Create the `README.md` if it does not already exist.
-    if !no_readme {
-        let readme = path.join("README.md");
-        if !readme.exists() {
-            fs_err::write(readme, String::new())?;
-        }
-    }
-
-    match explicit_path {
-        // Initialized a project in the current directory.
-        None => {
-            writeln!(printer.stderr(), "Initialized project `{}`", name.cyan())?;
-        }
-        // Initialized a project in the given directory.
-        Some(path) => {
-            let path =
-                std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
-            writeln!(
-                printer.stderr(),
-                "Initialized project `{}` at `{}`",
-                name.cyan(),
-                path.display().cyan()
-            )?;
-        }
-    }
-
-    Ok(ExitStatus::Success)
 }
 
 /// Initialize a project (and, implicitly, a workspace root) at the given path.
@@ -419,12 +426,103 @@ async fn init_project(
     Ok(())
 }
 
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum InitKind {
+    Project(InitProjectKind),
+    Script,
+}
+
+impl Default for InitKind {
+    fn default() -> Self {
+        InitKind::Project(InitProjectKind::default())
+    }
+}
+
 #[derive(Debug, Copy, Clone, Default)]
 pub(crate) enum InitProjectKind {
     #[default]
     Application,
     Library,
-    Script,
+}
+
+impl InitKind {
+    #[allow(clippy::fn_params_excessive_bools)]
+    async fn init_script(
+        self,
+        script_path: &PathBuf,
+        python: Option<String>,
+        connectivity: Connectivity,
+        python_preference: PythonPreference,
+        python_downloads: PythonDownloads,
+        cache: &Cache,
+        printer: Printer,
+        no_workspace: bool,
+        no_readme: bool,
+        no_pin_python: bool,
+        package: bool,
+        native_tls: bool,
+    ) -> Result<()> {
+        if no_workspace {
+            warn_user_once!("`--no_workspace` is a no-op for Python scripts, which are standalone");
+        }
+        if no_readme {
+            warn_user_once!("`--no_readme` is a no-op for Python scripts, which are standalone");
+        }
+        if package {
+            warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
+        }
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
+
+        let reporter = PythonDownloadReporter::single(printer);
+
+        let metadata = fs_err::tokio::metadata(script_path).await?;
+        let mut content_future = None;
+
+        if metadata.is_dir() {
+            anyhow::bail!("{} is a directory", script_path.to_str().unwrap());
+        } else if metadata.is_file() {
+            if Pep723Script::read(script_path).await?.is_some() {
+                anyhow::bail!("{} is a PEP 723 script", script_path.to_str().unwrap());
+            }
+
+            content_future = Some(fs_err::tokio::read(&script_path))
+        }
+
+        let requires_python = get_python_requirement_for_new_script(
+            python.as_deref(),
+            no_pin_python,
+            python_preference,
+            python_downloads,
+            &client_builder,
+            cache,
+            &reporter,
+        )
+        .await?;
+
+        if let Some(parent_path) = script_path.parent() {
+            fs_err::tokio::create_dir_all(parent_path).await?;
+        }
+
+        let existing_contents = if let Some(contents) = content_future {
+            Some(contents.await?)
+        } else {
+            None
+        };
+
+        Pep723Script::create(script_path, requires_python.specifiers()).await?;
+
+        if let Some(contents) = existing_contents {
+            let mut file = fs_err::OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(script_path)?;
+            file.write_all(&contents)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl InitProjectKind {
@@ -460,10 +558,6 @@ impl InitProjectKind {
                     package,
                 )
                 .await
-            }
-            InitProjectKind::Script => {
-                debug!("Script should be initialized directly via init_script");
-                anyhow::bail!("Error during script initialization")
             }
         }
     }
@@ -608,102 +702,6 @@ impl InitProjectKind {
 
         Ok(())
     }
-
-    #[allow(clippy::fn_params_excessive_bools)]
-    async fn init_script(
-        self,
-        script_path: &PathBuf,
-        python: Option<String>,
-        connectivity: Connectivity,
-        python_preference: PythonPreference,
-        python_downloads: PythonDownloads,
-        cache: &Cache,
-        printer: Printer,
-        no_workspace: bool,
-        no_readme: bool,
-        no_pin_python: bool,
-        package: bool,
-        native_tls: bool,
-    ) -> Result<()> {
-        if no_workspace {
-            warn_user_once!("`--no_workspace` is a no-op for Python scripts, which are standalone");
-        }
-        if no_readme {
-            warn_user_once!("`--no_readme` is a no-op for Python scripts, which are standalone");
-        }
-        if package {
-            warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
-        }
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls);
-
-        let reporter = PythonDownloadReporter::single(printer);
-
-        if script_path.try_exists()? {
-            anyhow::bail!("Script already exists at {}", script_path.to_str().unwrap());
-        }
-
-        let requires_python = get_python_requirement_for_new_script(
-            &python,
-            no_pin_python,
-            python_preference,
-            python_downloads,
-            &client_builder,
-            cache,
-            &reporter,
-        )
-        .await?;
-
-        if let Some(path) = script_path.parent() {
-            fs_err::tokio::create_dir_all(path).await?;
-        }
-        Pep723Script::create_new_script(script_path, requires_python.specifiers()).await?;
-
-        Ok(())
-    }
-}
-
-pub(crate) async fn get_python_requirement_for_new_script(
-    python: &Option<String>,
-    no_pin_python: bool,
-    python_preference: PythonPreference,
-    python_downloads: PythonDownloads,
-    client_builder: &BaseClientBuilder<'_>,
-    cache: &Cache,
-    reporter: &PythonDownloadReporter,
-) -> Result<RequiresPython> {
-    let python_request = if let Some(request) = python.as_deref() {
-        // (1) Explicit request from user
-        PythonRequest::parse(request)
-    } else if let (false, Some(request)) = (
-        no_pin_python,
-        PythonVersionFile::discover(&*CWD, false, false)
-            .await?
-            .and_then(PythonVersionFile::into_version),
-    ) {
-        // (2) Request from `.python-version`
-        request
-    } else {
-        // (3) Assume any Python version
-        PythonRequest::Any
-    };
-
-    let interpreter = PythonInstallation::find_or_download(
-        Some(&python_request),
-        EnvironmentPreference::Any,
-        python_preference,
-        python_downloads,
-        client_builder,
-        cache,
-        Some(reporter),
-    )
-    .await?
-    .into_interpreter();
-
-    Ok(RequiresPython::greater_than_equal_version(
-        &interpreter.python_minor_version(),
-    ))
 }
 
 /// Generate the `[project]` section of a `pyproject.toml`.

@@ -2332,7 +2332,7 @@ pub struct InitArgs {
 
     /// Create a script.
     ///
-    /// A script is a standalone file which adheres to the PEP-723 specification.
+    /// A script is a standalone file which adheres to the PEP 723 specification.
     ///
     /// By default, the Python version the script depends on is the system version; can be
     /// manually specified with the --python argument (takes absolute precedence) or a

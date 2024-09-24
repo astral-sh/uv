@@ -15,7 +15,7 @@ use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient
 use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
@@ -1205,6 +1205,48 @@ pub(crate) async fn update_environment(
         environment: venv,
         changelog,
     })
+}
+
+pub(crate) async fn get_python_requirement_for_new_script(
+    python: Option<&str>,
+    no_pin_python: bool,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    client_builder: &BaseClientBuilder<'_>,
+    cache: &Cache,
+    reporter: &PythonDownloadReporter,
+) -> anyhow::Result<RequiresPython> {
+    let python_request = if let Some(request) = python.as_deref() {
+        // (1) Explicit request from user
+        PythonRequest::parse(request)
+    } else if let (false, Some(request)) = (
+        no_pin_python,
+        PythonVersionFile::discover(&*CWD, false, false)
+            .await?
+            .and_then(PythonVersionFile::into_version),
+    ) {
+        // (2) Request from `.python-version`
+        request
+    } else {
+        // (3) Assume any Python version
+        PythonRequest::Any
+    };
+
+    let interpreter = PythonInstallation::find_or_download(
+        Some(&python_request),
+        EnvironmentPreference::Any,
+        python_preference,
+        python_downloads,
+        client_builder,
+        cache,
+        Some(reporter),
+    )
+    .await?
+    .into_interpreter();
+
+    Ok(RequiresPython::greater_than_equal_version(
+        &interpreter.python_minor_version(),
+    ))
 }
 
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.
