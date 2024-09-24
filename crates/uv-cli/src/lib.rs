@@ -389,6 +389,15 @@ pub enum Commands {
     Build(BuildArgs),
     /// Upload distributions to an index.
     Publish(PublishArgs),
+    /// The implementation of the build backend.
+    ///
+    /// These commands are not directly exposed to the user, instead users invoke their build
+    /// frontend (PEP 517) which calls the Python shims which calls back into uv with this method.
+    #[command(hide = true)]
+    BuildBackend {
+        #[command(subcommand)]
+        command: BuildBackendCommand,
+    },
     /// Manage uv's cache.
     #[command(
         after_help = "Use `uv help cache` for more details.",
@@ -4388,4 +4397,34 @@ pub struct PublishArgs {
         value_parser = parse_insecure_host,
     )]
     pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
+}
+
+/// See [PEP 517](https://peps.python.org/pep-0517/) and
+/// [PEP 660](https://peps.python.org/pep-0660/) for specifications of the parameters.
+#[derive(Subcommand)]
+pub enum BuildBackendCommand {
+    /// PEP 517 hook `build_sdist`.
+    BuildSdist { sdist_directory: PathBuf },
+    /// PEP 517 hook `build_wheel`.
+    BuildWheel {
+        wheel_directory: PathBuf,
+        #[arg(long)]
+        metadata_directory: Option<PathBuf>,
+    },
+    /// PEP 660 hook `build_editable`.
+    BuildEditable {
+        wheel_directory: PathBuf,
+        #[arg(long)]
+        metadata_directory: Option<PathBuf>,
+    },
+    /// PEP 517 hook `get_requires_for_build_sdist`.
+    GetRequiresForBuildSdist,
+    /// PEP 517 hook `get_requires_for_build_wheel`.
+    GetRequiresForBuildWheel,
+    /// PEP 517 hook `prepare_metadata_for_build_wheel`.
+    PrepareMetadataForBuildWheel { wheel_directory: PathBuf },
+    /// PEP 660 hook `get_requires_for_build_editable`.
+    GetRequiresForBuildEditable,
+    /// PEP 660 hook `prepare_metadata_for_build_editable`.
+    PrepareMetadataForBuildEditable { wheel_directory: PathBuf },
 }
