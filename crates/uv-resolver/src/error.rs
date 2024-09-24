@@ -6,7 +6,7 @@ use indexmap::IndexSet;
 use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Range, Reporter};
 use rustc_hash::FxHashMap;
 
-use distribution_types::{BuiltDist, IndexLocations, InstalledDist, SourceDist};
+use distribution_types::{BuiltDist, IndexLocations, IndexUrl, InstalledDist, SourceDist};
 use pep440_rs::Version;
 use pep508_rs::MarkerTree;
 use tracing::trace;
@@ -19,6 +19,7 @@ use crate::pubgrub::{
     PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, PubGrubSpecifierError,
 };
 use crate::python_requirement::PythonRequirement;
+use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
 
 #[derive(Debug, thiserror::Error)]
@@ -102,6 +103,9 @@ pub enum ResolveError {
     #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`")]
     UnhashedPackage(PackageName),
 
+    #[error("found conflicting distribution in resolution: {0}")]
+    ConflictingDistribution(ConflictingDistributionError),
+
     /// Something unexpected happened.
     #[error("{0}")]
     Failure(String),
@@ -122,6 +126,7 @@ pub(crate) type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, Unava
 pub struct NoSolutionError {
     error: pubgrub::NoSolutionError<UvDependencyProvider>,
     available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
+    available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
     selector: CandidateSelector,
     python_requirement: PythonRequirement,
     index_locations: IndexLocations,
@@ -137,6 +142,7 @@ impl NoSolutionError {
     pub(crate) fn new(
         error: pubgrub::NoSolutionError<UvDependencyProvider>,
         available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
+        available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         selector: CandidateSelector,
         python_requirement: PythonRequirement,
         index_locations: IndexLocations,
@@ -149,6 +155,7 @@ impl NoSolutionError {
         Self {
             error,
             available_versions,
+            available_indexes,
             selector,
             python_requirement,
             index_locations,
@@ -254,10 +261,12 @@ impl std::fmt::Display for NoSolutionError {
             &tree,
             &self.selector,
             &self.index_locations,
+            &self.available_indexes,
             &self.unavailable_packages,
             &self.incomplete_packages,
             &self.fork_urls,
             &self.markers,
+            &self.workspace_members,
             &mut additional_hints,
         );
         for hint in additional_hints {

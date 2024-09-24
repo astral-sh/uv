@@ -13,6 +13,7 @@ use pypi_types::{
     LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
 };
 use std::borrow::Cow;
+use std::path::Path;
 use std::str::FromStr;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -21,7 +22,6 @@ use uv_configuration::{
     HashCheckingMode, InstallOptions,
 };
 use uv_dispatch::BuildDispatch;
-use uv_fs::CWD;
 use uv_installer::SitePackages;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -34,6 +34,7 @@ use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProj
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
+    project_dir: &Path,
     locked: bool,
     frozen: bool,
     package: Option<PackageName>,
@@ -55,7 +56,7 @@ pub(crate) async fn sync(
     // Identify the project.
     let project = if frozen {
         VirtualProject::discover(
-            &CWD,
+            project_dir,
             &DiscoveryOptions {
                 members: MemberDiscovery::None,
                 ..DiscoveryOptions::default()
@@ -64,13 +65,13 @@ pub(crate) async fn sync(
         .await?
     } else if let Some(package) = package.as_ref() {
         VirtualProject::Project(
-            Workspace::discover(&CWD, &DiscoveryOptions::default())
+            Workspace::discover(project_dir, &DiscoveryOptions::default())
                 .await?
                 .with_current_project(package.clone())
                 .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
     } else {
-        VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+        VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
 
     // Identify the target.

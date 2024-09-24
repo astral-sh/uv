@@ -229,6 +229,9 @@ jobs:
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
+        # ghcr.io prefers index level annotations
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
           images: ${{ env.UV_BASE_IMG }}
           flavor: |
@@ -247,3 +250,57 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+
+  # This is effectively a duplicate of `docker-publish` to make https://github.com/astral-sh/uv/pkgs/container/uv
+  # show the uv base image first since GitHub always shows the last updated image digests
+  # This works by annotating the original digests (previously non-annotated) which triggers an update to ghcr.io
+  docker-republish:
+    name: Annotate Docker image (ghcr.io/astral-sh/uv)
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    needs:
+      - docker-publish-extra
+    if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+        with:
+          images: ${{ env.UV_BASE_IMG }}
+          # Order is on purpose such that the label org.opencontainers.image.version has the first pattern with the full version
+          tags: |
+            type=pep440,pattern={{ version }},value=${{ fromJson(inputs.plan).announcement_tag }}
+            type=pep440,pattern={{ major }}.{{ minor }},value=${{ fromJson(inputs.plan).announcement_tag }}
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        # The readarray part is used to make sure the quoting and special characters are preserved on expansion (e.g. spaces)
+        # The jq command expands the docker/metadata json "tags" array entry to `-t tag1 -t tag2 ...` for each tag in the array
+        # The printf will expand the base image with the `<UV_BASE_IMG>@sha256:<sha256> ...` for each sha256 in the directory
+        # The final command becomes `docker buildx imagetools create -t tag1 -t tag2 ... <UV_BASE_IMG>@sha256:<sha256_1> <UV_BASE_IMG>@sha256:<sha256_2> ...`
+        run: |
+          readarray -t lines <<< "$DOCKER_METADATA_OUTPUT_ANNOTATIONS"; annotations=(); for line in "${lines[@]}"; do annotations+=(--annotation "$line"); done
+          docker buildx imagetools create \
+            "${annotations[@]}" \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.UV_BASE_IMG }}@sha256:%s ' *)

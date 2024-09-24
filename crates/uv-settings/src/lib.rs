@@ -1,10 +1,10 @@
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
-use tracing::{debug, warn};
+use tracing::debug;
 
 use uv_fs::Simplified;
-use uv_warnings::owo_colors::OwoColorize;
+use uv_warnings::warn_user;
 
 pub use crate::combine::*;
 pub use crate::settings::*;
@@ -63,8 +63,8 @@ impl FilesystemOptions {
     ///
     /// The search starts at the given path and goes up the directory tree until a `uv.toml` file or
     /// `pyproject.toml` file is found.
-    pub fn find(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
-        for ancestor in path.as_ref().ancestors() {
+    pub fn find(path: &Path) -> Result<Option<Self>, Error> {
+        for ancestor in path.ancestors() {
             match Self::from_directory(ancestor) {
                 Ok(Some(options)) => {
                     return Ok(Some(options));
@@ -74,7 +74,7 @@ impl FilesystemOptions {
                 }
                 Err(Error::PyprojectToml(file, err)) => {
                     // If we see an invalid `pyproject.toml`, warn but continue.
-                    warn!(
+                    warn_user!(
                         "Failed to parse `{}` during settings discovery:\n{}",
                         file.cyan(),
                         textwrap::indent(&err.to_string(), "  ")
@@ -91,9 +91,9 @@ impl FilesystemOptions {
 
     /// Load a [`FilesystemOptions`] from a directory, preferring a `uv.toml` file over a
     /// `pyproject.toml` file.
-    pub fn from_directory(dir: impl AsRef<Path>) -> Result<Option<Self>, Error> {
+    pub fn from_directory(dir: &Path) -> Result<Option<Self>, Error> {
         // Read a `uv.toml` file in the current directory.
-        let path = dir.as_ref().join("uv.toml");
+        let path = dir.join("uv.toml");
         match fs_err::read_to_string(&path) {
             Ok(content) => {
                 let options: Options = toml::from_str(&content)
@@ -101,13 +101,13 @@ impl FilesystemOptions {
 
                 // If the directory also contains a `[tool.uv]` table in a `pyproject.toml` file,
                 // warn.
-                let pyproject = dir.as_ref().join("pyproject.toml");
+                let pyproject = dir.join("pyproject.toml");
                 if let Some(pyproject) = fs_err::read_to_string(pyproject)
                     .ok()
                     .and_then(|content| toml::from_str::<PyProjectToml>(&content).ok())
                 {
                     if pyproject.tool.is_some_and(|tool| tool.uv.is_some()) {
-                        warn!(
+                        warn_user!(
                             "Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The `[tool.uv]` section will be ignored in favor of the `uv.toml` file."
                         );
                     }
@@ -121,7 +121,7 @@ impl FilesystemOptions {
         }
 
         // Read a `pyproject.toml` file in the current directory.
-        let path = dir.as_ref().join("pyproject.toml");
+        let path = dir.join("pyproject.toml");
         match fs_err::read_to_string(&path) {
             Ok(content) => {
                 // Parse, but skip any `pyproject.toml` that doesn't have a `[tool.uv]` section.
@@ -130,14 +130,14 @@ impl FilesystemOptions {
                 let Some(tool) = pyproject.tool else {
                     debug!(
                         "Skipping `pyproject.toml` in `{}` (no `[tool]` section)",
-                        dir.as_ref().display()
+                        dir.display()
                     );
                     return Ok(None);
                 };
                 let Some(options) = tool.uv else {
                     debug!(
                         "Skipping `pyproject.toml` in `{}` (no `[tool.uv]` section)",
-                        dir.as_ref().display()
+                        dir.display()
                     );
                     return Ok(None);
                 };

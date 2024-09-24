@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.4.15
+
+### Bug fixes
+
+- Revert "Treat invalid platform as more compatible than invalid Python (#7556)" ([#7608](https://github.com/astral-sh/uv/pull/7608))
+
+### Documentation
+
+- Add the execution policy to powershell installs for single versions ([#7602](https://github.com/astral-sh/uv/pull/7602))
+
+## 0.4.14
+
+### Breaking
+
+- Move uvx shell completion to `uvx --generate-shell-completion` ([#7511](https://github.com/astral-sh/uv/pull/7511))
+
+### Enhancements
+
+- Adjust messaging for frozen hint on resolution failure during `uv add` ([#7597](https://github.com/astral-sh/uv/pull/7597))
+- Provide resolution hints in case of possible local name conflicts ([#7505](https://github.com/astral-sh/uv/pull/7505))
+- Improve Docker image release tagging order and display on `ghcr.io` ([#7568](https://github.com/astral-sh/uv/pull/7568))
+- Improve deserialization error messages ([#7598](https://github.com/astral-sh/uv/pull/7598))
+
+### Bug fixes
+
+- Allow system environments during project environment validity check ([#7585](https://github.com/astral-sh/uv/pull/7585))
+- Avoid validating workspace members when `--no-sources` is provided ([#7599](https://github.com/astral-sh/uv/pull/7599))
+- Fix handling of `sys.base_prefix` collision in interpreter identity check during tool installs ([#7596](https://github.com/astral-sh/uv/pull/7596))
+- Make `uv cache prune` robust to unreadable rkyv entries ([#7561](https://github.com/astral-sh/uv/pull/7561))
+- Revert "Remove duplicate warning for settings discovery errors (#7384)" ([#7594](https://github.com/astral-sh/uv/pull/7594))
+
+### Documentation
+
+- Fix `-` to `_` in packaged applications document ([#7571](https://github.com/astral-sh/uv/pull/7571))
+
 ## 0.4.13
 
 ### Enhancements
@@ -296,7 +331,7 @@
 
 ### Enhancements
 
-- Adding support for `.pyc`  files in `uv run` ([#6886](https://github.com/astral-sh/uv/pull/6886))
+- Adding support for `.pyc` files in `uv run` ([#6886](https://github.com/astral-sh/uv/pull/6886))
 - Treat missing `top_level.txt` as non-fatal ([#6881](https://github.com/astral-sh/uv/pull/6881))
 
 ### Bug fixes
@@ -336,7 +371,7 @@
 - Add docs for inline exclude newer in PEP 723 scripts ([#6831](https://github.com/astral-sh/uv/pull/6831))
 - Enumerate available Docker tags ([#6768](https://github.com/astral-sh/uv/pull/6768))
 - Omit `[pip]` section from configuration file docs ([#6814](https://github.com/astral-sh/uv/pull/6814))
-- Update `project.urls` in `pyproject.toml`  ([#6844](https://github.com/astral-sh/uv/pull/6844))
+- Update `project.urls` in `pyproject.toml` ([#6844](https://github.com/astral-sh/uv/pull/6844))
 - Add docs for AWS CodeArtifact usage ([#6816](https://github.com/astral-sh/uv/pull/6816))
 
 ### Other changes
@@ -367,7 +402,7 @@ See the latest documentation on [build systems in projects](http://docs.astral.s
 - Add first-class support for non-packaged projects ([#6585](https://github.com/astral-sh/uv/pull/6585))
 - Add `--app` and `--lib` options to `uv init` ([#6689](https://github.com/astral-sh/uv/pull/6689))
 - Use `virtual` source label in lockfile for non-packaged dependencies ([#6728](https://github.com/astral-sh/uv/pull/6728))
-- Read hash from URL fragment if `--hashes` are omitted  ([#6731](https://github.com/astral-sh/uv/pull/6731))
+- Read hash from URL fragment if `--hashes` are omitted ([#6731](https://github.com/astral-sh/uv/pull/6731))
 - Support `{package}@{version}` in `uv tool install` ([#6762](https://github.com/astral-sh/uv/pull/6762))
 - Publish additional Docker tags without patch version ([#6734](https://github.com/astral-sh/uv/pull/6734))
 
@@ -1128,7 +1163,7 @@ in `cache clean` ([#5353](https://github.com/astral-sh/uv/pull/5353))
 provided ([#5354](https://github.com/astral-sh/uv/pull/5354))
 - Show symbolic links in `uv python list` ([#5343](https://github.com/astral-sh/uv/pull/5343))
 - Discover workspace from target path in `uv init` ([#5250](https://github.com/astral-sh/uv/pull/5250))
-- Do not create nested workspace in `uv init`  ([#5293](https://github.com/astral-sh/uv/pull/5293))
+- Do not create nested workspace in `uv init` ([#5293](https://github.com/astral-sh/uv/pull/5293))
 
 ## 0.2.27
 
@@ -1137,7 +1172,7 @@ provided ([#5354](https://github.com/astral-sh/uv/pull/5354))
 - Add GraalPy support ([#5141](https://github.com/astral-sh/uv/pull/5141))
 - Add a `--verify-hashes` hash-checking mode ([#4007](https://github.com/astral-sh/uv/pull/4007))
 - Discover all `python3.x` executables in the `PATH` ([#5148](https://github.com/astral-sh/uv/pull/5148))
-- Support  `--link-mode=symlink` ([#5208](https://github.com/astral-sh/uv/pull/5208))
+- Support `--link-mode=symlink` ([#5208](https://github.com/astral-sh/uv/pull/5208))
 - Warn about unconstrained direct deps in lowest resolution ([#5142](https://github.com/astral-sh/uv/pull/5142))
 - Log origin of version selection ([#5186](https://github.com/astral-sh/uv/pull/5186))
 - Key hash policy on version, rather than package ([#5169](https://github.com/astral-sh/uv/pull/5169))

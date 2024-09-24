@@ -11,7 +11,7 @@ use tracing::debug;
 
 pub use archive::ArchiveId;
 use distribution_types::InstalledDist;
-use pypi_types::Metadata23;
+use pypi_types::ResolutionMetadata;
 use uv_cache_info::Timestamp;
 use uv_fs::{cachedir, directories};
 use uv_normalize::PackageName;
@@ -765,7 +765,7 @@ impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
             Self::SourceDistributions => "sdists-v4",
-            Self::FlatIndex => "flat-index-v0",
+            Self::FlatIndex => "flat-index-v1",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v2",
             // Note that when bumping this, you'll also need to bump it
@@ -789,7 +789,7 @@ impl CacheBucket {
             let Ok(metadata) = fs_err::read(path.join("metadata.msgpack")) else {
                 return false;
             };
-            let Ok(metadata) = rmp_serde::from_slice::<Metadata23>(&metadata) else {
+            let Ok(metadata) = rmp_serde::from_slice::<ResolutionMetadata>(&metadata) else {
                 return false;
             };
             metadata.name == *name

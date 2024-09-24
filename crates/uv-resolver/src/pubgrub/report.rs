@@ -8,8 +8,9 @@ use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
-use distribution_types::IndexLocations;
+use distribution_types::{IndexLocations, IndexUrl};
 use pep440_rs::Version;
+use uv_configuration::IndexStrategy;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
@@ -504,10 +505,12 @@ impl PubGrubReportFormatter<'_> {
         derivation_tree: &ErrorTree,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
+        available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
         markers: &ResolverMarkers,
+        workspace_members: &BTreeSet<PackageName>,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
         match derivation_tree {
@@ -526,15 +529,15 @@ impl PubGrubReportFormatter<'_> {
                             output_hints,
                         );
                     }
-                }
 
-                if let PubGrubPackageInner::Package { name, .. } = &**package {
-                    // Check for no versions due to no `--find-links` flat index
+                    // Check for no versions due to no `--find-links` flat index.
                     Self::index_hints(
                         package,
                         name,
                         set,
+                        selector,
                         index_locations,
+                        available_indexes,
                         unavailable_packages,
                         incomplete_packages,
                         output_hints,
@@ -547,6 +550,22 @@ impl PubGrubReportFormatter<'_> {
                 dependency,
                 dependency_set,
             )) => {
+                // Check for a dependency on a workspace package by a non-workspace package.
+                // Generally, this indicates that the workspace package is shadowing a transitive
+                // dependency name.
+                if let (Some(package_name), Some(dependency_name)) =
+                    (package.name(), dependency.name())
+                {
+                    if workspace_members.contains(dependency_name)
+                        && !workspace_members.contains(package_name)
+                    {
+                        output_hints.insert(PubGrubHint::DependsOnWorkspacePackage {
+                            package: package.clone(),
+                            dependency: dependency.clone(),
+                            workspace: self.is_workspace() && !self.is_single_project_workspace(),
+                        });
+                    }
+                }
                 // Check for no versions due to `Requires-Python`.
                 if matches!(
                     &**dependency,
@@ -567,20 +586,24 @@ impl PubGrubReportFormatter<'_> {
                     &derived.cause1,
                     selector,
                     index_locations,
+                    available_indexes,
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
                     markers,
+                    workspace_members,
                     output_hints,
                 );
                 self.generate_hints(
                     &derived.cause2,
                     selector,
                     index_locations,
+                    available_indexes,
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
                     markers,
+                    workspace_members,
                     output_hints,
                 );
             }
@@ -591,7 +614,9 @@ impl PubGrubReportFormatter<'_> {
         package: &PubGrubPackage,
         name: &PackageName,
         set: &Range<Version>,
+        selector: &CandidateSelector,
         index_locations: &IndexLocations,
+        available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         hints: &mut IndexSet<PubGrubHint>,
@@ -666,6 +691,27 @@ impl PubGrubReportFormatter<'_> {
                         }
                     }
                     break;
+                }
+            }
+        }
+
+        // Add hints due to the package being available on an index, but not at the correct version,
+        // with subsequent indexes that were _not_ queried.
+        if matches!(selector.index_strategy(), IndexStrategy::FirstIndex) {
+            if let Some(found_index) = available_indexes.get(name).and_then(BTreeSet::first) {
+                // Determine whether the index is the last-available index. If not, then some
+                // indexes were not queried, and could contain a compatible version.
+                if let Some(next_index) = index_locations
+                    .indexes()
+                    .skip_while(|url| *url != found_index)
+                    .nth(1)
+                {
+                    hints.insert(PubGrubHint::UncheckedIndex {
+                        package: package.clone(),
+                        range: set.clone(),
+                        found_index: found_index.clone(),
+                        next_index: next_index.clone(),
+                    });
                 }
             }
         }
@@ -802,6 +848,25 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         package_requires_python: Range<Version>,
     },
+    /// A non-workspace package depends on a workspace package, which is likely shadowing a
+    /// transitive dependency.
+    DependsOnWorkspacePackage {
+        package: PubGrubPackage,
+        dependency: PubGrubPackage,
+        workspace: bool,
+    },
+    /// A package was available on an index, but not at the correct version, and at least one
+    /// subsequent index was not queried. As such, a compatible version may be available on an
+    /// one of the remaining indexes.
+    UncheckedIndex {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        range: Range<Version>,
+        // excluded from `PartialEq` and `Hash`
+        found_index: IndexUrl,
+        // excluded from `PartialEq` and `Hash`
+        next_index: IndexUrl,
+    },
 }
 
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
@@ -841,6 +906,14 @@ enum PubGrubHintCore {
     RequiresPython {
         source: PythonRequirementSource,
         requires_python: RequiresPython,
+    },
+    DependsOnWorkspacePackage {
+        package: PubGrubPackage,
+        dependency: PubGrubPackage,
+        workspace: bool,
+    },
+    UncheckedIndex {
+        package: PubGrubPackage,
     },
 }
 
@@ -885,6 +958,16 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 source,
                 requires_python,
             },
+            PubGrubHint::DependsOnWorkspacePackage {
+                package,
+                dependency,
+                workspace,
+            } => Self::DependsOnWorkspacePackage {
+                package,
+                dependency,
+                workspace,
+            },
+            PubGrubHint::UncheckedIndex { package, .. } => Self::UncheckedIndex { package },
         }
     }
 }
@@ -1078,6 +1161,48 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     PackageRange::compatibility(package, package_set, None).bold(),
                     package_requires_python.bold(),
+                )
+            }
+            Self::DependsOnWorkspacePackage {
+                package,
+                dependency,
+                workspace,
+            } => {
+                let your_project = if *workspace {
+                    "one of your workspace members"
+                } else {
+                    "your project"
+                };
+                let the_project = if *workspace {
+                    "the workspace member"
+                } else {
+                    "the project"
+                };
+                write!(
+                    f,
+                    "{}{} The package `{}` depends on the package `{}` but the name is shadowed by {your_project}. Consider changing the name of {the_project}.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package,
+                    dependency,
+                )
+            }
+            Self::UncheckedIndex {
+                package,
+                range,
+                found_index,
+                next_index,
+            } => {
+                write!(
+                    f,
+                    "{}{} `{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `{}` to consider all versions from all indexes, regardless of the order in which they were defined.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package,
+                    found_index.cyan(),
+                    PackageRange::compatibility(package, range, None).cyan(),
+                    next_index.cyan(),
+                    "--index-strategy unsafe-best-match".green(),
                 )
             }
         }

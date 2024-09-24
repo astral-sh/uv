@@ -15,18 +15,21 @@ use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient
 use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_fs::{Simplified, CWD};
+use uv_fs::Simplified;
+use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
+use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::{
     NamedRequirementsError, NamedRequirementsResolver, RequirementsSpecification,
 };
 use uv_resolver::{
-    FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph, ResolverMarkers,
+    FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph,
+    ResolverMarkers,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -120,8 +123,8 @@ pub(crate) enum ProjectError {
     #[error("Environment marker is empty")]
     EmptyEnvironment,
 
-    #[error("Project virtual environment directory `{0}` cannot be used because it is not a virtual environment and is non-empty")]
-    InvalidProjectEnvironmentDir(PathBuf),
+    #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
+    InvalidProjectEnvironmentDir(PathBuf, String),
 
     #[error("Failed to parse `pyproject.toml`")]
     TomlParse(#[source] toml::de::Error),
@@ -332,7 +335,7 @@ impl WorkspacePython {
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone()))
+                    PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
                 });
             let source = PythonRequestSource::RequiresPython;
             (source, request)
@@ -393,12 +396,26 @@ impl FoundInterpreter {
                 }
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
-            Err(uv_python::Error::InvalidEnvironment(_)) => {
+            Err(uv_python::Error::InvalidEnvironment(inner)) => {
                 // If there's an invalid environment with existing content, we error instead of
-                // deleting it later on.
-                if fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some()) {
-                    return Err(ProjectError::InvalidProjectEnvironmentDir(venv));
-                }
+                // deleting it later on
+                match inner.kind {
+                    InvalidEnvironmentKind::NotDirectory => {
+                        return Err(ProjectError::InvalidProjectEnvironmentDir(
+                            venv,
+                            inner.kind.to_string(),
+                        ))
+                    }
+                    InvalidEnvironmentKind::MissingExecutable(_) => {
+                        if fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some()) {
+                            return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                venv,
+                                "because it is not a valid Python environment (no Python executable was found)"
+                                    .to_string(),
+                            ));
+                        }
+                    }
+                };
             }
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
                 if path.is_symlink() {
@@ -407,11 +424,6 @@ impl FoundInterpreter {
                         "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
                         path.user_display().cyan(),
                         target_path.user_display().cyan(),
-                    );
-                } else {
-                    warn_user!(
-                        "Ignoring existing virtual environment with missing Python interpreter: {}",
-                        path.user_display().cyan()
                     );
                 }
             }
@@ -437,18 +449,21 @@ impl FoundInterpreter {
         .await?;
 
         let managed = python.source().is_managed();
+        let implementation = python.implementation();
         let interpreter = python.into_interpreter();
 
         if managed {
             writeln!(
                 printer.stderr(),
-                "Using Python {}",
+                "Using {} {}",
+                implementation.pretty(),
                 interpreter.python_version().cyan()
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Using Python {} interpreter at: {}",
+                "Using {} {} interpreter at: {}",
+                implementation.pretty(),
                 interpreter.python_version(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
@@ -499,6 +514,14 @@ pub(crate) async fn get_or_init_environment(
         // Otherwise, create a virtual environment with the discovered interpreter.
         FoundInterpreter::Interpreter(interpreter) => {
             let venv = workspace.venv();
+
+            // Avoid removing things that are not virtual environments
+            if venv.exists() && !venv.join("pyvenv.cfg").exists() {
+                return Err(ProjectError::InvalidProjectEnvironmentDir(
+                    venv,
+                    "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                ));
+            }
 
             // Remove the existing virtual environment if it doesn't meet the requirements.
             match fs_err::remove_dir_all(&venv) {
@@ -676,10 +699,34 @@ pub(crate) async fn resolve_names(
     Ok(requirements)
 }
 
+#[derive(Debug)]
+pub(crate) struct EnvironmentSpecification<'lock> {
+    /// The requirements to include in the environment.
+    requirements: RequirementsSpecification,
+    /// The lockfile from which to extract preferences.
+    lock: Option<&'lock Lock>,
+}
+
+impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
+    fn from(requirements: RequirementsSpecification) -> Self {
+        Self {
+            requirements,
+            lock: None,
+        }
+    }
+}
+
+impl<'lock> EnvironmentSpecification<'lock> {
+    #[must_use]
+    pub(crate) fn with_lock(self, lock: Option<&'lock Lock>) -> Self {
+        Self { lock, ..self }
+    }
+}
+
 /// Run dependency resolution for an interpreter, returning the [`ResolutionGraph`].
 pub(crate) async fn resolve_environment<'a>(
+    spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
-    spec: RequirementsSpecification,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
@@ -689,7 +736,7 @@ pub(crate) async fn resolve_environment<'a>(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ResolutionGraph, ProjectError> {
-    warn_on_requirements_txt_setting(&spec, settings);
+    warn_on_requirements_txt_setting(&spec.requirements, settings);
 
     let ResolverSettingsRef {
         index_locations,
@@ -717,7 +764,7 @@ pub(crate) async fn resolve_environment<'a>(
         overrides,
         source_trees,
         ..
-    } = spec;
+    } = spec.requirements;
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = interpreter.tags()?;
@@ -765,7 +812,6 @@ pub(crate) async fn resolve_environment<'a>(
     let dev = Vec::default();
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
-    let preferences = Vec::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
 
@@ -773,6 +819,18 @@ pub(crate) async fn resolve_environment<'a>(
     // upgrades aren't relevant.
     let reinstall = Reinstall::default();
     let upgrade = Upgrade::default();
+
+    // If an existing lockfile exists, build up a set of preferences.
+    let LockedRequirements { preferences, git } = spec
+        .lock
+        .map(|lock| read_lock_requirements(lock, &upgrade))
+        .unwrap_or_default();
+
+    // Populate the Git resolver.
+    for ResolvedRepositoryReference { reference, sha } in git {
+        debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
+        state.git.insert(reference, sha);
+    }
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -1209,6 +1267,7 @@ pub(crate) async fn update_environment(
 
 pub(crate) async fn get_python_requirement_for_new_script(
     python: Option<&str>,
+    directory: &PathBuf,
     no_pin_python: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -1221,7 +1280,7 @@ pub(crate) async fn get_python_requirement_for_new_script(
         PythonRequest::parse(request)
     } else if let (false, Some(request)) = (
         no_pin_python,
-        PythonVersionFile::discover(&*CWD, false, false)
+        PythonVersionFile::discover(directory, false, false)
             .await?
             .and_then(PythonVersionFile::into_version),
     ) {

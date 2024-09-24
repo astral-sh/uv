@@ -140,6 +140,14 @@ impl VersionMap {
         }
     }
 
+    /// Return the index URL where this package came from.
+    pub(crate) fn index(&self) -> Option<&IndexUrl> {
+        match &self.inner {
+            VersionMapInner::Eager(_) => None,
+            VersionMapInner::Lazy(lazy) => Some(&lazy.index),
+        }
+    }
+
     /// Return an iterator over the versions and distributions.
     ///
     /// Note that the value returned in this iterator is a [`VersionMapDist`],

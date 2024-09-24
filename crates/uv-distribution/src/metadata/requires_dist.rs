@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
-use std::path::Path;
-
 use crate::metadata::{LoweredRequirement, MetadataError};
 use crate::Metadata;
+use pypi_types::Requirement;
+use std::collections::BTreeMap;
+use std::path::Path;
 use uv_configuration::SourceStrategy;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_workspace::pyproject::ToolUvSources;
@@ -54,11 +54,11 @@ impl RequiresDist {
     fn from_project_workspace(
         metadata: pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
-        sources: SourceStrategy,
+        source_strategy: SourceStrategy,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
-        let sources = match sources {
+        let sources = match source_strategy {
             SourceStrategy::Enabled => project_workspace
                 .current_project()
                 .pyproject_toml()
@@ -81,7 +81,37 @@ impl RequiresDist {
                 .and_then(|uv| uv.dev_dependencies.as_ref())
                 .into_iter()
                 .flatten()
-                .cloned()
+                .cloned();
+            let dev_dependencies = match source_strategy {
+                SourceStrategy::Enabled => dev_dependencies
+                    .map(|requirement| {
+                        let requirement_name = requirement.name.clone();
+                        LoweredRequirement::from_requirement(
+                            requirement,
+                            &metadata.name,
+                            project_workspace.project_root(),
+                            sources,
+                            project_workspace.workspace(),
+                        )
+                        .map(LoweredRequirement::into_inner)
+                        .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                SourceStrategy::Disabled => dev_dependencies
+                    .into_iter()
+                    .map(Requirement::from)
+                    .collect(),
+            };
+            if dev_dependencies.is_empty() {
+                BTreeMap::default()
+            } else {
+                BTreeMap::from([(DEV_DEPENDENCIES.clone(), dev_dependencies)])
+            }
+        };
+
+        let requires_dist = metadata.requires_dist.into_iter();
+        let requires_dist = match source_strategy {
+            SourceStrategy::Enabled => requires_dist
                 .map(|requirement| {
                     let requirement_name = requirement.name.clone();
                     LoweredRequirement::from_requirement(
@@ -94,30 +124,9 @@ impl RequiresDist {
                     .map(LoweredRequirement::into_inner)
                     .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
                 })
-                .collect::<Result<Vec<_>, _>>()?;
-            if dev_dependencies.is_empty() {
-                BTreeMap::default()
-            } else {
-                BTreeMap::from([(DEV_DEPENDENCIES.clone(), dev_dependencies)])
-            }
+                .collect::<Result<_, _>>()?,
+            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
         };
-
-        let requires_dist = metadata
-            .requires_dist
-            .into_iter()
-            .map(|requirement| {
-                let requirement_name = requirement.name.clone();
-                LoweredRequirement::from_requirement(
-                    requirement,
-                    &metadata.name,
-                    project_workspace.project_root(),
-                    sources,
-                    project_workspace.workspace(),
-                )
-                .map(LoweredRequirement::into_inner)
-                .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
-            })
-            .collect::<Result<_, _>>()?;
 
         Ok(Self {
             name: metadata.name,

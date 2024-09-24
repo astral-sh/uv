@@ -21,7 +21,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_fs::{Simplified, CWD};
+use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
 use uv_python::{
@@ -53,6 +53,7 @@ use super::get_python_requirement_for_new_script;
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
+    project_dir: &Path,
     locked: bool,
     frozen: bool,
     no_sync: bool,
@@ -132,6 +133,7 @@ pub(crate) async fn add(
         } else {
             let requires_python = get_python_requirement_for_new_script(
                 python.as_deref(),
+                &project_dir.to_path_buf(),
                 false,
                 python_preference,
                 python_downloads,
@@ -146,7 +148,7 @@ pub(crate) async fn add(
         let python_request = if let Some(request) = python.as_deref() {
             // (1) Explicit request from user
             Some(PythonRequest::parse(request))
-        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
+        } else if let Some(request) = PythonVersionFile::discover(project_dir, false, false)
             .await?
             .and_then(PythonVersionFile::into_version)
         {
@@ -159,7 +161,7 @@ pub(crate) async fn add(
                 .requires_python
                 .clone()
                 .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python))
+                    PythonRequest::Version(VersionRequest::Range(requires_python, false))
                 })
         };
 
@@ -180,13 +182,13 @@ pub(crate) async fn add(
         // Find the project in the workspace.
         let project = if let Some(package) = package {
             VirtualProject::Project(
-                Workspace::discover(&CWD, &DiscoveryOptions::default())
+                Workspace::discover(project_dir, &DiscoveryOptions::default())
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
         };
 
         // For non-project workspace roots, allow dev dependencies, but nothing else.
@@ -555,7 +557,7 @@ pub(crate) async fn add(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
             let header = err.header();
-            let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If this is intentional, run `uv add --frozen` to skip the lock and sync steps.") });
+            let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.") });
             anstream::eprint!("{report:?}");
 
             // Revert the changes to the `pyproject.toml`, if necessary.

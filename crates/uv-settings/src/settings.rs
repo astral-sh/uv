@@ -1,15 +1,15 @@
 use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
 
-use serde::{Deserialize, Serialize};
-
 use distribution_types::{FlatIndexLocation, IndexUrl, StaticMetadata};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
+use serde::{Deserialize, Serialize};
+use url::Url;
 use uv_cache_info::CacheKey;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
-    TrustedHost,
+    TrustedHost, TrustedPublishing,
 };
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
@@ -33,13 +33,18 @@ pub(crate) struct Tools {
 /// A `[tool.uv]` section.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(from = "OptionsWire", rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Options {
     #[serde(flatten)]
     pub globals: GlobalOptions,
+
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
+
+    #[serde(flatten)]
+    pub publish: PublishOptions,
+
     #[option_group]
     pub pip: Option<PipOptions>,
 
@@ -79,7 +84,6 @@ pub struct Options {
             cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = true }]
         "#
     )]
-    #[serde(default, skip_serializing)]
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
@@ -92,28 +96,6 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
-
-    // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`.
-    #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    workspace: serde::de::IgnoredAny,
-
-    #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    sources: serde::de::IgnoredAny,
-
-    #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    dev_dependencies: serde::de::IgnoredAny,
-
-    #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    managed: serde::de::IgnoredAny,
-
-    #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    r#package: serde::de::IgnoredAny,
 }
 
 impl Options {
@@ -1471,4 +1453,212 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             no_binary_package: value.no_binary_package,
         }
     }
+}
+
+/// Like [`Options]`, but with any `#[serde(flatten)]` fields inlined. This leads to far, far
+/// better error messages when deserializing.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct OptionsWire {
+    // #[serde(flatten)]
+    // globals: GlobalOptions,
+    native_tls: Option<bool>,
+    offline: Option<bool>,
+    no_cache: Option<bool>,
+    cache_dir: Option<PathBuf>,
+    preview: Option<bool>,
+    python_preference: Option<PythonPreference>,
+    python_downloads: Option<PythonDownloads>,
+    concurrent_downloads: Option<NonZeroUsize>,
+    concurrent_builds: Option<NonZeroUsize>,
+    concurrent_installs: Option<NonZeroUsize>,
+
+    // #[serde(flatten)]
+    // top_level: ResolverInstallerOptions,
+    index_url: Option<IndexUrl>,
+    extra_index_url: Option<Vec<IndexUrl>>,
+    no_index: Option<bool>,
+    find_links: Option<Vec<FlatIndexLocation>>,
+    index_strategy: Option<IndexStrategy>,
+    keyring_provider: Option<KeyringProviderType>,
+    allow_insecure_host: Option<Vec<TrustedHost>>,
+    resolution: Option<ResolutionMode>,
+    prerelease: Option<PrereleaseMode>,
+    dependency_metadata: Option<Vec<StaticMetadata>>,
+    config_settings: Option<ConfigSettings>,
+    no_build_isolation: Option<bool>,
+    no_build_isolation_package: Option<Vec<PackageName>>,
+    exclude_newer: Option<ExcludeNewer>,
+    link_mode: Option<LinkMode>,
+    compile_bytecode: Option<bool>,
+    no_sources: Option<bool>,
+    upgrade: Option<bool>,
+    upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    reinstall: Option<bool>,
+    reinstall_package: Option<Vec<PackageName>>,
+    no_build: Option<bool>,
+    no_build_package: Option<Vec<PackageName>>,
+    no_binary: Option<bool>,
+    no_binary_package: Option<Vec<PackageName>>,
+    publish_url: Option<Url>,
+    trusted_publishing: Option<TrustedPublishing>,
+
+    pip: Option<PipOptions>,
+    cache_keys: Option<Vec<CacheKey>>,
+
+    // NOTE(charlie): These fields are shared with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
+    override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    environments: Option<SupportedEnvironments>,
+
+    // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`.
+    #[allow(dead_code)]
+    workspace: Option<serde::de::IgnoredAny>,
+    #[allow(dead_code)]
+    sources: Option<serde::de::IgnoredAny>,
+    #[allow(dead_code)]
+    dev_dependencies: Option<serde::de::IgnoredAny>,
+    #[allow(dead_code)]
+    managed: Option<serde::de::IgnoredAny>,
+    #[allow(dead_code)]
+    r#package: Option<serde::de::IgnoredAny>,
+}
+
+impl From<OptionsWire> for Options {
+    fn from(value: OptionsWire) -> Self {
+        let OptionsWire {
+            native_tls,
+            offline,
+            no_cache,
+            cache_dir,
+            preview,
+            python_preference,
+            python_downloads,
+            concurrent_downloads,
+            concurrent_builds,
+            concurrent_installs,
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+            index_strategy,
+            keyring_provider,
+            allow_insecure_host,
+            resolution,
+            prerelease,
+            dependency_metadata,
+            config_settings,
+            no_build_isolation,
+            no_build_isolation_package,
+            exclude_newer,
+            link_mode,
+            compile_bytecode,
+            no_sources,
+            upgrade,
+            upgrade_package,
+            reinstall,
+            reinstall_package,
+            no_build,
+            no_build_package,
+            no_binary,
+            no_binary_package,
+            pip,
+            cache_keys,
+            override_dependencies,
+            constraint_dependencies,
+            environments,
+            publish_url,
+            trusted_publishing,
+            workspace: _,
+            sources: _,
+            dev_dependencies: _,
+            managed: _,
+            package: _,
+        } = value;
+
+        Self {
+            globals: GlobalOptions {
+                native_tls,
+                offline,
+                no_cache,
+                cache_dir,
+                preview,
+                python_preference,
+                python_downloads,
+                concurrent_downloads,
+                concurrent_builds,
+                concurrent_installs,
+            },
+            top_level: ResolverInstallerOptions {
+                index_url,
+                extra_index_url,
+                no_index,
+                find_links,
+                index_strategy,
+                keyring_provider,
+                allow_insecure_host,
+                resolution,
+                prerelease,
+                dependency_metadata,
+                config_settings,
+                no_build_isolation,
+                no_build_isolation_package,
+                exclude_newer,
+                link_mode,
+                compile_bytecode,
+                no_sources,
+                upgrade,
+                upgrade_package,
+                reinstall,
+                reinstall_package,
+                no_build,
+                no_build_package,
+                no_binary,
+                no_binary_package,
+            },
+            publish: PublishOptions {
+                publish_url,
+                trusted_publishing,
+            },
+            pip,
+            cache_keys,
+            override_dependencies,
+            constraint_dependencies,
+            environments,
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata,
+)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct PublishOptions {
+    /// The URL for publishing packages to the Python package index (by default:
+    /// <https://upload.pypi.org/legacy/>).
+    #[option(
+        default = "\"https://upload.pypi.org/legacy/\"",
+        value_type = "str",
+        example = r#"
+            publish-url = "https://test.pypi.org/legacy/"
+        "#
+    )]
+    pub publish_url: Option<Url>,
+
+    /// Configure trusted publishing via GitHub Actions.
+    ///
+    /// By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
+    /// if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
+    /// from a fork).
+    #[option(
+        default = "automatic",
+        value_type = "str",
+        example = r#"
+            trusted-publishing = "always"
+        "#
+    )]
+    pub trusted_publishing: Option<TrustedPublishing>,
 }
