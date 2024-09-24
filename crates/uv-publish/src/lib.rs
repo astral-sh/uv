@@ -13,6 +13,7 @@ use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
 use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
+use reqwest_retry::{Retryable, RetryableStrategy};
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -23,8 +24,9 @@ use std::{env, fmt, io};
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tokio_util::io::ReaderStream;
-use tracing::{debug, enabled, trace, Level};
+use tracing::{debug, enabled, trace, warn, Level};
 use url::Url;
+use uv_client::UvRetryableStrategy;
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
@@ -273,11 +275,14 @@ pub async fn check_trusted_publishing(
 /// Upload a file to a registry.
 ///
 /// Returns `true` if the file was newly uploaded and `false` if it already existed.
+///
+/// Implements a custom retry flow since the request isn't cloneable.
 pub async fn upload(
     file: &Path,
     filename: &DistFilename,
     registry: &Url,
     client: &ClientWithMiddleware,
+    retries: u32,
     username: Option<&str>,
     password: Option<&str>,
     reporter: Arc<impl Reporter>,
@@ -285,26 +290,38 @@ pub async fn upload(
     let form_metadata = form_metadata(file, filename)
         .await
         .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
-    let request = build_request(
-        file,
-        filename,
-        registry,
-        client,
-        username,
-        password,
-        form_metadata,
-        reporter,
-    )
-    .await
-    .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
 
-    let response = request.send().await.map_err(|err| {
-        PublishError::PublishSend(file.to_path_buf(), registry.clone(), err.into())
-    })?;
-
-    handle_response(registry, response)
+    // Retry loop
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        let request = build_request(
+            file,
+            filename,
+            registry,
+            client,
+            username,
+            password,
+            &form_metadata,
+            reporter.clone(),
+        )
         .await
-        .map_err(|err| PublishError::PublishSend(file.to_path_buf(), registry.clone(), err))
+        .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
+
+        let result = request.send().await;
+        if attempt <= retries && UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
+            warn!("Transient request failure for {}, retrying", registry);
+            continue;
+        }
+
+        let response = result.map_err(|err| {
+            PublishError::PublishSend(file.to_path_buf(), registry.clone(), err.into())
+        })?;
+
+        return handle_response(registry, response)
+            .await
+            .map_err(|err| PublishError::PublishSend(file.to_path_buf(), registry.clone(), err));
+    }
 }
 
 /// Calculate the SHA256 of a file.
@@ -465,12 +482,12 @@ async fn build_request(
     client: &ClientWithMiddleware,
     username: Option<&str>,
     password: Option<&str>,
-    form_metadata: Vec<(&'static str, String)>,
+    form_metadata: &[(&'static str, String)],
     reporter: Arc<impl Reporter>,
 ) -> Result<RequestBuilder, PublishPrepareError> {
     let mut form = reqwest::multipart::Form::new();
     for (key, value) in form_metadata {
-        form = form.text(key, value);
+        form = form.text(*key, value.clone());
     }
 
     let file = fs_err::tokio::File::open(file).await?;
@@ -687,7 +704,7 @@ mod tests {
             &BaseClientBuilder::new().build().client(),
             Some("ferris"),
             Some("F3RR!S"),
-            form_metadata,
+            &form_metadata,
             Arc::new(DummyReporter),
         )
         .await
@@ -830,7 +847,7 @@ mod tests {
             &BaseClientBuilder::new().build().client(),
             Some("ferris"),
             Some("F3RR!S"),
-            form_metadata,
+            &form_metadata,
             Arc::new(DummyReporter),
         )
         .await

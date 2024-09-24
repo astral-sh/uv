@@ -25,6 +25,8 @@ use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
 use crate::Connectivity;
 
+pub const DEFAULT_RETRIES: u32 = 3;
+
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
 pub enum AuthIntegration {
@@ -65,7 +67,7 @@ impl BaseClientBuilder<'_> {
             allow_insecure_host: vec![],
             native_tls: false,
             connectivity: Connectivity::Online,
-            retries: 3,
+            retries: DEFAULT_RETRIES,
             client: None,
             markers: None,
             platform: None,
@@ -374,7 +376,7 @@ impl BaseClient {
 }
 
 /// Extends [`DefaultRetryableStrategy`], to log transient request failures and additional retry cases.
-struct UvRetryableStrategy;
+pub struct UvRetryableStrategy;
 
 impl RetryableStrategy for UvRetryableStrategy {
     fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {
