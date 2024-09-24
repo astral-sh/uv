@@ -5,7 +5,7 @@ use fs_err::File;
 use futures::TryStreamExt;
 use glob::{glob, GlobError, PatternError};
 use itertools::Itertools;
-use python_pkginfo::Metadata;
+use pypi_types::{Metadata23, MetadataError};
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
@@ -47,11 +47,11 @@ pub enum PublishError {
 #[derive(Error, Debug)]
 pub enum PublishPrepareError {
     #[error(transparent)]
-    PkgInfoError(#[from] python_pkginfo::Error),
-    #[error(transparent)]
     Io(#[from] io::Error),
     #[error("Failed to read metadata")]
     Metadata(#[from] uv_metadata::Error),
+    #[error("Failed to read metadata")]
+    Metadata23(#[from] MetadataError),
     #[error("Only files ending in `.tar.gz` are valid source distributions: `{0}`")]
     InvalidExtension(SourceDistFilename),
     #[error("No PKG-INFO file found")]
@@ -292,7 +292,7 @@ async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareErro
     }
 }
 
-async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata, PublishPrepareError> {
+async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, PublishPrepareError> {
     let contents = match filename {
         DistFilename::SourceDistFilename(source_dist) => {
             if source_dist.extension != SourceDistExtension::TarGz {
@@ -308,7 +308,7 @@ async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata, Publ
             read_metadata_async_seek(wheel, reader).await?
         }
     };
-    Ok(Metadata::parse(&contents)?)
+    Ok(Metadata23::parse(&contents)?)
 }
 
 /// Collect the non-file fields for the multipart request from the package METADATA.

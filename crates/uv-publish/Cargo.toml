@@ -11,6 +11,7 @@ license.workspace = true
 
 [dependencies]
 distribution-filename = { workspace = true }
+pypi-types = { workspace = true }
 uv-client = { workspace = true }
 uv-fs = { workspace = true }
 uv-metadata = { workspace = true }
@@ -22,7 +23,6 @@ futures = { workspace = true }
 glob = { workspace = true }
 itertools = { workspace = true }
 krata-tokio-tar = { workspace = true }
-python-pkginfo = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rustc-hash = { workspace = true }
