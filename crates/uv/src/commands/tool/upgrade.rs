@@ -1,6 +1,7 @@
 use std::{collections::BTreeSet, fmt::Write};
 
 use anyhow::Result;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
@@ -95,8 +96,8 @@ pub(crate) async fn upgrade(
         debug!("Upgrading tool: `{name}`");
         let changelog = upgrade_tool(
             name,
-            &interpreter,
-            &python_request,
+            interpreter.as_ref(),
+            python_request.as_ref(),
             printer,
             &installed_tools,
             &args,
@@ -140,8 +141,8 @@ pub(crate) async fn upgrade(
         writeln!(
             printer.stderr(),
             "Upgraded build environment for {} to Python {}",
-            if names.len() == 1 {
-                format!("{}", names.first().unwrap().bold())
+            if let [name] = names.into_iter().collect_vec().as_slice() {
+                name.to_string()
             } else {
                 "all tools".bold().to_string()
             },
@@ -154,8 +155,8 @@ pub(crate) async fn upgrade(
 
 async fn upgrade_tool(
     name: &PackageName,
-    interpreter: &Option<Interpreter>,
-    python_request: &Option<PythonRequest>,
+    interpreter: Option<&Interpreter>,
+    python_request: Option<&PythonRequest>,
     printer: Printer,
     installed_tools: &InstalledTools,
     args: &ResolverInstallerOptions,
