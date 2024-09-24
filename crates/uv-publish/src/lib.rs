@@ -38,7 +38,7 @@ pub enum PublishError {
     #[error("File is neither a wheel nor a source distribution: `{}`", _0.user_display())]
     InvalidFilename(PathBuf),
     #[error("Failed to publish: `{}`", _0.user_display())]
-    PublishPrepare(PathBuf, #[source] PublishPrepareError),
+    PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
     PublishSend(PathBuf, Url, #[source] PublishSendError),
 }
@@ -215,7 +215,7 @@ pub async fn upload(
 ) -> Result<bool, PublishError> {
     let form_metadata = form_metadata(file, filename)
         .await
-        .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), err))?;
+        .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
     let request = build_request(
         file,
         filename,
@@ -226,7 +226,7 @@ pub async fn upload(
         form_metadata,
     )
     .await
-    .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), err))?;
+    .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
 
     let response = request.send().await.map_err(|err| {
         PublishError::PublishSend(file.to_path_buf(), registry.clone(), err.into())

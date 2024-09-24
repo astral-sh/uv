@@ -6792,7 +6792,7 @@ uv publish [OPTIONS] [FILES]...
 
 <dl class="cli-reference"><dt><code>FILES</code></dt><dd><p>Paths to the files to upload. Accepts glob expressions.</p>
 
-<p>Defaults to the <code>dist</code> directory.</p>
+<p>Defaults to the <code>dist</code> directory. Selects only wheels and source distributions, while ignoring other files.</p>
 
 </dd></dl>
 

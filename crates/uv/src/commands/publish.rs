@@ -27,8 +27,8 @@ pub(crate) async fn publish(
     let files = files_for_publishing(paths)?;
     match files.len() {
         0 => bail!("No files found to publish"),
-        1 => writeln!(printer.stderr(), "Publishing 1 file")?,
-        n => writeln!(printer.stderr(), "Publishing {n} files")?,
+        1 => writeln!(printer.stderr(), "Publishing 1 file to {publish_url}")?,
+        n => writeln!(printer.stderr(), "Publishing {n} files {publish_url}")?,
     }
 
     let client = BaseClientBuilder::new()
