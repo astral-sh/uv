@@ -33,6 +33,9 @@ pub(crate) async fn patch() -> Result<()> {
 
         // If there exist multiple of the same (major, minor) version, we only want to
         // update the one with the largest current patch version.
+        //
+        // We want to maintain the order of versions as read, so we keep an index associated
+        // with each patch
         let mut versions_to_patch: BTreeMap<MajorAndMinorVersion, PatchAndIndex> = BTreeMap::new();
 
         for (index, version) in versions.enumerate() {
