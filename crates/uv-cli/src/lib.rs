@@ -4313,7 +4313,11 @@ pub struct PublishArgs {
     #[arg(default_value = "dist/*")]
     pub files: Vec<String>,
 
-    /// The URL to the upload endpoint. Note: This is usually not the same as the index URL.
+    /// The URL of the upload endpoint.
+    ///
+    /// Note that this typically differs from the index URL.
+    ///
+    /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
     ///
     /// The default value is publish URL for PyPI (<https://upload.pypi.org/legacy/>).
     #[arg(long, env = "UV_PUBLISH_URL")]
