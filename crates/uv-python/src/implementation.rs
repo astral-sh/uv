@@ -52,8 +52,8 @@ impl LenientImplementationName {
 }
 
 impl From<&ImplementationName> for &'static str {
-    fn from(v: &ImplementationName) -> &'static str {
-        match v {
+    fn from(value: &ImplementationName) -> &'static str {
+        match value {
             ImplementationName::CPython => "cpython",
             ImplementationName::PyPy => "pypy",
             ImplementationName::GraalPy => "graalpy",
@@ -61,9 +61,15 @@ impl From<&ImplementationName> for &'static str {
     }
 }
 
+impl From<ImplementationName> for &'static str {
+    fn from(value: ImplementationName) -> &'static str {
+        (&value).into()
+    }
+}
+
 impl<'a> From<&'a LenientImplementationName> for &'a str {
-    fn from(v: &'a LenientImplementationName) -> &'a str {
-        match v {
+    fn from(value: &'a LenientImplementationName) -> &'a str {
+        match value {
             LenientImplementationName::Known(implementation) => implementation.into(),
             LenientImplementationName::Unknown(name) => name,
         }
