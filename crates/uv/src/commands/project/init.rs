@@ -493,7 +493,7 @@ impl InitKind {
 
         if let Ok(metadata) = metadata {
             if metadata.is_dir() {
-                anyhow::bail!("{} is a directory", script_path.to_str().unwrap());
+                anyhow::bail!("{} is an existing directory", script_path.to_str().unwrap());
             } else if metadata.is_file() {
                 if Pep723Script::read(script_path).await?.is_some() {
                     anyhow::bail!(
