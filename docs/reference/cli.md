@@ -6873,6 +6873,14 @@ uv publish [OPTIONS] [FILES]...
 </dd><dt><code>--password</code>, <code>-p</code> <i>password</i></dt><dd><p>The password for the upload</p>
 
 <p>May also be set with the <code>UV_PUBLISH_PASSWORD</code> environment variable.</p>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
 </dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint.</p>
 
 <p>Note that this typically differs from the index URL.</p>
