@@ -24,7 +24,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
-use super::get_python_requirement_for_new_script;
+use super::get_python_requirement_for_script;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
@@ -506,7 +506,7 @@ impl InitKind {
             }
         }
 
-        let requires_python = get_python_requirement_for_new_script(
+        let requires_python = get_python_requirement_for_script(
             python.as_deref(),
             &CWD,
             no_pin_python,

@@ -1265,7 +1265,7 @@ pub(crate) async fn update_environment(
     })
 }
 
-pub(crate) async fn get_python_requirement_for_new_script(
+pub(crate) async fn get_python_requirement_for_script(
     python: Option<&str>,
     directory: &PathBuf,
     no_pin_python: bool,

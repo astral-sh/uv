@@ -48,7 +48,7 @@ use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 
-use super::get_python_requirement_for_new_script;
+use super::get_python_requirement_for_script;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -131,7 +131,7 @@ pub(crate) async fn add(
         let script = if let Some(script) = Pep723Script::read(&script).await? {
             script
         } else {
-            let requires_python = get_python_requirement_for_new_script(
+            let requires_python = get_python_requirement_for_script(
                 python.as_deref(),
                 &project_dir.to_path_buf(),
                 false,
