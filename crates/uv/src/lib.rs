@@ -1088,7 +1088,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Python(PythonNamespace {
             command: PythonCommand::Patch,
         }) => {
-            commands::python_patch().await?;
+            commands::python_patch(&cache).await?;
             Ok(ExitStatus::Success)
         }
     }

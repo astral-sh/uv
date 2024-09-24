@@ -22,7 +22,7 @@ struct PatchAndIndex {
 }
 
 /// Update .python-version and .python-versions files to the latest patch version
-pub(crate) async fn patch() -> Result<()> {
+pub(crate) async fn patch(cache: &Cache) -> Result<()> {
     let python_version_file = PythonVersionFile::discover(CWD.as_path(), false, false).await?;
     let python_versions_file = PythonVersionFile::discover(CWD.as_path(), false, true).await?;
 
@@ -70,6 +70,7 @@ pub(crate) async fn patch() -> Result<()> {
                     major_and_minor.major,
                     major_and_minor.minor,
                     patch_and_index.patch,
+                    cache,
                 )
             })
             .collect_vec();
@@ -110,7 +111,7 @@ pub(crate) async fn patch() -> Result<()> {
         if let Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(major, minor, patch))) =
             python_version_file.version()
         {
-            let new_patch = get_latest_patch_version(*major, *minor, *patch);
+            let new_patch = get_latest_patch_version(*major, *minor, *patch, cache);
 
             if new_patch != *patch {
                 println!("Bumped patch for version {major}.{minor}.{patch} to {new_patch}",);
@@ -128,7 +129,7 @@ pub(crate) async fn patch() -> Result<()> {
     Ok(())
 }
 
-fn get_latest_patch_version(major: u8, minor: u8, patch: u8) -> u8 {
+fn get_latest_patch_version(major: u8, minor: u8, patch: u8, cache: &Cache) -> u8 {
     let mut max_patch = patch;
     for download in ManagedPythonDownload::iter_all() {
         if !(download.python_version().major() == major
@@ -146,15 +147,12 @@ fn get_latest_patch_version(major: u8, minor: u8, patch: u8) -> u8 {
         return max_patch;
     }
 
-    let (base_version, cache) = (
-        PythonRequest::Version(VersionRequest::MajorMinor(major, minor)),
-        Cache::temp().unwrap(),
-    );
+    let base_version = PythonRequest::Version(VersionRequest::MajorMinor(major, minor));
     let system_installations = find_python_installations(
         &base_version,
         EnvironmentPreference::Any,
         PythonPreference::System,
-        &cache,
+        cache,
     );
 
     for installation in system_installations.flatten().flatten() {
