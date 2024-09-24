@@ -277,8 +277,6 @@ pub(crate) async fn install(
         installed_tools
             .get_environment(&from.name, &cache)?
             .filter(|environment| {
-                // TODO(zanieb): Consider using `sysconfig.get_path("stdlib")` instead, which
-                // should be generally robust.
                 if interpreter.is_interpreter_used_by(environment) {
                     trace!(
                         "Existing interpreter matches the requested interpreter for `{}`: {}",

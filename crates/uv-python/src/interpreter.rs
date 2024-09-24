@@ -500,6 +500,8 @@ impl Interpreter {
 
     /// Whether or not this interpreter is used by the given environment
     pub fn is_interpreter_used_by(&self, environment: &PythonEnvironment) -> bool {
+        // TODO(zanieb): Consider using `sysconfig.get_path("stdlib")` instead, which
+        // should be generally robust.
         if cfg!(windows) {
             // On Windows, we can't canonicalize an interpreter based on its executable path
             // because the executables are separate shim files (not links). Instead, we
