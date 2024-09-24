@@ -6913,6 +6913,19 @@ uv publish [OPTIONS] [FILES]...
 <p>Using a token is equivalent to passing <code>__token__</code> as <code>--username</code> and the token as <code>--password</code>. password.</p>
 
 <p>May also be set with the <code>UV_PUBLISH_TOKEN</code> environment variable.</p>
+</dd><dt><code>--trusted-publishing</code> <i>trusted-publishing</i></dt><dd><p>Configure using trusted publishing through GitHub Actions.</p>
+
+<p>By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it if it isn&#8217;t configured or the workflow doesn&#8217;t have enough permissions (e.g., a pull request from a fork).</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Try trusted publishing when we&#8217;re already in GitHub Actions, continue if that fails</li>
+
+<li><code>always</code></li>
+
+<li><code>never</code></li>
+</ul>
 </dd><dt><code>--username</code>, <code>-u</code> <i>username</i></dt><dd><p>The username for the upload</p>
 
 <p>May also be set with the <code>UV_PUBLISH_USERNAME</code> environment variable.</p>

@@ -1246,6 +1246,35 @@ By default, uv will use the latest compatible version of each package (`highest`
 
 ---
 
+### [`trusted-publishing`](#trusted-publishing) {: #trusted-publishing }
+
+Configure trusted publishing via GitHub Actions.
+
+By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
+if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
+from a fork).
+
+**Default value**: `automatic`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    trusted-publishing = "always"
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    trusted-publishing = "always"
+    ```
+
+---
+
 ### [`upgrade`](#upgrade) {: #upgrade }
 
 Allow package upgrades, ignoring pinned versions in any existing output file.

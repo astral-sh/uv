@@ -38,6 +38,11 @@ $ uv publish
 Set a PyPI token with `--token` or `UV_PUBLISH_TOKEN`, or set a username with `--username` or
 `UV_PUBLISH_USERNAME` and password with `--password` or `UV_PUBLISH_PASSWORD`.
 
+!!! info
+
+    For publishing to PyPI from GitHub Actions, you don't need to set any credentials. Instead,
+    [add a trusted publisher to the PyPI project](https://docs.pypi.org/trusted-publishers/adding-a-publisher/).
+
 !!! note
 
     PyPI does not support publishing with username and password anymore, instead you need to

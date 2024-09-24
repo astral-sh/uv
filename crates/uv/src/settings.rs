@@ -25,7 +25,8 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, DevMode, EditableMode, ExportFormat,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
-    NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost, Upgrade,
+    NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade,
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
@@ -2436,6 +2437,7 @@ pub(crate) struct PublishSettings {
 
     // Both CLI and configuration.
     pub(crate) publish_url: Url,
+    pub(crate) trusted_publishing: TrustedPublishing,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
 }
@@ -2449,7 +2451,10 @@ impl PublishSettings {
             .map(FilesystemOptions::into_options)
             .unwrap_or_default();
 
-        let PublishOptions { publish_url } = publish;
+        let PublishOptions {
+            publish_url,
+            trusted_publishing,
+        } = publish;
         let ResolverInstallerOptions {
             keyring_provider,
             allow_insecure_host,
@@ -2471,6 +2476,9 @@ impl PublishSettings {
                 .publish_url
                 .combine(publish_url)
                 .unwrap_or_else(|| Url::parse(PYPI_PUBLISH_URL).unwrap()),
+            trusted_publishing: trusted_publishing
+                .combine(args.trusted_publishing)
+                .unwrap_or_default(),
             keyring_provider: args
                 .keyring_provider
                 .combine(keyring_provider)

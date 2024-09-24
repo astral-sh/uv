@@ -1,3 +1,6 @@
+mod trusted_publishing;
+
+use crate::trusted_publishing::TrustedPublishingError;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -9,26 +12,29 @@ use pypi_types::{Metadata23, MetadataError};
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
-use reqwest_middleware::RequestBuilder;
+use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::{fmt, io};
+use std::{env, fmt, io};
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tokio_util::io::ReaderStream;
 use tracing::{debug, enabled, trace, Level};
 use url::Url;
-use uv_client::BaseClient;
+use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
+use uv_warnings::warn_user_once;
+
+pub use trusted_publishing::TrustedPublishingToken;
 
 #[derive(Error, Debug)]
 pub enum PublishError {
-    #[error("Invalid publish path: `{0}`")]
+    #[error("The publish path is not a valid glob pattern: `{0}`")]
     Pattern(String, #[source] PatternError),
     /// [`GlobError`] is a wrapped io error.
     #[error(transparent)]
@@ -43,6 +49,8 @@ pub enum PublishError {
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
     PublishSend(PathBuf, Url, #[source] PublishSendError),
+    #[error("Failed to obtain token for trusted publishing")]
+    TrustedPublishing(#[from] TrustedPublishingError),
 }
 
 /// Failure to get the metadata for a specific file.
@@ -211,6 +219,57 @@ pub fn files_for_publishing(
     Ok(files)
 }
 
+/// If applicable, attempt obtaining a token for trusted publishing.
+pub async fn check_trusted_publishing(
+    username: Option<&str>,
+    password: Option<&str>,
+    keyring_provider: KeyringProviderType,
+    trusted_publishing: TrustedPublishing,
+    registry: &Url,
+    client: &ClientWithMiddleware,
+) -> Result<Option<TrustedPublishingToken>, PublishError> {
+    match trusted_publishing {
+        TrustedPublishing::Automatic => {
+            // If the user provided credentials, use those.
+            if username.is_some()
+                || password.is_some()
+                || keyring_provider != KeyringProviderType::Disabled
+            {
+                return Ok(None);
+            }
+            // If we aren't in GitHub Actions, we can't use trusted publishing.
+            if env::var("GITHUB_ACTIONS") != Ok("true".to_string()) {
+                return Ok(None);
+            }
+            // We could check for credentials from the keyring or netrc the auth middleware first, but
+            // given that we are in GitHub Actions we check for trusted publishing first.
+            debug!("Running on GitHub Actions without explicit credentials, checking for trusted publishing");
+            match trusted_publishing::get_token(registry, client).await {
+                Ok(token) => Ok(Some(token)),
+                Err(err) => {
+                    // TODO(konsti): It would be useful if we could differentiate between actual errors
+                    // such as connection errors and warn for them while ignoring errors from trusted
+                    // publishing not being configured.
+                    debug!("Could not obtain trusted publishing credentials, skipping: {err}");
+                    Ok(None)
+                }
+            }
+        }
+        TrustedPublishing::Always => {
+            debug!("Using trusted publishing for GitHub Actions");
+            if env::var("GITHUB_ACTIONS") != Ok("true".to_string()) {
+                warn_user_once!(
+                    "Trusted publishing was requested, but you're not in GitHub Actions."
+                );
+            }
+
+            let token = trusted_publishing::get_token(registry, client).await?;
+            Ok(Some(token))
+        }
+        TrustedPublishing::Never => Ok(None),
+    }
+}
+
 /// Upload a file to a registry.
 ///
 /// Returns `true` if the file was newly uploaded and `false` if it already existed.
@@ -218,7 +277,7 @@ pub async fn upload(
     file: &Path,
     filename: &DistFilename,
     registry: &Url,
-    client: &BaseClient,
+    client: &ClientWithMiddleware,
     username: Option<&str>,
     password: Option<&str>,
     reporter: Arc<impl Reporter>,
@@ -403,7 +462,7 @@ async fn build_request(
     file: &Path,
     filename: &DistFilename,
     registry: &Url,
-    client: &BaseClient,
+    client: &ClientWithMiddleware,
     username: Option<&str>,
     password: Option<&str>,
     form_metadata: Vec<(&'static str, String)>,
@@ -441,7 +500,6 @@ async fn build_request(
     };
 
     let mut request = client
-        .client()
         .post(url)
         .multipart(form)
         // Ask PyPI for a structured error messages instead of HTML-markup error messages.
@@ -626,7 +684,7 @@ mod tests {
             &file,
             &filename,
             &Url::parse("https://example.org/upload").unwrap(),
-            &BaseClientBuilder::new().build(),
+            &BaseClientBuilder::new().build().client(),
             Some("ferris"),
             Some("F3RR!S"),
             form_metadata,
@@ -769,7 +827,7 @@ mod tests {
             &file,
             &filename,
             &Url::parse("https://example.org/upload").unwrap(),
-            &BaseClientBuilder::new().build(),
+            &BaseClientBuilder::new().build().client(),
             Some("ferris"),
             Some("F3RR!S"),
             form_metadata,

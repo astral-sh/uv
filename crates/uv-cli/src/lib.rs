@@ -14,7 +14,7 @@ use url::Url;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    TargetTriple, TrustedHost,
+    TargetTriple, TrustedHost, TrustedPublishing,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -4346,6 +4346,14 @@ pub struct PublishArgs {
         conflicts_with = "password"
     )]
     pub token: Option<String>,
+
+    /// Configure using trusted publishing through GitHub Actions.
+    ///
+    /// By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
+    /// if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
+    /// from a fork).
+    #[arg(long)]
+    pub trusted_publishing: Option<TrustedPublishing>,
 
     /// Attempt to use `keyring` for authentication for remote requirements files.
     ///

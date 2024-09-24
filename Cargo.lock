@@ -5030,8 +5030,10 @@ dependencies = [
  "tracing",
  "url",
  "uv-client",
+ "uv-configuration",
  "uv-fs",
  "uv-metadata",
+ "uv-warnings",
 ]
 
 [[package]]
