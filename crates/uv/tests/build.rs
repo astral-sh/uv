@@ -1486,3 +1486,38 @@ fn sha() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn build_quiet() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    project.child("src").child("__init__.py").touch()?;
+    project.child("README").touch()?;
+
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("-q"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}

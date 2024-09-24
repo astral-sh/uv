@@ -239,7 +239,7 @@ impl Error {
 
         if let Some(missing_library) = missing_library {
             return match level {
-                BuildOutput::Stderr => Self::MissingHeader {
+                BuildOutput::Stderr | BuildOutput::Quiet => Self::MissingHeader {
                     message,
                     exit_code: output.status,
                     missing_header_cause: MissingHeaderCause {
@@ -265,7 +265,7 @@ impl Error {
         }
 
         match level {
-            BuildOutput::Stderr => Self::BuildBackend {
+            BuildOutput::Stderr | BuildOutput::Quiet => Self::BuildBackend {
                 message,
                 exit_code: output.status,
             },
