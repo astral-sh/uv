@@ -239,8 +239,8 @@ async fn upgrade_tool(
     if let Some(interpreter) = interpreter {
         if !interpreter.is_interpreter_used_by(&environment) {
             let resolution = resolve_environment(
+                RequirementsSpecification::from_requirements(requirements.to_vec()).into(),
                 interpreter,
-                RequirementsSpecification::from_requirements(requirements.to_vec()),
                 settings.as_ref().into(),
                 &state,
                 Box::new(SummaryResolveLogger),
