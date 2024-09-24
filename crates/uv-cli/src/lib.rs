@@ -4333,7 +4333,7 @@ pub struct PublishArgs {
 
     /// The token for the upload.
     ///
-    /// Using a token is equivalent to using `__token__` as username and using the token as
+    /// Using a token is equivalent to passing `__token__` as `--username` and the token as `--password`.
     /// password.
     #[arg(
         short,
