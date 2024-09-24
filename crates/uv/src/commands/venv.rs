@@ -222,6 +222,7 @@ async fn venv_impl(
     .into_diagnostic()?;
 
     let managed = python.source().is_managed();
+    let implementation = python.implementation();
     let interpreter = python.into_interpreter();
 
     // Add all authenticated sources to the cache.
@@ -232,14 +233,16 @@ async fn venv_impl(
     if managed {
         writeln!(
             printer.stderr(),
-            "Using Python {}",
+            "Using {} {}",
+            implementation.pretty(),
             interpreter.python_version().cyan()
         )
         .into_diagnostic()?;
     } else {
         writeln!(
             printer.stderr(),
-            "Using Python {} interpreter at: {}",
+            "Using {} {} interpreter at: {}",
+            implementation.pretty(),
             interpreter.python_version(),
             interpreter.sys_executable().user_display().cyan()
         )
