@@ -1,5 +1,4 @@
 use std::fmt::Write;
-use std::io::Write as FileWrite;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
@@ -446,6 +445,11 @@ pub(crate) enum InitProjectKind {
 }
 
 impl InitKind {
+    /// Checks if this is a project, packaged by default.
+    pub(crate) fn project_packaged_by_default(self) -> bool {
+        matches!(self, InitKind::Project(InitProjectKind::Library))
+    }
+
     #[allow(clippy::fn_params_excessive_bools)]
     async fn init_script(
         self,
@@ -477,17 +481,22 @@ impl InitKind {
 
         let reporter = PythonDownloadReporter::single(printer);
 
-        let metadata = fs_err::tokio::metadata(script_path).await?;
+        let metadata = fs_err::tokio::metadata(script_path).await;
         let mut content_future = None;
 
-        if metadata.is_dir() {
-            anyhow::bail!("{} is a directory", script_path.to_str().unwrap());
-        } else if metadata.is_file() {
-            if Pep723Script::read(script_path).await?.is_some() {
-                anyhow::bail!("{} is a PEP 723 script", script_path.to_str().unwrap());
-            }
+        if let Ok(metadata) = metadata {
+            if metadata.is_dir() {
+                anyhow::bail!("{} is a directory", script_path.to_str().unwrap());
+            } else if metadata.is_file() {
+                if Pep723Script::read(script_path).await?.is_some() {
+                    anyhow::bail!(
+                        "{} is already a PEP 723 script",
+                        script_path.to_str().unwrap()
+                    );
+                }
 
-            content_future = Some(fs_err::tokio::read(&script_path))
+                content_future = Some(fs_err::tokio::read(&script_path));
+            }
         }
 
         let requires_python = get_python_requirement_for_new_script(
@@ -511,15 +520,7 @@ impl InitKind {
             None
         };
 
-        Pep723Script::create(script_path, requires_python.specifiers()).await?;
-
-        if let Some(contents) = existing_contents {
-            let mut file = fs_err::OpenOptions::new()
-                .write(true)
-                .append(true)
-                .open(script_path)?;
-            file.write_all(&contents)?;
-        }
+        Pep723Script::create(script_path, requires_python.specifiers(), existing_contents).await?;
 
         Ok(())
     }
@@ -560,11 +561,6 @@ impl InitProjectKind {
                 .await
             }
         }
-    }
-
-    /// Whether this project kind is packaged by default.
-    pub(crate) fn packaged_by_default(self) -> bool {
-        matches!(self, InitProjectKind::Library)
     }
 
     async fn init_application(

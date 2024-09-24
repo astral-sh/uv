@@ -98,6 +98,7 @@ impl Pep723Script {
     pub async fn create(
         script_path: &PathBuf,
         requires_python: &VersionSpecifiers,
+        existing_contents: Option<Vec<u8>>,
     ) -> Result<(), Pep723Error> {
         let script_name = script_path
             .file_name()
@@ -114,7 +115,14 @@ impl Pep723Script {
         };
         let metadata = serialize_metadata(&default_metadata);
 
-        let script = indoc::formatdoc! {r#"
+        let script = if let Some(existing_contents) = existing_contents {
+            indoc::formatdoc! {r#"
+            {metadata}
+            {existing_contents}
+            "#, metadata = metadata,
+            existing_contents = String::from_utf8(existing_contents).map_err(|e| Pep723Error::Utf8(e.utf8_error()))?}
+        } else {
+            indoc::formatdoc! {r#"
             {metadata}
             def main() -> None:
                 print("Hello from {name}!")
@@ -122,8 +130,9 @@ impl Pep723Script {
             if __name__ == "__main__":
                 main()
         "#,
-            metadata = metadata,
-            name = script_name,
+                metadata = metadata,
+                name = script_name,
+            }
         };
 
         Ok(fs_err::tokio::write(script_path, script).await?)

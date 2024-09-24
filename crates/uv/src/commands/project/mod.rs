@@ -1216,7 +1216,7 @@ pub(crate) async fn get_python_requirement_for_new_script(
     cache: &Cache,
     reporter: &PythonDownloadReporter,
 ) -> anyhow::Result<RequiresPython> {
-    let python_request = if let Some(request) = python.as_deref() {
+    let python_request = if let Some(request) = python {
         // (1) Explicit request from user
         PythonRequest::parse(request)
     } else if let (false, Some(request)) = (

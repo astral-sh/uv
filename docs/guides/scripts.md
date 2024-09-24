@@ -127,11 +127,11 @@ Multiple dependencies can be requested by repeating with `--with` option.
 Note that if `uv run` is used in a _project_, these dependencies will be included _in addition_ to
 the project's dependencies. To opt-out of this behavior, use the `--no-project` flag.
 
-## Creating a python script
+## Creating a Python script
 
 Python recently added a standard format for
 [inline script metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata).
-It allows for selecting python versions and defining dependencies. Use `uv init --script` to
+It allows for selecting Python versions and defining dependencies. Use `uv init --script` to
 initialize scripts with the inline metadata:
 
 ```console

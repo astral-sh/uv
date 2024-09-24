@@ -431,7 +431,7 @@ fn init_script() -> Result<()> {
             # dependencies = []
             # ///
 
-            def main():
+            def main() -> None:
                 print("Hello from hello.py!")
 
             if __name__ == "__main__":
@@ -482,7 +482,7 @@ fn init_script_python_version() -> Result<()> {
             # dependencies = []
             # ///
 
-            def main():
+            def main() -> None:
                 print("Hello from version.py!")
 
             if __name__ == "__main__":
@@ -524,7 +524,7 @@ fn init_script_create_directory() -> Result<()> {
             # dependencies = []
             # ///
 
-            def main():
+            def main() -> None:
                 print("Hello from dir.py!")
 
             if __name__ == "__main__":
@@ -536,7 +536,7 @@ fn init_script_create_directory() -> Result<()> {
     Ok(())
 }
 
-// Init script should fail if file path exists
+// Init script should fail if file is already a PEP 723 script
 #[test]
 fn init_script_file_conflicts() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -559,8 +559,33 @@ fn init_script_file_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Script already exists at name_conflict.py
+    error: name_conflict.py is already a PEP 723 script
     "###);
+
+    let contents = "print(\"Hello, world!\")";
+    fs_err::write(child.join("existing_script.py"), &contents)?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("existing_script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `existing_script.py`
+    "###);
+
+    let existing_script = fs_err::read_to_string(child.join("existing_script.py"))?;
+
+    assert_snapshot!(
+        existing_script, @r###"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    print("Hello, world!")
+    "###
+    );
 
     Ok(())
 }

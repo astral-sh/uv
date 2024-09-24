@@ -36,7 +36,7 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 
 use crate::commands::ToolRunCommand;
-use crate::commands::{pip::operations::Modifications, InitProjectKind};
+use crate::commands::{pip::operations::Modifications, InitKind, InitProjectKind};
 
 /// The resolved global settings to use for any invocation of the CLI.
 #[allow(clippy::struct_excessive_bools)]
@@ -155,7 +155,7 @@ pub(crate) struct InitSettings {
     pub(crate) path: Option<String>,
     pub(crate) name: Option<PackageName>,
     pub(crate) package: bool,
-    pub(crate) kind: InitProjectKind,
+    pub(crate) kind: InitKind,
     pub(crate) no_readme: bool,
     pub(crate) no_pin_python: bool,
     pub(crate) no_workspace: bool,
@@ -182,14 +182,15 @@ impl InitSettings {
         } = args;
 
         let kind = match (app, lib, script) {
-            (true, false, false) => InitProjectKind::Application,
-            (false, true, false) => InitProjectKind::Library,
-            (false, false, true) => InitProjectKind::Script,
-            (false, false, false) => InitProjectKind::default(),
+            (true, false, false) => InitKind::Project(InitProjectKind::Application),
+            (false, true, false) => InitKind::Project(InitProjectKind::Library),
+            (false, false, true) => InitKind::Script,
+            (false, false, false) => InitKind::default(),
             (_, _, _) => unreachable!("`app`, `lib`, and `script` are mutually exclusive"),
         };
 
-        let package = flag(package || r#virtual, no_package).unwrap_or(kind.packaged_by_default());
+        let package =
+            flag(package || r#virtual, no_package).unwrap_or(kind.project_packaged_by_default());
 
         Self {
             path,
