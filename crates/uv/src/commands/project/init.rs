@@ -453,7 +453,7 @@ pub(crate) enum InitProjectKind {
 
 impl InitKind {
     /// Checks if this is a project, packaged by default.
-    pub(crate) fn project_packaged_by_default(self) -> bool {
+    pub(crate) fn packaged_by_default(self) -> bool {
         matches!(self, InitKind::Project(InitProjectKind::Library))
     }
 
