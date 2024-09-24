@@ -150,7 +150,7 @@ fn get_latest_patch_version(major: u8, minor: u8, patch: u8, cache: &Cache) -> u
     let base_version = PythonRequest::Version(VersionRequest::MajorMinor(major, minor));
     let system_installations = find_python_installations(
         &base_version,
-        EnvironmentPreference::Any,
+        EnvironmentPreference::OnlySystem,
         PythonPreference::System,
         cache,
     );
