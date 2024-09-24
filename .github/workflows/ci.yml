@@ -968,13 +968,36 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: "/home/runner/example"
 
-  integration-test-publish:
+  integration-test-publish-changed:
     timeout-minutes: 10
     needs: build-binary-linux
-    name: "integration test | uv publish"
+    name: "integration test | determine publish changes"
     runs-on: ubuntu-latest
+    outputs:
+      # Flag that is raised when any code is changed
+      code: ${{ steps.changed.outputs.code_any_changed }}
     # Only the main repository is a trusted publisher
     if: github.repository == 'astral-sh/uv'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Only publish a new release if the publishing code changed
+      - uses: tj-actions/changed-files@v45
+        id: changed
+        with:
+          files_yaml: |
+            code:
+              - "crates/uv-publish/**/*"
+              - "scripts/publish/**/*"
+
+  integration-test-publish:
+    timeout-minutes: 10
+    needs: integration-test-publish-changed
+    name: "integration test | uv publish"
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'astral-sh/uv' && (needs.integration-test-publish-changed.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     environment: uv-test-publish
     env:
       # No dbus in GitHub Actions
@@ -986,15 +1009,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      # Only publish a new release if the
-      - uses: tj-actions/changed-files@v45
-        id: changed
-        with:
-          files_yaml: |
-            code:
-              - "crates/uv-publish/**/*"
-              - "scripts/publish/**/*"
 
       - uses: actions/setup-python@v5
         with:
@@ -1017,7 +1031,6 @@ jobs:
           UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
 
       - name: "Publish test packages"
-        if: ${{ steps.changed.outputs.code_any_changed }}
         # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
         run: ./uv run -p 3.12 scripts/publish/test_publish.py --uv ./uv all
         env:
