@@ -950,7 +950,9 @@ pub(crate) fn find_python_installation(
             && !has_default_executable_name
         {
             debug!("Skipping pre-release {}", installation.key());
-            first_prerelease = Some(installation.clone());
+            if first_prerelease.is_none() {
+                first_prerelease = Some(installation.clone());
+            }
             continue;
         }
 
