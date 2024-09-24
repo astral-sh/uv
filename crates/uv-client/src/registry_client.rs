@@ -8,7 +8,6 @@ use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
 use reqwest::{Client, Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
-use serde::{Deserialize, Serialize};
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
@@ -722,9 +721,7 @@ impl RegistryClient {
     }
 }
 
-#[derive(
-    Default, Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct VersionFiles {
     pub wheels: Vec<VersionWheel>,
@@ -755,27 +752,25 @@ impl VersionFiles {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct VersionWheel {
     pub name: WheelFilename,
     pub file: File,
 }
 
-#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct VersionSourceDist {
     pub name: SourceDistFilename,
     pub file: File,
 }
 
-#[derive(
-    Default, Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct SimpleMetadata(Vec<SimpleMetadatum>);
 
-#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct SimpleMetadatum {
     pub version: Version,

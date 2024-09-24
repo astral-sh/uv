@@ -11,7 +11,7 @@ use uv_cache::{Cache, CacheBucket};
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
-use crate::{Connectivity, Error, ErrorKind, RegistryClient};
+use crate::{Connectivity, Error, ErrorKind, OwnedArchive, RegistryClient};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
@@ -170,7 +170,7 @@ impl<'a> FlatIndexClient<'a> {
                 let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
-                let files: Vec<File> = files
+                let unarchived: Vec<File> = files
                     .into_iter()
                     .filter_map(|file| {
                         match File::try_from(file, base.as_url()) {
@@ -183,7 +183,7 @@ impl<'a> FlatIndexClient<'a> {
                         }
                     })
                     .collect();
-                Ok::<Vec<File>, CachedClientError<Error>>(files)
+                OwnedArchive::from_unarchived(&unarchived)
             }
             .boxed_local()
             .instrument(info_span!("parse_flat_index_html", url = % url))
@@ -191,7 +191,7 @@ impl<'a> FlatIndexClient<'a> {
         let response = self
             .client
             .cached_client()
-            .get_serde(
+            .get_cacheable(
                 flat_index_request,
                 &cache_entry,
                 cache_control,
@@ -201,7 +201,11 @@ impl<'a> FlatIndexClient<'a> {
         match response {
             Ok(files) => {
                 let files = files
-                    .into_iter()
+                    .iter()
+                    .map(|file| {
+                        rkyv::deserialize::<File, rkyv::rancor::Error>(file)
+                            .expect("archived version always deserializes")
+                    })
                     .filter_map(|file| {
                         Some((
                             DistFilename::try_from_normalized_filename(&file.filename)?,

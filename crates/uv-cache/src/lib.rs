@@ -765,7 +765,7 @@ impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
             Self::SourceDistributions => "sdists-v4",
-            Self::FlatIndex => "flat-index-v0",
+            Self::FlatIndex => "flat-index-v1",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v2",
             // Note that when bumping this, you'll also need to bump it
