@@ -109,6 +109,12 @@ $ uv tool install ruff@latest
 $ uv tool install ruff@0.6.0
 ```
 
+## Python versions
+
+Each tool's virtual environment will be linked to a particular Python version. This uses the same Python version discovery logic as other virtual environments created by uv.
+
+If more control is needed, you can use the `--python` and `--python-preference` options. See the [Python Versions concept](./python-versions.md) page for further information.
+
 ### Tools directory
 
 By default, the uv tools directory is named `tools` and is in the uv application state directory,
