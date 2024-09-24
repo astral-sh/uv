@@ -563,7 +563,7 @@ fn init_script_file_conflicts() -> Result<()> {
     "###);
 
     let contents = "print(\"Hello, world!\")";
-    fs_err::write(child.join("existing_script.py"), &contents)?;
+    fs_err::write(child.join("existing_script.py"), contents)?;
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("existing_script.py"), @r###"
     success: true
