@@ -24,6 +24,7 @@ fn help() {
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
+      bump                       Bump, set or show project version
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -90,6 +91,7 @@ fn help_flag() {
       lock     Update the project's lockfile
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
+      bump     Bump, set or show project version
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -154,6 +156,7 @@ fn help_short_flag() {
       lock     Update the project's lockfile
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
+      bump     Bump, set or show project version
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -661,6 +664,7 @@ fn help_unknown_subcommand() {
         lock
         export
         tree
+        bump
         tool
         python
         pip
@@ -686,6 +690,7 @@ fn help_unknown_subcommand() {
         lock
         export
         tree
+        bump
         tool
         python
         pip
@@ -738,6 +743,7 @@ fn help_with_global_option() {
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
+      bump                       Bump, set or show project version
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -840,6 +846,7 @@ fn help_with_no_pager() {
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
+      bump                       Bump, set or show project version
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface

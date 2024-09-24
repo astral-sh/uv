@@ -5,7 +5,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 use thiserror::Error;
-use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
+use toml_edit::{Array, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value};
 use uv_fs::PortablePath;
 
 use crate::pyproject::{DependencyType, Source};
@@ -511,6 +511,36 @@ impl PyProjectTomlMut {
         }
 
         types
+    }
+    pub fn version(&mut self) -> Result<Version, Error> {
+        let project = self
+            .doc
+            .entry("project")
+            .or_insert(Item::Table(Table::new()))
+            .as_table()
+            .ok_or(Error::MalformedWorkspace)?;
+
+        let version = project
+            .get("version")
+            .and_then(Item::as_value)
+            .and_then(Value::as_str)
+            .ok_or(Error::MalformedWorkspace)?;
+
+        Version::from_str(version).map_err(|_| Error::MalformedWorkspace)
+    }
+    pub fn set_version(&mut self, version: &Version) -> Result<(), Error> {
+        let project = self
+            .doc
+            .entry("project")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or(Error::MalformedWorkspace)?;
+        project.insert(
+            "version",
+            Item::Value(Value::String(Formatted::new(version.to_string()))),
+        );
+
+        Ok(())
     }
 }
 

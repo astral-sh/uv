@@ -9,6 +9,7 @@ use anstream::eprintln;
 use anyhow::Result;
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
+use commands::BumpInstruction;
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
 use tracing::{debug, instrument};
@@ -1411,6 +1412,16 @@ async fn run_project(
                 printer,
             )
             .await
+        }
+        ProjectCommand::Bump(args) => {
+            if let Some(bump) = args.bump {
+                commands::bump(Some(BumpInstruction::Bump(bump)), printer).await?;
+            } else if let Some(bump) = args.raw {
+                commands::bump(Some(BumpInstruction::String(bump)), printer).await?;
+            } else {
+                commands::bump(None, printer).await?;
+            }
+            Ok(ExitStatus::Success)
         }
     }
 }

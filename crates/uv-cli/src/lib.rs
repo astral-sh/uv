@@ -730,6 +730,8 @@ pub enum ProjectCommand {
     Export(ExportArgs),
     /// Display the project's dependency tree.
     Tree(TreeArgs),
+    /// Bump, set or show project version.
+    Bump(BumpArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -4302,4 +4304,20 @@ pub struct DisplayTreeArgs {
     /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
+}
+
+#[derive(Args)]
+pub struct BumpArgs {
+    /// The version to set
+    #[arg(long)]
+    pub raw: Option<String>,
+    /// The version bump to apply
+    pub bump: Option<BumpType>,
+}
+
+#[derive(Debug, Clone, PartialEq, clap::ValueEnum)]
+pub enum BumpType {
+    Major,
+    Minor,
+    Patch,
 }

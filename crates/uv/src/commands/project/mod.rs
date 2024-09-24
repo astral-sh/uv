@@ -43,6 +43,7 @@ use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettingsRef};
 
 pub(crate) mod add;
+pub(crate) mod bump;
 pub(crate) mod environment;
 pub(crate) mod export;
 pub(crate) mod init;
