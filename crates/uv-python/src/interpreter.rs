@@ -26,7 +26,8 @@ use crate::implementation::LenientImplementationName;
 use crate::platform::{Arch, Libc, Os};
 use crate::pointer_size::PointerSize;
 use crate::{
-    Prefix, PythonEnvironment, PythonInstallationKey, PythonVersion, Target, VirtualEnvironment,
+    Prefix, PythonEnvironment, PythonInstallationKey, PythonVersion, Target, VersionRequest,
+    VirtualEnvironment,
 };
 
 /// A Python executable and its associated platform markers.
@@ -497,6 +498,7 @@ impl Interpreter {
         }
     }
 
+    /// Whether or not this interpreter is used by the given environment
     pub fn is_interpreter_used_by(&self, environment: &PythonEnvironment) -> bool {
         if cfg!(windows) {
             // On Windows, we can't canonicalize an interpreter based on its executable path
@@ -514,6 +516,21 @@ impl Interpreter {
                 )
                 .unwrap_or(false)
         }
+    }
+
+    /// Whether or not this Python interpreter is from a default Python executable name, like
+    /// `python`, `python3`, or `python.exe`.
+    pub(crate) fn has_default_executable_name(&self) -> bool {
+        let Some(file_name) = self.sys_executable().file_name() else {
+            return false;
+        };
+        let Some(name) = file_name.to_str() else {
+            return false;
+        };
+        VersionRequest::Default
+            .executable_names(None)
+            .into_iter()
+            .any(|default_name| name == default_name.to_string())
     }
 }
 

@@ -33,7 +33,8 @@ pub enum PyprojectTomlError {
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "kebab-case")]
 pub struct PyProjectToml {
     /// PEP 621-compliant project metadata.
@@ -111,7 +112,8 @@ impl AsRef<[u8]> for PyProjectToml {
 /// PEP 621 project metadata (`project`).
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "kebab-case")]
 pub struct Project {
     /// The name of the project
@@ -133,7 +135,8 @@ pub struct Project {
     pub(crate) scripts: Option<serde::de::IgnoredAny>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Tool {
     pub uv: Option<ToolUv>,
@@ -141,7 +144,8 @@ pub struct Tool {
 
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
-#[derive(Serialize, Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUv {
@@ -287,9 +291,9 @@ pub struct ToolUv {
     pub constraint_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
 }
 
-#[derive(Serialize, Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ToolUvSources(BTreeMap<PackageName, Source>);
 
 impl ToolUvSources {
@@ -346,7 +350,8 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
     }
 }
 
-#[derive(Serialize, Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ToolUvWorkspace {

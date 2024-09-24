@@ -1,3 +1,6 @@
+use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
+
 use distribution_types::{
     Dist, DistributionMetadata, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
     VersionOrUrlRef,
@@ -11,7 +14,6 @@ use petgraph::{
 };
 use pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use std::fmt::{Display, Formatter};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_git::GitResolver;
@@ -233,7 +235,7 @@ impl ResolutionGraph {
             report_missing_lower_bounds(&petgraph, &mut diagnostics);
         }
 
-        Ok(Self {
+        let graph = Self {
             petgraph,
             requires_python,
             package_markers,
@@ -243,7 +245,29 @@ impl ResolutionGraph {
             overrides: overrides.clone(),
             options,
             fork_markers,
-        })
+        };
+        let mut conflicting = graph.find_conflicting_distributions();
+        if !conflicting.is_empty() {
+            tracing::warn!(
+                "found {} conflicting distributions in resolution, \
+                 please report this as a bug at \
+                 https://github.com/astral-sh/uv/issues/new",
+                conflicting.len()
+            );
+        }
+        // When testing, we materialize any conflicting distributions as an
+        // error to ensure any relevant tests fail. Otherwise, we just leave
+        // it at the warning message above. The reason for not returning an
+        // error "in production" is that an incorrect resolution may only be
+        // incorrect in certain marker environments, but fine in most others.
+        // Returning an error in that case would make `uv` unusable whenever
+        // the bug occurs, but letting it through means `uv` *could* still be
+        // usable.
+        #[cfg(debug_assertions)]
+        if let Some(err) = conflicting.pop() {
+            return Err(ResolveError::ConflictingDistribution(err));
+        }
+        Ok(graph)
     }
 
     fn add_edge(
@@ -680,6 +704,84 @@ impl ResolutionGraph {
         } else {
             Some(&package_markers[&(version.clone(), url.cloned())])
         }
+    }
+
+    /// Returns a sequence of conflicting distribution errors from this
+    /// resolution.
+    ///
+    /// Correct resolutions always return an empty sequence. A non-empty
+    /// sequence implies there is a package with two distinct versions in the
+    /// same marker environment in this resolution. This in turn implies that
+    /// an installation in that marker environment could wind up trying to
+    /// install different versions of the same package, which is not allowed.
+    fn find_conflicting_distributions(&self) -> Vec<ConflictingDistributionError> {
+        let mut name_to_markers: BTreeMap<&PackageName, Vec<(&Version, &MarkerTree)>> =
+            BTreeMap::new();
+        for node in self.petgraph.node_weights() {
+            let annotated_dist = match node {
+                ResolutionGraphNode::Root => continue,
+                ResolutionGraphNode::Dist(ref annotated_dist) => annotated_dist,
+            };
+            name_to_markers
+                .entry(&annotated_dist.name)
+                .or_default()
+                .push((&annotated_dist.version, &annotated_dist.marker));
+        }
+        let mut dupes = vec![];
+        for (name, marker_trees) in name_to_markers {
+            for (i, (version1, marker1)) in marker_trees.iter().enumerate() {
+                for (version2, marker2) in &marker_trees[i + 1..] {
+                    if version1 == version2 {
+                        continue;
+                    }
+                    if !marker1.is_disjoint(marker2) {
+                        dupes.push(ConflictingDistributionError {
+                            name: name.clone(),
+                            version1: (*version1).clone(),
+                            version2: (*version2).clone(),
+                            marker1: (*marker1).clone(),
+                            marker2: (*marker2).clone(),
+                        });
+                    }
+                }
+            }
+        }
+        dupes
+    }
+}
+
+/// An error that occurs for conflicting versions of the same package.
+///
+/// Specifically, this occurs when two distributions with the same package
+/// name are found with distinct versions in at least one possible marker
+/// environment. This error reflects an error that could occur when installing
+/// the corresponding resolution into that marker environment.
+#[derive(Debug)]
+pub struct ConflictingDistributionError {
+    name: PackageName,
+    version1: Version,
+    version2: Version,
+    marker1: MarkerTree,
+    marker2: MarkerTree,
+}
+
+impl std::error::Error for ConflictingDistributionError {}
+
+impl std::fmt::Display for ConflictingDistributionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let ConflictingDistributionError {
+            ref name,
+            ref version1,
+            ref version2,
+            ref marker1,
+            ref marker2,
+        } = *self;
+        write!(
+            f,
+            "found conflicting versions for package `{name}`:
+             `{marker1:?}` (for version `{version1}`) is not disjoint with \
+             `{marker2:?}` (for version `{version2}`)",
+        )
     }
 }
 

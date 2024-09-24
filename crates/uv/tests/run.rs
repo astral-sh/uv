@@ -5,6 +5,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::indoc;
+use std::path::Path;
 
 use uv_python::PYTHON_VERSION_FILENAME;
 
@@ -55,7 +56,7 @@ fn run_with_python_version() -> Result<()> {
     3.7.0
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -104,7 +105,7 @@ fn run_with_python_version() -> Result<()> {
     3.6.0
 
     ----- stderr -----
-    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
@@ -132,7 +133,7 @@ fn run_with_python_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     error: The requested interpreter resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.11, <4`
     "###);
 
@@ -606,7 +607,7 @@ fn run_with() -> Result<()> {
         name = "foo"
         version = "1.0.0"
         requires-python = ">=3.8"
-        dependencies = ["anyio", "sniffio==1.3.1"]
+        dependencies = ["sniffio==1.3.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -627,13 +628,11 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==4.3.0
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/)
-     + idna==3.6
-     + sniffio==1.3.1
+     + sniffio==1.3.0
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -647,22 +646,56 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
     "###);
 
     // Unless the user requests a different version.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio<1.3.1").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio<1.3.0").arg("main.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
+     + sniffio==1.2.0
+    "###);
+
+    // If we request a dependency that isn't in the base environment, we should still respect any
+    // other dependencies. In this case, `sniffio==1.3.0` is not the latest-compatible version, but
+    // we should use it anyway.
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.0
+    "###);
+
+    // Even if we run with` --no-sync`.
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio==4.2.0").arg("--no-sync").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.2.0
+     + idna==3.6
      + sniffio==1.3.0
     "###);
 
@@ -673,8 +706,8 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
       × No solution found when resolving `--with` dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     "###);
@@ -1319,10 +1352,9 @@ fn run_editable() -> Result<()> {
 #[test]
 fn run_from_directory() -> Result<()> {
     // default 3.11 so that the .python-version is meaningful
-    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.10", "3.11", "3.12"]);
 
     let project_dir = context.temp_dir.child("project");
-    project_dir.create_dir_all()?;
     project_dir
         .child(PYTHON_VERSION_FILENAME)
         .write_str("3.12")?;
@@ -1332,7 +1364,7 @@ fn run_from_directory() -> Result<()> {
         [project]
         name = "foo"
         version = "1.0.0"
-        requires-python = ">=3.11, <4"
+        requires-python = ">=3.10"
         dependencies = []
 
         [project.scripts]
@@ -1343,6 +1375,7 @@ fn run_from_directory() -> Result<()> {
         build-backend = "setuptools.build_meta"
         "#
     })?;
+
     let main_script = project_dir.child("main.py");
     main_script.write_str(indoc! { r"
         import platform
@@ -1352,10 +1385,56 @@ fn run_from_directory() -> Result<()> {
        "
     })?;
 
-    let mut command = context.run();
-    let command_with_args = command.arg("--directory").arg("project").arg("main");
+    let filters = TestContext::path_patterns(Path::new("project").join(".venv"))
+        .into_iter()
+        .map(|pattern| (pattern, "[PROJECT_VENV]/".to_string()))
+        .collect::<Vec<_>>();
+    let error = regex::escape("The system cannot find the path specified. (os error 3)");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(
+            filters
+                .iter()
+                .map(|(pattern, replacement)| (pattern.as_str(), replacement.as_str())),
+        )
+        .chain(std::iter::once((
+            error.as_str(),
+            "No such file or directory (os error 2)",
+        )))
+        .collect::<Vec<_>>();
 
-    uv_snapshot!(context.filters(), command_with_args, @r###"
+    // Use `--project`, which resolves configuration relative to the provided directory, but paths
+    // relative to the current working directory.
+    uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("main"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12.[X]
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [PROJECT_VENV]/
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+    "###);
+
+    uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("./project/main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Use `--directory`, which switches to the provided directory entirely.
+    uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("main"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1363,12 +1442,71 @@ fn run_from_directory() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("./main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("./project/main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    error: Failed to spawn: `./project/main.py`
+      Caused by: No such file or directory (os error 2)
+    "###);
+
+    // Even if we write a `.python-version` file in the current directory, we should prefer the
+    // one in the project directory in both cases.
+    context
+        .temp_dir
+        .child(PYTHON_VERSION_FILENAME)
+        .write_str("3.11")?;
+
+    project_dir
+        .child(PYTHON_VERSION_FILENAME)
+        .write_str("3.10")?;
+
+    uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("main"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.10.[X]
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored
+    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
+    Removed virtual environment at: [PROJECT_VENV]/
+    Creating virtual environment at: [PROJECT_VENV]/
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
+    "###);
+
+    uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("main"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.10.[X]
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
     "###);
 
     Ok(())
@@ -1462,7 +1600,7 @@ fn run_isolated_python_version() -> Result<()> {
     (3, 8)
 
     ----- stderr -----
-    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -1770,7 +1908,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     error: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`
     "###);
 

@@ -694,17 +694,18 @@ fn reformat_array_multiline(deps: &mut Array) {
     for item in deps.iter_mut() {
         let decor = item.decor_mut();
         let mut prefix = String::new();
-        // calculating the indentation prefix as the indentation of the first dependency entry
+
+        // Calculate the indentation prefix based on the indentation of the first dependency entry.
         if indentation_prefix.is_none() {
             let decor_prefix = decor
                 .prefix()
                 .and_then(|s| s.as_str())
-                .map(|s| s.split('#').next().unwrap_or("").to_string())
-                .unwrap_or(String::new())
-                .trim_start_matches('\n')
+                .map(|s| s.split('#').next().unwrap_or(""))
+                .unwrap_or_default()
+                .trim_start_matches(['\r', '\n'].as_ref())
                 .to_string();
 
-            // if there is no indentation then apply a default one
+            // If there is no indentation, use four-space.
             indentation_prefix = Some(if decor_prefix.is_empty() {
                 "    ".to_string()
             } else {

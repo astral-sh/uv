@@ -8,7 +8,7 @@ use pep508_rs::PackageName;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_fs::{Simplified, CWD};
+use uv_fs::Simplified;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionRequest,
@@ -25,6 +25,7 @@ use crate::printer::Printer;
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
+    project_dir: &Path,
     explicit_path: Option<String>,
     name: Option<PackageName>,
     package: bool,
@@ -42,7 +43,7 @@ pub(crate) async fn init(
 ) -> Result<ExitStatus> {
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
-        None => CWD.to_path_buf(),
+        None => project_dir.to_path_buf(),
         Some(ref path) => std::path::absolute(path)?,
     };
 
@@ -185,7 +186,7 @@ async fn init_project(
     let (requires_python, python_request) = if let Some(request) = python.as_deref() {
         // (1) Explicit request from user
         match PythonRequest::parse(request) {
-            PythonRequest::Version(VersionRequest::MajorMinor(major, minor)) => {
+            PythonRequest::Version(VersionRequest::MajorMinor(major, minor, false)) => {
                 let requires_python = RequiresPython::greater_than_equal_version(&Version::new([
                     u64::from(major),
                     u64::from(minor),
@@ -195,13 +196,13 @@ async fn init_project(
                     None
                 } else {
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
-                        major, minor,
+                        major, minor, false,
                     )))
                 };
 
                 (requires_python, python_request)
             }
-            PythonRequest::Version(VersionRequest::MajorMinorPatch(major, minor, patch)) => {
+            PythonRequest::Version(VersionRequest::MajorMinorPatch(major, minor, patch, false)) => {
                 let requires_python = RequiresPython::greater_than_equal_version(&Version::new([
                     u64::from(major),
                     u64::from(minor),
@@ -212,13 +213,14 @@ async fn init_project(
                     None
                 } else {
                     Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(
-                        major, minor, patch,
+                        major, minor, patch, false,
                     )))
                 };
 
                 (requires_python, python_request)
             }
-            ref python_request @ PythonRequest::Version(VersionRequest::Range(ref specifiers)) => {
+            ref
+            python_request @ PythonRequest::Version(VersionRequest::Range(ref specifiers, _)) => {
                 let requires_python = RequiresPython::from_specifiers(specifiers)?;
 
                 let python_request = if no_pin_python {
@@ -239,6 +241,7 @@ async fn init_project(
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         interpreter.python_major(),
                         interpreter.python_minor(),
+                        false,
                     )))
                 };
 
@@ -266,6 +269,7 @@ async fn init_project(
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         interpreter.python_major(),
                         interpreter.python_minor(),
+                        false,
                     )))
                 };
 
@@ -277,8 +281,10 @@ async fn init_project(
         .and_then(|workspace| find_requires_python(workspace).ok().flatten())
     {
         // (2) `Requires-Python` from the workspace
-        let python_request =
-            PythonRequest::Version(VersionRequest::Range(requires_python.specifiers().clone()));
+        let python_request = PythonRequest::Version(VersionRequest::Range(
+            requires_python.specifiers().clone(),
+            false,
+        ));
 
         // Pin to the minor version.
         let python_request = if no_pin_python {
@@ -299,6 +305,7 @@ async fn init_project(
             Some(PythonRequest::Version(VersionRequest::MajorMinor(
                 interpreter.python_major(),
                 interpreter.python_minor(),
+                false,
             )))
         };
 
@@ -327,6 +334,7 @@ async fn init_project(
             Some(PythonRequest::Version(VersionRequest::MajorMinor(
                 interpreter.python_major(),
                 interpreter.python_minor(),
+                false,
             )))
         };
 

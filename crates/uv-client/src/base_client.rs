@@ -25,6 +25,21 @@ use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
 use crate::Connectivity;
 
+pub const DEFAULT_RETRIES: u32 = 3;
+
+/// Selectively skip parts or the entire auth middleware.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum AuthIntegration {
+    /// Run the full auth middleware, including sending an unauthenticated request first.
+    #[default]
+    Default,
+    /// Send only an authenticated request without cloning and sending an unauthenticated request
+    /// first. Errors if no credentials were found.
+    OnlyAuthenticated,
+    /// Skip the auth middleware entirely. The caller is responsible for managing authentication.
+    NoAuthMiddleware,
+}
+
 /// A builder for an [`BaseClient`].
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
@@ -36,6 +51,7 @@ pub struct BaseClientBuilder<'a> {
     client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
+    auth_integration: AuthIntegration,
 }
 
 impl Default for BaseClientBuilder<'_> {
@@ -51,10 +67,11 @@ impl BaseClientBuilder<'_> {
             allow_insecure_host: vec![],
             native_tls: false,
             connectivity: Connectivity::Online,
-            retries: 3,
+            retries: DEFAULT_RETRIES,
             client: None,
             markers: None,
             platform: None,
+            auth_integration: AuthIntegration::default(),
         }
     }
 }
@@ -108,6 +125,12 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    #[must_use]
+    pub fn auth_integration(mut self, auth_integration: AuthIntegration) -> Self {
+        self.auth_integration = auth_integration;
+        self
+    }
+
     pub fn is_offline(&self) -> bool {
         matches!(self.connectivity, Connectivity::Offline)
     }
@@ -154,7 +177,7 @@ impl<'a> BaseClientBuilder<'a> {
         debug!("Using request timeout of {timeout}s");
 
         // Create a secure client that validates certificates.
-        let client = self.create_client(
+        let raw_client = self.create_client(
             &user_agent_string,
             timeout,
             ssl_cert_file_exists,
@@ -162,7 +185,7 @@ impl<'a> BaseClientBuilder<'a> {
         );
 
         // Create an insecure client that accepts invalid certificates.
-        let dangerous_client = self.create_client(
+        let raw_dangerous_client = self.create_client(
             &user_agent_string,
             timeout,
             ssl_cert_file_exists,
@@ -170,15 +193,34 @@ impl<'a> BaseClientBuilder<'a> {
         );
 
         // Wrap in any relevant middleware and handle connectivity.
-        let client = self.apply_middleware(client);
-        let dangerous_client = self.apply_middleware(dangerous_client);
+        let client = self.apply_middleware(raw_client.clone());
+        let dangerous_client = self.apply_middleware(raw_dangerous_client.clone());
+
+        BaseClient {
+            connectivity: self.connectivity,
+            allow_insecure_host: self.allow_insecure_host.clone(),
+            client,
+            raw_client,
+            dangerous_client,
+            raw_dangerous_client,
+            timeout,
+        }
+    }
+
+    /// Share the underlying client between two different middleware configurations.
+    pub fn wrap_existing(&self, existing: &BaseClient) -> BaseClient {
+        // Wrap in any relevant middleware and handle connectivity.
+        let client = self.apply_middleware(existing.raw_client.clone());
+        let dangerous_client = self.apply_middleware(existing.raw_dangerous_client.clone());
 
         BaseClient {
             connectivity: self.connectivity,
             allow_insecure_host: self.allow_insecure_host.clone(),
             client,
             dangerous_client,
-            timeout,
+            raw_client: existing.raw_client.clone(),
+            raw_dangerous_client: existing.raw_dangerous_client.clone(),
+            timeout: existing.timeout,
         }
     }
 
@@ -230,20 +272,37 @@ impl<'a> BaseClientBuilder<'a> {
     fn apply_middleware(&self, client: Client) -> ClientWithMiddleware {
         match self.connectivity {
             Connectivity::Online => {
-                let client = reqwest_middleware::ClientBuilder::new(client);
+                let mut client = reqwest_middleware::ClientBuilder::new(client);
 
-                // Initialize the retry strategy.
-                let retry_policy =
-                    ExponentialBackoff::builder().build_with_max_retries(self.retries);
-                let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
-                    retry_policy,
-                    UvRetryableStrategy,
-                );
-                let client = client.with(retry_strategy);
+                // Avoid uncloneable errors with a streaming body during publish.
+                if self.retries > 0 {
+                    // Initialize the retry strategy.
+                    let retry_policy =
+                        ExponentialBackoff::builder().build_with_max_retries(self.retries);
+                    let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
+                        retry_policy,
+                        UvRetryableStrategy,
+                    );
+                    client = client.with(retry_strategy);
+                }
 
                 // Initialize the authentication middleware to set headers.
-                let client =
-                    client.with(AuthMiddleware::new().with_keyring(self.keyring.to_provider()));
+                match self.auth_integration {
+                    AuthIntegration::Default => {
+                        client = client
+                            .with(AuthMiddleware::new().with_keyring(self.keyring.to_provider()));
+                    }
+                    AuthIntegration::OnlyAuthenticated => {
+                        client = client.with(
+                            AuthMiddleware::new()
+                                .with_keyring(self.keyring.to_provider())
+                                .with_only_authenticated(true),
+                        );
+                    }
+                    AuthIntegration::NoAuthMiddleware => {
+                        // The downstream code uses custom auth logic.
+                    }
+                }
 
                 client.build()
             }
@@ -261,6 +320,10 @@ pub struct BaseClient {
     client: ClientWithMiddleware,
     /// The underlying HTTP client that accepts invalid certificates.
     dangerous_client: ClientWithMiddleware,
+    /// The HTTP client without middleware.
+    raw_client: Client,
+    /// The HTTP client that accepts invalid certificates without middleware.
+    raw_dangerous_client: Client,
     /// The connectivity mode to use.
     connectivity: Connectivity,
     /// Configured client timeout, in seconds.
@@ -281,6 +344,11 @@ impl BaseClient {
     /// The underlying [`ClientWithMiddleware`] for secure requests.
     pub fn client(&self) -> ClientWithMiddleware {
         self.client.clone()
+    }
+
+    /// The underlying [`Client`] without middleware.
+    pub fn raw_client(&self) -> Client {
+        self.raw_client.clone()
     }
 
     /// Selects the appropriate client based on the host's trustworthiness.
@@ -308,7 +376,7 @@ impl BaseClient {
 }
 
 /// Extends [`DefaultRetryableStrategy`], to log transient request failures and additional retry cases.
-struct UvRetryableStrategy;
+pub struct UvRetryableStrategy;
 
 impl RetryableStrategy for UvRetryableStrategy {
     fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {

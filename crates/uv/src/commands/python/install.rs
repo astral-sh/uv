@@ -1,15 +1,14 @@
-use std::collections::BTreeSet;
-use std::fmt::Write;
-
 use anyhow::Result;
 use fs_err as fs;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::collections::BTreeSet;
+use std::fmt::Write;
+use std::path::Path;
 
 use uv_client::Connectivity;
-use uv_fs::CWD;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use uv_python::{PythonDownloads, PythonRequest, PythonVersionFile};
@@ -21,6 +20,7 @@ use crate::printer::Printer;
 
 /// Download and install Python versions.
 pub(crate) async fn install(
+    project_dir: &Path,
     targets: Vec<String>,
     reinstall: bool,
     python_downloads: PythonDownloads,
@@ -38,9 +38,9 @@ pub(crate) async fn install(
 
     let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {
-        PythonVersionFile::discover(&*CWD, no_config, true)
+        PythonVersionFile::discover(project_dir, no_config, true)
             .await?
-            .map(uv_python::PythonVersionFile::into_versions)
+            .map(PythonVersionFile::into_versions)
             .unwrap_or_else(|| vec![PythonRequest::Default])
     } else {
         targets

@@ -31,7 +31,7 @@ Request a specific version by including it in the URL:
 === "Windows"
 
     ```console
-    $ powershell -c "irm https://astral.sh/uv/0.4.6/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.4.6/install.ps1 | iex"
     ```
 
 !!! tip

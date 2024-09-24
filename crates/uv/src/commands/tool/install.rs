@@ -25,6 +25,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 
 use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
+    EnvironmentSpecification,
 };
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::tool::Target;
@@ -370,8 +371,8 @@ pub(crate) async fn install(
         // If we're creating a new environment, ensure that we can resolve the requirements prior
         // to removing any existing tools.
         let resolution = resolve_environment(
+            EnvironmentSpecification::from(spec),
             &interpreter,
-            spec,
             settings.as_ref().into(),
             &state,
             Box::new(DefaultResolveLogger),
