@@ -285,13 +285,13 @@ impl InstalledDist {
     }
 
     /// Read the `METADATA` file from a `.dist-info` directory.
-    pub fn metadata(&self) -> Result<pypi_types::MetadataResolver> {
+    pub fn metadata(&self) -> Result<pypi_types::ResolutionMetadata> {
         match self {
             Self::Registry(_) | Self::Url(_) => {
                 let path = self.path().join("METADATA");
                 let contents = fs::read(&path)?;
                 // TODO(zanieb): Update this to use thiserror so we can unpack parse errors downstream
-                pypi_types::MetadataResolver::parse_metadata(&contents).with_context(|| {
+                pypi_types::ResolutionMetadata::parse_metadata(&contents).with_context(|| {
                     format!(
                         "Failed to parse `METADATA` file at: {}",
                         path.user_display()
@@ -306,7 +306,7 @@ impl InstalledDist {
                     _ => unreachable!(),
                 };
                 let contents = fs::read(path.as_ref())?;
-                pypi_types::MetadataResolver::parse_metadata(&contents).with_context(|| {
+                pypi_types::ResolutionMetadata::parse_metadata(&contents).with_context(|| {
                     format!(
                         "Failed to parse `PKG-INFO` file at: {}",
                         path.user_display()

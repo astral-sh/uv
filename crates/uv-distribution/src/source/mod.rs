@@ -20,7 +20,7 @@ use distribution_types::{
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use platform_tags::Tags;
-use pypi_types::{HashDigest, Metadata12, MetadataResolver, RequiresTxt};
+use pypi_types::{HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
 use reqwest::Response;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, warn, Instrument};
@@ -1583,7 +1583,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source_root: &Path,
         subdirectory: Option<&Path>,
         cache_shard: &CacheShard,
-    ) -> Result<(String, WheelFilename, MetadataResolver), Error> {
+    ) -> Result<(String, WheelFilename, ResolutionMetadata), Error> {
         debug!("Building: {source}");
 
         // Guard against build of source distributions when disabled.
@@ -1641,7 +1641,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         source_root: &Path,
         subdirectory: Option<&Path>,
-    ) -> Result<Option<MetadataResolver>, Error> {
+    ) -> Result<Option<ResolutionMetadata>, Error> {
         debug!("Preparing metadata for: {source}");
 
         // Set up the builder.
@@ -1673,7 +1673,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let content = fs::read(dist_info.join("METADATA"))
             .await
             .map_err(Error::CacheRead)?;
-        let metadata = MetadataResolver::parse_metadata(&content)?;
+        let metadata = ResolutionMetadata::parse_metadata(&content)?;
 
         // Validate the metadata.
         validate(source, &metadata)?;
@@ -1685,7 +1685,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         source_root: &Path,
         subdirectory: Option<&Path>,
-    ) -> Result<Option<MetadataResolver>, Error> {
+    ) -> Result<Option<ResolutionMetadata>, Error> {
         // Attempt to read static metadata from the `pyproject.toml`.
         match read_pyproject_toml(source_root, subdirectory).await {
             Ok(metadata) => {
@@ -1858,7 +1858,7 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
 }
 
 /// Validate that the source distribution matches the built metadata.
-fn validate(source: &BuildableSource<'_>, metadata: &MetadataResolver) -> Result<(), Error> {
+fn validate(source: &BuildableSource<'_>, metadata: &ResolutionMetadata) -> Result<(), Error> {
     if let Some(name) = source.name() {
         if metadata.name != *name {
             return Err(Error::NameMismatch {
@@ -1955,7 +1955,7 @@ impl LocalRevisionPointer {
     }
 }
 
-/// Read the [`MetadataResolver`] by combining a source distribution's `PKG-INFO` file with a
+/// Read the [`ResolutionMetadata`] by combining a source distribution's `PKG-INFO` file with a
 /// `requires.txt`.
 ///
 /// `requires.txt` is a legacy concept from setuptools. For example, here's
@@ -1988,7 +1988,7 @@ impl LocalRevisionPointer {
 async fn read_egg_info(
     source_tree: &Path,
     subdirectory: Option<&Path>,
-) -> Result<MetadataResolver, Error> {
+) -> Result<ResolutionMetadata, Error> {
     fn find_egg_info(source_tree: &Path) -> std::io::Result<Option<PathBuf>> {
         for entry in fs_err::read_dir(source_tree)? {
             let entry = entry?;
@@ -2048,7 +2048,7 @@ async fn read_egg_info(
     let metadata = Metadata12::parse_metadata(&content).map_err(Error::PkgInfo)?;
 
     // Combine the sources.
-    Ok(MetadataResolver {
+    Ok(ResolutionMetadata {
         name: metadata.name,
         version: metadata.version,
         requires_python: metadata.requires_python,
@@ -2057,13 +2057,13 @@ async fn read_egg_info(
     })
 }
 
-/// Read the [`MetadataResolver`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
+/// Read the [`ResolutionMetadata`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
 /// or later _and_ none of the required fields (`Requires-Python`, `Requires-Dist`, and
 /// `Provides-Extra`) are marked as dynamic.
 async fn read_pkg_info(
     source_tree: &Path,
     subdirectory: Option<&Path>,
-) -> Result<MetadataResolver, Error> {
+) -> Result<ResolutionMetadata, Error> {
     // Read the `PKG-INFO` file.
     let pkg_info = match subdirectory {
         Some(subdirectory) => source_tree.join(subdirectory).join("PKG-INFO"),
@@ -2078,17 +2078,17 @@ async fn read_pkg_info(
     };
 
     // Parse the metadata.
-    let metadata = MetadataResolver::parse_pkg_info(&content).map_err(Error::PkgInfo)?;
+    let metadata = ResolutionMetadata::parse_pkg_info(&content).map_err(Error::PkgInfo)?;
 
     Ok(metadata)
 }
 
-/// Read the [`MetadataResolver`] from a source distribution's `pyproject.toml` file, if it defines static
+/// Read the [`ResolutionMetadata`] from a source distribution's `pyproject.toml` file, if it defines static
 /// metadata consistent with PEP 621.
 async fn read_pyproject_toml(
     source_tree: &Path,
     subdirectory: Option<&Path>,
-) -> Result<MetadataResolver, Error> {
+) -> Result<ResolutionMetadata, Error> {
     // Read the `pyproject.toml` file.
     let pyproject_toml = match subdirectory {
         Some(subdirectory) => source_tree.join(subdirectory).join("pyproject.toml"),
@@ -2104,7 +2104,7 @@ async fn read_pyproject_toml(
 
     // Parse the metadata.
     let metadata =
-        MetadataResolver::parse_pyproject_toml(&content).map_err(Error::PyprojectToml)?;
+        ResolutionMetadata::parse_pyproject_toml(&content).map_err(Error::PyprojectToml)?;
 
     Ok(metadata)
 }
@@ -2128,8 +2128,10 @@ async fn read_requires_dist(project_root: &Path) -> Result<pypi_types::RequiresD
     Ok(requires_dist)
 }
 
-/// Read an existing cached [`MetadataResolver`], if it exists.
-async fn read_cached_metadata(cache_entry: &CacheEntry) -> Result<Option<MetadataResolver>, Error> {
+/// Read an existing cached [`ResolutionMetadata`], if it exists.
+async fn read_cached_metadata(
+    cache_entry: &CacheEntry,
+) -> Result<Option<ResolutionMetadata>, Error> {
     match fs::read(&cache_entry.path()).await {
         Ok(cached) => Ok(Some(rmp_serde::from_slice(&cached)?)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -2137,14 +2139,17 @@ async fn read_cached_metadata(cache_entry: &CacheEntry) -> Result<Option<Metadat
     }
 }
 
-/// Read the [`MetadataResolver`] from a built wheel.
-fn read_wheel_metadata(filename: &WheelFilename, wheel: &Path) -> Result<MetadataResolver, Error> {
+/// Read the [`ResolutionMetadata`] from a built wheel.
+fn read_wheel_metadata(
+    filename: &WheelFilename,
+    wheel: &Path,
+) -> Result<ResolutionMetadata, Error> {
     let file = fs_err::File::open(wheel).map_err(Error::CacheRead)?;
     let reader = std::io::BufReader::new(file);
     let mut archive = ZipArchive::new(reader)?;
     let dist_info = read_archive_metadata(filename, &mut archive)
         .map_err(|err| Error::WheelMetadata(wheel.to_path_buf(), Box::new(err)))?;
-    Ok(MetadataResolver::parse_metadata(&dist_info)?)
+    Ok(ResolutionMetadata::parse_metadata(&dist_info)?)
 }
 
 /// Apply an advisory lock to a [`CacheShard`] to prevent concurrent builds.

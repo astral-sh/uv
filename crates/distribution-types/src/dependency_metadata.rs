@@ -1,6 +1,6 @@
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::Requirement;
-use pypi_types::{MetadataResolver, VerbatimParsedUrl};
+use pypi_types::{ResolutionMetadata, VerbatimParsedUrl};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use uv_normalize::{ExtraName, PackageName};
@@ -20,7 +20,7 @@ impl DependencyMetadata {
     }
 
     /// Retrieve a [`StaticMetadata`] entry by [`PackageName`] and [`Version`].
-    pub fn get(&self, package: &PackageName, version: &Version) -> Option<MetadataResolver> {
+    pub fn get(&self, package: &PackageName, version: &Version) -> Option<ResolutionMetadata> {
         let versions = self.0.get(package)?;
 
         // Search for an exact, then a global match.
@@ -29,7 +29,7 @@ impl DependencyMetadata {
             .find(|v| v.version.as_ref() == Some(version))
             .or_else(|| versions.iter().find(|v| v.version.is_none()))?;
 
-        Some(MetadataResolver {
+        Some(ResolutionMetadata {
             name: metadata.name.clone(),
             version: version.clone(),
             requires_dist: metadata.requires_dist.clone(),
