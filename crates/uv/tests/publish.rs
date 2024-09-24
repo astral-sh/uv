@@ -19,10 +19,10 @@ fn username_password_no_longer_supported() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv.sources` is experimental and may change without warning
+    warning: `uv publish` is experimental and may change without warning
     Publishing 1 file
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
-    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to `https://upload.pypi.org/legacy/`
+    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://upload.pypi.org/legacy/
       Caused by: Incorrect credentials (status code 403 Forbidden): 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://pypi.org/help/#apitoken and https://pypi.org/help/#trusted-publishers
     "###
     );
@@ -43,10 +43,10 @@ fn invalid_token() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv.sources` is experimental and may change without warning
+    warning: `uv publish` is experimental and may change without warning
     Publishing 1 file
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
-    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to `https://upload.pypi.org/legacy/`
+    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://upload.pypi.org/legacy/
       Caused by: Incorrect credentials (status code 403 Forbidden): 403 Invalid or non-existent authentication information. See https://pypi.org/help/#invalid-auth for more information.
     "###
     );

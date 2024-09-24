@@ -25,6 +25,7 @@ krata-tokio-tar = { workspace = true }
 python-pkginfo = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
+rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

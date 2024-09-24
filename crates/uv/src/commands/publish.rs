@@ -32,13 +32,13 @@ pub(crate) async fn publish(
     }
 
     let client = BaseClientBuilder::new()
+        // Don't try cloning the request for retries.
         // https://github.com/seanmonstar/reqwest/issues/2416
         .retries(0)
         .keyring(keyring_provider)
         .native_tls(native_tls)
         .allow_insecure_host(allow_insecure_host)
         // Don't try cloning the request to make an unauthenticated request first.
-        // https://github.com/seanmonstar/reqwest/issues/2416
         .only_authenticated(true)
         .build();
 
@@ -65,7 +65,7 @@ pub(crate) async fn publish(
             writeln!(
                 printer.stderr(),
                 "{}",
-                "File already existed, skipping".dimmed()
+                "File already exists, skipping".dimmed()
             )?;
         }
     }

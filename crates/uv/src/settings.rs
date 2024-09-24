@@ -2470,7 +2470,7 @@ impl PublishSettings {
             publish_url: args
                 .publish_url
                 .combine(publish_url)
-                .unwrap_or(Url::parse(PYPI_PUBLISH_URL).unwrap()),
+                .unwrap_or_else(|| Url::parse(PYPI_PUBLISH_URL).unwrap()),
             keyring_provider: args
                 .keyring_provider
                 .combine(keyring_provider)

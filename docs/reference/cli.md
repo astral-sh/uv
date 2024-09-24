@@ -6790,7 +6790,9 @@ uv publish [OPTIONS] [FILES]...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>FILES</code></dt><dd><p>The paths to the files to uploads, as glob expressions</p>
+<dl class="cli-reference"><dt><code>FILES</code></dt><dd><p>Paths to the files to upload. Accepts glob expressions.</p>
+
+<p>Defaults to the <code>dist</code> directory.</p>
 
 </dd></dl>
 
@@ -6871,7 +6873,11 @@ uv publish [OPTIONS] [FILES]...
 </dd><dt><code>--password</code>, <code>-p</code> <i>password</i></dt><dd><p>The password for the upload</p>
 
 <p>May also be set with the <code>UV_PUBLISH_PASSWORD</code> environment variable.</p>
-</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL to the upload endpoint. Note: This is usually not the same as the index URL.</p>
+</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint.</p>
+
+<p>Note that this typically differs from the index URL.</p>
+
+<p>Defaults to PyPI&#8217;s publish URL (&lt;https://upload.pypi.org/legacy/&gt;).</p>
 
 <p>The default value is publish URL for PyPI (&lt;https://upload.pypi.org/legacy/&gt;).</p>
 
@@ -6896,7 +6902,7 @@ uv publish [OPTIONS] [FILES]...
 
 </dd><dt><code>--token</code>, <code>-t</code> <i>token</i></dt><dd><p>The token for the upload.</p>
 
-<p>Using a token is equivalent to using <code>__token__</code> as username and using the token as password.</p>
+<p>Using a token is equivalent to passing <code>__token__</code> as <code>--username</code> and the token as <code>--password</code>. password.</p>
 
 <p>May also be set with the <code>UV_PUBLISH_TOKEN</code> environment variable.</p>
 </dd><dt><code>--username</code>, <code>-u</code> <i>username</i></dt><dd><p>The username for the upload</p>

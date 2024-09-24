@@ -5114,6 +5114,7 @@ dependencies = [
  "python-pkginfo",
  "reqwest",
  "reqwest-middleware",
+ "rustc-hash",
  "serde",
  "serde_json",
  "sha2",

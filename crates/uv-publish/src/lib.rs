@@ -10,9 +10,9 @@ use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
 use reqwest_middleware::RequestBuilder;
+use rustc_hash::FxHashSet;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::{fmt, io};
@@ -39,7 +39,7 @@ pub enum PublishError {
     InvalidFilename(PathBuf),
     #[error("Failed to publish: `{}`", _0.user_display())]
     PublishPrepare(PathBuf, #[source] PublishPrepareError),
-    #[error("Failed to publish `{}` to `{}`", _0.user_display(), _1)]
+    #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
     PublishSend(PathBuf, Url, #[source] PublishSendError),
 }
 
@@ -71,11 +71,11 @@ pub enum PublishSendError {
     StatusNoBody(StatusCode, #[source] reqwest::Error),
     #[error("Upload failed with status code {0}: {1}")]
     Status(StatusCode, String),
-    /// The registry returned a "403 Forbidden"
-    #[error("Incorrect credentials (status code {0}): {1}")]
-    IncorrectCredentials(StatusCode, String),
-    /// See inline comment
-    #[error("The request was redirected, but publishing doesn't support redirect, please use the canonical URL: `{0}`")]
+    /// The registry returned a "403 Forbidden".
+    #[error("Permission denied (status code {0}): {1}")]
+    PermissionDenied(StatusCode, String),
+    /// See inline comment.
+    #[error("The request was redirected, but redirects are not allowed when publishing, please use the canonical URL: `{0}`")]
     RedirectError(Url),
 }
 
@@ -177,23 +177,23 @@ impl PublishSendError {
 pub fn files_for_publishing(
     paths: Vec<String>,
 ) -> Result<Vec<(PathBuf, DistFilename)>, PublishError> {
-    let mut seen = HashSet::new();
+    let mut seen = FxHashSet::default();
     let mut files = Vec::new();
     for path in paths {
-        for entry in glob(&path).map_err(|err| PublishError::Pattern(path, err))? {
-            let entry = entry?;
-            if !seen.insert(entry.clone()) {
+        for dist in glob(&path).map_err(|err| PublishError::Pattern(path, err))? {
+            let dist = dist?;
+            if !dist.is_file() {
                 continue;
             }
-            if !entry.is_file() {
+            if !seen.insert(dist.clone()) {
                 continue;
             }
-            let Some(filename) = entry.file_name().and_then(|filename| filename.to_str()) else {
+            let Some(filename) = dist.file_name().and_then(|filename| filename.to_str()) else {
                 continue;
             };
             let filename = DistFilename::try_from_normalized_filename(filename)
-                .ok_or_else(|| PublishError::InvalidFilename(entry.clone()))?;
-            files.push((entry, filename));
+                .ok_or_else(|| PublishError::InvalidFilename(dist.clone()))?;
+            files.push((dist, filename));
         }
     }
     // TODO(konsti): Should we sort those files, e.g. wheels before sdists because they are more
@@ -495,7 +495,7 @@ async fn handle_response(registry: &Url, response: Response) -> Result<bool, Pub
             // Artifactory (https://jfrog.com/artifactory/)
             Ok(false)
         } else {
-            Err(PublishSendError::IncorrectCredentials(
+            Err(PublishSendError::PermissionDenied(
                 status_code,
                 PublishSendError::extract_error_message(
                     upload_error.to_string(),
