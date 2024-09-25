@@ -21,6 +21,7 @@ use uv_distribution::LoweredRequirement;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
+use uv_python::which::is_executable;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
@@ -716,6 +717,55 @@ pub(crate) async fn run(
     let interpreter = ephemeral_env
         .as_ref()
         .map_or_else(|| &base_interpreter, |env| env.interpreter());
+
+    // Check if any run command is given.
+    // If not, print the available scripts for the current interpreter.
+    if let RunCommand::Empty = command {
+        writeln!(
+            printer.stdout(),
+            "Provide a command or script to invoke with `uv run <command>` or `uv run script.py`.\n"
+        )?;
+
+        let mut scripts = interpreter
+            .scripts()
+            .read_dir()
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| match entry {
+                Ok(entry) => Some(entry),
+                Err(err) => {
+                    debug!("Failed to read entry: {}", err);
+                    None
+                }
+            })
+            .filter(|entry| {
+                entry
+                    .file_type()
+                    .is_ok_and(|file_type| file_type.is_file() || file_type.is_symlink())
+            })
+            .map(|entry| entry.path())
+            .filter(|path| is_executable(path))
+            .map(|path| {
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .collect_vec();
+        scripts.sort();
+
+        if !scripts.is_empty() {
+            writeln!(printer.stdout(), "The following scripts are available:\n")?;
+            writeln!(printer.stdout(), "{}", scripts.join("\n"))?;
+        }
+        writeln!(
+            printer.stdout(),
+            "\nSee `uv run --help` for more information."
+        )?;
+
+        return Ok(ExitStatus::Success);
+    };
 
     debug!("Running `{command}`");
     let mut process = command.as_command(interpreter);

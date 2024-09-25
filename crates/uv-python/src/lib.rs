@@ -37,7 +37,7 @@ mod python_version;
 mod target;
 mod version_files;
 mod virtualenv;
-mod which;
+pub mod which;
 
 #[cfg(not(test))]
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {

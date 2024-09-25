@@ -132,7 +132,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     // Parse the external command, if necessary.
     let run_command = if let Commands::Project(command) = &*cli.command {
         if let ProjectCommand::Run(uv_cli::RunArgs { command, .. }) = &**command {
-            Some(RunCommand::try_from(command)?)
+            match command {
+                Some(command) => Some(RunCommand::try_from(command)?),
+                None => Some(RunCommand::Empty),
+            }
         } else {
             None
         }

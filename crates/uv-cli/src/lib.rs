@@ -2485,7 +2485,7 @@ pub struct RunArgs {
     /// If the path to a Python script (i.e., ending in `.py`), it will be
     /// executed with the Python interpreter.
     #[command(subcommand)]
-    pub command: ExternalCommand,
+    pub command: Option<ExternalCommand>,
 
     /// Run with the given packages installed.
     ///
