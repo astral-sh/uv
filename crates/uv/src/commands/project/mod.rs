@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -1263,6 +1263,50 @@ pub(crate) async fn update_environment(
         environment: venv,
         changelog,
     })
+}
+
+/// Determine the [`RequiresPython`] requirement for a PEP 723 script.
+pub(crate) async fn script_python_requirement(
+    python: Option<&str>,
+    directory: &Path,
+    no_pin_python: bool,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    client_builder: &BaseClientBuilder<'_>,
+    cache: &Cache,
+    reporter: &PythonDownloadReporter,
+) -> anyhow::Result<RequiresPython> {
+    let python_request = if let Some(request) = python {
+        // (1) Explicit request from user
+        PythonRequest::parse(request)
+    } else if let (false, Some(request)) = (
+        no_pin_python,
+        PythonVersionFile::discover(directory, false, false)
+            .await?
+            .and_then(PythonVersionFile::into_version),
+    ) {
+        // (2) Request from `.python-version`
+        request
+    } else {
+        // (3) Assume any Python version
+        PythonRequest::Any
+    };
+
+    let interpreter = PythonInstallation::find_or_download(
+        Some(&python_request),
+        EnvironmentPreference::Any,
+        python_preference,
+        python_downloads,
+        client_builder,
+        cache,
+        Some(reporter),
+    )
+    .await?
+    .into_interpreter();
+
+    Ok(RequiresPython::greater_than_equal_version(
+        &interpreter.python_minor_version(),
+    ))
 }
 
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.

@@ -412,9 +412,9 @@ uv init [OPTIONS] [PATH]
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>PATH</code></dt><dd><p>The path to use for the project.</p>
+<dl class="cli-reference"><dt><code>PATH</code></dt><dd><p>The path to use for the project/script.</p>
 
-<p>Defaults to the current working directory. Accepts relative and absolute paths.</p>
+<p>Defaults to the current working directory when initializing an app or library; required when initializing a script. Accepts relative and absolute paths.</p>
 
 <p>If a <code>pyproject.toml</code> is found in any of the parent directories of the target path, the project will be added as a workspace member of the parent, unless <code>--no-workspace</code> is provided.</p>
 
@@ -549,6 +549,14 @@ uv init [OPTIONS] [PATH]
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+
+</dd><dt><code>--script</code></dt><dd><p>Create a script.</p>
+
+<p>A script is a standalone file with embedded metadata enumerating its dependencies, along with any Python version requirements, as defined in the PEP 723 specification.</p>
+
+<p>PEP 723 scripts can be executed directly with <code>uv run</code>.</p>
+
+<p>By default, adds a requirement on the system Python version; use <code>--python</code> to specify an alternative Python version requirement.</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 

@@ -39,7 +39,7 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 
 use crate::commands::ToolRunCommand;
-use crate::commands::{pip::operations::Modifications, InitProjectKind};
+use crate::commands::{pip::operations::Modifications, InitKind, InitProjectKind};
 
 /// The default publish URL.
 const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
@@ -158,10 +158,10 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct InitSettings {
-    pub(crate) path: Option<String>,
+    pub(crate) path: Option<PathBuf>,
     pub(crate) name: Option<PackageName>,
     pub(crate) package: bool,
-    pub(crate) kind: InitProjectKind,
+    pub(crate) kind: InitKind,
     pub(crate) no_readme: bool,
     pub(crate) no_pin_python: bool,
     pub(crate) no_workspace: bool,
@@ -180,17 +180,19 @@ impl InitSettings {
             no_package,
             app,
             lib,
+            script,
             no_readme,
             no_pin_python,
             no_workspace,
             python,
         } = args;
 
-        let kind = match (app, lib) {
-            (true, false) => InitProjectKind::Application,
-            (false, true) => InitProjectKind::Library,
-            (false, false) => InitProjectKind::default(),
-            (true, true) => unreachable!("`app` and `lib` are mutually exclusive"),
+        let kind = match (app, lib, script) {
+            (true, false, false) => InitKind::Project(InitProjectKind::Application),
+            (false, true, false) => InitKind::Project(InitProjectKind::Library),
+            (false, false, true) => InitKind::Script,
+            (false, false, false) => InitKind::default(),
+            (_, _, _) => unreachable!("`app`, `lib`, and `script` are mutually exclusive"),
         };
 
         let package = flag(package || r#virtual, no_package).unwrap_or(kind.packaged_by_default());

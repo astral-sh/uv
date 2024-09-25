@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use owo_colors::OwoColorize;
@@ -8,16 +8,18 @@ use pep508_rs::PackageName;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionRequest,
 };
 use uv_resolver::RequiresPython;
+use uv_scripts::{Pep723Script, ScriptTag};
+use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
 
-use crate::commands::project::find_requires_python;
+use crate::commands::project::{find_requires_python, script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -26,10 +28,10 @@ use crate::printer::Printer;
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
     project_dir: &Path,
-    explicit_path: Option<String>,
+    explicit_path: Option<PathBuf>,
     name: Option<PackageName>,
     package: bool,
-    project_kind: InitProjectKind,
+    init_kind: InitKind,
     no_readme: bool,
     no_pin_python: bool,
     python: Option<String>,
@@ -41,79 +43,185 @@ pub(crate) async fn init(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // Default to the current directory if a path was not provided.
-    let path = match explicit_path {
-        None => project_dir.to_path_buf(),
-        Some(ref path) => std::path::absolute(path)?,
-    };
+    match init_kind {
+        InitKind::Script => {
+            let Some(path) = explicit_path.as_deref() else {
+                anyhow::bail!("Script initialization requires a file path")
+            };
 
-    // Make sure a project does not already exist in the given directory.
-    if path.join("pyproject.toml").exists() {
-        let path = std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
-        anyhow::bail!(
-            "Project is already initialized in `{}` (`pyproject.toml` file exists)",
-            path.display().cyan()
-        );
-    }
+            init_script(
+                path,
+                python,
+                connectivity,
+                python_preference,
+                python_downloads,
+                cache,
+                printer,
+                no_workspace,
+                no_readme,
+                no_pin_python,
+                package,
+                native_tls,
+            )
+            .await?;
 
-    // Default to the directory name if a name was not provided.
-    let name = match name {
-        Some(name) => name,
-        None => {
-            let name = path
-                .file_name()
-                .and_then(|path| path.to_str())
-                .context("Missing directory name")?;
-
-            PackageName::new(name.to_string())?
-        }
-    };
-
-    init_project(
-        &path,
-        &name,
-        package,
-        project_kind,
-        no_readme,
-        no_pin_python,
-        python,
-        no_workspace,
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?;
-
-    // Create the `README.md` if it does not already exist.
-    if !no_readme {
-        let readme = path.join("README.md");
-        if !readme.exists() {
-            fs_err::write(readme, String::new())?;
-        }
-    }
-
-    match explicit_path {
-        // Initialized a project in the current directory.
-        None => {
-            writeln!(printer.stderr(), "Initialized project `{}`", name.cyan())?;
-        }
-        // Initialized a project in the given directory.
-        Some(path) => {
-            let path =
-                std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
             writeln!(
                 printer.stderr(),
-                "Initialized project `{}` at `{}`",
-                name.cyan(),
-                path.display().cyan()
+                "Initialized script at `{}`",
+                path.user_display().cyan()
             )?;
+        }
+        InitKind::Project(project_kind) => {
+            // Default to the current directory if a path was not provided.
+            let path = match explicit_path {
+                None => project_dir.to_path_buf(),
+                Some(ref path) => std::path::absolute(path)?,
+            };
+
+            // Make sure a project does not already exist in the given directory.
+            if path.join("pyproject.toml").exists() {
+                let path =
+                    std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
+                anyhow::bail!(
+                    "Project is already initialized in `{}` (`pyproject.toml` file exists)",
+                    path.display().cyan()
+                );
+            }
+
+            // Default to the directory name if a name was not provided.
+            let name = match name {
+                Some(name) => name,
+                None => {
+                    let name = path
+                        .file_name()
+                        .and_then(|path| path.to_str())
+                        .context("Missing directory name")?;
+
+                    PackageName::new(name.to_string())?
+                }
+            };
+
+            init_project(
+                &path,
+                &name,
+                package,
+                project_kind,
+                no_readme,
+                no_pin_python,
+                python,
+                no_workspace,
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?;
+
+            // Create the `README.md` if it does not already exist.
+            if !no_readme {
+                let readme = path.join("README.md");
+                if !readme.exists() {
+                    fs_err::write(readme, String::new())?;
+                }
+            }
+
+            match explicit_path {
+                // Initialized a project in the current directory.
+                None => {
+                    writeln!(printer.stderr(), "Initialized project `{}`", name.cyan())?;
+                }
+                // Initialized a project in the given directory.
+                Some(path) => {
+                    let path = std::path::absolute(&path)
+                        .unwrap_or_else(|_| path.simplified().to_path_buf());
+                    writeln!(
+                        printer.stderr(),
+                        "Initialized project `{}` at `{}`",
+                        name.cyan(),
+                        path.display().cyan()
+                    )?;
+                }
+            }
         }
     }
 
     Ok(ExitStatus::Success)
+}
+
+#[allow(clippy::fn_params_excessive_bools)]
+async fn init_script(
+    script_path: &Path,
+    python: Option<String>,
+    connectivity: Connectivity,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    cache: &Cache,
+    printer: Printer,
+    no_workspace: bool,
+    no_readme: bool,
+    no_pin_python: bool,
+    package: bool,
+    native_tls: bool,
+) -> Result<()> {
+    if no_workspace {
+        warn_user_once!("`--no_workspace` is a no-op for Python scripts, which are standalone");
+    }
+    if no_readme {
+        warn_user_once!("`--no_readme` is a no-op for Python scripts, which are standalone");
+    }
+    if package {
+        warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
+    }
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
+
+    let reporter = PythonDownloadReporter::single(printer);
+
+    // If the file already exists, read its content.
+    let content = match fs_err::tokio::read(script_path).await {
+        Ok(metadata) => {
+            // If the file is already a script, raise an error.
+            if ScriptTag::parse(&metadata)?.is_some() {
+                anyhow::bail!(
+                    "`{}` is already a PEP 723 script; use `{}` to execute it",
+                    script_path.simplified_display().cyan(),
+                    "uv run".green()
+                );
+            }
+
+            Some(metadata)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => {
+            return Err(anyhow::Error::from(err).context(format!(
+                "Failed to read script at `{}`",
+                script_path.simplified_display().cyan()
+            )));
+        }
+    };
+
+    let requires_python = script_python_requirement(
+        python.as_deref(),
+        &CWD,
+        no_pin_python,
+        python_preference,
+        python_downloads,
+        &client_builder,
+        cache,
+        &reporter,
+    )
+    .await?;
+
+    if let Some(parent) = script_path.parent() {
+        fs_err::tokio::create_dir_all(parent).await?;
+    }
+
+    Pep723Script::create(script_path, requires_python.specifiers(), content).await?;
+
+    Ok(())
 }
 
 /// Initialize a project (and, implicitly, a workspace root) at the given path.
@@ -395,11 +503,36 @@ async fn init_project(
     Ok(())
 }
 
+/// The kind of entity to initialize (either a PEP 723 script or a Python project).
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum InitKind {
+    /// Initialize a Python project.
+    Project(InitProjectKind),
+    /// Initialize a PEP 723 script.
+    Script,
+}
+
+impl Default for InitKind {
+    fn default() -> Self {
+        InitKind::Project(InitProjectKind::default())
+    }
+}
+
+/// The kind of Python project to initialize (either an application or a library).
 #[derive(Debug, Copy, Clone, Default)]
 pub(crate) enum InitProjectKind {
+    /// Initialize a Python application.
     #[default]
     Application,
+    /// Initialize a Python library.
     Library,
+}
+
+impl InitKind {
+    /// Returns `true` if the project should be packaged by default.
+    pub(crate) fn packaged_by_default(self) -> bool {
+        matches!(self, InitKind::Project(InitProjectKind::Library))
+    }
 }
 
 impl InitProjectKind {
@@ -437,11 +570,6 @@ impl InitProjectKind {
                 .await
             }
         }
-    }
-
-    /// Whether this project kind is packaged by default.
-    pub(crate) fn packaged_by_default(self) -> bool {
-        matches!(self, InitProjectKind::Library)
     }
 
     async fn init_application(
@@ -588,13 +716,13 @@ fn pyproject_project(
     no_readme: bool,
 ) -> String {
     indoc::formatdoc! {r#"
-            [project]
-            name = "{name}"
-            version = "0.1.0"
-            description = "Add your description here"{readme}
-            requires-python = "{requires_python}"
-            dependencies = []
-            "#,
+        [project]
+        name = "{name}"
+        version = "0.1.0"
+        description = "Add your description here"{readme}
+        requires-python = "{requires_python}"
+        dependencies = []
+    "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
         requires_python = requires_python.specifiers(),
     }
