@@ -83,8 +83,8 @@ fn tool_install() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -165,7 +165,7 @@ fn tool_install() {
         [tool]
         requirements = [{ name = "flask" }]
         entrypoints = [
-            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
         ]
 
         [tool.options]
@@ -303,8 +303,8 @@ fn tool_install_version() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -385,7 +385,7 @@ fn tool_install_editable() {
         [tool]
         requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
 
         [tool.options]
@@ -424,7 +424,7 @@ fn tool_install_editable() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
 
         [tool.options]
@@ -467,8 +467,8 @@ fn tool_install_editable() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -515,8 +515,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -605,8 +605,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -681,7 +681,7 @@ fn tool_install_editable_from() {
         [tool]
         requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
 
         [tool.options]
@@ -831,8 +831,8 @@ fn tool_install_already_installed() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -867,8 +867,8 @@ fn tool_install_already_installed() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1154,8 +1154,8 @@ fn tool_install_entry_point_exists() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1190,8 +1190,8 @@ fn tool_install_entry_point_exists() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1453,8 +1453,8 @@ fn tool_install_unnamed_package() {
         [tool]
         requirements = [{ name = "black", url = "https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1566,8 +1566,8 @@ fn tool_install_unnamed_from() {
         [tool]
         requirements = [{ name = "black", url = "https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1658,8 +1658,8 @@ fn tool_install_unnamed_with() {
             { name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1727,8 +1727,8 @@ fn tool_install_requirements_txt() {
             { name = "iniconfig" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1772,8 +1772,8 @@ fn tool_install_requirements_txt() {
             { name = "idna" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1836,8 +1836,8 @@ fn tool_install_requirements_txt_arguments() {
             { name = "idna" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1950,8 +1950,8 @@ fn tool_install_upgrade() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.1" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1982,8 +1982,8 @@ fn tool_install_upgrade() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2022,8 +2022,8 @@ fn tool_install_upgrade() {
             { name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2062,8 +2062,8 @@ fn tool_install_upgrade() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2525,7 +2525,7 @@ fn tool_install_malformed_dist_info() {
         [tool]
         requirements = [{ name = "babel" }]
         entrypoints = [
-            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel", from = "babel" },
         ]
 
         [tool.options]
@@ -2603,7 +2603,7 @@ fn tool_install_settings() {
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
-            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
         ]
 
         [tool.options]
@@ -2636,7 +2636,7 @@ fn tool_install_settings() {
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
-            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
         ]
 
         [tool.options]
@@ -2676,7 +2676,7 @@ fn tool_install_settings() {
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
-            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
         ]
 
         [tool.options]
@@ -2725,8 +2725,8 @@ fn tool_install_at_version() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.0" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2791,8 +2791,8 @@ fn tool_install_at_latest() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2836,7 +2836,7 @@ fn tool_install_from_at_latest() {
         [tool]
         requirements = [{ name = "babel" }]
         entrypoints = [
-            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel", from = "babel" },
         ]
 
         [tool.options]
@@ -2880,7 +2880,7 @@ fn tool_install_from_at_version() {
         [tool]
         requirements = [{ name = "babel", specifier = "==2.13.0" }]
         entrypoints = [
-            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel", from = "babel" },
         ]
 
         [tool.options]
@@ -2929,8 +2929,8 @@ fn tool_install_at_latest_upgrade() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.1" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2961,8 +2961,8 @@ fn tool_install_at_latest_upgrade() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2998,8 +2998,8 @@ fn tool_install_at_latest_upgrade() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
