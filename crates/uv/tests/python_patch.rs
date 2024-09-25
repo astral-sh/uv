@@ -26,6 +26,8 @@ fn python_patch_version() -> Result<()> {
 }
 
 #[test]
+/// NOTE: This test is not deterministic. If new patches for Python 3.10 are released,
+/// this will need to be reflected in the test.
 fn python_patch_versions() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.8.12", "3.9.18", "3.10.13"]);
 
