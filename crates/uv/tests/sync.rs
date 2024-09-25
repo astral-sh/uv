@@ -358,7 +358,7 @@ fn mixed_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -377,7 +377,7 @@ fn mixed_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     error: The requested interpreter resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.8. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.8.[X]` followed by `uv pip install -e .`.
     "###);
 
@@ -1188,7 +1188,7 @@ fn no_install_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -1635,7 +1635,7 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -1655,7 +1655,7 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foo
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
@@ -1680,7 +1680,7 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foobar/.venv
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
@@ -1705,7 +1705,7 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: bar
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
@@ -1726,7 +1726,7 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: [OTHER_TEMPDIR]/.venv
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
@@ -1758,7 +1758,7 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: foo
     Activate with: source foo/[BIN]/activate
     "###);
@@ -1773,7 +1773,7 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: foo
     Creating virtual environment at: foo
     Resolved 2 packages in [TIME]
@@ -1850,7 +1850,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foo
     Resolved 3 packages in [TIME]
     Installed 1 package in [TIME]
@@ -2006,7 +2006,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foo
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
@@ -2021,7 +2021,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=foo` does not match the project environment path `bar` and will be ignored
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: bar
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
@@ -2083,7 +2083,7 @@ fn sync_update_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -2146,7 +2146,7 @@ fn sync_environment_prompt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -2651,7 +2651,7 @@ fn sync_invalid_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "###);
@@ -2666,7 +2666,7 @@ fn sync_invalid_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
@@ -2689,7 +2689,7 @@ fn sync_invalid_environment() -> Result<()> {
 
         ----- stderr -----
         warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/python -> python
-        Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+        Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
         Removed virtual environment at: .venv
         Creating virtual environment at: .venv
         Resolved 2 packages in [TIME]
@@ -2717,7 +2717,7 @@ fn sync_invalid_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "###);
@@ -2735,7 +2735,7 @@ fn sync_invalid_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: Project virtual environment directory `[VENV]/` cannot be used because it is not a compatible environment but cannot be recreated because it is not a virtual environment
     "###);
 

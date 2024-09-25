@@ -19,6 +19,7 @@ struct MajorAndMinorVersion {
 struct MaxPatchAndIndex {
     max_patch: u8,
     index: usize,
+    free_thread: bool,
 }
 
 /// Update .python-version and .python-versions files to the latest patch version
@@ -52,6 +53,7 @@ pub(crate) async fn patch(cache: &Cache) -> Result<()> {
                 major,
                 minor,
                 current_patch,
+                free_thread,
             )) = version
             {
                 versions_to_patch
@@ -70,6 +72,7 @@ pub(crate) async fn patch(cache: &Cache) -> Result<()> {
                     .or_insert(MaxPatchAndIndex {
                         max_patch: *current_patch,
                         index,
+                        free_thread: *free_thread,
                     });
             }
         }
@@ -82,6 +85,7 @@ pub(crate) async fn patch(cache: &Cache) -> Result<()> {
                     major_and_minor.major,
                     major_and_minor.minor,
                     patch_and_index.max_patch,
+                    patch_and_index.free_thread,
                     cache,
                 )
             })
@@ -106,6 +110,7 @@ pub(crate) async fn patch(cache: &Cache) -> Result<()> {
                             major_and_minor.major,
                             major_and_minor.minor,
                             new_patch,
+                            patch_and_index.free_thread,
                         ));
                 }
             },
@@ -123,10 +128,14 @@ pub(crate) async fn patch(cache: &Cache) -> Result<()> {
         // `python_versions_fle` resolved to a .python-version file
         python_version_file == python_versions_file,
     ) {
-        if let Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(major, minor, patch))) =
-            python_version_file.version()
+        if let Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(
+            major,
+            minor,
+            patch,
+            free_thread,
+        ))) = python_version_file.version()
         {
-            let new_patch = get_latest_patch_version(*major, *minor, *patch, cache);
+            let new_patch = get_latest_patch_version(*major, *minor, *patch, *free_thread, cache);
 
             if new_patch != *patch {
                 println!("Bumped patch for version {major}.{minor}.{patch} to {new_patch}",);
@@ -134,7 +143,7 @@ pub(crate) async fn patch(cache: &Cache) -> Result<()> {
 
             PythonVersionFile::new(python_version_file.path().to_path_buf())
                 .with_versions(vec![PythonRequest::Version(
-                    VersionRequest::MajorMinorPatch(*major, *minor, new_patch),
+                    VersionRequest::MajorMinorPatch(*major, *minor, new_patch, *free_thread),
                 )])
                 .write()
                 .await?;
@@ -147,7 +156,13 @@ pub(crate) async fn patch(cache: &Cache) -> Result<()> {
 /// To get the latest patch version, we first check all versions of Python
 /// downloaded by uv. If none match the given major and minor, we check against
 /// the system installations.
-fn get_latest_patch_version(major: u8, minor: u8, patch: u8, cache: &Cache) -> u8 {
+fn get_latest_patch_version(
+    major: u8,
+    minor: u8,
+    patch: u8,
+    free_thread: bool,
+    cache: &Cache,
+) -> u8 {
     let mut max_patch = patch;
     for download in ManagedPythonDownload::iter_all() {
         if !(download.python_version().major() == major
@@ -165,7 +180,8 @@ fn get_latest_patch_version(major: u8, minor: u8, patch: u8, cache: &Cache) -> u
         return max_patch;
     }
 
-    let base_version = PythonRequest::Version(VersionRequest::MajorMinor(major, minor));
+    let base_version =
+        PythonRequest::Version(VersionRequest::MajorMinor(major, minor, free_thread));
     let system_installations = find_python_installations(
         &base_version,
         EnvironmentPreference::OnlySystem,

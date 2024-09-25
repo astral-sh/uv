@@ -15,8 +15,8 @@ use distribution_types::{
     RemoteSource, SourceUrl, VersionId,
 };
 use pep508_rs::{UnnamedRequirement, VersionOrUrl};
-use pypi_types::Requirement;
-use pypi_types::{Metadata10, ParsedUrl, VerbatimParsedUrl};
+use pypi_types::{Metadata10, Requirement};
+use pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_normalize::PackageName;
 use uv_resolver::{InMemoryIndex, MetadataResponse};

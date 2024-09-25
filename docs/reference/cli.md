@@ -38,6 +38,8 @@ uv [OPTIONS] <COMMAND>
 </dd>
 <dt><a href="#uv-build"><code>uv build</code></a></dt><dd><p>Build Python packages into source distributions and wheels</p>
 </dd>
+<dt><a href="#uv-publish"><code>uv publish</code></a></dt><dd><p>Upload distributions to an index</p>
+</dd>
 <dt><a href="#uv-cache"><code>uv cache</code></a></dt><dd><p>Manage uv&#8217;s cache</p>
 </dd>
 <dt><a href="#uv-version"><code>uv version</code></a></dt><dd><p>Display uv&#8217;s version</p>
@@ -113,6 +115,12 @@ uv run [OPTIONS] <COMMAND>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
@@ -233,7 +241,7 @@ uv run [OPTIONS] <COMMAND>
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -306,6 +314,8 @@ uv run [OPTIONS] <COMMAND>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -442,6 +452,12 @@ uv init [OPTIONS] [PATH]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--lib</code></dt><dd><p>Create a project for a library.</p>
@@ -506,6 +522,8 @@ uv init [OPTIONS] [PATH]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -613,6 +631,12 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
 </dd><dt><code>--dev</code></dt><dd><p>Add the requirements as development dependencies</p>
+
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
 
 </dd><dt><code>--editable</code></dt><dd><p>Add the requirements as editable</p>
 
@@ -725,7 +749,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -784,6 +808,8 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -930,6 +956,12 @@ uv remove [OPTIONS] <PACKAGES>...
 
 </dd><dt><code>--dev</code></dt><dd><p>Remove the packages from the development dependencies</p>
 
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
@@ -1033,7 +1065,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -1088,6 +1120,8 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -1220,6 +1254,12 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
@@ -1333,7 +1373,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -1408,6 +1448,8 @@ uv sync [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -1521,6 +1563,12 @@ uv lock [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
@@ -1624,7 +1672,7 @@ uv lock [OPTIONS]
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -1673,6 +1721,8 @@ uv lock [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -1787,6 +1837,12 @@ uv export [OPTIONS]
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
@@ -1907,7 +1963,7 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -1984,6 +2040,8 @@ uv export [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -2092,6 +2150,12 @@ uv tree [OPTIONS]
 </dd><dt><code>--depth</code>, <code>-d</code> <i>depth</i></dt><dd><p>Maximum display depth of the dependency tree</p>
 
 <p>[default: 255]</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
@@ -2199,7 +2263,7 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -2252,6 +2316,8 @@ uv tree [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -2455,6 +2521,12 @@ uv tool run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
@@ -2556,7 +2628,7 @@ uv tool run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -2605,6 +2677,8 @@ uv tool run [OPTIONS] [COMMAND]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -2735,6 +2809,12 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--editable</code>, <code>-e</code></dt><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
@@ -2834,7 +2914,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -2883,6 +2963,8 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -3011,6 +3093,12 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
@@ -3106,7 +3194,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -3155,6 +3243,8 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -3240,6 +3330,12 @@ uv tool list [OPTIONS]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -3270,6 +3366,8 @@ uv tool list [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -3329,6 +3427,12 @@ uv tool uninstall [OPTIONS] <NAME>...
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -3361,6 +3465,8 @@ uv tool uninstall [OPTIONS] <NAME>...
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -3430,6 +3536,12 @@ uv tool update-shell [OPTIONS]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -3462,6 +3574,8 @@ uv tool update-shell [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -3549,6 +3663,12 @@ uv tool dir [OPTIONS]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -3581,6 +3701,8 @@ uv tool dir [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -3615,7 +3737,7 @@ uv tool dir [OPTIONS]
 Manage Python versions and installations
 
 Generally, uv first searches for Python in a virtual environment, either active or in a
-`.venv` directory  in the current working directory or any parent directory. If a virtual
+`.venv` directory in the current working directory or any parent directory. If a virtual
 environment is not required, uv will then search for a Python interpreter. Python
 interpreters are found by searching for Python executables in the `PATH` environment
 variable.
@@ -3726,6 +3848,12 @@ uv python list [OPTIONS]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -3762,6 +3890,8 @@ uv python list [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -3845,6 +3975,12 @@ uv python install [OPTIONS] [TARGETS]...
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -3877,6 +4013,8 @@ uv python install [OPTIONS] [TARGETS]...
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -3956,6 +4094,12 @@ uv python find [OPTIONS] [REQUEST]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -3992,6 +4136,8 @@ uv python find [OPTIONS] [REQUEST]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -4076,6 +4222,12 @@ uv python pin [OPTIONS] [REQUEST]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -4112,6 +4264,8 @@ uv python pin [OPTIONS] [REQUEST]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -4280,6 +4434,12 @@ uv python dir [OPTIONS]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -4312,6 +4472,8 @@ uv python dir [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -4385,6 +4547,12 @@ uv python uninstall [OPTIONS] <TARGETS>...
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -4417,6 +4585,8 @@ uv python uninstall [OPTIONS] <TARGETS>...
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -4567,6 +4737,12 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>Used to reflect custom build scripts and commands that wrap <code>uv pip compile</code>.</p>
 
 <p>May also be set with the <code>UV_CUSTOM_COMPILE_COMMAND</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--emit-build-options</code></dt><dd><p>Include <code>--no-binary</code> and <code>--only-binary</code> entries in the generated output file</p>
 
 </dd><dt><code>--emit-find-links</code></dt><dd><p>Include <code>--find-links</code> entries in the generated output file</p>
@@ -4682,7 +4858,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
@@ -4755,6 +4931,8 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -4957,6 +5135,12 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>This is equivalent to pip&#8217;s <code>--constraint</code> option.</p>
 
 <p>May also be set with the <code>UV_CONSTRAINT</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--dry-run</code></dt><dd><p>Perform a dry run, i.e., don&#8217;t actually install anything but resolve the dependencies and print the resulting plan</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -5086,6 +5270,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -5285,6 +5471,12 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <p>This is equivalent to pip&#8217;s <code>--constraint</code> option.</p>
 
 <p>May also be set with the <code>UV_CONSTRAINT</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--dry-run</code></dt><dd><p>Perform a dry run, i.e., don&#8217;t actually install anything but resolve the dependencies and print the resulting plan</p>
 
 </dd><dt><code>--editable</code>, <code>-e</code> <i>editable</i></dt><dd><p>Install the editable package based on the provided local file path</p>
@@ -5390,7 +5582,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
@@ -5456,6 +5648,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -5652,6 +5846,12 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
@@ -5700,6 +5900,8 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -5781,6 +5983,12 @@ uv pip freeze [OPTIONS]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--exclude-editable</code></dt><dd><p>Exclude any editable packages from output</p>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -5815,6 +6023,8 @@ uv pip freeze [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -5894,6 +6104,12 @@ uv pip list [OPTIONS]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--editable</code>, <code>-e</code></dt><dd><p>Only include editable projects</p>
 
 </dd><dt><code>--exclude</code> <i>exclude</i></dt><dd><p>Exclude the specified package(s) from the output</p>
@@ -5944,6 +6160,8 @@ uv pip list [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -6029,6 +6247,12 @@ uv pip show [OPTIONS] [PACKAGE]...
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -6061,6 +6285,8 @@ uv pip show [OPTIONS] [PACKAGE]...
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -6143,6 +6369,12 @@ uv pip tree [OPTIONS]
 </dd><dt><code>--depth</code>, <code>-d</code> <i>depth</i></dt><dd><p>Maximum display depth of the dependency tree</p>
 
 <p>[default: 255]</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--invert</code></dt><dd><p>Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package</p>
@@ -6181,6 +6413,8 @@ uv pip tree [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -6264,6 +6498,12 @@ uv pip check [OPTIONS]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -6296,6 +6536,8 @@ uv pip check [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -6406,6 +6648,12 @@ uv venv [OPTIONS] [PATH]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
@@ -6516,6 +6764,8 @@ uv venv [OPTIONS] [PATH]
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 
+<p>See <code>--directory</code> to change the working directory entirely.</p>
+
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--prompt</code> <i>prompt</i></dt><dd><p>Provide an alternative prompt prefix for the virtual environment.</p>
@@ -6579,11 +6829,11 @@ Build Python packages into source distributions and wheels.
 
 `uv build` accepts a path to a directory or source distribution, which defaults to the current working directory.
 
-By default, if passed a directory, `uv build` will build a source distribution ("sdist") from the source directory, and a binary distribution ("wheel") from  the source distribution.
+By default, if passed a directory, `uv build` will build a source distribution ("sdist") from the source directory, and a binary distribution ("wheel") from the source distribution.
 
 `uv build --sdist` can be used to build only the source distribution, `uv build --wheel` can be used to build only the binary distribution, and `uv build --sdist --wheel` can be used to build both distributions from source.
 
-If passed a source distribution, `uv build --wheel` will build a wheel from  the source distribution.
+If passed a source distribution, `uv build --wheel` will build a wheel from the source distribution.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -6638,6 +6888,12 @@ uv build [OPTIONS] [SRC]
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
@@ -6736,7 +6992,7 @@ uv build [OPTIONS] [SRC]
 <p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
@@ -6795,6 +7051,8 @@ uv build [OPTIONS] [SRC]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -6873,6 +7131,173 @@ uv build [OPTIONS] [SRC]
 
 </dd></dl>
 
+## uv publish
+
+Upload distributions to an index
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+uv publish [OPTIONS] [FILES]...
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt><code>FILES</code></dt><dd><p>Paths to the files to upload. Accepts glob expressions.</p>
+
+<p>Defaults to the <code>dist</code> directory. Selects only wheels and source distributions, while ignoring other files.</p>
+
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
+</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+
+<p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
+
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
+</dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+
+<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
+</dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
+
+<p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
+
+<p>Defaults to <code>disabled</code>.</p>
+
+<p>May also be set with the <code>UV_KEYRING_PROVIDER</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
+</dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
+
+<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
+
+<p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
+
+<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
+</dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+
+<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
+</dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+
+<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
+
+<p>For example, spinners or progress bars.</p>
+
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
+
+</dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
+
+<p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--password</code>, <code>-p</code> <i>password</i></dt><dd><p>The password for the upload</p>
+
+<p>May also be set with the <code>UV_PUBLISH_PASSWORD</code> environment variable.</p>
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
+</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint.</p>
+
+<p>Note that this typically differs from the index URL.</p>
+
+<p>Defaults to PyPI&#8217;s publish URL (&lt;https://upload.pypi.org/legacy/&gt;).</p>
+
+<p>The default value is publish URL for PyPI (&lt;https://upload.pypi.org/legacy/&gt;).</p>
+
+<p>May also be set with the <code>UV_PUBLISH_URL</code> environment variable.</p>
+</dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
+
+<p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
+
+<p>May also be set with the <code>UV_PYTHON_PREFERENCE</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
+</dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+
+</dd><dt><code>--token</code>, <code>-t</code> <i>token</i></dt><dd><p>The token for the upload.</p>
+
+<p>Using a token is equivalent to passing <code>__token__</code> as <code>--username</code> and the token as <code>--password</code>. password.</p>
+
+<p>May also be set with the <code>UV_PUBLISH_TOKEN</code> environment variable.</p>
+</dd><dt><code>--trusted-publishing</code> <i>trusted-publishing</i></dt><dd><p>Configure using trusted publishing through GitHub Actions.</p>
+
+<p>By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it if it isn&#8217;t configured or the workflow doesn&#8217;t have enough permissions (e.g., a pull request from a fork).</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Try trusted publishing when we&#8217;re already in GitHub Actions, continue if that fails</li>
+
+<li><code>always</code></li>
+
+<li><code>never</code></li>
+</ul>
+</dd><dt><code>--username</code>, <code>-u</code> <i>username</i></dt><dd><p>The username for the upload</p>
+
+<p>May also be set with the <code>UV_PUBLISH_USERNAME</code> environment variable.</p>
+</dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+
+<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
+
+</dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
+
+</dd></dl>
+
 ## uv cache
 
 Manage uv's cache
@@ -6933,6 +7358,12 @@ uv cache clean [OPTIONS] [PACKAGE]...
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -6965,6 +7396,8 @@ uv cache clean [OPTIONS] [PACKAGE]...
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -7034,6 +7467,12 @@ uv cache prune [OPTIONS]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -7067,6 +7506,8 @@ uv cache prune [OPTIONS]
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 
+<p>See <code>--directory</code> to change the working directory entirely.</p>
+
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
@@ -7099,7 +7540,7 @@ uv cache prune [OPTIONS]
 
 Show the cache directory.
 
-By default, the cache is stored in  `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and `%LOCALAPPDATA%\uv\cache` on Windows.
+By default, the cache is stored in `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and `%LOCALAPPDATA%\uv\cache` on Windows.
 
 When `--no-cache` is used, the cache is stored in a temporary directory and discarded when the process exits.
 
@@ -7137,6 +7578,12 @@ uv cache dir [OPTIONS]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -7169,6 +7616,8 @@ uv cache dir [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -7232,6 +7681,12 @@ uv version [OPTIONS]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -7264,6 +7719,8 @@ uv version [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -7311,11 +7768,19 @@ uv generate-shell-completion [OPTIONS] <SHELL>
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<dl class="cli-reference"><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
+</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
@@ -7359,6 +7824,12 @@ uv help [OPTIONS] [COMMAND]...
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -7393,6 +7864,8 @@ uv help [OPTIONS] [COMMAND]...
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 

@@ -30,6 +30,7 @@ pub(crate) use project::remove::remove;
 pub(crate) use project::run::{run, RunCommand};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
+pub(crate) use publish::publish;
 pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
 pub(crate) use python::install::install as python_install;
@@ -60,19 +61,20 @@ pub(crate) use version::version;
 
 use crate::printer::Printer;
 
+mod build;
+pub(crate) mod build_backend;
 mod cache_clean;
 mod cache_dir;
 mod cache_prune;
 mod help;
 pub(crate) mod pip;
 mod project;
+mod publish;
 mod python;
 pub(crate) mod reporters;
-mod tool;
-
-mod build;
 #[cfg(feature = "self-update")]
 mod self_update;
+mod tool;
 mod venv;
 mod version;
 

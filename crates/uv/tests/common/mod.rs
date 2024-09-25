@@ -52,7 +52,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"tv_sec: \d+", "tv_sec: [TIME]"),
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
     // Rewrite Windows output to Unix output
-    (r"\\([\w\d])", "/$1"),
+    (r"\\([\w\d]|\.\.)", "/$1"),
     (r"uv.exe", "uv"),
     // uv version display
     (
@@ -576,6 +576,21 @@ impl TestContext {
         let mut command = Command::new(get_bin());
         command.arg("build");
         self.add_shared_args(&mut command, false);
+        command
+    }
+
+    /// Create a `uv publish` command with options shared across scenarios.
+    #[expect(clippy::unused_self)] // For consistency
+    pub fn publish(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("publish");
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+        }
+
         command
     }
 

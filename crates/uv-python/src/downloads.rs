@@ -264,6 +264,10 @@ impl PythonDownloadRequest {
             if !version.matches_major_minor_patch(key.major, key.minor, key.patch) {
                 return false;
             }
+            if version.is_free_threaded_requested() {
+                debug!("Installing managed free-threaded Python is not yet supported");
+                return false;
+            }
         }
         // If we don't allow pre-releases, don't match a key with a pre-release tag
         if !self.allows_prereleases() && !key.prerelease.is_empty() {
@@ -277,8 +281,18 @@ impl PythonDownloadRequest {
         self.satisfied_by_key(download.key())
     }
 
+    /// Whether this download request opts-in to pre-release Python versions.
     pub fn allows_prereleases(&self) -> bool {
-        self.prereleases.unwrap_or_else(|| self.version.is_some())
+        self.prereleases.unwrap_or_else(|| {
+            self.version
+                .as_ref()
+                .is_some_and(VersionRequest::allows_prereleases)
+        })
+    }
+
+    /// Whether this download request opts-in to alternative Python implementations.
+    pub fn allows_alternative_implementations(&self) -> bool {
+        self.implementation.is_some()
     }
 
     pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {

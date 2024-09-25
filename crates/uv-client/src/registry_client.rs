@@ -8,7 +8,6 @@ use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
 use reqwest::{Client, Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
-use serde::{Deserialize, Serialize};
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
@@ -19,7 +18,7 @@ use distribution_types::{
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_tags::Platform;
-use pypi_types::{Metadata23, SimpleJson};
+use pypi_types::{ResolutionMetadata, SimpleJson};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
@@ -405,7 +404,7 @@ impl RegistryClient {
         &self,
         built_dist: &BuiltDist,
         capabilities: &IndexCapabilities,
-    ) -> Result<Metadata23, Error> {
+    ) -> Result<ResolutionMetadata, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheels) => {
                 #[derive(Debug, Clone)]
@@ -455,7 +454,7 @@ impl RegistryClient {
                             .map_err(|err| {
                                 ErrorKind::Metadata(path.to_string_lossy().to_string(), err)
                             })?;
-                        Metadata23::parse_metadata(&contents).map_err(|err| {
+                        ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
                             ErrorKind::MetadataParseError(
                                 wheel.filename.clone(),
                                 built_dist.to_string(),
@@ -489,7 +488,7 @@ impl RegistryClient {
                     .map_err(|err| {
                         ErrorKind::Metadata(wheel.install_path.to_string_lossy().to_string(), err)
                     })?;
-                Metadata23::parse_metadata(&contents).map_err(|err| {
+                ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
                     ErrorKind::MetadataParseError(
                         wheel.filename.clone(),
                         built_dist.to_string(),
@@ -516,7 +515,7 @@ impl RegistryClient {
         file: &File,
         url: &Url,
         capabilities: &IndexCapabilities,
-    ) -> Result<Metadata23, Error> {
+    ) -> Result<ResolutionMetadata, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
         if file.dist_info_metadata {
@@ -541,7 +540,7 @@ impl RegistryClient {
                 let bytes = response.bytes().await.map_err(ErrorKind::from)?;
 
                 info_span!("parse_metadata21")
-                    .in_scope(|| Metadata23::parse_metadata(bytes.as_ref()))
+                    .in_scope(|| ResolutionMetadata::parse_metadata(bytes.as_ref()))
                     .map_err(|err| {
                         Error::from(ErrorKind::MetadataParseError(
                             filename,
@@ -582,7 +581,7 @@ impl RegistryClient {
         index: Option<&'data IndexUrl>,
         cache_shard: WheelCache<'data>,
         capabilities: &'data IndexCapabilities,
-    ) -> Result<Metadata23, Error> {
+    ) -> Result<ResolutionMetadata, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.wheel_dir(filename.name.as_ref()),
@@ -629,14 +628,15 @@ impl RegistryClient {
                     .map_err(ErrorKind::AsyncHttpRangeReader)?;
                     trace!("Getting metadata for {filename} by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
-                    let metadata = Metadata23::parse_metadata(text.as_bytes()).map_err(|err| {
-                        Error::from(ErrorKind::MetadataParseError(
-                            filename.clone(),
-                            url.to_string(),
-                            Box::new(err),
-                        ))
-                    })?;
-                    Ok::<Metadata23, CachedClientError<Error>>(metadata)
+                    let metadata =
+                        ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
+                            Error::from(ErrorKind::MetadataParseError(
+                                filename.clone(),
+                                url.to_string(),
+                                Box::new(err),
+                            ))
+                        })?;
+                    Ok::<ResolutionMetadata, CachedClientError<Error>>(metadata)
                 }
                 .boxed_local()
                 .instrument(info_span!("read_metadata_range_request", wheel = %filename))
@@ -722,9 +722,7 @@ impl RegistryClient {
     }
 }
 
-#[derive(
-    Default, Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct VersionFiles {
     pub wheels: Vec<VersionWheel>,
@@ -755,27 +753,25 @@ impl VersionFiles {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct VersionWheel {
     pub name: WheelFilename,
     pub file: File,
 }
 
-#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct VersionSourceDist {
     pub name: SourceDistFilename,
     pub file: File,
 }
 
-#[derive(
-    Default, Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
+#[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct SimpleMetadata(Vec<SimpleMetadatum>);
 
-#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct SimpleMetadatum {
     pub version: Version,

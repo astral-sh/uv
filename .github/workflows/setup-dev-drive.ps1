@@ -12,6 +12,9 @@ Write-Output $Volume
 $Drive = "$($Volume.DriveLetter):"
 $Tmp = "$($Drive)/uv-tmp"
 
+# Create the directory ahead of time in an attempt to avoid race-conditions
+New-Item $Tmp -ItemType Directory
+
 Write-Output `
 	"DEV_DRIVE=$($Drive)" `
 	"TMP=$($Tmp)" `

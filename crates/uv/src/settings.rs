@@ -8,10 +8,11 @@ use distribution_types::{DependencyMetadata, IndexLocations};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{ExtraName, RequirementOrigin};
 use pypi_types::{Requirement, SupportedEnvironments};
+use url::Url;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::{
     options::{flag, resolver_installer_options, resolver_options},
-    BuildArgs, ExportArgs, ToolUpgradeArgs,
+    BuildArgs, ExportArgs, PublishArgs, ToolUpgradeArgs,
 };
 use uv_cli::{
     AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
@@ -24,19 +25,24 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, DevMode, EditableMode, ExportFormat,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
-    NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost, Upgrade,
+    NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade,
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_settings::{
-    Combine, FilesystemOptions, Options, PipOptions, ResolverInstallerOptions, ResolverOptions,
+    Combine, FilesystemOptions, Options, PipOptions, PublishOptions, ResolverInstallerOptions,
+    ResolverOptions,
 };
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 
 use crate::commands::ToolRunCommand;
 use crate::commands::{pip::operations::Modifications, InitProjectKind};
+
+/// The default publish URL.
+const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
 
 /// The resolved global settings to use for any invocation of the CLI.
 #[allow(clippy::struct_excessive_bools)]
@@ -2416,6 +2422,77 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for InstallerSettingsRef<'a> {
             reinstall: settings.reinstall,
             build_options: settings.build_options,
             sources: settings.sources,
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv publish` CLI.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct PublishSettings {
+    // CLI only, see [`PublishArgs`] for docs.
+    pub(crate) files: Vec<String>,
+    pub(crate) username: Option<String>,
+    pub(crate) password: Option<String>,
+
+    // Both CLI and configuration.
+    pub(crate) publish_url: Url,
+    pub(crate) trusted_publishing: TrustedPublishing,
+    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) allow_insecure_host: Vec<TrustedHost>,
+}
+
+impl PublishSettings {
+    /// Resolve the [`crate::settings::PublishSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PublishArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let Options {
+            publish, top_level, ..
+        } = filesystem
+            .map(FilesystemOptions::into_options)
+            .unwrap_or_default();
+
+        let PublishOptions {
+            publish_url,
+            trusted_publishing,
+        } = publish;
+        let ResolverInstallerOptions {
+            keyring_provider,
+            allow_insecure_host,
+            ..
+        } = top_level;
+
+        // Tokens are encoded in the same way as username/password
+        let (username, password) = if let Some(token) = args.token {
+            (Some("__token__".to_string()), Some(token))
+        } else {
+            (args.username, args.password)
+        };
+
+        Self {
+            files: args.files,
+            username,
+            password,
+            publish_url: args
+                .publish_url
+                .combine(publish_url)
+                .unwrap_or_else(|| Url::parse(PYPI_PUBLISH_URL).unwrap()),
+            trusted_publishing: trusted_publishing
+                .combine(args.trusted_publishing)
+                .unwrap_or_default(),
+            keyring_provider: args
+                .keyring_provider
+                .combine(keyring_provider)
+                .unwrap_or_default(),
+            allow_insecure_host: args
+                .allow_insecure_host
+                .map(|allow_insecure_host| {
+                    allow_insecure_host
+                        .into_iter()
+                        .filter_map(Maybe::into_option)
+                        .collect()
+                })
+                .combine(allow_insecure_host)
+                .unwrap_or_default(),
         }
     }
 }

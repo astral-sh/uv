@@ -15,8 +15,8 @@ use tracing::{debug, instrument};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::{
-    compat::CompatArgs, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
-    ProjectCommand,
+    compat::CompatArgs, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
+    PipCommand, PipNamespace, ProjectCommand,
 };
 use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLevelArgs};
 #[cfg(feature = "self-update")]
@@ -33,6 +33,7 @@ use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
     PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
+    PublishSettings,
 };
 
 #[cfg(target_os = "windows")]
@@ -1085,6 +1086,72 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             commands::python_dir()?;
             Ok(ExitStatus::Success)
         }
+        Commands::Publish(args) => {
+            show_settings!(args);
+
+            if globals.preview.is_disabled() {
+                warn_user_once!("`uv publish` is experimental and may change without warning");
+            }
+
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let PublishSettings {
+                files,
+                username,
+                password,
+                publish_url,
+                trusted_publishing,
+                keyring_provider,
+                allow_insecure_host,
+            } = PublishSettings::resolve(args, filesystem);
+
+            commands::publish(
+                files,
+                publish_url,
+                trusted_publishing,
+                keyring_provider,
+                allow_insecure_host,
+                username,
+                password,
+                globals.connectivity,
+                globals.native_tls,
+                printer,
+            )
+            .await
+        }
+        Commands::BuildBackend { command } => match command {
+            BuildBackendCommand::BuildSdist { sdist_directory } => {
+                commands::build_backend::build_sdist(&sdist_directory)
+            }
+            BuildBackendCommand::BuildWheel {
+                wheel_directory,
+                metadata_directory,
+            } => commands::build_backend::build_wheel(
+                &wheel_directory,
+                metadata_directory.as_deref(),
+            ),
+            BuildBackendCommand::BuildEditable {
+                wheel_directory,
+                metadata_directory,
+            } => commands::build_backend::build_editable(
+                &wheel_directory,
+                metadata_directory.as_deref(),
+            ),
+            BuildBackendCommand::GetRequiresForBuildSdist => {
+                commands::build_backend::get_requires_for_build_sdist()
+            }
+            BuildBackendCommand::GetRequiresForBuildWheel => {
+                commands::build_backend::get_requires_for_build_wheel()
+            }
+            BuildBackendCommand::PrepareMetadataForBuildWheel { wheel_directory } => {
+                commands::build_backend::prepare_metadata_for_build_wheel(&wheel_directory)
+            }
+            BuildBackendCommand::GetRequiresForBuildEditable => {
+                commands::build_backend::get_requires_for_build_editable()
+            }
+            BuildBackendCommand::PrepareMetadataForBuildEditable { wheel_directory } => {
+                commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory)
+            }
+        },
         Commands::Python(PythonNamespace {
             command: PythonCommand::Patch,
         }) => {

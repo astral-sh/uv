@@ -1,4 +1,6 @@
-pub use base_client::{BaseClient, BaseClientBuilder};
+pub use base_client::{
+    AuthIntegration, BaseClient, BaseClientBuilder, UvRetryableStrategy, DEFAULT_RETRIES,
+};
 pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
 pub use error::{Error, ErrorKind, WrappedReqwestError};
 pub use flat_index::{FlatIndexClient, FlatIndexEntries, FlatIndexError};

@@ -63,6 +63,14 @@ uv accepts the following command-line arguments as environment variables:
   `--no-python-downloads` option. Whether uv should allow Python downloads.
 - `UV_COMPILE_BYTECODE`: Equivalent to the `--compile-bytecode` command-line argument. If set, uv
   will compile Python source files to bytecode after installation.
+- `UV_PUBLISH_URL`: Equivalent to the `--publish-url` command-line argument. The URL of the upload
+  endpoint of the index to use with `uv publish`.
+- `UV_PUBLISH_TOKEN`: Equivalent to the `--token` command-line argument in `uv publish`. If set, uv
+  will use this token (with the username `__token__`) for publishing.
+- `UV_PUBLISH_USERNAME`: Equivalent to the `--username` command-line argument in `uv publish`. If
+  set, uv will use this username for publishing.
+- `UV_PUBLISH_PASSWORD`: Equivalent to the `--password` command-line argument in `uv publish`. If
+  set, uv will use this password for publishing.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
@@ -117,6 +125,8 @@ In addition, uv respects the following environment variables:
 - `VIRTUAL_ENV`: Used to detect an activated virtual environment.
 - `CONDA_PREFIX`: Used to detect an activated Conda environment.
 - `PROMPT`: Used to detect the use of the Windows Command Prompt (as opposed to PowerShell).
+- `VIRTUAL_ENV_DISABLE_PROMPT`: If set to `1` before a virtual environment is activated, then the
+  virtual environment name will not be prepended to the terminal prompt.
 - `NU_VERSION`: Used to detect the use of NuShell.
 - `FISH_VERSION`: Used to detect the use of the Fish shell.
 - `BASH_VERSION`: Used to detect the use of the Bash shell.

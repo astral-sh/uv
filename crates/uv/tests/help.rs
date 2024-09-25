@@ -29,6 +29,7 @@ fn help() {
       pip                        Manage Python packages with a pip-compatible interface
       venv                       Create a virtual environment
       build                      Build Python packages into source distributions and wheels
+      publish                    Upload distributions to an index
       cache                      Manage uv's cache
       version                    Display uv's version
       generate-shell-completion  Generate shell completion
@@ -55,6 +56,7 @@ fn help() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
@@ -95,6 +97,7 @@ fn help_flag() {
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
       build    Build Python packages into source distributions and wheels
+      publish  Upload distributions to an index
       cache    Manage uv's cache
       version  Display uv's version
       help     Display documentation for a command
@@ -120,6 +123,7 @@ fn help_flag() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
@@ -159,6 +163,7 @@ fn help_short_flag() {
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
       build    Build Python packages into source distributions and wheels
+      publish  Upload distributions to an index
       cache    Manage uv's cache
       version  Display uv's version
       help     Display documentation for a command
@@ -184,6 +189,7 @@ fn help_short_flag() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
@@ -209,7 +215,7 @@ fn help_subcommand() {
     Manage Python versions and installations
 
     Generally, uv first searches for Python in a virtual environment, either active or in a
-    `.venv` directory  in the current working directory or any parent directory. If a virtual
+    `.venv` directory in the current working directory or any parent directory. If a virtual
     environment is not required, uv will then search for a Python interpreter. Python
     interpreters are found by searching for Python executables in the `PATH` environment
     variable.
@@ -336,6 +342,13 @@ fn help_subcommand() {
               
               For example, spinners or progress bars.
 
+          --directory <DIRECTORY>
+              Change to the given directory prior to running the command.
+              
+              Relative paths are resolved with the given directory as the base.
+              
+              See `--project` to only change the project root directory.
+
           --project <PROJECT>
               Run the command within the given project directory.
               
@@ -345,6 +358,8 @@ fn help_subcommand() {
               
               Other command-line arguments (such as relative paths) will be resolved relative to the
               current working directory.
+              
+              See `--directory` to change the working directory entirely.
               
               This setting has no effect when used in the `uv pip` interface.
 
@@ -497,6 +512,13 @@ fn help_subsubcommand() {
               
               For example, spinners or progress bars.
 
+          --directory <DIRECTORY>
+              Change to the given directory prior to running the command.
+              
+              Relative paths are resolved with the given directory as the base.
+              
+              See `--project` to only change the project root directory.
+
           --project <PROJECT>
               Run the command within the given project directory.
               
@@ -506,6 +528,8 @@ fn help_subsubcommand() {
               
               Other command-line arguments (such as relative paths) will be resolved relative to the
               current working directory.
+              
+              See `--directory` to change the working directory entirely.
               
               This setting has no effect when used in the `uv pip` interface.
 
@@ -577,6 +601,7 @@ fn help_flag_subcommand() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
@@ -630,6 +655,7 @@ fn help_flag_subsubcommand() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
@@ -666,6 +692,7 @@ fn help_unknown_subcommand() {
         pip
         venv
         build
+        publish
         cache
         version
         generate-shell-completion
@@ -691,6 +718,7 @@ fn help_unknown_subcommand() {
         pip
         venv
         build
+        publish
         cache
         version
         generate-shell-completion
@@ -743,6 +771,7 @@ fn help_with_global_option() {
       pip                        Manage Python packages with a pip-compatible interface
       venv                       Create a virtual environment
       build                      Build Python packages into source distributions and wheels
+      publish                    Upload distributions to an index
       cache                      Manage uv's cache
       version                    Display uv's version
       generate-shell-completion  Generate shell completion
@@ -769,6 +798,7 @@ fn help_with_global_option() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
@@ -797,7 +827,7 @@ fn help_with_help() {
     Usage: uv help [OPTIONS] [COMMAND]...
 
     Options:
-      --no-pager  Disable pager when printing help
+      --no-pager Disable pager when printing help
 
     ----- stderr -----
     "###);
@@ -845,6 +875,7 @@ fn help_with_no_pager() {
       pip                        Manage Python packages with a pip-compatible interface
       venv                       Create a virtual environment
       build                      Build Python packages into source distributions and wheels
+      publish                    Upload distributions to an index
       cache                      Manage uv's cache
       version                    Display uv's version
       generate-shell-completion  Generate shell completion
@@ -871,6 +902,7 @@ fn help_with_no_pager() {
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
           --no-progress                Hide all progress outputs
+          --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]

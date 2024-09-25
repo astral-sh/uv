@@ -10,10 +10,11 @@ use clap::{Args, Parser, Subcommand};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
+use url::Url;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    TargetTriple, TrustedHost,
+    TargetTriple, TrustedHost, TrustedPublishing,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -233,7 +234,11 @@ pub struct GlobalArgs {
     pub no_progress: bool,
 
     /// Change to the given directory prior to running the command.
-    #[arg(global = true, long, hide = true)]
+    ///
+    /// Relative paths are resolved with the given directory as the base.
+    ///
+    /// See `--project` to only change the project root directory.
+    #[arg(global = true, long)]
     pub directory: Option<PathBuf>,
 
     /// Run the command within the given project directory.
@@ -244,6 +249,8 @@ pub struct GlobalArgs {
     ///
     /// Other command-line arguments (such as relative paths) will be resolved relative
     /// to the current working directory.
+    ///
+    /// See `--directory` to change the working directory entirely.
     ///
     /// This setting has no effect when used in the `uv pip` interface.
     #[arg(global = true, long)]
@@ -289,7 +296,7 @@ pub enum Commands {
     /// Manage Python versions and installations
     ///
     /// Generally, uv first searches for Python in a virtual environment, either active or in a
-    /// `.venv` directory  in the current working directory or any parent directory. If a virtual
+    /// `.venv` directory in the current working directory or any parent directory. If a virtual
     /// environment is not required, uv will then search for a Python interpreter. Python
     /// interpreters are found by searching for Python executables in the `PATH` environment
     /// variable.
@@ -366,7 +373,7 @@ pub enum Commands {
     ///
     /// By default, if passed a directory, `uv build` will build a source
     /// distribution ("sdist") from the source directory, and a binary
-    /// distribution ("wheel") from  the source distribution.
+    /// distribution ("wheel") from the source distribution.
     ///
     /// `uv build --sdist` can be used to build only the source distribution,
     /// `uv build --wheel` can be used to build only the binary distribution,
@@ -374,12 +381,23 @@ pub enum Commands {
     /// from source.
     ///
     /// If passed a source distribution, `uv build --wheel` will build a wheel
-    /// from  the source distribution.
+    /// from the source distribution.
     #[command(
         after_help = "Use `uv help build` for more details.",
         after_long_help = ""
     )]
     Build(BuildArgs),
+    /// Upload distributions to an index.
+    Publish(PublishArgs),
+    /// The implementation of the build backend.
+    ///
+    /// These commands are not directly exposed to the user, instead users invoke their build
+    /// frontend (PEP 517) which calls the Python shims which calls back into uv with this method.
+    #[command(hide = true)]
+    BuildBackend {
+        #[command(subcommand)]
+        command: BuildBackendCommand,
+    },
     /// Manage uv's cache.
     #[command(
         after_help = "Use `uv help cache` for more details.",
@@ -410,7 +428,7 @@ pub enum Commands {
 ",
         after_help = format!("\
 {heading}Options:{heading:#}
-  {option}--no-pager{option:#}  Disable pager when printing help
+  {option}--no-pager{option:#} Disable pager when printing help
 ",
             heading = Style::new().bold().underline(),
             option = Style::new().bold(),
@@ -470,7 +488,7 @@ pub enum CacheCommand {
     /// Show the cache directory.
     ///
     ///
-    /// By default, the cache is stored in  `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
+    /// By default, the cache is stored in `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
     /// `%LOCALAPPDATA%\uv\cache` on Windows.
     ///
     /// When `--no-cache` is used, the cache is stored in a temporary directory and discarded when
@@ -4022,7 +4040,7 @@ pub struct ResolverArgs {
 
     /// Disable isolation when building source distributions for a specific package.
     ///
-    /// Assumes that the packages' build dependencies specified by PEP 518  are already installed.
+    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
     #[arg(long, help_heading = "Build options")]
     pub no_build_isolation_package: Vec<PackageName>,
 
@@ -4214,7 +4232,7 @@ pub struct ResolverInstallerArgs {
 
     /// Disable isolation when building source distributions for a specific package.
     ///
-    /// Assumes that the packages' build dependencies specified by PEP 518  are already installed.
+    /// Assumes that the packages' build dependencies specified by PEP 518 are already installed.
     #[arg(long, help_heading = "Build options")]
     pub no_build_isolation_package: Vec<PackageName>,
 
@@ -4306,4 +4324,111 @@ pub struct DisplayTreeArgs {
     /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct PublishArgs {
+    /// Paths to the files to upload. Accepts glob expressions.
+    ///
+    /// Defaults to the `dist` directory. Selects only wheels and source distributions, while
+    /// ignoring other files.
+    #[arg(default_value = "dist/*")]
+    pub files: Vec<String>,
+
+    /// The URL of the upload endpoint.
+    ///
+    /// Note that this typically differs from the index URL.
+    ///
+    /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
+    ///
+    /// The default value is publish URL for PyPI (<https://upload.pypi.org/legacy/>).
+    #[arg(long, env = "UV_PUBLISH_URL")]
+    pub publish_url: Option<Url>,
+
+    /// The username for the upload.
+    #[arg(short, long, env = "UV_PUBLISH_USERNAME")]
+    pub username: Option<String>,
+
+    /// The password for the upload.
+    #[arg(short, long, env = "UV_PUBLISH_PASSWORD")]
+    pub password: Option<String>,
+
+    /// The token for the upload.
+    ///
+    /// Using a token is equivalent to passing `__token__` as `--username` and the token as `--password`.
+    /// password.
+    #[arg(
+        short,
+        long,
+        env = "UV_PUBLISH_TOKEN",
+        conflicts_with = "username",
+        conflicts_with = "password"
+    )]
+    pub token: Option<String>,
+
+    /// Configure using trusted publishing through GitHub Actions.
+    ///
+    /// By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
+    /// if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
+    /// from a fork).
+    #[arg(long)]
+    pub trusted_publishing: Option<TrustedPublishing>,
+
+    /// Attempt to use `keyring` for authentication for remote requirements files.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to
+    /// use the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    pub keyring_provider: Option<KeyringProviderType>,
+
+    /// Allow insecure connections to a host.
+    ///
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[arg(
+        long,
+        alias = "trusted-host",
+        env = "UV_INSECURE_HOST",
+        value_delimiter = ' ',
+        value_parser = parse_insecure_host,
+    )]
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
+}
+
+/// See [PEP 517](https://peps.python.org/pep-0517/) and
+/// [PEP 660](https://peps.python.org/pep-0660/) for specifications of the parameters.
+#[derive(Subcommand)]
+pub enum BuildBackendCommand {
+    /// PEP 517 hook `build_sdist`.
+    BuildSdist { sdist_directory: PathBuf },
+    /// PEP 517 hook `build_wheel`.
+    BuildWheel {
+        wheel_directory: PathBuf,
+        #[arg(long)]
+        metadata_directory: Option<PathBuf>,
+    },
+    /// PEP 660 hook `build_editable`.
+    BuildEditable {
+        wheel_directory: PathBuf,
+        #[arg(long)]
+        metadata_directory: Option<PathBuf>,
+    },
+    /// PEP 517 hook `get_requires_for_build_sdist`.
+    GetRequiresForBuildSdist,
+    /// PEP 517 hook `get_requires_for_build_wheel`.
+    GetRequiresForBuildWheel,
+    /// PEP 517 hook `prepare_metadata_for_build_wheel`.
+    PrepareMetadataForBuildWheel { wheel_directory: PathBuf },
+    /// PEP 660 hook `get_requires_for_build_editable`.
+    GetRequiresForBuildEditable,
+    /// PEP 660 hook `prepare_metadata_for_build_editable`.
+    PrepareMetadataForBuildEditable { wheel_directory: PathBuf },
 }
