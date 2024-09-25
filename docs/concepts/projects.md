@@ -381,7 +381,8 @@ To upgrade all packages:
 $ uv lock --upgrade
 ```
 
-To upgrade a single package to the latest version:
+To upgrade a single package to the latest version, while retaining the locked versions of all other
+packages:
 
 ```console
 $ uv lock --upgrade-package <package>
