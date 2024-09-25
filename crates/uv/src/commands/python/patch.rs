@@ -30,8 +30,8 @@ struct MaxPatchAndIndex {
 /// Python with the same major/minor version (in uv's .python-versions, there's both 3.8.12/3.8.18).
 ///
 /// We only want to bump the one with the largest patch, so we keep an in memory map of
-/// (major, minor) -> (max_patch, index). The index is kept so the original ordering of
-/// the versions is not lost after we bump the max_patch.
+/// (major, minor) -> (max patch, index). The index is kept so the original ordering of
+/// the versions is not lost after we bump the max patch.
 pub(crate) async fn patch(cache: &Cache) -> Result<()> {
     let python_version_file = PythonVersionFile::discover(CWD.as_path(), false, false).await?;
     let python_versions_file = PythonVersionFile::discover(CWD.as_path(), false, true).await?;

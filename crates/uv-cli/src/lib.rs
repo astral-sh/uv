@@ -3440,7 +3440,8 @@ pub enum PythonCommand {
     /// See `uv help python` to view supported request formats.
     Pin(PythonPinArgs),
 
-    /// Update .python-version(s) files to latest patch version
+    /// Update the patches of distributions specified in .python-version(s)
+    /// files to the latest available versions.
     Patch,
 
     /// Show the uv Python installation directory.
