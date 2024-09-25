@@ -3022,7 +3022,7 @@ fn tool_install_additional_entrypoints() {
         .arg("--i-want-ponies")
         .arg("ansible-core")
         .arg("--i-want-ponies")
-        .arg("ansible-lint")
+        .arg("black")
         .arg("ansible==9.3.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
@@ -3036,42 +3036,56 @@ fn tool_install_additional_entrypoints() {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + ansible==9.3.0
-     + ansible-compat==4.1.11
      + ansible-core==2.16.4
-     + ansible-lint==24.2.1
-     + attrs==23.2.0
      + black==24.3.0
-     + bracex==2.4
      + cffi==1.16.0
      + click==8.1.7
      + cryptography==42.0.5
-     + filelock==3.13.1
      + jinja2==3.1.3
-     + jsonschema==4.21.1
-     + jsonschema-specifications==2023.12.[X]
-     + markdown-it-py==3.0.0
      + markupsafe==2.1.5
-     + mdurl==0.1.2
      + mypy-extensions==1.0.0
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
      + pycparser==2.21
-     + pygments==2.17.2
      + pyyaml==6.0.1
-     + referencing==0.34.0
      + resolvelib==1.0.1
-     + rich==13.7.1
-     + rpds-py==0.18.0
-     + ruamel-yaml==0.18.6
-     + ruamel-yaml-clib==0.2.8
-     + subprocess-tee==0.4.1
-     + wcmatch==8.5.1
-     + yamllint==1.35.1
     Installed 11 executables from `ansible-core`: ansible, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault
-    Installed 1 executable from `ansible-lint`: ansible-lint
+    Installed 2 executables from `black`: black, blackd
     Installed 1 executable: ansible-community
     "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("ansible").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [
+            { name = "ansible", specifier = "==9.3.0" },
+            { name = "ansible-core" },
+            { name = "black" },
+        ]
+        entrypoints = [
+            { name = "ansible", install-path = "[TEMP_DIR]/bin/ansible", from = "ansible-core" },
+            { name = "ansible-community", install-path = "[TEMP_DIR]/bin/ansible-community", from = "ansible" },
+            { name = "ansible-config", install-path = "[TEMP_DIR]/bin/ansible-config", from = "ansible-core" },
+            { name = "ansible-connection", install-path = "[TEMP_DIR]/bin/ansible-connection", from = "ansible-core" },
+            { name = "ansible-console", install-path = "[TEMP_DIR]/bin/ansible-console", from = "ansible-core" },
+            { name = "ansible-doc", install-path = "[TEMP_DIR]/bin/ansible-doc", from = "ansible-core" },
+            { name = "ansible-galaxy", install-path = "[TEMP_DIR]/bin/ansible-galaxy", from = "ansible-core" },
+            { name = "ansible-inventory", install-path = "[TEMP_DIR]/bin/ansible-inventory", from = "ansible-core" },
+            { name = "ansible-playbook", install-path = "[TEMP_DIR]/bin/ansible-playbook", from = "ansible-core" },
+            { name = "ansible-pull", install-path = "[TEMP_DIR]/bin/ansible-pull", from = "ansible-core" },
+            { name = "ansible-test", install-path = "[TEMP_DIR]/bin/ansible-test", from = "ansible-core" },
+            { name = "ansible-vault", install-path = "[TEMP_DIR]/bin/ansible-vault", from = "ansible-core" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
 
     uv_snapshot!(context.filters(), context.tool_uninstall()
         .arg("ansible")
@@ -3083,6 +3097,6 @@ fn tool_install_additional_entrypoints() {
     ----- stdout -----
 
     ----- stderr -----
-    Uninstalled 13 executables: ansible, ansible-community, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-lint, ansible-playbook, ansible-pull, ansible-test, ansible-vault
+    Uninstalled 14 executables: ansible, ansible-community, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault, black, blackd
     "###);
 }
