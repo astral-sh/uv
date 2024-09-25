@@ -141,3 +141,25 @@ uv determines the cache directory according to, in order:
 It is important for performance for the cache directory to be located on the same file system as the
 Python environment uv is operating on. Otherwise, uv will not be able to link files from the cache
 into the environment and will instead need to fallback to slow copy operations.
+
+## Cache versioning
+
+The uv cache is composed of a number of buckets (e.g., a bucket for wheels, a bucket for source
+distributions, a bucket for Git repositories, and so on). Each bucket is versioned, such that if a
+release contains a breaking change to the cache format, uv will not attempt to read from or write to
+an incompatible cache bucket.
+
+For example, uv 0.4.13 included a breaking change to the core metadata bucket. As such, the bucket
+version was increased from v12 to v13.
+
+Within a cache version, changes are guaranteed to be forwards-compatible, but _not_
+backwards-compatible.
+
+For example, uv 0.4.8 can read cache entries written by uv 0.4.7, but uv 0.4.7 cannot read cache
+entries written by uv 0.4.8. As a result, it's safe to share a cache directory across multiple uv
+versions, as long as those versions are strictly increasing over time, as is common in production
+and development environments.
+
+If you intend to use multiple uv versions on an ongoing basis, we recommend using separate caches
+for each version, as (e.g.) a cache populated by uv 0.4.8 may not be usable by uv 0.4.7, despite the
+cache _versions_ remaining unchanged between the releases.
