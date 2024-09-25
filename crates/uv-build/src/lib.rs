@@ -983,7 +983,7 @@ impl PythonRunner {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Printer {
+enum Printer {
     /// Send the build backend output to `stderr`.
     Stderr,
     /// Send the build backend output to `tracing`.

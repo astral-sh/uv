@@ -1,7 +1,7 @@
-use std::future::Future;
-
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
+use std::future::Future;
+use std::sync::Arc;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_normalize::PackageName;
@@ -42,6 +42,8 @@ pub enum MetadataResponse {
     InvalidStructure(Box<uv_metadata::Error>),
     /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
+    /// There was an error building the source distribution into a wheel.
+    BuildFailed(Box<Dist>, Arc<anyhow::Error>),
 }
 
 pub trait ResolverProvider {
@@ -201,6 +203,10 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                 uv_distribution::Error::WheelMetadata(_, err) => {
                     Ok(MetadataResponse::InvalidStructure(err))
                 }
+                uv_distribution::Error::Build(err) => Ok(MetadataResponse::BuildFailed(
+                    Box::new(dist.clone()),
+                    Arc::new(err),
+                )),
                 err => Err(err),
             },
         }

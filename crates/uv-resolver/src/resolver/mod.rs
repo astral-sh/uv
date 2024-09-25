@@ -906,6 +906,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
                 return Ok(None);
             }
+            MetadataResponse::BuildFailed(_, _) => {
+                todo!();
+            }
         };
 
         let version = &metadata.version;
@@ -1284,6 +1287,59 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         return Ok(Dependencies::Unavailable(
                             UnavailableVersion::InvalidStructure,
                         ));
+                    }
+                    MetadataResponse::BuildFailed(dist, err) => {
+                        let versions_response = self.index.packages().wait_blocking(name);
+                        let Some(VersionsResponse::Found(ref version_maps)) =
+                            versions_response.as_deref()
+                        else {
+                            return Err(ResolveError::BuildMetadata(dist.clone(), err.clone()));
+                        };
+                        let compatible_wheel_version = version_maps
+                            .iter()
+                            .flat_map(|version_map| {
+                                version_map.iter(&Range::higher_than(version.clone()))
+                            })
+                            .find_map(|(version, handle)| {
+                                let prioritized_dist = handle.prioritized_dist()?;
+                                let (best_wheel, compat) = prioritized_dist.best_wheel()?;
+                                if !compat.is_compatible() {
+                                    return None;
+                                }
+                                let Some(requires_python) =
+                                    best_wheel.file.requires_python.as_ref()
+                                else {
+                                    // no Python requirements -> compatible
+                                    return Some(version.clone());
+                                };
+
+                                // Wheels must meet the _target_ Python version.
+                                let compatible = if python_requirement.installed()
+                                    == python_requirement.target()
+                                {
+                                    python_requirement
+                                        .installed()
+                                        .is_contained_by(requires_python)
+                                } else {
+                                    python_requirement.target().is_contained_by(requires_python)
+                                };
+
+                                if compatible {
+                                    Some(version.clone())
+                                } else {
+                                    None
+                                }
+                            });
+                        return if let Some(compatible_wheel_version) = compatible_wheel_version {
+                            Err(ResolveError::BuildMetadataWithContext {
+                                dist: dist.clone(),
+                                name: name.clone(),
+                                wheel_version: compatible_wheel_version,
+                                source: err.clone(),
+                            })
+                        } else {
+                            Err(ResolveError::BuildMetadata(dist.clone(), err.clone()))
+                        };
                     }
                 };
 

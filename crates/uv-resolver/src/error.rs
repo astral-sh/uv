@@ -6,7 +6,9 @@ use indexmap::IndexSet;
 use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Range, Reporter};
 use rustc_hash::FxHashMap;
 
-use distribution_types::{BuiltDist, IndexLocations, IndexUrl, InstalledDist, SourceDist};
+use distribution_types::{
+    BuiltDist, Dist, DistributionMetadata, IndexLocations, IndexUrl, InstalledDist, SourceDist,
+};
 use pep440_rs::Version;
 use pep508_rs::MarkerTree;
 use tracing::trace;
@@ -85,6 +87,19 @@ pub enum ResolveError {
 
     #[error("Failed to build `{0}`")]
     Build(Box<SourceDist>, #[source] uv_distribution::Error),
+
+    // Due to the indirection through `MetadataResponse`, these are distinct variant.
+    #[error("Failed to build `{0}`")]
+    BuildMetadata(Box<Dist>, #[source] Arc<anyhow::Error>),
+
+    #[error("Failed to build `{dist}`. Note: The recent version {wheel_version} contains a compatible wheel. Using a newer version of {name} instead of {} may fix this problem.", dist.version_or_url())]
+    BuildMetadataWithContext {
+        dist: Box<Dist>,
+        name: PackageName,
+        wheel_version: Version,
+        #[source]
+        source: Arc<anyhow::Error>,
+    },
 
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),
