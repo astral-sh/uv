@@ -893,11 +893,15 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let extra_deps = args
                 .with
                 .into_iter()
-                .chain(args.extra_entrypoints_packages.iter().cloned());
+                .map(RequirementsSource::from_package)
+                .chain(
+                    args.extra_entrypoints_packages
+                        .iter()
+                        .map(RequirementsSource::from_package_name),
+                );
 
             let requirements = extra_deps
                 .into_iter()
-                .map(RequirementsSource::from_package)
                 .chain(
                     args.with_requirements
                         .into_iter()
@@ -910,7 +914,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.editable,
                 args.from,
                 &requirements,
-                &args.extra_entrypoints_packages,
+                args.extra_entrypoints_packages,
                 args.python,
                 args.force,
                 args.options,

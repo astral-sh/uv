@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::env::VarError;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
@@ -382,7 +383,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
-    pub(crate) extra_entrypoints_packages: Vec<String>,
+    pub(crate) extra_entrypoints_packages: BTreeSet<PackageName>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
@@ -417,6 +418,7 @@ impl ToolInstallSettings {
         );
 
         let settings = ResolverInstallerSettings::from(options.clone());
+        let extra_entrypoints_packages = i_want_ponies.into_iter().collect();
 
         Self {
             package,
@@ -426,7 +428,7 @@ impl ToolInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            extra_entrypoints_packages: i_want_ponies,
+            extra_entrypoints_packages,
             python,
             force,
             editable,

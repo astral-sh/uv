@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::str::FromStr;
 
@@ -44,7 +45,7 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
-    extra_entrypoints_packages: &[String],
+    extra_entrypoints_packages: BTreeSet<PackageName>,
     python: Option<String>,
     force: bool,
     options: ResolverInstallerOptions,
@@ -423,8 +424,7 @@ pub(crate) async fn install(
     // Install additional entrypoints from dependencies,
     // if any was explicitly requested.
     let mut deps_entrypoints = vec![];
-    for entry in extra_entrypoints_packages {
-        let pkg = PackageName::from_str(entry)?;
+    for pkg in extra_entrypoints_packages {
         debug!(
             "Installing entrypoints for {} as part of tool {}",
             pkg, from.name
