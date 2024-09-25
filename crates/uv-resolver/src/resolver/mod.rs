@@ -1813,7 +1813,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Avoid prefetching source distributions with unbounded lower-bound ranges. This
                 // often leads to failed attempts to build legacy versions of packages that are
                 // incompatible with modern build tools.
-                if dist.wheel().is_some() {
+                if !dist.wheel().is_some() {
                     if !self.selector.use_highest_version(&package_name) {
                         if let Some((lower, _)) = range.iter().next() {
                             if lower == &Bound::Unbounded {
