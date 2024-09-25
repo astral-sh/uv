@@ -158,7 +158,7 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct InitSettings {
-    pub(crate) path: Option<String>,
+    pub(crate) path: Option<PathBuf>,
     pub(crate) name: Option<PackageName>,
     pub(crate) package: bool,
     pub(crate) kind: InitKind,

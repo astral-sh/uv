@@ -552,9 +552,11 @@ uv init [OPTIONS] [PATH]
 
 </dd><dt><code>--script</code></dt><dd><p>Create a script.</p>
 
-<p>A script is a standalone file which adheres to the PEP 723 specification.</p>
+<p>A script is a standalone file with embedded metadata enumerating its dependencies, along with any Python version requirements, as defined in the PEP 723 specification.</p>
 
-<p>By default, the Python version the script depends on is the system version; can be manually specified with the --python argument (takes absolute precedence) or a .python-version file (ignore with --<code>no_pin_python</code>).</p>
+<p>PEP 723 scripts can be executed directly with <code>uv run</code>.</p>
+
+<p>By default, adds a requirement on the system Python version; use <code>--python</code> to specify an alternative Python version requirement.</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 

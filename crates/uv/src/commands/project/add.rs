@@ -42,13 +42,11 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
-use crate::commands::project::ProjectError;
+use crate::commands::project::{script_python_requirement, ProjectError};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
-
-use super::get_python_requirement_for_script;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -131,9 +129,9 @@ pub(crate) async fn add(
         let script = if let Some(script) = Pep723Script::read(&script).await? {
             script
         } else {
-            let requires_python = get_python_requirement_for_script(
+            let requires_python = script_python_requirement(
                 python.as_deref(),
-                &project_dir.to_path_buf(),
+                project_dir,
                 false,
                 python_preference,
                 python_downloads,

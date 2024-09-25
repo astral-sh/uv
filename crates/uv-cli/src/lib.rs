@@ -2310,7 +2310,7 @@ pub struct InitArgs {
     /// target path, the project will be added as a workspace member of the
     /// parent, unless `--no-workspace` is provided.
     #[arg(required_if_eq("script", "true"))]
-    pub path: Option<String>,
+    pub path: Option<PathBuf>,
 
     /// The name of the project.
     ///
@@ -2363,11 +2363,13 @@ pub struct InitArgs {
 
     /// Create a script.
     ///
-    /// A script is a standalone file which adheres to the PEP 723 specification.
+    /// A script is a standalone file with embedded metadata enumerating its dependencies, along
+    /// with any Python version requirements, as defined in the PEP 723 specification.
     ///
-    /// By default, the Python version the script depends on is the system version; can be
-    /// manually specified with the --python argument (takes absolute precedence) or a
-    /// .python-version file (ignore with --`no_pin_python`).
+    /// PEP 723 scripts can be executed directly with `uv run`.
+    ///
+    /// By default, adds a requirement on the system Python version; use `--python` to specify an
+    /// alternative Python version requirement.
     #[arg(long, alias="script", conflicts_with_all=["app", "lib", "package"])]
     pub r#script: bool,
 

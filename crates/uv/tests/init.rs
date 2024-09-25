@@ -426,16 +426,18 @@ fn init_script() -> Result<()> {
     }, {
         assert_snapshot!(
             script, @r###"
-            # /// script
-            # requires-python = ">=3.12"
-            # dependencies = []
-            # ///
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
 
-            def main() -> None:
-                print("Hello from hello.py!")
 
-            if __name__ == "__main__":
-                main()
+        def main() -> None:
+            print("Hello from hello.py!")
+
+
+        if __name__ == "__main__":
+            main()
         "###
         );
     });
@@ -477,16 +479,18 @@ fn init_script_python_version() -> Result<()> {
     }, {
         assert_snapshot!(
             script, @r###"
-            # /// script
-            # requires-python = ">=3.11"
-            # dependencies = []
-            # ///
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        # ///
 
-            def main() -> None:
-                print("Hello from version.py!")
 
-            if __name__ == "__main__":
-                main()
+        def main() -> None:
+            print("Hello from version.py!")
+
+
+        if __name__ == "__main__":
+            main()
         "###
         );
     });
@@ -519,16 +523,18 @@ fn init_script_create_directory() -> Result<()> {
     }, {
         assert_snapshot!(
             script, @r###"
-            # /// script
-            # requires-python = ">=3.12"
-            # dependencies = []
-            # ///
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
 
-            def main() -> None:
-                print("Hello from dir.py!")
 
-            if __name__ == "__main__":
-                main()
+        def main() -> None:
+            print("Hello from dir.py!")
+
+
+        if __name__ == "__main__":
+            main()
         "###
         );
     });
@@ -559,7 +565,7 @@ fn init_script_file_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: name_conflict.py is already a PEP 723 script
+    error: `name_conflict.py` is already a PEP 723 script; use `uv run` to execute it
     "###);
 
     let contents = "print(\"Hello, world!\")";

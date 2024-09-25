@@ -95,32 +95,32 @@ impl Pep723Script {
         })
     }
 
+    /// Create a PEP 723 script at the given path.
     pub async fn create(
-        script_path: &PathBuf,
+        file: impl AsRef<Path>,
         requires_python: &VersionSpecifiers,
         existing_contents: Option<Vec<u8>>,
     ) -> Result<(), Pep723Error> {
-        let script_name = script_path
+        let file = file.as_ref();
+
+        let script_name = file
             .file_name()
             .and_then(|name| name.to_str())
-            .ok_or_else(|| {
-                Pep723Error::InvalidFilename(script_path.to_string_lossy().into_owned())
-            })?;
+            .ok_or_else(|| Pep723Error::InvalidFilename(file.to_string_lossy().to_string()))?;
 
         let default_metadata = indoc::formatdoc! {r#"
             requires-python = "{requires_python}"
             dependencies = []
             "#,
-            requires_python = requires_python,
         };
         let metadata = serialize_metadata(&default_metadata);
 
         let script = if let Some(existing_contents) = existing_contents {
             indoc::formatdoc! {r#"
             {metadata}
-            {existing_contents}
-            "#, metadata = metadata,
-            existing_contents = String::from_utf8(existing_contents).map_err(|e| Pep723Error::Utf8(e.utf8_error()))?}
+            {content}
+            "#,
+            content = String::from_utf8(existing_contents).map_err(|err| Pep723Error::Utf8(err.utf8_error()))?}
         } else {
             indoc::formatdoc! {r#"
             {metadata}
@@ -137,7 +137,7 @@ impl Pep723Script {
             }
         };
 
-        Ok(fs_err::tokio::write(script_path, script).await?)
+        Ok(fs_err::tokio::write(file, script).await?)
     }
 
     /// Replace the existing metadata in the file with new metadata and write the updated content.
@@ -211,7 +211,7 @@ pub enum Pep723Error {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-struct ScriptTag {
+pub struct ScriptTag {
     /// The content of the script before the metadata block.
     prelude: String,
     /// The metadata block.
@@ -249,7 +249,7 @@ impl ScriptTag {
     /// - Postlude: `import requests\n\nprint("Hello, World!")\n`
     ///
     /// See: <https://peps.python.org/pep-0723/>
-    fn parse(contents: &[u8]) -> Result<Option<Self>, Pep723Error> {
+    pub fn parse(contents: &[u8]) -> Result<Option<Self>, Pep723Error> {
         // Identify the opening pragma.
         let Some(index) = FINDER.find(contents) else {
             return Ok(None);

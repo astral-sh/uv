@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -1265,9 +1265,10 @@ pub(crate) async fn update_environment(
     })
 }
 
-pub(crate) async fn get_python_requirement_for_script(
+/// Determine the [`RequiresPython`] requirement for a PEP 723 script.
+pub(crate) async fn script_python_requirement(
     python: Option<&str>,
-    directory: &PathBuf,
+    directory: &Path,
     no_pin_python: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,

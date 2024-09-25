@@ -14,23 +14,21 @@ use uv_python::{
     PythonVersionFile, VersionRequest,
 };
 use uv_resolver::RequiresPython;
-use uv_scripts::Pep723Script;
+use uv_scripts::{Pep723Script, ScriptTag};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
 
-use crate::commands::project::find_requires_python;
+use crate::commands::project::{find_requires_python, script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-
-use super::get_python_requirement_for_script;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
     project_dir: &Path,
-    explicit_path: Option<String>,
+    explicit_path: Option<PathBuf>,
     name: Option<PackageName>,
     package: bool,
     init_kind: InitKind,
@@ -47,32 +45,31 @@ pub(crate) async fn init(
 ) -> Result<ExitStatus> {
     match init_kind {
         InitKind::Script => {
-            if let Some(script_path) = explicit_path {
-                init_kind
-                    .init_script(
-                        &PathBuf::from(&script_path),
-                        python,
-                        connectivity,
-                        python_preference,
-                        python_downloads,
-                        cache,
-                        printer,
-                        no_workspace,
-                        no_readme,
-                        no_pin_python,
-                        package,
-                        native_tls,
-                    )
-                    .await?;
+            let Some(path) = explicit_path.as_deref() else {
+                anyhow::bail!("Script initialization requires a file path")
+            };
 
-                writeln!(
-                    printer.stderr(),
-                    "Initialized script at `{}`",
-                    script_path.cyan()
-                )?;
-                return Ok(ExitStatus::Success);
-            }
-            anyhow::bail!("Filename not provided for script");
+            init_script(
+                path,
+                python,
+                connectivity,
+                python_preference,
+                python_downloads,
+                cache,
+                printer,
+                no_workspace,
+                no_readme,
+                no_pin_python,
+                package,
+                native_tls,
+            )
+            .await?;
+
+            writeln!(
+                printer.stderr(),
+                "Initialized script at `{}`",
+                path.user_display().cyan()
+            )?;
         }
         InitKind::Project(project_kind) => {
             // Default to the current directory if a path was not provided.
@@ -147,10 +144,84 @@ pub(crate) async fn init(
                     )?;
                 }
             }
-
-            Ok(ExitStatus::Success)
         }
     }
+
+    Ok(ExitStatus::Success)
+}
+
+#[allow(clippy::fn_params_excessive_bools)]
+async fn init_script(
+    script_path: &Path,
+    python: Option<String>,
+    connectivity: Connectivity,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    cache: &Cache,
+    printer: Printer,
+    no_workspace: bool,
+    no_readme: bool,
+    no_pin_python: bool,
+    package: bool,
+    native_tls: bool,
+) -> Result<()> {
+    if no_workspace {
+        warn_user_once!("`--no_workspace` is a no-op for Python scripts, which are standalone");
+    }
+    if no_readme {
+        warn_user_once!("`--no_readme` is a no-op for Python scripts, which are standalone");
+    }
+    if package {
+        warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
+    }
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
+
+    let reporter = PythonDownloadReporter::single(printer);
+
+    // If the file already exists, read its content.
+    let content = match fs_err::tokio::read(script_path).await {
+        Ok(metadata) => {
+            // If the file is already a script, raise an error.
+            if ScriptTag::parse(&metadata)?.is_some() {
+                anyhow::bail!(
+                    "`{}` is already a PEP 723 script; use `{}` to execute it",
+                    script_path.simplified_display().cyan(),
+                    "uv run".green()
+                );
+            }
+
+            Some(metadata)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => {
+            return Err(anyhow::Error::from(err).context(format!(
+                "Failed to read script at `{}`",
+                script_path.simplified_display().cyan()
+            )));
+        }
+    };
+
+    let requires_python = script_python_requirement(
+        python.as_deref(),
+        &CWD,
+        no_pin_python,
+        python_preference,
+        python_downloads,
+        &client_builder,
+        cache,
+        &reporter,
+    )
+    .await?;
+
+    if let Some(parent) = script_path.parent() {
+        fs_err::tokio::create_dir_all(parent).await?;
+    }
+
+    Pep723Script::create(script_path, requires_python.specifiers(), content).await?;
+
+    Ok(())
 }
 
 /// Initialize a project (and, implicitly, a workspace root) at the given path.
@@ -432,9 +503,12 @@ async fn init_project(
     Ok(())
 }
 
+/// The kind of entity to initialize (either a PEP 723 script or a Python project).
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum InitKind {
+    /// Initialize a Python project.
     Project(InitProjectKind),
+    /// Initialize a PEP 723 script.
     Script,
 }
 
@@ -444,87 +518,20 @@ impl Default for InitKind {
     }
 }
 
+/// The kind of Python project to initialize (either an application or a library).
 #[derive(Debug, Copy, Clone, Default)]
 pub(crate) enum InitProjectKind {
+    /// Initialize a Python application.
     #[default]
     Application,
+    /// Initialize a Python library.
     Library,
 }
 
 impl InitKind {
-    /// Checks if this is a project, packaged by default.
+    /// Returns `true` if the project should be packaged by default.
     pub(crate) fn packaged_by_default(self) -> bool {
         matches!(self, InitKind::Project(InitProjectKind::Library))
-    }
-
-    #[allow(clippy::fn_params_excessive_bools)]
-    async fn init_script(
-        self,
-        script_path: &PathBuf,
-        python: Option<String>,
-        connectivity: Connectivity,
-        python_preference: PythonPreference,
-        python_downloads: PythonDownloads,
-        cache: &Cache,
-        printer: Printer,
-        no_workspace: bool,
-        no_readme: bool,
-        no_pin_python: bool,
-        package: bool,
-        native_tls: bool,
-    ) -> Result<()> {
-        if no_workspace {
-            warn_user_once!("`--no_workspace` is a no-op for Python scripts, which are standalone");
-        }
-        if no_readme {
-            warn_user_once!("`--no_readme` is a no-op for Python scripts, which are standalone");
-        }
-        if package {
-            warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
-        }
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls);
-
-        let reporter = PythonDownloadReporter::single(printer);
-
-        let metadata = fs_err::tokio::metadata(script_path).await;
-        let mut existing_content = None;
-
-        if let Ok(metadata) = metadata {
-            if metadata.is_dir() {
-                anyhow::bail!("{} is an existing directory", script_path.to_str().unwrap());
-            } else if metadata.is_file() {
-                if Pep723Script::read(script_path).await?.is_some() {
-                    anyhow::bail!(
-                        "{} is already a PEP 723 script",
-                        script_path.to_str().unwrap()
-                    );
-                }
-
-                existing_content = Some(fs_err::tokio::read(&script_path).await?);
-            }
-        }
-
-        let requires_python = get_python_requirement_for_script(
-            python.as_deref(),
-            &CWD,
-            no_pin_python,
-            python_preference,
-            python_downloads,
-            &client_builder,
-            cache,
-            &reporter,
-        )
-        .await?;
-
-        if let Some(parent_path) = script_path.parent() {
-            fs_err::tokio::create_dir_all(parent_path).await?;
-        }
-
-        Pep723Script::create(script_path, requires_python.specifiers(), existing_content).await?;
-
-        Ok(())
     }
 }
 
@@ -709,13 +716,13 @@ fn pyproject_project(
     no_readme: bool,
 ) -> String {
     indoc::formatdoc! {r#"
-            [project]
-            name = "{name}"
-            version = "0.1.0"
-            description = "Add your description here"{readme}
-            requires-python = "{requires_python}"
-            dependencies = []
-            "#,
+        [project]
+        name = "{name}"
+        version = "0.1.0"
+        description = "Add your description here"{readme}
+        requires-python = "{requires_python}"
+        dependencies = []
+    "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
         requires_python = requires_python.specifiers(),
     }
