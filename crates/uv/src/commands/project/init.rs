@@ -489,7 +489,7 @@ impl InitKind {
         let reporter = PythonDownloadReporter::single(printer);
 
         let metadata = fs_err::tokio::metadata(script_path).await;
-        let mut content_future = None;
+        let mut existing_content = None;
 
         if let Ok(metadata) = metadata {
             if metadata.is_dir() {
@@ -502,7 +502,7 @@ impl InitKind {
                     );
                 }
 
-                content_future = Some(fs_err::tokio::read(&script_path));
+                existing_content = Some(fs_err::tokio::read(&script_path).await?);
             }
         }
 
@@ -522,13 +522,7 @@ impl InitKind {
             fs_err::tokio::create_dir_all(parent_path).await?;
         }
 
-        let existing_contents = if let Some(contents) = content_future {
-            Some(contents.await?)
-        } else {
-            None
-        };
-
-        Pep723Script::create(script_path, requires_python.specifiers(), existing_contents).await?;
+        Pep723Script::create(script_path, requires_python.specifiers(), existing_content).await?;
 
         Ok(())
     }
