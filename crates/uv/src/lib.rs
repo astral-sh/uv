@@ -44,21 +44,40 @@ pub(crate) mod printer;
 pub(crate) mod settings;
 pub(crate) mod version;
 
-async fn try_download_remote_script(
+/// Resolves the script target for a run command.
+/// If it's a local file, does nothing. If it's a URL, downloads the content
+/// to a temporary file and updates the command. Prioritizes local files over URLs.
+/// Returns Some(NamedTempFile) if a remote script was downloaded, None otherwise.
+async fn resolve_script_target(
     command: &mut ExternalCommand,
 ) -> Result<Option<tempfile::NamedTempFile>> {
-    if let Some(target) = command.get_mut(0) {
-        let maybe_url = target.to_string_lossy();
-        if maybe_url.starts_with("http://") || maybe_url.starts_with("https://") {
-            let script_url = url::Url::parse(&maybe_url)?;
-            let temp_file = tempfile::Builder::new().suffix(".py").tempfile()?;
-            let response = reqwest::get(script_url).await?;
-            let contents = response.bytes().await?;
-            write_atomic(&temp_file, &contents).await?;
-            *target = temp_file.path().into();
-            return Ok(Some(temp_file));
-        }
+    let Some(target) = command.get_mut(0) else {
+        return Ok(None);
+    };
+
+    if Path::new(target).is_file() {
+        return Ok(None);
     }
+
+    let maybe_url = target.to_string_lossy();
+    if maybe_url.starts_with("http://") || maybe_url.starts_with("https://") {
+        let script_url = url::Url::parse(&maybe_url)?;
+        let file_name = script_url
+            .path_segments()
+            .and_then(|segments| segments.last())
+            .unwrap_or("script.py");
+
+        let temp_file = tempfile::Builder::new()
+            .prefix(file_name)
+            .suffix(".py")
+            .tempfile()?;
+        let response = reqwest::get(script_url).await?;
+        let contents = response.bytes().await?;
+        write_atomic(&temp_file, &contents).await?;
+        *target = temp_file.path().into();
+        return Ok(Some(temp_file));
+    }
+
     Ok(None)
 }
 
@@ -150,10 +169,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     };
 
     // Parse the external command, if necessary.
-    let mut _maybe_temp_file: Option<tempfile::NamedTempFile> = None;
+    let mut _maybe_tempfile: Option<tempfile::NamedTempFile> = None;
     let run_command = if let Commands::Project(command) = &mut *cli.command {
         if let ProjectCommand::Run(uv_cli::RunArgs { command, .. }) = &mut **command {
-            _maybe_temp_file = try_download_remote_script(command).await?;
+            _maybe_tempfile = resolve_script_target(command).await?;
             Some(RunCommand::try_from(&*command)?)
         } else {
             None

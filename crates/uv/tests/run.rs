@@ -5,7 +5,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::indoc;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use uv_python::PYTHON_VERSION_FILENAME;
 
@@ -2168,4 +2168,32 @@ fn run_remote_pep723_script() {
      + rich==13.7.1
      + urllib3==2.2.1
     "###);
+}
+
+#[test]
+fn run_url_like_with_local_file_priority() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let url = "https://example.com/path/to/main.py";
+    let local_path: PathBuf = ["https:", "", "example.com", "path", "to", "main.py"]
+        .iter()
+        .collect();
+
+    // replace with URL-like filepath
+    let test_script = context.temp_dir.child(local_path);
+    test_script.write_str(indoc! { r#"
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg(url), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
 }
