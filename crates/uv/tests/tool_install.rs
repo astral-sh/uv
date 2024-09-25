@@ -190,7 +190,7 @@ fn tool_install_suggest_other_packages_with_executable() {
     .env("UV_TOOL_DIR", tool_dir.as_os_str())
     .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
     No executables are provided by `fastapi`
     However, an executable with the name `fastapi` is available via dependency `fastapi-cli`.
@@ -234,6 +234,7 @@ fn tool_install_suggest_other_packages_with_executable() {
      + uvicorn==0.29.0
      + watchfiles==0.21.0
      + websockets==12.0
+    error: Failed to install entrypoints for `fastapi`
     "###);
 }
 
@@ -557,7 +558,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
     No executables are provided by `black`
 
@@ -573,6 +574,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
      - packaging==24.0
      - pathspec==0.12.1
      - platformdirs==4.2.0
+    error: Failed to install entrypoints for `black`
     "###);
 
     // Re-request `black`. It should reinstall, without requiring `--force`.
@@ -1375,7 +1377,7 @@ fn tool_install_no_entrypoints() {
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
     No executables are provided by `iniconfig`
 
@@ -1384,6 +1386,7 @@ fn tool_install_no_entrypoints() {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    error: Failed to install entrypoints for `iniconfig`
     "###);
 }
 

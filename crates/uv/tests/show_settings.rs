@@ -2536,6 +2536,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         from: None,
         with: [],
         with_requirements: [],
+        extra_entrypoints_packages: {},
         python: None,
         refresh: None(
             Timestamp(
