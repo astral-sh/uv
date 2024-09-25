@@ -988,6 +988,8 @@ pub enum Printer {
     Stderr,
     /// Send the build backend output to `tracing`.
     Debug,
+    /// Hide the build backend output.
+    Quiet,
 }
 
 impl From<BuildOutput> for Printer {
@@ -995,6 +997,7 @@ impl From<BuildOutput> for Printer {
         match output {
             BuildOutput::Stderr => Self::Stderr,
             BuildOutput::Debug => Self::Debug,
+            BuildOutput::Quiet => Self::Quiet,
         }
     }
 }
@@ -1008,6 +1011,7 @@ impl Write for Printer {
             Self::Debug => {
                 debug!("{s}");
             }
+            Self::Quiet => {}
         }
         Ok(())
     }

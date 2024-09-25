@@ -31,6 +31,8 @@ pub enum BuildOutput {
     Stderr,
     /// Send the build backend output to `tracing`.
     Debug,
+    /// Do not display the build backend output.
+    Quiet,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
