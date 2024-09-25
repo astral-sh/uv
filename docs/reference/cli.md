@@ -3248,6 +3248,11 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>Upgrade a tool, and specify it to use the given Python interpreter to build its environment. Use with <code>--all</code> to apply to all tools.</p>
+
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
+
+<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>

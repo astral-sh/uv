@@ -5,16 +5,24 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::Connectivity;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Concurrency;
 use uv_normalize::PackageName;
+use uv_python::{
+    EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
+    PythonRequest,
+};
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 
-use crate::commands::pip::loggers::{SummaryResolveLogger, UpgradeInstallLogger};
-use crate::commands::pip::operations::Changelog;
-use crate::commands::project::{update_environment, EnvironmentUpdate};
+use crate::commands::pip::loggers::{
+    DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
+};
+use crate::commands::project::{
+    resolve_environment, sync_environment, update_environment, EnvironmentUpdate,
+};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -23,9 +31,12 @@ use crate::settings::ResolverInstallerSettings;
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
     name: Vec<PackageName>,
+    python: Option<String>,
     connectivity: Connectivity,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
@@ -34,6 +45,7 @@ pub(crate) async fn upgrade(
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
 
+    // Collect the tools to upgrade.
     let names: BTreeSet<PackageName> = {
         if name.is_empty() {
             installed_tools
@@ -52,16 +64,45 @@ pub(crate) async fn upgrade(
         return Ok(ExitStatus::Success);
     }
 
+    let reporter = PythonDownloadReporter::single(printer);
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
+
+    let python_request = python.as_deref().map(PythonRequest::parse);
+
+    let interpreter = if python_request.is_some() {
+        Some(
+            PythonInstallation::find_or_download(
+                python_request.as_ref(),
+                EnvironmentPreference::OnlySystem,
+                python_preference,
+                python_downloads,
+                &client_builder,
+                cache,
+                Some(&reporter),
+            )
+            .await?
+            .into_interpreter(),
+        )
+    } else {
+        None
+    };
+
     // Determine whether we applied any upgrades.
-    let mut did_upgrade = false;
+    let mut did_upgrade_tool = vec![];
+
+    // Determine whether we applied any upgrades.
+    let mut did_upgrade_environment = vec![];
 
     // Determine whether any tool upgrade failed.
     let mut failed_upgrade = false;
 
     for name in &names {
         debug!("Upgrading tool: `{name}`");
-        let changelog = upgrade_tool(
+        let result = upgrade_tool(
             name,
+            interpreter.as_ref(),
             printer,
             &installed_tools,
             &args,
@@ -73,9 +114,15 @@ pub(crate) async fn upgrade(
         )
         .await;
 
-        match changelog {
-            Ok(changelog) => {
-                did_upgrade |= !changelog.is_empty();
+        match result {
+            Ok(UpgradeOutcome::UpgradeEnvironment) => {
+                did_upgrade_environment.push(name);
+            }
+            Ok(UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::UpgradeTool) => {
+                did_upgrade_tool.push(name);
+            }
+            Ok(UpgradeOutcome::NoOp) => {
+                debug!("Upgrading `{name}` was a no-op");
             }
             Err(err) => {
                 // If we have a single tool, return the error directly.
@@ -97,15 +144,43 @@ pub(crate) async fn upgrade(
         return Ok(ExitStatus::Failure);
     }
 
-    if !did_upgrade {
+    if did_upgrade_tool.is_empty() && did_upgrade_environment.is_empty() {
         writeln!(printer.stderr(), "Nothing to upgrade")?;
+    }
+
+    if let Some(python_request) = python_request {
+        let tools = did_upgrade_environment
+            .iter()
+            .map(|name| format!("`{}`", name.cyan()))
+            .collect::<Vec<_>>();
+        let s = if tools.len() > 1 { "s" } else { "" };
+        writeln!(
+            printer.stderr(),
+            "Upgraded tool environment{s} for {} to {}",
+            conjunction(tools),
+            python_request.cyan(),
+        )?;
     }
 
     Ok(ExitStatus::Success)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UpgradeOutcome {
+    /// The tool itself was upgraded.
+    UpgradeTool,
+    /// The tool's dependencies were upgraded, but the tool itself was unchanged.
+    UpgradeDependencies,
+    /// The tool's environment was upgraded.
+    UpgradeEnvironment,
+    /// The tool was already up-to-date.
+    NoOp,
+}
+
+/// Upgrade a specific tool.
 async fn upgrade_tool(
     name: &PackageName,
+    interpreter: Option<&Interpreter>,
     printer: Printer,
     installed_tools: &InstalledTools,
     args: &ResolverInstallerOptions,
@@ -114,7 +189,7 @@ async fn upgrade_tool(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
-) -> Result<Changelog> {
+) -> Result<UpgradeOutcome> {
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
         Ok(Some(receipt)) => receipt,
@@ -136,7 +211,7 @@ async fn upgrade_tool(
         }
     };
 
-    let existing_environment = match installed_tools.get_environment(name, cache) {
+    let environment = match installed_tools.get_environment(name, cache) {
         Ok(Some(environment)) => environment,
         Ok(None) => {
             let install_command = format!("uv tool install {name}");
@@ -170,32 +245,85 @@ async fn upgrade_tool(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    // TODO(zanieb): Build the environment in the cache directory then copy into the tool
-    // directory.
-    let EnvironmentUpdate {
-        environment,
-        changelog,
-    } = update_environment(
-        existing_environment,
-        spec,
-        &settings,
-        &state,
-        Box::new(SummaryResolveLogger),
-        Box::new(UpgradeInstallLogger::new(name.clone())),
-        connectivity,
-        concurrency,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?;
+    // Check if we need to create a new environment — if so, resolve it first, then
+    // install the requested tool
+    let (environment, outcome) = if let Some(interpreter) =
+        interpreter.filter(|interpreter| !environment.uses(interpreter))
+    {
+        // If we're using a new interpreter, re-create the environment for each tool.
+        let resolution = resolve_environment(
+            RequirementsSpecification::from_requirements(requirements.to_vec()).into(),
+            interpreter,
+            settings.as_ref().into(),
+            &state,
+            Box::new(SummaryResolveLogger),
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?;
 
-    // If we modified the target tool, reinstall the entrypoints.
-    if changelog.includes(name) {
+        let environment = installed_tools.create_environment(name, interpreter.clone())?;
+
+        let environment = sync_environment(
+            environment,
+            &resolution.into(),
+            settings.as_ref().into(),
+            &state,
+            Box::new(DefaultInstallLogger),
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?;
+
+        (environment, UpgradeOutcome::UpgradeEnvironment)
+    } else {
+        // Otherwise, upgrade the existing environment.
+        // TODO(zanieb): Build the environment in the cache directory then copy into the tool
+        // directory.
+        let EnvironmentUpdate {
+            environment,
+            changelog,
+        } = update_environment(
+            environment,
+            spec,
+            &settings,
+            &state,
+            Box::new(SummaryResolveLogger),
+            Box::new(UpgradeInstallLogger::new(name.clone())),
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?;
+
+        let outcome = if changelog.includes(name) {
+            UpgradeOutcome::UpgradeTool
+        } else if changelog.is_empty() {
+            UpgradeOutcome::NoOp
+        } else {
+            UpgradeOutcome::UpgradeDependencies
+        };
+
+        (environment, outcome)
+    };
+
+    if matches!(
+        outcome,
+        UpgradeOutcome::UpgradeEnvironment | UpgradeOutcome::UpgradeTool
+    ) {
         // At this point, we updated the existing environment, so we should remove any of its
         // existing executables.
         remove_entrypoints(&existing_tool_receipt);
 
+        // If we modified the target tool, reinstall the entrypoints.
         install_executables(
             &environment,
             name,
@@ -208,5 +336,32 @@ async fn upgrade_tool(
         )?;
     }
 
-    Ok(changelog)
+    Ok(outcome)
+}
+
+/// Given a list of names, return a conjunction of the names (e.g., "Alice, Bob and Charlie").
+fn conjunction(names: Vec<String>) -> String {
+    let mut names = names.into_iter();
+    let first = names.next();
+    let last = names.next_back();
+    match (first, last) {
+        (Some(first), Some(last)) => {
+            let mut result = first;
+            let mut comma = false;
+            for name in names {
+                result.push_str(", ");
+                result.push_str(&name);
+                comma = true;
+            }
+            if comma {
+                result.push_str(", and ");
+            } else {
+                result.push_str(" and ");
+            }
+            result.push_str(&last);
+            result
+        }
+        (Some(first), None) => first,
+        _ => String::new(),
+    }
 }
