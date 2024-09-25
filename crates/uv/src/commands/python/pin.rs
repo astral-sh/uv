@@ -18,7 +18,7 @@ use uv_workspace::{DiscoveryOptions, VirtualProject};
 use crate::commands::{project::find_requires_python, ExitStatus};
 use crate::printer::Printer;
 
-use super::patch::patch;
+use super::patch_upgrade::patch;
 
 /// Pin to a specific Python version.
 pub(crate) async fn pin(
