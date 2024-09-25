@@ -26,8 +26,7 @@ use crate::implementation::LenientImplementationName;
 use crate::platform::{Arch, Libc, Os};
 use crate::pointer_size::PointerSize;
 use crate::{
-    Prefix, PythonEnvironment, PythonInstallationKey, PythonVersion, Target, VersionRequest,
-    VirtualEnvironment,
+    Prefix, PythonInstallationKey, PythonVersion, Target, VersionRequest, VirtualEnvironment,
 };
 
 /// A Python executable and its associated platform markers.
@@ -495,28 +494,6 @@ impl Interpreter {
             version.version() == self.python_version()
         } else {
             (version.major(), version.minor()) == self.python_tuple()
-        }
-    }
-
-    /// Whether or not this interpreter is used by the given environment
-    pub fn is_interpreter_used_by(&self, environment: &PythonEnvironment) -> bool {
-        // TODO(zanieb): Consider using `sysconfig.get_path("stdlib")` instead, which
-        // should be generally robust.
-        if cfg!(windows) {
-            // On Windows, we can't canonicalize an interpreter based on its executable path
-            // because the executables are separate shim files (not links). Instead, we
-            // compare the `sys.base_prefix`.
-            let old_base_prefix = environment.interpreter().sys_base_prefix();
-            let selected_base_prefix = self.sys_base_prefix();
-            old_base_prefix == selected_base_prefix
-        } else {
-            // On Unix, we can see if the canonicalized executable is the same file.
-            environment.interpreter().sys_executable() == self.sys_executable()
-                || same_file::is_same_file(
-                    environment.interpreter().sys_executable(),
-                    self.sys_executable(),
-                )
-                .unwrap_or(false)
         }
     }
 

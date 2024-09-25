@@ -72,7 +72,6 @@ owo-colors = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
-same-file = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

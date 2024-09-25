@@ -277,7 +277,7 @@ pub(crate) async fn install(
         installed_tools
             .get_environment(&from.name, &cache)?
             .filter(|environment| {
-                if interpreter.is_interpreter_used_by(environment) {
+                if environment.uses(&interpreter) {
                     trace!(
                         "Existing interpreter matches the requested interpreter for `{}`: {}",
                         from.name,

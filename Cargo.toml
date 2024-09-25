@@ -175,7 +175,7 @@ xz2 = { version = "0.1.7" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 
 [workspace.metadata.cargo-shear]
-ignored = ["flate2", "xz2", "same-file"]
+ignored = ["flate2", "xz2"]
 
 [patch.crates-io]
 # For pyproject-toml

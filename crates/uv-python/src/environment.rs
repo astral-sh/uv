@@ -300,4 +300,26 @@ impl PythonEnvironment {
     pub fn into_interpreter(self) -> Interpreter {
         Arc::unwrap_or_clone(self.0).interpreter
     }
+
+    /// Returns `true` if the [`PythonEnvironment`] uses the same underlying [`Interpreter`].
+    pub fn uses(&self, interpreter: &Interpreter) -> bool {
+        // TODO(zanieb): Consider using `sysconfig.get_path("stdlib")` instead, which
+        // should be generally robust.
+        if cfg!(windows) {
+            // On Windows, we can't canonicalize an interpreter based on its executable path
+            // because the executables are separate shim files (not links). Instead, we
+            // compare the `sys.base_prefix`.
+            let old_base_prefix = self.interpreter().sys_base_prefix();
+            let selected_base_prefix = interpreter.sys_base_prefix();
+            old_base_prefix == selected_base_prefix
+        } else {
+            // On Unix, we can see if the canonicalized executable is the same file.
+            self.interpreter().sys_executable() == interpreter.sys_executable()
+                || same_file::is_same_file(
+                    self.interpreter().sys_executable(),
+                    interpreter.sys_executable(),
+                )
+                .unwrap_or(false)
+        }
+    }
 }

@@ -625,7 +625,7 @@ fn test_tool_upgrade_python() {
      + babel==2.6.0
      + pytz==2018.5
     Installed 1 executable: pybabel
-    Upgraded build environment for babel to Python 3.12
+    Upgraded tool environment for `babel` to Python 3.12
     "###
     );
 
@@ -710,7 +710,7 @@ fn test_tool_upgrade_python_with_all() {
     Installed [N] packages in [TIME]
      + python-dotenv==0.10.2.post2
     Installed 1 executable: dotenv
-    Upgraded build environment for all tools to Python 3.12
+    Upgraded tool environments for `babel` and `python-dotenv` to Python 3.12
     "###
     );
 
