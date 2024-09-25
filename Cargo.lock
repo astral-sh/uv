@@ -3373,6 +3373,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "spdx"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47317bbaf63785b53861e1ae2d11b80d6b624211d42cb20efcd210ee6f8a14bc"
+dependencies = [
+ "smallvec",
+]
+
+[[package]]
 name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4168,6 +4177,7 @@ dependencies = [
  "unicode-width",
  "url",
  "uv-auth",
+ "uv-build-backend",
  "uv-cache",
  "uv-cache-info",
  "uv-cache-key",
@@ -4255,6 +4265,35 @@ dependencies = [
  "uv-python",
  "uv-resolver",
  "uv-types",
+]
+
+[[package]]
+name = "uv-build-backend"
+version = "0.1.0"
+dependencies = [
+ "async_zip",
+ "fs-err",
+ "glob",
+ "indoc",
+ "insta",
+ "itertools 0.13.0",
+ "serde",
+ "spdx",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "toml",
+ "tracing",
+ "uv-distribution-filename",
+ "uv-fs",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-pubgrub",
+ "uv-pypi-types",
+ "uv-version",
+ "uv-warnings",
 ]
 
 [[package]]

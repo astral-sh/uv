@@ -22,6 +22,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 uv-auth = { path = "crates/uv-auth" }
+uv-build-backend = { path = "crates/uv-build-backend" }
 uv-build-frontend = { path = "crates/uv-build-frontend" }
 uv-cache = { path = "crates/uv-cache" }
 uv-cache-info = { path = "crates/uv-cache-info" }
@@ -143,6 +144,7 @@ serde-untagged = { version = "0.1.6" }
 serde_json = { version = "1.0.128" }
 sha2 = { version = "0.10.8" }
 smallvec = { version = "1.13.2" }
+spdx = { version = "0.10.6" }
 syn = { version = "2.0.77" }
 sys-info = { version = "0.9.1" }
 target-lexicon = { version = "0.12.16" }
