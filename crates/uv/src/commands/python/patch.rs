@@ -1,10 +1,9 @@
 use anstream::println;
 use anyhow::Result;
 use itertools::Itertools;
-use std::{cmp::Eq, collections::BTreeMap};
+use std::{cmp::Eq, collections::BTreeMap, path::Path};
 
 use uv_cache::Cache;
-use uv_fs::CWD;
 use uv_python::{
     downloads::ManagedPythonDownload, find_python_installations, EnvironmentPreference,
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
@@ -33,9 +32,9 @@ struct MaxPatchAndIndex {
 /// We only want to bump the one with the largest patch, so we keep an in memory map of
 /// (major, minor) -> (max patch, index). The index is kept so the original ordering of
 /// the versions is not lost after we bump the max patch.
-pub(crate) async fn patch(cache: &Cache) -> Result<()> {
-    let python_version_file = PythonVersionFile::discover(CWD.as_path(), false, false).await?;
-    let python_versions_file = PythonVersionFile::discover(CWD.as_path(), false, true).await?;
+pub(crate) async fn patch(project_dir: &Path, cache: &Cache) -> Result<()> {
+    let python_version_file = PythonVersionFile::discover(project_dir, false, false).await?;
+    let python_versions_file = PythonVersionFile::discover(project_dir, false, true).await?;
 
     // Note that python_versions_file might be a .python-version file (the `discover` function
     // associated with the PythonVersionFile struct used above falls back to .python-version

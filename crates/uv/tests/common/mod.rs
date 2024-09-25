@@ -628,14 +628,6 @@ impl TestContext {
         command
     }
 
-    /// Create a `uv python patch` command with options shared across scenarios.
-    pub fn python_patch(&self) -> Command {
-        let mut command = Command::new(get_bin());
-        command.arg("python").arg("patch");
-        self.add_shared_args(&mut command, true);
-        command
-    }
-
     /// Create a `uv run` command with options shared across scenarios.
     pub fn run(&self) -> Command {
         let mut command = Command::new(get_bin());

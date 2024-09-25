@@ -3458,10 +3458,6 @@ pub enum PythonCommand {
     /// See `uv help python` to view supported request formats.
     Pin(PythonPinArgs),
 
-    /// Update the patches of distributions specified in .python-version(s)
-    /// files to the latest available versions.
-    Patch,
-
     /// Show the uv Python installation directory.
     ///
     /// By default, Python installations are stored in the uv data directory at
@@ -3598,6 +3594,11 @@ pub struct PythonPinArgs {
     /// `requires-python` constraint.
     #[arg(long, alias = "no-workspace")]
     pub no_project: bool,
+
+    /// Upgrade the patches of distributions specified in .python-version(s)
+    /// files to the latest available versions.
+    #[arg(long, conflicts_with = "request")]
+    pub r#upgrade: bool,
 }
 
 #[derive(Args)]

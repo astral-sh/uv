@@ -1075,6 +1075,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.resolved,
                 globals.python_preference,
                 args.no_project,
+                args.upgrade,
                 &cache,
                 printer,
             )
@@ -1152,12 +1153,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory)
             }
         },
-        Commands::Python(PythonNamespace {
-            command: PythonCommand::Patch,
-        }) => {
-            commands::python_patch(&cache).await?;
-            Ok(ExitStatus::Success)
-        }
     }
 }
 
