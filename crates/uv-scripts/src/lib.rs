@@ -124,8 +124,10 @@ impl Pep723Script {
         } else {
             indoc::formatdoc! {r#"
             {metadata}
+
             def main() -> None:
                 print("Hello from {name}!")
+
 
             if __name__ == "__main__":
                 main()
