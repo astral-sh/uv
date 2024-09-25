@@ -7,7 +7,7 @@ use std::path::Path;
 use std::time::Duration;
 use std::{fmt::Display, fmt::Write, process::ExitCode};
 
-pub(crate) use build::build;
+pub(crate) use build_frontend::build_frontend;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 pub(crate) use cache_prune::cache_prune;
@@ -60,8 +60,8 @@ pub(crate) use version::version;
 
 use crate::printer::Printer;
 
-mod build;
 pub(crate) mod build_backend;
+mod build_frontend;
 mod cache_clean;
 mod cache_dir;
 mod cache_prune;

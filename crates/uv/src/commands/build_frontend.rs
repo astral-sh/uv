@@ -38,7 +38,7 @@ use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
 /// Build source distributions and wheels.
 #[allow(clippy::fn_params_excessive_bools)]
-pub(crate) async fn build(
+pub(crate) async fn build_frontend(
     project_dir: &Path,
     src: Option<PathBuf>,
     package: Option<PackageName>,

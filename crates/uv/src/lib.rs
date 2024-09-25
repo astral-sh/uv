@@ -685,7 +685,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
 
-            commands::build(
+            commands::build_frontend(
                 &project_dir,
                 args.src,
                 args.package,
@@ -1115,36 +1115,42 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         Commands::BuildBackend { command } => match command {
             BuildBackendCommand::BuildSdist { sdist_directory } => {
-                commands::build_backend::build_sdist(&sdist_directory)
+                commands::build_backend::build_sdist(&sdist_directory).await
             }
             BuildBackendCommand::BuildWheel {
                 wheel_directory,
                 metadata_directory,
-            } => commands::build_backend::build_wheel(
-                &wheel_directory,
-                metadata_directory.as_deref(),
-            ),
+            } => {
+                commands::build_backend::build_wheel(
+                    &wheel_directory,
+                    metadata_directory.as_deref(),
+                )
+                .await
+            }
             BuildBackendCommand::BuildEditable {
                 wheel_directory,
                 metadata_directory,
-            } => commands::build_backend::build_editable(
-                &wheel_directory,
-                metadata_directory.as_deref(),
-            ),
+            } => {
+                commands::build_backend::build_editable(
+                    &wheel_directory,
+                    metadata_directory.as_deref(),
+                )
+                .await
+            }
             BuildBackendCommand::GetRequiresForBuildSdist => {
-                commands::build_backend::get_requires_for_build_sdist()
+                commands::build_backend::get_requires_for_build_sdist().await
             }
             BuildBackendCommand::GetRequiresForBuildWheel => {
-                commands::build_backend::get_requires_for_build_wheel()
+                commands::build_backend::get_requires_for_build_wheel().await
             }
             BuildBackendCommand::PrepareMetadataForBuildWheel { wheel_directory } => {
-                commands::build_backend::prepare_metadata_for_build_wheel(&wheel_directory)
+                commands::build_backend::prepare_metadata_for_build_wheel(&wheel_directory).await
             }
             BuildBackendCommand::GetRequiresForBuildEditable => {
-                commands::build_backend::get_requires_for_build_editable()
+                commands::build_backend::get_requires_for_build_editable().await
             }
             BuildBackendCommand::PrepareMetadataForBuildEditable { wheel_directory } => {
-                commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory)
+                commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory).await
             }
         },
     }
