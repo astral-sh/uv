@@ -4335,6 +4335,12 @@ uv python patch [OPTIONS]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -4367,6 +4373,8 @@ uv python patch [OPTIONS]
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
