@@ -16,27 +16,36 @@ struct MajorAndMinorVersion {
     minor: u8,
 }
 
-struct PatchAndIndex {
-    patch: u8,
+struct MaxPatchAndIndex {
+    max_patch: u8,
     index: usize,
 }
 
 /// Update .python-version and .python-versions files to the latest patch version
+///
+/// Handling .python-version files is trivial — we simply read the first line of the file,
+/// get the latest patch (if one exists), and log the output.
+///
+/// Handling .python-versions files is trickier, as there might be two listed versions of
+/// Python with the same major/minor version (in uv's .python-versions, there's both 3.8.12/3.8.18).
+///
+/// We only want to bump the one with the largest patch, so we keep an in memory map of
+/// (major, minor) -> (max_patch, index). The index is kept so the original ordering of
+/// the versions is not lost after we bump the max_patch.
 pub(crate) async fn patch(cache: &Cache) -> Result<()> {
     let python_version_file = PythonVersionFile::discover(CWD.as_path(), false, false).await?;
     let python_versions_file = PythonVersionFile::discover(CWD.as_path(), false, true).await?;
 
-    // Note that `python_versions_file` may resolve to a python-version file
+    // Note that python_versions_file might be a .python-version file (the `discover` function
+    // associated with the PythonVersionFile struct used above falls back to .python-version
+    // if a .python-versions file cannot be found).
     if let Some(python_versions_file) = &python_versions_file {
         let versions = python_versions_file.versions();
         let mut resulting_versions = python_versions_file.versions().cloned().collect_vec();
 
-        // If there exist multiple of the same (major, minor) version, we only want to
-        // update the one with the largest current patch version.
-        //
-        // We want to maintain the order of versions as read, so we keep an index associated
-        // with each patch
-        let mut versions_to_patch: BTreeMap<MajorAndMinorVersion, PatchAndIndex> = BTreeMap::new();
+        // Use a BTreeMap so the logged output for patches is ordered
+        let mut versions_to_patch: BTreeMap<MajorAndMinorVersion, MaxPatchAndIndex> =
+            BTreeMap::new();
 
         for (index, version) in versions.enumerate() {
             if let PythonRequest::Version(VersionRequest::MajorMinorPatch(
@@ -51,40 +60,44 @@ pub(crate) async fn patch(cache: &Cache) -> Result<()> {
                         minor: *minor,
                     })
                     .and_modify(|patch_and_index| {
-                        if patch_and_index.patch < *current_patch {
-                            patch_and_index.patch = *current_patch;
+                        // Store the largest patch associated with each (major, minor) pair,
+                        // along with its index in the original list of versions
+                        if patch_and_index.max_patch < *current_patch {
+                            patch_and_index.max_patch = *current_patch;
                             patch_and_index.index = index;
                         }
                     })
-                    .or_insert(PatchAndIndex {
-                        patch: *current_patch,
+                    .or_insert(MaxPatchAndIndex {
+                        max_patch: *current_patch,
                         index,
                     });
             }
         }
 
+        // Get the latest patch for each given major/minor versions
         let patched_versions: Vec<u8> = versions_to_patch
             .iter()
             .map(|(major_and_minor, patch_and_index)| {
                 get_latest_patch_version(
                     major_and_minor.major,
                     major_and_minor.minor,
-                    patch_and_index.patch,
+                    patch_and_index.max_patch,
                     cache,
                 )
             })
             .collect_vec();
 
+        // If a larger patch was found, update the result vector
         versions_to_patch.into_iter().enumerate().for_each(
             |(i, (major_and_minor, patch_and_index))| {
                 let new_patch = patched_versions[i];
 
-                if new_patch != patch_and_index.patch {
+                if new_patch != patch_and_index.max_patch {
                     println!(
                         "Bumped patch for version {}.{}.{} to {}",
                         major_and_minor.major,
                         major_and_minor.minor,
-                        patch_and_index.patch,
+                        patch_and_index.max_patch,
                         new_patch
                     );
 
@@ -106,6 +119,8 @@ pub(crate) async fn patch(cache: &Cache) -> Result<()> {
 
     if let (Some(python_version_file), false) = (
         &python_version_file,
+        // This ensures we're not doing duplicate work in the case
+        // `python_versions_fle` resolved to a .python-version file
         python_version_file == python_versions_file,
     ) {
         if let Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(major, minor, patch))) =
@@ -129,6 +144,9 @@ pub(crate) async fn patch(cache: &Cache) -> Result<()> {
     Ok(())
 }
 
+/// To get the latest patch version, we first check all versions of Python
+/// downloaded by uv. If none match the given major and minor, we check against
+/// the system installations.
 fn get_latest_patch_version(major: u8, minor: u8, patch: u8, cache: &Cache) -> u8 {
     let mut max_patch = patch;
     for download in ManagedPythonDownload::iter_all() {
