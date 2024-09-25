@@ -709,9 +709,9 @@ fn python_pin_upgrade_version() -> Result<()> {
     Ok(())
 }
 
-#[test]
 /// NOTE: This test is not deterministic. If new patches for Python 3.10 are released,
 /// the test will need to be changed to reflect this.
+#[test]
 fn python_pin_upgrade_versions() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.8.12", "3.9.18", "3.10.13"]);
 
