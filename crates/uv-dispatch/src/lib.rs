@@ -16,7 +16,7 @@ use distribution_types::{
     SourceDist, VersionOrUrlRef,
 };
 use pypi_types::Requirement;
-use uv_build::{SourceBuild, SourceBuildContext};
+use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{

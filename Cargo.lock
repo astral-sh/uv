@@ -4560,7 +4560,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "uv-build"
+name = "uv-build-frontend"
 version = "0.0.1"
 dependencies = [
  "anstream",
@@ -4779,7 +4779,7 @@ dependencies = [
  "pypi-types",
  "rustc-hash",
  "tracing",
- "uv-build",
+ "uv-build-frontend",
  "uv-cache",
  "uv-client",
  "uv-configuration",
