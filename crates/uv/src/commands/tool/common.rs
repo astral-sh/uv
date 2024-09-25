@@ -199,8 +199,6 @@ pub(crate) fn install_executables(
     let tool = Tool::new(requirements, python, all_entrypoints, options);
     installed_tools.add_tool_receipt(tool_name, tool.clone())?;
 
-    warn_out_of_path(executable_directory);
-
     Ok(new_entrypoints)
 }
 
