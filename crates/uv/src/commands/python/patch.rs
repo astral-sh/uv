@@ -125,7 +125,7 @@ pub(crate) async fn patch(cache: &Cache) -> Result<()> {
     if let (Some(python_version_file), false) = (
         &python_version_file,
         // This ensures we're not doing duplicate work in the case
-        // `python_versions_fle` resolved to a .python-version file
+        // `python_versions_file` resolved to a .python-version file
         python_version_file == python_versions_file,
     ) {
         if let Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(
