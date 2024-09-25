@@ -1,0 +1,10 @@
+[package]
+name = "uv-performance-flate2-backend"
+version = "0.1.0"
+publish = false
+
+[target.'cfg(not(any(target_arch = "s390x", target_arch = "powerpc64")))'.dependencies]
+flate2 = { version = "1.0.28", default-features = false, features = ["zlib-ng"] }
+
+[target.'cfg(any(target_arch = "s390x", target_arch = "powerpc64"))'.dependencies]
+flate2 = { version = "1.0.28", default-features = false, features = ["rust_backend"] }
