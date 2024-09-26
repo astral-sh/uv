@@ -733,7 +733,7 @@ pub(crate) async fn run(
                     ephemeral_env
                         .interpreter()
                         .sys_path()
-                        .into_iter()
+                        .iter()
                         .map(|path| path.display().to_string())
                         .collect::<Vec<_>>()
                         .join(if cfg!(windows) { ";" } else { ":" }),
