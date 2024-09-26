@@ -56,7 +56,9 @@ async fn resolve_script_target(
         return Ok(None);
     };
 
-    if Path::new(target).is_file() {
+    // Only continue if we are absolutely certain no local file exists.
+    if let Ok(false) = Path::new(target).try_exists() {
+    } else {
         return Ok(None);
     }
 
