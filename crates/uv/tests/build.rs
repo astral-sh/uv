@@ -1523,7 +1523,7 @@ fn build_quiet() -> Result<()> {
 }
 
 #[test]
-fn build_no_backend_output() -> Result<()> {
+fn build_no_build_logs() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let project = context.temp_dir.child("project");
@@ -1546,7 +1546,7 @@ fn build_no_backend_output() -> Result<()> {
     project.child("src").child("__init__.py").touch()?;
     project.child("README").touch()?;
 
-    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-backend-output"), @r###"
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

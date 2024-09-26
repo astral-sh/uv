@@ -2029,12 +2029,12 @@ pub struct BuildArgs {
     #[arg(long)]
     pub wheel: bool,
 
-    #[arg(long, overrides_with("no_backend_output"), hide = true)]
-    pub backend_output: bool,
+    #[arg(long, overrides_with("no_build_logs"), hide = true)]
+    pub build_logs: bool,
 
-    /// Hide output from the build backend.
-    #[arg(long, overrides_with("backend_output"))]
-    pub no_backend_output: bool,
+    /// Hide logs from the build backend.
+    #[arg(long, overrides_with("build_logs"))]
+    pub no_build_logs: bool,
 
     /// Constrain build dependencies using the given requirements files when building
     /// distributions.

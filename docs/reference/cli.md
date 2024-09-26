@@ -6878,8 +6878,6 @@ uv build [OPTIONS] [SRC]
 <p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
 
 <p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
-</dd><dt><code>--no-backend-output</code></dt><dd><p>Hide output from the build backend</p>
-
 </dd><dt><code>--no-binary</code></dt><dd><p>Don&#8217;t install pre-built wheels.</p>
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
@@ -6898,6 +6896,8 @@ uv build [OPTIONS] [SRC]
 </dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
 
 <p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
+
+</dd><dt><code>--no-build-logs</code></dt><dd><p>Hide output from the build backend</p>
 
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
