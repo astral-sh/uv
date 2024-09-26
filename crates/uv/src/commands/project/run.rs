@@ -725,6 +725,9 @@ pub(crate) async fn run(
         ephemeral_env
             .as_ref()
             .map(|ephemeral_env| {
+                // Ensure the sys.path of the ephemeral env is included in
+                // the process's env, in case we're executing an external
+                // command which resolves to the project environment (i.e. `jupyter`)
                 process.env(
                     "PYTHONPATH",
                     ephemeral_env
