@@ -246,6 +246,8 @@ impl ResolutionGraph {
             options,
             fork_markers,
         };
+
+        #[allow(unused_mut, reason = "Used in debug_assertions below")]
         let mut conflicting = graph.find_conflicting_distributions();
         if !conflicting.is_empty() {
             tracing::warn!(
