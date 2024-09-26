@@ -3174,6 +3174,11 @@ pub enum ToolCommand {
     ///
     /// Packages are installed into an ephemeral virtual environment in the uv
     /// cache directory.
+    #[command(
+        about = "Run a command provided by a Python package. Also available via the alias `uvx`.",
+        after_help = "You can also use `uvx` as an alias for `uv tool run`. \n\
+        Use `uv help tool run` for more details."
+    )]
     Run(ToolRunArgs),
     /// Hidden alias for `uv tool run` for the `uvx` command
     #[command(
