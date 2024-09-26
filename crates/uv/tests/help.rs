@@ -432,6 +432,12 @@ fn help_subsubcommand() {
               
               By default, uv will exit successfully if the version is already installed.
 
+          --shim
+              Install a `python` shim
+
+          --no-shim
+              Do not install a `python` shim
+
     Cache options:
       -n, --no-cache
               Avoid reading from or writing to the cache, instead using a temporary directory for the
@@ -633,6 +639,8 @@ fn help_flag_subsubcommand() {
 
     Options:
       -r, --reinstall  Reinstall the requested Python version, if it's already installed
+          --shim       Install a `python` shim
+          --no-shim    Do not install a `python` shim
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary

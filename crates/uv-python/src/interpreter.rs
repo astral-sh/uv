@@ -620,6 +620,7 @@ impl InterpreterInfo {
             .arg("-B") // Don't write bytecode.
             .arg("-c")
             .arg(script)
+            .env("UV_INTERNAL__PYTHON_QUERY", "1")
             .output()
             .map_err(|err| Error::SpawnFailed {
                 path: interpreter.to_path_buf(),

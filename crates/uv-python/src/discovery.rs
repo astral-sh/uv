@@ -1219,6 +1219,7 @@ impl PythonRequest {
         if let Ok(version) = VersionRequest::from_str(value) {
             return Self::Version(version);
         }
+
         // e.g. `python3.12.1`
         if let Some(remainder) = value.strip_prefix("python") {
             if let Ok(version) = VersionRequest::from_str(remainder) {

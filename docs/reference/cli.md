@@ -4026,6 +4026,8 @@ uv python install [OPTIONS] [TARGETS]...
 
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
+</dd><dt><code>--no-shim</code></dt><dd><p>Do not install a <code>python</code> shim</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -4061,6 +4063,8 @@ uv python install [OPTIONS] [TARGETS]...
 </dd><dt><code>--reinstall</code>, <code>-r</code></dt><dd><p>Reinstall the requested Python version, if it&#8217;s already installed.</p>
 
 <p>By default, uv will exit successfully if the version is already installed.</p>
+
+</dd><dt><code>--shim</code></dt><dd><p>Install a <code>python</code> shim</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
