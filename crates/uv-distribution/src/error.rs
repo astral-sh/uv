@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use owo_colors::OwoColorize;
 use tokio::task::JoinError;
 use url::Url;
 use zip::result::ZipError;
@@ -46,6 +47,8 @@ pub enum Error {
     CacheEncode(#[from] rmp_serde::encode::Error),
     #[error("Failed to walk the distribution cache")]
     CacheWalk(#[source] walkdir::Error),
+    #[error(transparent)]
+    CacheInfo(#[from] uv_cache_info::CacheInfoError),
 
     // Build error
     #[error(transparent)]
@@ -63,8 +66,8 @@ pub enum Error {
     VersionMismatch { given: Version, metadata: Version },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] pypi_types::MetadataError),
-    #[error("Failed to read `dist-info` metadata from built wheel")]
-    DistInfo(#[from] install_wheel_rs::Error),
+    #[error("Failed to read metadata: `{}`", _0.user_display())]
+    WheelMetadata(PathBuf, #[source] Box<uv_metadata::Error>),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
     #[error("Source distribution directory contains neither readable `pyproject.toml` nor `setup.py`: `{}`", _0.user_display())]
@@ -91,6 +94,8 @@ pub enum Error {
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]
     NotFound(Url),
+    #[error("Attempted to re-extract the source distribution for `{0}`, but the hashes didn't match. Run `{}` to clear the cache.", "uv cache clean".green())]
+    CacheHeal(String),
 
     /// A generic request middleware error happened while making a request.
     /// Refer to the error message for more details.

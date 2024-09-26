@@ -22,15 +22,15 @@ use tracing::{debug, info, instrument, trace, warn, Level};
 
 use distribution_types::{
     BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
-    IncompatibleWheel, IndexLocations, InstalledDist, PythonRequirementKind, RemoteSource,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    IncompatibleWheel, IndexCapabilities, IndexLocations, InstalledDist, PythonRequirementKind,
+    RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 pub(crate) use fork_map::{ForkMap, ForkSet};
 use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
 use pep508_rs::MarkerTree;
 use platform_tags::Tags;
-use pypi_types::{Metadata23, Requirement, VerbatimParsedUrl};
+use pypi_types::{Requirement, ResolutionMetadata, VerbatimParsedUrl};
 pub use resolver_markers::ResolverMarkers;
 pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
@@ -95,6 +95,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     groups: Groups,
     preferences: Preferences,
     git: GitResolver,
+    capabilities: IndexCapabilities,
     exclusions: Exclusions,
     urls: Urls,
     locals: Locals,
@@ -169,6 +170,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             python_requirement,
             index,
             build_context.git(),
+            build_context.capabilities(),
             provider,
             installed_packages,
         )
@@ -187,12 +189,14 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         python_requirement: &PythonRequirement,
         index: &InMemoryIndex,
         git: &GitResolver,
+        capabilities: &IndexCapabilities,
         provider: Provider,
         installed_packages: InstalledPackages,
     ) -> Result<Self, ResolveError> {
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
+            capabilities: capabilities.clone(),
             selector: CandidateSelector::for_resolution(options, &manifest, &markers),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &markers, git, options.dependency_mode)?,
@@ -458,6 +462,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         &state.python_requirement,
                         &request_sink,
                         &self.index,
+                        &self.capabilities,
                         &self.selector,
                         &state.markers,
                     )?;
@@ -1808,7 +1813,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Avoid prefetching source distributions with unbounded lower-bound ranges. This
                 // often leads to failed attempts to build legacy versions of packages that are
                 // incompatible with modern build tools.
-                if !dist.prefetchable() {
+                if dist.wheel().is_none() {
                     if !self.selector.use_highest_version(&package_name) {
                         if let Some((lower, _)) = range.iter().next() {
                             if lower == &Bound::Unbounded {
@@ -1939,6 +1944,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
+        let mut available_indexes = FxHashMap::default();
         let mut available_versions = FxHashMap::default();
         for package in err.packages() {
             let Some(name) = package.name() else { continue };
@@ -1951,12 +1957,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             if let Some(response) = self.index.packages().get(name) {
                 if let VersionsResponse::Found(ref version_maps) = *response {
+                    // Track the available versions, across all indexes.
                     for version_map in version_maps {
                         available_versions
                             .entry(name.clone())
                             .or_insert_with(BTreeSet::new)
-                            .extend(version_map.iter().map(|(version, _)| version.clone()));
+                            .extend(version_map.versions().cloned());
                     }
+
+                    // Track the indexes in which the package is available.
+                    available_indexes
+                        .entry(name.clone())
+                        .or_insert(BTreeSet::new())
+                        .extend(
+                            version_maps
+                                .iter()
+                                .filter_map(|version_map| version_map.index().cloned()),
+                        );
                 }
             }
         }
@@ -1964,6 +1981,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         ResolveError::NoSolution(NoSolutionError::new(
             err,
             available_versions,
+            available_indexes,
             self.selector.clone(),
             self.python_requirement.clone(),
             index_locations.clone(),
@@ -2565,7 +2583,7 @@ enum Response {
     /// The returned metadata for an already-installed distribution.
     Installed {
         dist: InstalledDist,
-        metadata: Metadata23,
+        metadata: ResolutionMetadata,
     },
 }
 

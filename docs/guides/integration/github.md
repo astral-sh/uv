@@ -40,7 +40,7 @@ jobs:
         uses: astral-sh/setup-uv@v2
         with:
           # Install a specific version of uv.
-          version: "0.4.7"
+          version: "0.4.16"
 ```
 
 ## Setting up Python
@@ -264,6 +264,30 @@ Its effect on performance is dependent on the packages being installed.
 !!! tip
 
     If using `uv pip`, use `requirements.txt` instead of `uv.lock` in the cache key.
+
+!!! note
+
+    [post-job-hook]: https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/running-scripts-before-or-after-a-job
+
+    When using non-ephemeral, self-hosted runners the default cache directory can grow unbounded.
+    In this case, it may not be optimal to share the cache between jobs. Instead, move the cache
+    inside the GitHub Workspace and remove it once the job finishes using a
+    [Post Job Hook][post-job-hook].
+
+    ```yaml
+    install_job:
+      env:
+        # Configure a relative location for the uv cache
+        UV_CACHE_DIR: ${{ github.workspace }}/.cache/uv
+    ```
+
+    Using a post job hook requires setting the `ACTIONS_RUNNER_HOOK_JOB_STARTED` environment
+    variable on the self-hosted runner to the path of a cleanup script such as the one shown below.
+
+    ```sh title="clean-uv-cache.sh"
+    #!/usr/bin/env sh
+    uv cache clean
+    ```
 
 ## Using `uv pip`
 

@@ -69,7 +69,7 @@ Initialized project `example` at `/home/user/example`
 $ cd example
 
 $ uv add ruff
-Creating virtualenv at: .venv
+Creating virtual environment at: .venv
 Resolved 2 packages in 170ms
    Built example @ file:///home/user/example
 Prepared 2 packages in 627ms
@@ -142,8 +142,8 @@ Download Python versions as needed:
 
 ```console
 $ uv venv --python 3.12.0
-Using Python 3.12.0
-Creating virtualenv at: .venv
+Using CPython 3.12.0
+Creating virtual environment at: .venv
 Activate with: source .venv/bin/activate
 
 $ uv run --python pypy@3.8 -- python --version
@@ -210,8 +210,8 @@ Create a virtual environment:
 
 ```console
 $ uv venv
-Using Python 3.12.3
-Creating virtualenv at: .venv
+Using CPython 3.12.3
+Creating virtual environment at: .venv
 Activate with: source .venv/bin/activate
 ```
 

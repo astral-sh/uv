@@ -12,17 +12,16 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
-use tracing::debug;
 use url::Url;
 
 use cache_key::RepositoryUrl;
 use distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use distribution_types::{
-    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
-    DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
+    BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
+    Dist, DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
     IndexLocations, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
-    UrlString,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, StaticMetadata,
+    ToUrlError, UrlString,
 };
 use pep440_rs::Version;
 use pep508_rs::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
@@ -31,7 +30,7 @@ use pypi_types::{
     redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
     RequirementSource, ResolverMarkerEnvironment,
 };
-use uv_configuration::{BuildOptions, ExtrasSpecification};
+use uv_configuration::{BuildOptions, DevSpecification, ExtrasSpecification, InstallOptions};
 use uv_distribution::DistributionDatabase;
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
@@ -115,10 +114,6 @@ impl Lock {
             if !dist.is_base() {
                 continue;
             }
-            if graph.reachability[&node_index].is_false() {
-                debug!("Removing unreachable package: `{}`", dist.package_id());
-                continue;
-            }
             let fork_markers = graph
                 .fork_markers(dist.name(), &dist.version, dist.dist.version_or_url().url())
                 .cloned()
@@ -132,10 +127,6 @@ impl Lock {
                 else {
                     continue;
                 };
-                // Prune edges leading to unreachable nodes.
-                if graph.reachability[&edge.target()].is_false() {
-                    continue;
-                }
                 let marker = edge.weight().clone();
                 package.add_dependency(&requires_python, dependency_dist, marker, root)?;
             }
@@ -154,9 +145,6 @@ impl Lock {
             let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
                 continue;
             };
-            if graph.reachability[&node_index].is_false() {
-                continue;
-            }
             if let Some(extra) = dist.extra.as_ref() {
                 let id = PackageId::from_annotated_dist(dist, root)?;
                 let Some(package) = packages.get_mut(&id) else {
@@ -171,10 +159,6 @@ impl Lock {
                     else {
                         continue;
                     };
-                    // Prune edges leading to unreachable nodes.
-                    if graph.reachability[&edge.target()].is_false() {
-                        continue;
-                    }
                     let marker = edge.weight().clone();
                     package.add_optional_dependency(
                         &requires_python,
@@ -199,10 +183,6 @@ impl Lock {
                     else {
                         continue;
                     };
-                    // Prune edges leading to unreachable nodes.
-                    if graph.reachability[&edge.target()].is_false() {
-                        continue;
-                    }
                     let marker = edge.weight().clone();
                     package.add_dev_dependency(
                         &requires_python,
@@ -268,7 +248,6 @@ impl Lock {
             // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
             // a single disjointness check with the intersection is sufficient, so we have one
             // constant per platform.
-            let reachability_markers = &graph.reachability[&node_index];
             let platform_tags = &wheel.filename.platform_tag;
             if platform_tags.iter().all(|tag| {
                 linux_tags.into_iter().any(|linux_tag| {
@@ -276,14 +255,20 @@ impl Lock {
                     tag.starts_with(linux_tag) || tag == "linux_armv6l" || tag == "linux_armv7l"
                 })
             }) {
-                !reachability_markers.is_disjoint(&LINUX_MARKERS)
+                !graph.petgraph[node_index]
+                    .marker()
+                    .is_disjoint(&LINUX_MARKERS)
             } else if platform_tags
                 .iter()
                 .all(|tag| windows_tags.contains(&&**tag))
             {
-                !graph.reachability[&node_index].is_disjoint(&WINDOWS_MARKERS)
+                !graph.petgraph[node_index]
+                    .marker()
+                    .is_disjoint(&WINDOWS_MARKERS)
             } else if platform_tags.iter().all(|tag| tag.starts_with("macosx_")) {
-                !graph.reachability[&node_index].is_disjoint(&MAC_MARKERS)
+                !graph.petgraph[node_index]
+                    .marker()
+                    .is_disjoint(&MAC_MARKERS)
             } else {
                 true
             }
@@ -443,7 +428,7 @@ impl Lock {
                 }
             }
         }
-        Ok(Self {
+        let lock = Self {
             version,
             fork_markers,
             supported_environments,
@@ -452,7 +437,8 @@ impl Lock {
             packages,
             by_id,
             manifest,
-        })
+        };
+        Ok(lock)
     }
 
     /// Record the requirements that were used to generate this lock.
@@ -494,11 +480,6 @@ impl Lock {
     /// Returns the [`Package`] entries in this lock.
     pub fn packages(&self) -> &[Package] {
         &self.packages
-    }
-
-    /// Returns the owned [`Package`] entries in this lock.
-    pub fn into_packages(self) -> Vec<Package> {
-        self.packages
     }
 
     /// Returns the supported Python version range for the lockfile, if present.
@@ -560,8 +541,9 @@ impl Lock {
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecification,
-        dev: &[GroupName],
+        dev: DevSpecification<'_>,
         build_options: &BuildOptions,
+        install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
@@ -577,20 +559,39 @@ impl Lock {
                     name: root_name.clone(),
                 })?;
 
-            // Add the base package.
-            queue.push_back((root, None));
+            if dev.prod() {
+                // Add the base package.
+                queue.push_back((root, None));
 
-            // Add any extras.
-            match extras {
-                ExtrasSpecification::None => {}
-                ExtrasSpecification::All => {
-                    for extra in root.optional_dependencies.keys() {
-                        queue.push_back((root, Some(extra)));
+                // Add any extras.
+                match extras {
+                    ExtrasSpecification::None => {}
+                    ExtrasSpecification::All => {
+                        for extra in root.optional_dependencies.keys() {
+                            queue.push_back((root, Some(extra)));
+                        }
+                    }
+                    ExtrasSpecification::Some(extras) => {
+                        for extra in extras {
+                            queue.push_back((root, Some(extra)));
+                        }
                     }
                 }
-                ExtrasSpecification::Some(extras) => {
-                    for extra in extras {
-                        queue.push_back((root, Some(extra)));
+            }
+
+            // Add any dev dependencies.
+            for group in dev.iter() {
+                for dep in root.dev_dependencies.get(group).into_iter().flatten() {
+                    if dep.complexified_marker.evaluate(marker_env, &[]) {
+                        let dep_dist = self.find_by_id(&dep.package_id);
+                        if seen.insert((&dep.package_id, None)) {
+                            queue.push_back((dep_dist, None));
+                        }
+                        for extra in &dep.extra {
+                            if seen.insert((&dep.package_id, Some(extra))) {
+                                queue.push_back((dep_dist, Some(extra)));
+                            }
+                        }
                     }
                 }
             }
@@ -598,7 +599,7 @@ impl Lock {
 
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
         // dependencies in (legacy) non-project workspace roots).
-        for group in dev {
+        for group in dev.iter() {
             for dependency in project.group(group) {
                 if dependency.marker.evaluate(marker_env, &[]) {
                     let root_name = &dependency.name;
@@ -625,16 +626,11 @@ impl Lock {
         let mut map = BTreeMap::default();
         let mut hashes = BTreeMap::default();
         while let Some((dist, extra)) = queue.pop_front() {
-            let deps =
-                if let Some(extra) = extra {
-                    Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
-                } else {
-                    Either::Right(dist.dependencies.iter().chain(
-                        dev.iter().flat_map(|group| {
-                            dist.dev_dependencies.get(group).into_iter().flatten()
-                        }),
-                    ))
-                };
+            let deps = if let Some(extra) = extra {
+                Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
+            } else {
+                Either::Right(dist.dependencies.iter())
+            };
             for dep in deps {
                 if dep.complexified_marker.evaluate(marker_env, &[]) {
                     let dep_dist = self.find_by_id(&dep.package_id);
@@ -648,15 +644,21 @@ impl Lock {
                     }
                 }
             }
-            map.insert(
-                dist.id.name.clone(),
-                ResolvedDist::Installable(dist.to_dist(
-                    project.workspace().install_path(),
-                    tags,
-                    build_options,
-                )?),
-            );
-            hashes.insert(dist.id.name.clone(), dist.hashes());
+            if install_options.include_package(
+                &dist.id.name,
+                project.project_name(),
+                &self.manifest.members,
+            ) {
+                map.insert(
+                    dist.id.name.clone(),
+                    ResolvedDist::Installable(dist.to_dist(
+                        project.workspace().install_path(),
+                        TagPolicy::Required(tags),
+                        build_options,
+                    )?),
+                );
+                hashes.insert(dist.id.name.clone(), dist.hashes());
+            }
         }
         let diagnostics = vec![];
         Ok(Resolution::new(map, hashes, diagnostics))
@@ -794,6 +796,40 @@ impl Lock {
                 manifest_table.insert("overrides", value(overrides));
             }
 
+            if !self.manifest.dependency_metadata.is_empty() {
+                let mut tables = ArrayOfTables::new();
+                for metadata in &self.manifest.dependency_metadata {
+                    let mut table = Table::new();
+                    table.insert("name", value(metadata.name.to_string()));
+                    if let Some(version) = metadata.version.as_ref() {
+                        table.insert("version", value(version.to_string()));
+                    }
+                    if !metadata.requires_dist.is_empty() {
+                        table.insert(
+                            "requires-dist",
+                            value(serde::Serialize::serialize(
+                                &metadata.requires_dist,
+                                toml_edit::ser::ValueSerializer::new(),
+                            )?),
+                        );
+                    }
+                    if let Some(requires_python) = metadata.requires_python.as_ref() {
+                        table.insert("requires-python", value(requires_python.to_string()));
+                    }
+                    if !metadata.provides_extras.is_empty() {
+                        table.insert(
+                            "provides-extras",
+                            value(serde::Serialize::serialize(
+                                &metadata.provides_extras,
+                                toml_edit::ser::ValueSerializer::new(),
+                            )?),
+                        );
+                    }
+                    tables.push(table);
+                }
+                manifest_table.insert("dependency-metadata", Item::ArrayOfTables(tables));
+            }
+
             if !manifest_table.is_empty() {
                 doc.insert("manifest", Item::Table(manifest_table));
             }
@@ -880,6 +916,7 @@ impl Lock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
+        dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
         build_options: &BuildOptions,
         tags: &Tags,
@@ -994,6 +1031,18 @@ impl Lock {
             }
         }
 
+        // Validate that the lockfile was generated with the same static metadata.
+        {
+            let expected = dependency_metadata
+                .values()
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            let actual = &self.manifest.dependency_metadata;
+            if expected != *actual {
+                return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
+            }
+        }
+
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let remotes = indexes.map(|locations| {
             locations
@@ -1096,7 +1145,11 @@ impl Lock {
             }
 
             // Get the metadata for the distribution.
-            let dist = package.to_dist(workspace.install_path(), tags, build_options)?;
+            let dist = package.to_dist(
+                workspace.install_path(),
+                TagPolicy::Preferred(tags),
+                build_options,
+            )?;
 
             let Ok(archive) = database
                 .get_or_build_wheel_metadata(&dist, HashPolicy::None)
@@ -1209,6 +1262,24 @@ impl Lock {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+enum TagPolicy<'tags> {
+    /// Exclusively consider wheels that match the specified platform tags.
+    Required(&'tags Tags),
+    /// Prefer wheels that match the specified platform tags, but fall back to incompatible wheels
+    /// if  necessary.
+    Preferred(&'tags Tags),
+}
+
+impl<'tags> TagPolicy<'tags> {
+    /// Returns the platform tags to consider.
+    fn tags(&self) -> &'tags Tags {
+        match self {
+            TagPolicy::Required(tags) | TagPolicy::Preferred(tags) => tags,
+        }
+    }
+}
+
 /// The result of checking if a lockfile satisfies a set of requirements.
 #[derive(Debug)]
 pub enum SatisfiesResult<'lock> {
@@ -1226,6 +1297,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    /// The lockfile uses different static metadata.
+    MismatchedStaticMetadata(BTreeSet<StaticMetadata>, &'lock BTreeSet<StaticMetadata>),
     /// The lockfile is missing a workspace member.
     MissingRoot(PackageName),
     /// The lockfile referenced a remote index that was not provided
@@ -1279,6 +1352,9 @@ pub struct ResolverManifest {
     /// The overrides provided to the resolver.
     #[serde(default)]
     overrides: BTreeSet<Requirement>,
+    /// The static metadata provided to the resolver.
+    #[serde(default)]
+    dependency_metadata: BTreeSet<StaticMetadata>,
 }
 
 impl ResolverManifest {
@@ -1289,12 +1365,14 @@ impl ResolverManifest {
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Requirement>,
+        dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {
         Self {
             members: members.into_iter().collect(),
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
             overrides: overrides.into_iter().collect(),
+            dependency_metadata: dependency_metadata.into_iter().collect(),
         }
     }
 
@@ -1317,6 +1395,7 @@ impl ResolverManifest {
                 .into_iter()
                 .map(|requirement| requirement.relative_to(workspace.install_path()))
                 .collect::<Result<BTreeSet<_>, _>>()?,
+            dependency_metadata: self.dependency_metadata,
         })
     }
 }
@@ -1386,39 +1465,6 @@ impl TryFrom<LockWire> for Lock {
             supported_environments,
             fork_markers,
         )?;
-
-        /*
-        // TODO: Use the below in tests to validate we don't produce a
-        // trivially incorrect lock file.
-        let mut name_to_markers: BTreeMap<&PackageName, Vec<(&Version, &MarkerTree)>> =
-            BTreeMap::new();
-        for package in &lock.packages {
-            for dep in &package.dependencies {
-                name_to_markers
-                    .entry(&dep.package_id.name)
-                    .or_default()
-                    .push((&dep.package_id.version, &dep.marker));
-            }
-        }
-        for (name, marker_trees) in name_to_markers {
-            for (i, (version1, marker1)) in marker_trees.iter().enumerate() {
-                for (version2, marker2) in &marker_trees[i + 1..] {
-                    if version1 == version2 {
-                        continue;
-                    }
-                    if !marker1.is_disjoint(marker2) {
-                        eprintln!("{}", lock.to_toml().unwrap());
-                        assert!(
-                            false,
-                            "[{marker1:?}] (for version {version1}) is not disjoint with \
-                             [{marker2:?}] (for version {version2}) \
-                             for package `{name}`",
-                        );
-                    }
-                }
-            }
-        }
-        */
 
         Ok(lock)
     }
@@ -1604,14 +1650,14 @@ impl Package {
     fn to_dist(
         &self,
         workspace_root: &Path,
-        tags: &Tags,
+        tag_policy: TagPolicy<'_>,
         build_options: &BuildOptions,
     ) -> Result<Dist, LockError> {
         let no_binary = build_options.no_binary_package(&self.id.name);
         let no_build = build_options.no_build_package(&self.id.name);
 
         if !no_binary {
-            if let Some(best_wheel_index) = self.find_best_wheel(tags) {
+            if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
                 return match &self.id.source {
                     Source::Registry(source) => {
                         let wheels = self
@@ -1688,6 +1734,10 @@ impl Package {
                 id: self.id.clone(),
             }
             .into()),
+            (true, false) if self.id.source.is_wheel() => Err(LockErrorKind::NoBinaryWheelOnly {
+                id: self.id.clone(),
+            }
+            .into()),
             (true, false) => Err(LockErrorKind::NoBinary {
                 id: self.id.clone(),
             }
@@ -1696,6 +1746,12 @@ impl Package {
                 id: self.id.clone(),
             }
             .into()),
+            (false, false) if self.id.source.is_wheel() => {
+                Err(LockErrorKind::IncompatibleWheelOnly {
+                    id: self.id.clone(),
+                }
+                .into())
+            }
             (false, false) => Err(LockErrorKind::NeitherSourceDistNorWheel {
                 id: self.id.clone(),
             }
@@ -1713,11 +1769,15 @@ impl Package {
     ) -> Result<Option<distribution_types::SourceDist>, LockError> {
         let sdist = match &self.id.source {
             Source::Path(path) => {
+                // A direct path source can also be a wheel, so validate the extension.
+                let DistExtension::Source(ext) = DistExtension::from_path(path)? else {
+                    return Ok(None);
+                };
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
-                    ext: SourceDistExtension::from_path(path)?,
+                    ext,
                 };
                 distribution_types::SourceDist::Path(path_dist)
             }
@@ -1780,7 +1840,10 @@ impl Package {
                 distribution_types::SourceDist::Git(git_dist)
             }
             Source::Direct(url, direct) => {
-                let ext = SourceDistExtension::from_path(url.as_ref())?;
+                // A direct URL source can also be a wheel, so validate the extension.
+                let DistExtension::Source(ext) = DistExtension::from_path(url.as_ref())? else {
+                    return Ok(None);
+                };
                 let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                 let url = Url::from(ParsedArchiveUrl {
                     url: url.to_url(),
@@ -1824,7 +1887,7 @@ impl Package {
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
-                let index = IndexUrl::Url(VerbatimUrl::from_url(url.to_url()));
+                let index = IndexUrl::from(VerbatimUrl::from_url(url.to_url()));
 
                 let reg_dist = RegistrySourceDist {
                     name: self.id.name.clone(),
@@ -1866,7 +1929,7 @@ impl Package {
                     url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
                     yanked: None,
                 });
-                let index = IndexUrl::Path(
+                let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(workspace_root.join(path))
                         .map_err(LockErrorKind::RegistryVerbatimUrl)?,
                 );
@@ -2018,10 +2081,12 @@ impl Package {
         Ok(table)
     }
 
-    fn find_best_wheel(&self, tags: &Tags) -> Option<usize> {
+    fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
         let mut best: Option<(TagPriority, usize)> = None;
         for (i, wheel) in self.wheels.iter().enumerate() {
-            let TagCompatibility::Compatible(priority) = wheel.filename.compatibility(tags) else {
+            let TagCompatibility::Compatible(priority) =
+                wheel.filename.compatibility(tag_policy.tags())
+            else {
                 continue;
             };
             match best {
@@ -2035,7 +2100,12 @@ impl Package {
                 }
             }
         }
-        best.map(|(_, i)| i)
+
+        let best = best.map(|(_, i)| i);
+        match tag_policy {
+            TagPolicy::Required(_) => best,
+            TagPolicy::Preferred(_) => best.or_else(|| self.wheels.first().map(|_| 0)),
+        }
     }
 
     /// Returns the [`PackageName`] of the package.
@@ -2436,6 +2506,29 @@ impl Source {
     /// We also assume that Git sources are immutable, since a Git source encodes a specific commit.
     fn is_immutable(&self) -> bool {
         matches!(self, Self::Registry(..) | Self::Git(_, _))
+    }
+
+    /// Returns `true` if the source is that of a wheel.
+    fn is_wheel(&self) -> bool {
+        match &self {
+            Source::Path(path) => {
+                matches!(
+                    DistExtension::from_path(path).ok(),
+                    Some(DistExtension::Wheel)
+                )
+            }
+            Source::Direct(url, _) => {
+                matches!(
+                    DistExtension::from_path(url.as_ref()).ok(),
+                    Some(DistExtension::Wheel)
+                )
+            }
+            Source::Directory(..) => false,
+            Source::Editable(..) => false,
+            Source::Virtual(..) => false,
+            Source::Git(..) => false,
+            Source::Registry(..) => false,
+        }
     }
 
     fn to_toml(&self, table: &mut Table) {
@@ -3215,7 +3308,7 @@ impl Wheel {
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
-                let index = IndexUrl::Url(VerbatimUrl::from_url(index_url.to_url()));
+                let index = IndexUrl::from(VerbatimUrl::from_url(index_url.to_url()));
                 Ok(RegistryBuiltWheel {
                     filename,
                     file,
@@ -3245,7 +3338,7 @@ impl Wheel {
                     url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
                     yanked: None,
                 });
-                let index = IndexUrl::Path(
+                let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(root.join(index_path))
                         .map_err(LockErrorKind::RegistryVerbatimUrl)?,
                 );
@@ -3819,7 +3912,7 @@ enum LockErrorKind {
     /// distribution.
     #[error("distribution {id} can't be installed because it doesn't have a source distribution or wheel for the current platform")]
     NeitherSourceDistNorWheel {
-        /// The ID of the distribution that has a missing base.
+        /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as both `--no-binary` and `--no-build`.
@@ -3828,17 +3921,32 @@ enum LockErrorKind {
         /// The ID of the distribution.
         id: PackageId,
     },
-    /// An error that occurs when a distribution is marked as both `--no-binary`, but no source
+    /// An error that occurs when a distribution is marked as `--no-binary`, but no source
     /// distribution is available.
     #[error("distribution {id} can't be installed because it is marked as `--no-binary` but has no source distribution")]
     NoBinary {
         /// The ID of the distribution.
         id: PackageId,
     },
-    /// An error that occurs when a distribution is marked as both `--no-build`, but no binary
+    /// An error that occurs when a distribution is marked as `--no-build`, but no binary
     /// distribution is available.
     #[error("distribution {id} can't be installed because it is marked as `--no-build` but has no binary distribution")]
     NoBuild {
+        /// The ID of the distribution.
+        id: PackageId,
+    },
+    /// An error that occurs when a wheel-only distribution is incompatible with the current
+    /// platform.
+    #[error(
+        "distribution {id} can't be installed because the binary distribution is incompatible with the current platform"
+    )]
+    IncompatibleWheelOnly {
+        /// The ID of the distribution.
+        id: PackageId,
+    },
+    /// An error that occurs when a wheel-only source is marked as `--no-binary`.
+    #[error("distribution {id} can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
+    NoBinaryWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },

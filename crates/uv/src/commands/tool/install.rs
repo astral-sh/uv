@@ -7,8 +7,9 @@ use owo_colors::OwoColorize;
 use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::MarkerTree;
 use pypi_types::{Requirement, RequirementSource};
-use tracing::debug;
-use uv_cache::{Cache, Refresh, Timestamp};
+use tracing::trace;
+use uv_cache::{Cache, Refresh};
+use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, Upgrade};
 use uv_normalize::PackageName;
@@ -24,6 +25,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 
 use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
+    EnvironmentSpecification,
 };
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::tool::Target;
@@ -275,19 +277,21 @@ pub(crate) async fn install(
         installed_tools
             .get_environment(&from.name, &cache)?
             .filter(|environment| {
-                python_request.as_ref().map_or(true, |python_request| {
-                    if python_request.satisfied(environment.interpreter(), &cache) {
-                        debug!("Found existing environment for `{from}`", from = from.name.cyan());
-                        true
-                    } else {
-                        let _ = writeln!(
-                            printer.stderr(),
-                            "Existing environment for `{from}` does not satisfy the requested Python interpreter",
-                            from = from.name.cyan(),
-                        );
-                        false
-                    }
-                })
+                if environment.uses(&interpreter) {
+                    trace!(
+                        "Existing interpreter matches the requested interpreter for `{}`: {}",
+                        from.name,
+                        environment.interpreter().sys_executable().display()
+                    );
+                    true
+                } else {
+                    let _ = writeln!(
+                        printer.stderr(),
+                        "Ignoring existing environment for `{from}`: the requested Python interpreter does not match the environment interpreter",
+                        from = from.name.cyan(),
+                    );
+                    false
+                }
             });
 
     // If the requested and receipt requirements are the same...
@@ -365,8 +369,8 @@ pub(crate) async fn install(
         // If we're creating a new environment, ensure that we can resolve the requirements prior
         // to removing any existing tools.
         let resolution = resolve_environment(
+            EnvironmentSpecification::from(spec),
             &interpreter,
-            spec,
             settings.as_ref().into(),
             &state,
             Box::new(DefaultResolveLogger),

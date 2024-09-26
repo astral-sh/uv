@@ -5,6 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
+use std::path::Path;
 
 use crate::common::{decode_token, packse_index_url};
 use common::{uv_snapshot, TestContext};
@@ -438,7 +439,7 @@ fn add_git_private_raw() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg(&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")).arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")).arg("--raw-sources"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -579,6 +580,40 @@ fn add_git_error() -> Result<()> {
 
     ----- stderr -----
     error: `flask` did not resolve to a Git repository, but a Git reference (`--branch 0.0.1`) was provided.
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "git")]
+fn add_git_branch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--branch").arg("test-branch"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
     Ok(())
@@ -1713,6 +1748,12 @@ fn add_workspace_editable() -> Result<()> {
 
     let workspace = context.temp_dir.child("pyproject.toml");
     workspace.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
         [tool.uv.workspace]
         members = ["child1", "child2"]
     "#})?;
@@ -1753,7 +1794,7 @@ fn add_workspace_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + child1==0.1.0 (from file://[TEMP_DIR]/child1)
@@ -1803,6 +1844,7 @@ fn add_workspace_editable() -> Result<()> {
         members = [
             "child1",
             "child2",
+            "parent",
         ]
 
         [[package]]
@@ -1820,6 +1862,11 @@ fn add_workspace_editable() -> Result<()> {
         name = "child2"
         version = "0.1.0"
         source = { editable = "child2" }
+
+        [[package]]
+        name = "parent"
+        version = "0.1.0"
+        source = { virtual = "." }
         "###
         );
     });
@@ -1832,6 +1879,124 @@ fn add_workspace_editable() -> Result<()> {
 
     ----- stderr -----
     Audited 2 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// Add a workspace dependency via its path.
+#[test]
+fn add_workspace_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let workspace = context.temp_dir.child("pyproject.toml");
+    workspace.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+
+    let pyproject_toml = context.temp_dir.child("child/pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("./child"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+        ]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "###
+        );
+    });
+
+    // `uv add` implies a full lock and sync, including development dependencies.
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+            "parent",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "child" }
+
+        [[package]]
+        name = "parent"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child", editable = "child" }]
+        "###
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
     "###);
 
     Ok(())
@@ -1855,7 +2020,7 @@ fn add_path() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    let child = workspace.child("child");
+    let child = workspace.child("packages").child("child");
     child.child("pyproject.toml").write_str(indoc! {r#"
         [project]
         name = "child"
@@ -1868,18 +2033,18 @@ fn add_path() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("./child").current_dir(workspace.path()), @r###"
+    uv_snapshot!(context.filters(), context.add().arg(Path::new("packages").join("child")).current_dir(workspace.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/workspace/child)
+     + child==0.1.0 (from file://[TEMP_DIR]/workspace/packages/child)
      + parent==0.1.0 (from file://[TEMP_DIR]/workspace)
     "###);
 
@@ -1903,7 +2068,7 @@ fn add_path() -> Result<()> {
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
-        child = { path = "child" }
+        child = { path = "packages/child" }
         "###
         );
     });
@@ -1925,7 +2090,7 @@ fn add_path() -> Result<()> {
         [[package]]
         name = "child"
         version = "0.1.0"
-        source = { directory = "child" }
+        source = { directory = "packages/child" }
 
         [[package]]
         name = "parent"
@@ -1936,7 +2101,7 @@ fn add_path() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "child", directory = "child" }]
+        requires-dist = [{ name = "child", directory = "packages/child" }]
         "###
         );
     });
@@ -3144,7 +3309,7 @@ fn add_error() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
-      help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "###);
 
     uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @r###"
@@ -3956,6 +4121,60 @@ fn add_script() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn add_script_relative_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        print("Hello, world!")
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("./project").arg("--editable").arg("--script").arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated `script.py`
+    "###);
+
+    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r###"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "project",
+        # ]
+        #
+        # [tool.uv.sources]
+        # project = { path = "project", editable = true }
+        # ///
+        print("Hello, world!")
+        "###
+        );
+    });
+    Ok(())
+}
+
 /// Add to a script without an existing metadata table.
 #[test]
 fn add_script_without_metadata_table() -> Result<()> {
@@ -4537,5 +4756,112 @@ fn custom_dependencies() -> Result<()> {
         "###
         );
     });
+    Ok(())
+}
+
+/// Regression test for: <https://github.com/astral-sh/uv/issues/7259>
+#[test]
+fn update_offset() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "iniconfig"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig",
+            "typing-extensions>=4.10.0",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+/// Check hint for <https://github.com/astral-sh/uv/issues/7329>
+/// if there is a broken cyclic dependency on a local package.
+#[test]
+fn add_shadowed_name() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "dagster"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Pinned constrained, check for a direct dependency loop.
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.6.13"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "###);
+
+    // Constraint with several available versions, check for an indirect dependency loop.
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of dagster-webserver are available:
+              dagster-webserver<=1.6.13
+              dagster-webserver>1.7.0
+          and dagster-webserver==1.6.11 depends on your project, we can conclude that all of:
+              dagster-webserver>=1.6.11,<1.6.12
+              dagster-webserver>1.6.13,<1.7.0
+          depend on your project.
+          And because dagster-webserver==1.6.12 depends on your project, we can conclude that all of:
+              dagster-webserver>=1.6.11,<1.6.13
+              dagster-webserver>1.6.13,<1.7.0
+          depend on your project.
+          And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11,<1.7.0, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "###);
+
     Ok(())
 }

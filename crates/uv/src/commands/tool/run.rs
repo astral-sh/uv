@@ -14,7 +14,8 @@ use distribution_types::{Name, UnresolvedRequirementSpecification};
 use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::MarkerTree;
 use pypi_types::{Requirement, RequirementSource};
-use uv_cache::{Cache, Refresh, Timestamp};
+use uv_cache::{Cache, Refresh};
+use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Concurrency;
@@ -32,7 +33,7 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations;
-use crate::commands::project::{resolve_names, ProjectError};
+use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::Target;
 use crate::commands::{
@@ -127,6 +128,11 @@ pub(crate) async fn run(
             let report =
                 miette::Report::msg(format!("{err}")).context(err.header().with_context("tool"));
             eprint!("{report:?}");
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::NamedRequirements(err)) => {
+            let err = miette::Report::msg(format!("{err}")).context("Invalid `--with` requirement");
+            eprint!("{err:?}");
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),
@@ -482,7 +488,7 @@ async fn get_or_create_environment(
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
     let environment = CachedEnvironment::get_or_create(
-        spec,
+        EnvironmentSpecification::from(spec),
         interpreter,
         settings,
         &state,

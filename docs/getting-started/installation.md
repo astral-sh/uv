@@ -20,7 +20,19 @@ uv provides a standalone installer to download and install uv:
     $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
 
-By default, uv is installed to `~/.cargo/bin`.
+Request a specific version by including it in the URL:
+
+=== "macOS and Linux"
+
+    ```console
+    $ curl -LsSf https://astral.sh/uv/0.4.6/install.sh | sh
+    ```
+
+=== "Windows"
+
+    ```console
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.4.6/install.ps1 | iex"
+    ```
 
 !!! tip
 
@@ -40,28 +52,36 @@ By default, uv is installed to `~/.cargo/bin`.
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
 
-Request a specific version by including it in the URL:
+#### Configuring installation
+
+By default, uv is installed to `~/.cargo/bin`. To change the installation path, use
+`UV_INSTALL_DIR`:
 
 === "macOS and Linux"
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.4.7/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/custom/path" sh
     ```
 
 === "Windows"
 
-    ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.4.7/install.ps1 | iex"
+    ```powershell
+    $env:UV_INSTALL_DIR = "C:\Custom\Path" powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
 
-!!! tip
+The installer will also update your shell profiles to ensure the uv binary is on your `PATH`. To
+disable this behavior, use `INSTALLER_NO_MODIFY_PATH`. For example:
 
-    The installer will update your shell profiles to ensure the uv binary is on your `PATH`. To
-    disable this behavior, set `INSTALLER_NO_MODIFY_PATH=1`. For example:
+```console
+$ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
+```
 
-    ```
-    INSTALLER_NO_MODIFY_PATH=1 bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
-    ```
+Using environment variables is recommended because they are consistent across platforms. However,
+options can be passed directly to the install script. For example, to see the available options:
+
+```console
+$ curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --help
+```
 
 ### PyPI
 
@@ -164,6 +184,24 @@ To enable shell autocompletion for uv commands, run one of the following:
 
     ```powershell
     Add-Content -Path $PROFILE -Value '(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression'
+    ```
+
+To enable shell autocompletion for uvx, run one of the following:
+
+=== "Linux and macOS"
+
+    ```bash
+    # Determine your shell (e.g., with `echo $SHELL`), then run one of:
+    echo 'eval "$(uvx --generate-shell-completion bash)"' >> ~/.bashrc
+    echo 'eval "$(uvx --generate-shell-completion zsh)"' >> ~/.zshrc
+    echo 'uvx --generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    echo 'eval (uvx --generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
+    ```
+
+=== "Windows"
+
+    ```powershell
+    Add-Content -Path $PROFILE -Value '(& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression'
     ```
 
 Then restart the shell or source the shell config file.

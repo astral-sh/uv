@@ -11,7 +11,8 @@ use tracing::debug;
 
 pub use archive::ArchiveId;
 use distribution_types::InstalledDist;
-use pypi_types::Metadata23;
+use pypi_types::ResolutionMetadata;
+use uv_cache_info::Timestamp;
 use uv_fs::{cachedir, directories};
 use uv_normalize::PackageName;
 
@@ -19,7 +20,6 @@ pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
 pub use crate::removal::{rm_rf, Removal};
-pub use crate::timestamp::Timestamp;
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
@@ -28,7 +28,6 @@ mod by_timestamp;
 #[cfg(feature = "clap")]
 mod cli;
 mod removal;
-mod timestamp;
 mod wheel;
 
 /// A [`CacheEntry`] which may or may not exist yet.
@@ -44,6 +43,11 @@ impl CacheEntry {
     /// Create a new [`CacheEntry`] from a path.
     pub fn from_path(path: impl Into<PathBuf>) -> Self {
         Self(path.into())
+    }
+
+    /// Return the cache entry's parent directory.
+    pub fn shard(&self) -> CacheShard {
+        CacheShard(self.dir().to_path_buf())
     }
 
     /// Convert the [`CacheEntry`] into a [`PathBuf`].
@@ -448,12 +452,31 @@ impl Cache {
                 Err(err) => return Err(err),
             }
 
-            // Remove any unzipped wheels (i.e., symlinks) from the built wheels cache.
             for entry in walkdir::WalkDir::new(self.bucket(CacheBucket::SourceDistributions)) {
                 let entry = entry?;
-                if entry.file_type().is_symlink() {
-                    debug!("Removing unzipped wheel entry: {}", entry.path().display());
-                    summary += rm_rf(entry.path())?;
+
+                // If the directory contains a `metadata.msgpack`, then it's a built wheel revision.
+                if !entry.file_type().is_dir() {
+                    continue;
+                }
+
+                if !entry.path().join("metadata.msgpack").exists() {
+                    continue;
+                }
+
+                // Remove any symlinks and directories in the revision. The symlinks represent
+                // unzipped wheels, and the directories represent the source distribution archives.
+                for entry in fs_err::read_dir(entry.path())? {
+                    let entry = entry?;
+                    let path = entry.path();
+
+                    if path.is_dir() {
+                        debug!("Removing unzipped built wheel entry: {}", path.display());
+                        summary += rm_rf(path)?;
+                    } else if path.is_symlink() {
+                        debug!("Removing unzipped built wheel entry: {}", path.display());
+                        summary += rm_rf(path)?;
+                    }
                 }
             }
         }
@@ -741,15 +764,16 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            // Note, next time we change the version we should change the name of this bucket to `source-dists-v0`
-            Self::SourceDistributions => "built-wheels-v3",
-            Self::FlatIndex => "flat-index-v0",
+            Self::SourceDistributions => "sdists-v4",
+            Self::FlatIndex => "flat-index-v1",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v2",
             // Note that when bumping this, you'll also need to bump it
             // in crates/uv/tests/cache_clean.rs.
-            Self::Simple => "simple-v12",
-            Self::Wheels => "wheels-v1",
+            Self::Simple => "simple-v13",
+            // Note that when bumping this, you'll also need to bump it
+            // in crates/uv/tests/cache_prune.rs.
+            Self::Wheels => "wheels-v2",
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v1",
@@ -765,7 +789,7 @@ impl CacheBucket {
             let Ok(metadata) = fs_err::read(path.join("metadata.msgpack")) else {
                 return false;
             };
-            let Ok(metadata) = rmp_serde::from_slice::<Metadata23>(&metadata) else {
+            let Ok(metadata) = rmp_serde::from_slice::<ResolutionMetadata>(&metadata) else {
                 return false;
             };
             metadata.name == *name

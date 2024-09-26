@@ -133,6 +133,15 @@ To remove a package, you can use `uv remove`:
 $ uv remove requests
 ```
 
+To upgrade a package, run `uv lock` with the `--upgrade-package` flag:
+
+```console
+$ uv lock --upgrade-package requests
+```
+
+The `--upgrade-package` flag will attempt to update the specified package to the latest compatible
+version, while keeping the rest of the lockfile intact.
+
 See the documentation on [managing dependencies](../concepts/projects.md#managing-dependencies) for
 more details.
 

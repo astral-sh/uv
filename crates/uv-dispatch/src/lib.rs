@@ -11,9 +11,12 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{CachedDist, IndexLocations, Name, Resolution, SourceDist};
+use distribution_types::{
+    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, Name, Resolution,
+    SourceDist, VersionOrUrlRef,
+};
 use pypi_types::Requirement;
-use uv_build::{SourceBuild, SourceBuildContext};
+use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
@@ -42,6 +45,8 @@ pub struct BuildDispatch<'a> {
     flat_index: &'a FlatIndex,
     index: &'a InMemoryIndex,
     git: &'a GitResolver,
+    capabilities: &'a IndexCapabilities,
+    dependency_metadata: &'a DependencyMetadata,
     in_flight: &'a InFlight,
     build_isolation: BuildIsolation<'a>,
     link_mode: install_wheel_rs::linker::LinkMode,
@@ -63,8 +68,10 @@ impl<'a> BuildDispatch<'a> {
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
+        dependency_metadata: &'a DependencyMetadata,
         index: &'a InMemoryIndex,
         git: &'a GitResolver,
+        capabilities: &'a IndexCapabilities,
         in_flight: &'a InFlight,
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
@@ -85,6 +92,8 @@ impl<'a> BuildDispatch<'a> {
             flat_index,
             index,
             git,
+            capabilities,
+            dependency_metadata,
             in_flight,
             index_strategy,
             config_settings,
@@ -127,8 +136,20 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.git
     }
 
+    fn capabilities(&self) -> &IndexCapabilities {
+        self.capabilities
+    }
+
+    fn dependency_metadata(&self) -> &DependencyMetadata {
+        self.dependency_metadata
+    }
+
     fn build_options(&self) -> &BuildOptions {
         self.build_options
+    }
+
+    fn config_settings(&self) -> &ConfigSettings {
+        self.config_settings
     }
 
     fn sources(&self) -> SourceStrategy {
@@ -210,6 +231,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             &BuildOptions::default(),
             self.hasher,
             self.index_locations,
+            self.config_settings,
             self.cache(),
             venv,
             &markers,
@@ -299,12 +321,19 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &'data self,
         source: &'data Path,
         subdirectory: Option<&'data Path>,
-        version_id: &'data str,
+        version_id: Option<String>,
         dist: Option<&'data SourceDist>,
         build_kind: BuildKind,
         build_output: BuildOutput,
     ) -> Result<SourceBuild> {
         let dist_name = dist.map(distribution_types::Name::name);
+        let dist_version = dist
+            .map(distribution_types::DistributionMetadata::version_or_url)
+            .and_then(|version| match version {
+                VersionOrUrlRef::Version(version) => Some(version),
+                VersionOrUrlRef::Url(_) => None,
+            });
+
         // Note we can only prevent builds by name for packages with names
         // unless all builds are disabled.
         if self
@@ -326,10 +355,11 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             source,
             subdirectory,
             dist_name,
+            dist_version,
             self.interpreter,
             self,
             self.source_build_context.clone(),
-            version_id.to_string(),
+            version_id,
             self.config_settings.clone(),
             self.build_isolation,
             build_kind,

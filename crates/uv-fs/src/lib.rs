@@ -1,10 +1,12 @@
 use fs2::FileExt;
 use std::fmt::Display;
+use std::io;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use tempfile::NamedTempFile;
-use tracing::{debug, error, trace, warn};
-
-use uv_warnings::warn_user;
+use tokio::io::{AsyncRead, ReadBuf};
+use tracing::{debug, error, info, trace, warn};
 
 pub use crate::path::*;
 
@@ -329,8 +331,8 @@ impl LockedFile {
                 // Log error code and enum kind to help debugging more exotic failures
                 // TODO(zanieb): When `raw_os_error` stabilizes, use that to avoid displaying
                 // the error when it is `WouldBlock`, which is expected and noisy otherwise.
-                trace!("Try lock error, waiting for exclusive lock: {:?}", err);
-                warn_user!(
+                trace!("Try lock error: {err:?}");
+                info!(
                     "Waiting to acquire lock for `{resource}` at `{}`",
                     file.path().user_display(),
                 );
@@ -387,5 +389,34 @@ impl Drop for LockedFile {
         } else {
             debug!("Released lock at `{}`", self.0.path().display());
         }
+    }
+}
+
+/// An asynchronous reader that reports progress as bytes are read.
+pub struct ProgressReader<Reader: AsyncRead + Unpin, Callback: Fn(usize) + Unpin> {
+    reader: Reader,
+    callback: Callback,
+}
+
+impl<Reader: AsyncRead + Unpin, Callback: Fn(usize) + Unpin> ProgressReader<Reader, Callback> {
+    /// Create a new [`ProgressReader`] that wraps another reader.
+    pub fn new(reader: Reader, callback: Callback) -> Self {
+        Self { reader, callback }
+    }
+}
+
+impl<Reader: AsyncRead + Unpin, Callback: Fn(usize) + Unpin> AsyncRead
+    for ProgressReader<Reader, Callback>
+{
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.as_mut().reader)
+            .poll_read(cx, buf)
+            .map_ok(|()| {
+                (self.callback)(buf.filled().len());
+            })
     }
 }

@@ -44,9 +44,9 @@ jobs:
               - "docs/reference/cli.md"
               - "docs/reference/settings.md"
               - "uv.schema.json"
-  cargo-fmt:
+  lint:
     timeout-minutes: 10
-    name: "cargo fmt"
+    name: "lint"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +57,9 @@ jobs:
 
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v3
 
       - name: "rustfmt"
         run: cargo fmt --all --check
@@ -69,27 +72,13 @@ jobs:
       - name: "README check"
         run: python scripts/transform_readme.py --target pypi
 
-  python-lint:
-    timeout-minutes: 10
-    name: "Python lint"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
-
-      - name: "Install uv"
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-
-      - name: "Format"
+      - name: "Python format"
         run: uvx ruff format --diff .
 
-      - name: "Lint"
+      - name: "Python lint"
         run: uvx ruff check .
 
-      - name: "Type check"
+      - name: "Python type check"
         run: uvx mypy
 
   cargo-clippy:
@@ -186,6 +175,7 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
+          # astral-sh/setup-uv sets `UV_CACHE_DIR` which disrupts the help message check
           curl -LsSf https://astral.sh/uv/install.sh | sh
           uv python install
 
@@ -207,6 +197,13 @@ jobs:
           $uv venv
           $uv pip install ruff
 
+      - name: "Smoke test completion"
+        run: |
+          uv="./target/debug/uv"
+          uvx="./target/debug/uvx"
+          eval "$($uv generate-shell-completion bash)"
+          eval "$($uvx --generate-shell-completion bash)"
+
   cargo-test-macos:
     timeout-minutes: 10
     needs: determine_changes
@@ -226,6 +223,7 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
+          # astral-sh/setup-uv sets `UV_CACHE_DIR` which disrupts the help message check
           curl -LsSf https://astral.sh/uv/install.sh | sh
           uv python install
 
@@ -305,6 +303,18 @@ jobs:
           uv venv
           uv pip install ruff
 
+      - name: "Smoke test completion"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        shell: powershell
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 2000000
+        run: |
+          Set-Alias -Name uv -Value ./target/debug/uv
+          Set-Alias -Name uvx -Value ./target/debug/uvx
+          (& uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+          (& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
+
   # Separate jobs for the nightly crate
   windows-trampoline-check:
     timeout-minutes: 10
@@ -348,7 +358,7 @@ jobs:
       - name: "Clippy"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
         if: matrix.target-arch == 'x86_64'
-        run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
+        run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
         env:
           XWIN_ARCH: "x86_64"
           XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
@@ -602,6 +612,42 @@ jobs:
         shell: bash -el {0}
         run: |
           echo "$CONDA_PREFIX"
+          ./uv pip install anyio
+
+  integration-test-free-threaded-linux:
+    timeout-minutes: 5
+    needs: build-binary-linux
+    name: "integration test | free-threaded on linux"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "install python3.13-nogil"
+        run: |
+          sudo add-apt-repository ppa:deadsnakes
+          sudo apt-get update
+          sudo apt-get install python3.13-nogil
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create a virtual environment"
+        run: |
+          ./uv venv -p 3.13t --python-preference only-system
+
+      - name: "Check version"
+        run: |
+          .venv/bin/python --version
+
+      - name: "Check is free-threaded"
+        run: |
+          .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
+
+      - name: "Check install"
+        run: |
           ./uv pip install anyio
 
   integration-test-pypy-linux:
@@ -870,7 +916,6 @@ jobs:
     name: "integration test | github actions"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -894,9 +939,105 @@ jobs:
       - name: Configure uv to use the system Python by default
         run: echo "UV_SYSTEM_PYTHON=1" >> $GITHUB_ENV
 
-      - name: "Install a package with environment system opt-in"
+      - name: "Install a package with system opt-in via the environment"
         run: |
           ./uv pip install anyio --reinstall
+
+      - name: "Create a project"
+        run: |
+          # Use Python 3.11 as the minimum required version
+          ./uv init --python 3.11
+          ./uv add anyio
+
+      - name: "Sync to the system Python"
+        run: ./uv sync --python 3.12
+        env:
+          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.6/x64"
+
+      - name: "Attempt to sync to the system Python with an incompatible version"
+        run: |
+          ./uv sync --python 3.11 && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
+        env:
+          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.6/x64"
+
+      - name: "Attempt to sync to a non-Python environment directory"
+        run: |
+          mkdir -p /home/runner/example
+          touch /home/runner/example/some-file
+          ./uv sync && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
+        env:
+          UV_PROJECT_ENVIRONMENT: "/home/runner/example"
+
+  integration-test-publish-changed:
+    timeout-minutes: 10
+    needs: build-binary-linux
+    name: "integration test | determine publish changes"
+    runs-on: ubuntu-latest
+    outputs:
+      # Flag that is raised when any code is changed
+      code: ${{ steps.changed.outputs.code_any_changed }}
+    # Only the main repository is a trusted publisher
+    if: github.repository == 'astral-sh/uv'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Only publish a new release if the publishing code changed
+      - uses: tj-actions/changed-files@v45
+        id: changed
+        with:
+          files_yaml: |
+            code:
+              - "crates/uv-publish/**/*"
+              - "scripts/publish/**/*"
+
+  integration-test-publish:
+    timeout-minutes: 10
+    needs: integration-test-publish-changed
+    name: "integration test | uv publish"
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'astral-sh/uv' && (needs.integration-test-publish-changed.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    environment: uv-test-publish
+    env:
+      # No dbus in GitHub Actions
+      PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+    permissions:
+      # For trusted publishing
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Add password to keyring"
+        run: |
+          # `keyrings.alt` contains the plaintext keyring
+          ./uv tool install --with keyrings.alt "keyring<25.4.0" # TODO(konsti): Remove upper bound once fix is released
+          echo $UV_TEST_PUBLISH_KEYRING | keyring set https://test.pypi.org/legacy/?astral-test-keyring __token__
+        env:
+          UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
+
+      - name: "Publish test packages"
+        # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
+        run: ./uv run -p 3.12 scripts/publish/test_publish.py --uv ./uv all
+        env:
+          RUST_LOG: uv=debug,uv_publish=trace
+          UV_TEST_PUBLISH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_TOKEN }}
+          UV_TEST_PUBLISH_PASSWORD: ${{ secrets.UV_TEST_PUBLISH_PASSWORD }}
+          UV_TEST_PUBLISH_GITLAB_PAT: ${{ secrets.UV_TEST_PUBLISH_GITLAB_PAT }}
 
   cache-test-ubuntu:
     timeout-minutes: 10
@@ -1356,7 +1497,7 @@ jobs:
   system-test-pyenv:
     timeout-minutes: 10
     needs: build-binary-linux
-    name: "check system | python via pyenv"
+    name: "check system | python3.9 via pyenv"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1379,6 +1520,33 @@ jobs:
 
       - name: "Validate global Python install"
         run: python3.9 scripts/check_system_python.py --uv ./uv
+
+  system-test-linux-313:
+    timeout-minutes: 10
+    needs: build-binary-linux
+    name: "check system | python3.13"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+          allow-prereleases: true
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3.13)
+
+      - name: "Validate global Python install"
+        run: python3.13 scripts/check_system_python.py --uv ./uv
 
   system-test-conda:
     timeout-minutes: 10
@@ -1524,7 +1692,7 @@ jobs:
           cargo run --bin uv -- pip compile scripts/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: cargo codspeed build --features codspeed -p bench
+        run: cargo codspeed build --profile profiling --features codspeed -p bench
 
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@v3

@@ -129,6 +129,12 @@ impl PythonVersionFile {
         &self.path
     }
 
+    /// Return the file name of the version file (guaranteed to be one of `.python-version` or
+    /// `.python-versions`).
+    pub fn file_name(&self) -> &str {
+        self.path.file_name().unwrap().to_str().unwrap()
+    }
+
     /// Set the versions for the file.
     #[must_use]
     pub fn with_versions(self, versions: Vec<PythonRequest>) -> Self {

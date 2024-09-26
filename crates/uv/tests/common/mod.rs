@@ -52,7 +52,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"tv_sec: \d+", "tv_sec: [TIME]"),
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
     // Rewrite Windows output to Unix output
-    (r"\\([\w\d])", "/$1"),
+    (r"\\([\w\d]|\.\.)", "/$1"),
     (r"uv.exe", "uv"),
     // uv version display
     (
@@ -351,11 +351,11 @@ impl TestContext {
         // Make virtual environment activation cross-platform and shell-agnostic
         filters.push((
             r"Activate with: (.*)\\Scripts\\activate".to_string(),
-            "Activate with: source $1/bin/activate".to_string(),
+            "Activate with: source $1/[BIN]/activate".to_string(),
         ));
         filters.push((
-            r"Activate with: source .venv/bin/activate(?:\.\w+)".to_string(),
-            "Activate with: source .venv/bin/activate".to_string(),
+            r"Activate with: source (.*)/bin/activate(?:\.\w+)?".to_string(),
+            "Activate with: source $1/[BIN]/activate".to_string(),
         ));
 
         // Account for [`Simplified::user_display`] which is relative to the command working directory
@@ -419,13 +419,15 @@ impl TestContext {
     /// * Don't wrap text output based on the terminal we're in, the test output doesn't get printed
     ///   but snapshotted to a string.
     /// * Use a fake `HOME` to avoid accidentally changing the developer's machine.
-    /// * Hide other Python python with `UV_PYTHON_INSTALL_DIR` and installed interpreters with
-    ///   `UV_TEST_PYTHON_PATH`.
+    /// * Hide other Pythons with `UV_PYTHON_INSTALL_DIR` and installed interpreters with
+    ///   `UV_TEST_PYTHON_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
     pub fn add_shared_args(&self, command: &mut Command, activate_venv: bool) {
         command
             .arg("--cache-dir")
             .arg(self.cache_dir.path())
+            // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
+            .env_remove("VIRTUAL_ENV")
             .env("UV_NO_WRAP", "1")
             .env("HOME", self.home_dir.as_os_str())
             .env("UV_PYTHON_INSTALL_DIR", "")
@@ -440,7 +442,7 @@ impl TestContext {
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
             // default windows stack of 1MB
-            command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
         }
     }
 
@@ -531,7 +533,7 @@ impl TestContext {
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
             // default windows stack of 1MB
-            command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
         }
 
         command
@@ -574,6 +576,21 @@ impl TestContext {
         let mut command = Command::new(get_bin());
         command.arg("build");
         self.add_shared_args(&mut command, false);
+        command
+    }
+
+    /// Create a `uv publish` command with options shared across scenarios.
+    #[expect(clippy::unused_self)] // For consistency
+    pub fn publish(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("publish");
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+        }
+
         command
     }
 
@@ -748,7 +765,7 @@ impl TestContext {
     }
 
     /// Generate various escaped regex patterns for the given path.
-    pub(crate) fn path_patterns(path: impl AsRef<Path>) -> Vec<String> {
+    pub fn path_patterns(path: impl AsRef<Path>) -> Vec<String> {
         let mut patterns = Vec::new();
 
         // We can only canonicalize paths that exist already
@@ -1030,6 +1047,18 @@ pub enum WindowsFilters {
     Universal,
 }
 
+/// Helper method to apply filters to a string. Useful when `!uv_snapshot` cannot be used.
+pub fn apply_filters<T: AsRef<str>>(mut snapshot: String, filters: impl AsRef<[(T, T)]>) -> String {
+    for (matcher, replacement) in filters.as_ref() {
+        // TODO(konstin): Cache regex compilation
+        let re = Regex::new(matcher.as_ref()).expect("Do you need to regex::escape your filter?");
+        if re.is_match(&snapshot) {
+            snapshot = re.replace_all(&snapshot, replacement.as_ref()).to_string();
+        }
+    }
+    snapshot
+}
+
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
@@ -1076,21 +1105,16 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
         .output()
         .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"));
 
-    let mut snapshot = format!(
-        "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
-        output.status.success(),
-        output.status.code().unwrap_or(!0),
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+    let mut snapshot = apply_filters(
+        format!(
+            "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
+            output.status.success(),
+            output.status.code().unwrap_or(!0),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ),
+        filters,
     );
-
-    for (matcher, replacement) in filters.as_ref() {
-        // TODO(konstin): Cache regex compilation
-        let re = Regex::new(matcher.as_ref()).expect("Do you need to regex::escape your filter?");
-        if re.is_match(&snapshot) {
-            snapshot = re.replace_all(&snapshot, replacement.as_ref()).to_string();
-        }
-    }
 
     // This is a heuristic filter meant to try and make *most* of our tests
     // pass whether it's on Windows or Unix. In particular, there are some very

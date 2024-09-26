@@ -113,7 +113,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
 }
 
 #[test]
-fn invalid_pyproject_toml_schema() -> Result<()> {
+fn invalid_pyproject_toml_project_schema() -> Result<()> {
     let context = TestContext::new("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str("[project]")?;
@@ -133,6 +133,71 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
       | ^^^^^^^^^
     missing field `name`
 
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_pyproject_toml_option_schema() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r"
+        [tool.uv]
+        index-url = true
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 2, column 13
+        |
+      2 | index-url = true
+        |             ^^^^
+      invalid type: boolean `true`, expected a string
+
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.uv]
+        unknown = "field"
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 2, column 1
+        |
+      2 | unknown = "field"
+        | ^^^^^^^
+      unknown field `unknown`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `workspace`, `sources`, `dev-dependencies`, `managed`, `package`
+
+    Resolved in [TIME]
+    Audited in [TIME]
     "###
     );
 
@@ -2764,9 +2829,37 @@ fn config_settings() {
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
 
-    // Install the editable package with `--editable_mode=compat`.
-    let context = TestContext::new("3.12");
+    // Reinstalling with `--editable_mode=compat` should be a no-op; changes in build configuration
+    // don't invalidate the environment.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/setuptools_editable"))
+        .arg("-C")
+        .arg("editable_mode=compat")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Uninstall the package.
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("setuptools-editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "###);
+
+    // Install the editable package with `--editable_mode=compat`. We should ignore the cached
+    // build configuration and rebuild.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("scripts/packages/setuptools_editable"))
@@ -2779,9 +2872,8 @@ fn config_settings() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + iniconfig==2.0.0
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
     "###
     );
@@ -2926,7 +3018,7 @@ requires-python = ">=3.8"
     "###
     );
 
-    // Re-installing should be a no-op.
+    // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
@@ -2951,7 +3043,7 @@ requires-python = ">=3.8"
 "#,
     )?;
 
-    // Re-installing should update the package.
+    // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
@@ -3015,7 +3107,7 @@ dependencies = {file = ["requirements.txt"]}
     "###
     );
 
-    // Re-installing should not re-install, as we don't special-case dynamic metadata.
+    // Installing again should not re-install, as we don't special-case dynamic metadata.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
@@ -3068,7 +3160,7 @@ requires-python = ">=3.8"
     "###
     );
 
-    // Re-installing should be a no-op.
+    // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"
@@ -3093,7 +3185,7 @@ requires-python = ">=3.8"
 "#,
     )?;
 
-    // Re-installing should update the package.
+    // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"
@@ -3108,6 +3200,284 @@ requires-python = ">=3.8"
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalidate_path_on_cache_key() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package.
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = ["constraints.txt", { file = "requirements.txt" }]
+"#,
+    )?;
+
+    let requirements_txt = editable_dir.child("requirements.txt");
+    requirements_txt.write_str("idna")?;
+
+    let constraints_txt = editable_dir.child("constraints.txt");
+    constraints_txt.write_str("idna<3.4")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Installing again should be a no-op.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Modify the constraints file.
+    constraints_txt.write_str("idna<3.5")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    // Modify the requirements file.
+    requirements_txt.write_str("flask")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    // Modify the `pyproject.toml` file (but not in a meaningful way).
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ file = "requirements.txt" }, "constraints.txt"]
+"#,
+    )?;
+
+    // Installing again should be a no-op, since `pyproject.toml` was not included as a cache key.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Modify the `pyproject.toml` to use a glob.
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ file = "**/*.txt" }]
+"#,
+    )?;
+
+    // Write a new file.
+    editable_dir
+        .child("resources")
+        .child("data.txt")
+        .write_str("data")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    // Write a new file in the current directory.
+    editable_dir.child("data.txt").write_str("data")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalidate_path_on_commit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package.
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
+
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ git = true }]
+        "#,
+    )?;
+
+    // Create a Git repository.
+    context
+        .temp_dir
+        .child(".git")
+        .child("HEAD")
+        .write_str("ref: refs/heads/main")?;
+    context
+        .temp_dir
+        .child(".git")
+        .child("refs")
+        .child("heads")
+        .child("main")
+        .write_str("1b6638fdb424e993d8354e75c55a3e524050c857")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Installing again should be a no-op.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Change the current commit.
+    context
+        .temp_dir
+        .child(".git")
+        .child("refs")
+        .child("heads")
+        .child("main")
+        .write_str("a1a42cbd10d83bafd8600ba81f72bbef6c579385")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );
@@ -6414,7 +6784,7 @@ fn invalid_extension() {
 
     ----- stderr -----
     error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`
-      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`) to end in a supported file extension: `.whl`, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`
+      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
     ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###);
@@ -6434,7 +6804,7 @@ fn no_extension() {
 
     ----- stderr -----
     error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`
-      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`) to end in a supported file extension: `.whl`, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`
+      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
     ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###);

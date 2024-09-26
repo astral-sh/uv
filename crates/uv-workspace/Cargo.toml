@@ -16,7 +16,7 @@ workspace = true
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
-uv-fs = { workspace = true, features = ["tokio"] }
+uv-fs = { workspace = true, features = ["tokio", "schemars"] }
 uv-git = { workspace = true }
 uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
@@ -39,8 +39,11 @@ url = { workspace = true }
 itertools = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.39.0", features = ["filters", "json", "redactions"] }
+anyhow = { workspace = true }
+assert_fs = { version = "1.1.2" }
+insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
 regex = { workspace = true }
+tempfile = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["uv-options-metadata"]

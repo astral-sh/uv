@@ -3,30 +3,33 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
 use cache_key::RepositoryUrl;
-use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
-use pypi_types::redact_git_credentials;
+use distribution_types::UnresolvedRequirement;
+use pep508_rs::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
+use pypi_types::{redact_git_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, ExtrasSpecification, InstallOptions, SourceStrategy,
+    Concurrency, Constraints, DevMode, EditableMode, ExtrasSpecification, InstallOptions,
+    SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_fs::{Simplified, CWD};
-use uv_git::GIT_STORE;
+use uv_fs::Simplified;
+use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
-use uv_resolver::{FlatIndex, RequiresPython};
+use uv_resolver::FlatIndex;
 use uv_scripts::Pep723Script;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
@@ -39,7 +42,7 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
-use crate::commands::project::ProjectError;
+use crate::commands::project::{script_python_requirement, ProjectError};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -48,6 +51,7 @@ use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
+    project_dir: &Path,
     locked: bool,
     frozen: bool,
     no_sync: bool,
@@ -125,41 +129,24 @@ pub(crate) async fn add(
         let script = if let Some(script) = Pep723Script::read(&script).await? {
             script
         } else {
-            let python_request = if let Some(request) = python.as_deref() {
-                // (1) Explicit request from user
-                PythonRequest::parse(request)
-            } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
-                .await?
-                .and_then(PythonVersionFile::into_version)
-            {
-                // (2) Request from `.python-version`
-                request
-            } else {
-                // (3) Assume any Python version
-                PythonRequest::Any
-            };
-
-            let interpreter = PythonInstallation::find_or_download(
-                Some(&python_request),
-                EnvironmentPreference::Any,
+            let requires_python = script_python_requirement(
+                python.as_deref(),
+                project_dir,
+                false,
                 python_preference,
                 python_downloads,
                 &client_builder,
                 cache,
-                Some(&reporter),
+                &reporter,
             )
-            .await?
-            .into_interpreter();
-
-            let requires_python =
-                RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-            Pep723Script::create(&script, requires_python.specifiers()).await?
+            .await?;
+            Pep723Script::init(&script, requires_python.specifiers()).await?
         };
 
         let python_request = if let Some(request) = python.as_deref() {
             // (1) Explicit request from user
             Some(PythonRequest::parse(request))
-        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
+        } else if let Some(request) = PythonVersionFile::discover(project_dir, false, false)
             .await?
             .and_then(PythonVersionFile::into_version)
         {
@@ -172,7 +159,7 @@ pub(crate) async fn add(
                 .requires_python
                 .clone()
                 .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python))
+                    PythonRequest::Version(VersionRequest::Range(requires_python, false))
                 })
         };
 
@@ -193,13 +180,13 @@ pub(crate) async fn add(
         // Find the project in the workspace.
         let project = if let Some(package) = package {
             VirtualProject::Project(
-                Workspace::discover(&CWD, &DiscoveryOptions::default())
+                Workspace::discover(project_dir, &DiscoveryOptions::default())
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
         };
 
         // For non-project workspace roots, allow dev dependencies, but nothing else.
@@ -297,8 +284,10 @@ pub(crate) async fn add(
         target.interpreter(),
         &settings.index_locations,
         &flat_index,
+        &settings.dependency_metadata,
         &state.index,
         &state.git,
+        &state.capabilities,
         &state.in_flight,
         settings.index_strategy,
         &settings.config_setting,
@@ -312,15 +301,42 @@ pub(crate) async fn add(
     );
 
     // Resolve any unnamed requirements.
-    let requirements = NamedRequirementsResolver::new(
-        requirements,
-        &hasher,
-        &state.index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve()
-    .await?;
+    let requirements = {
+        // Partition the requirements into named and unnamed requirements.
+        let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
+            .into_iter()
+            .map(|spec| {
+                augment_requirement(
+                    spec.requirement,
+                    rev.as_deref(),
+                    tag.as_deref(),
+                    branch.as_deref(),
+                )
+            })
+            .partition_map(|requirement| match requirement {
+                UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
+                UnresolvedRequirement::Unnamed(requirement) => {
+                    itertools::Either::Right(requirement)
+                }
+            });
+
+        // Resolve any unnamed requirements.
+        if !unnamed.is_empty() {
+            requirements.extend(
+                NamedRequirementsResolver::new(
+                    unnamed,
+                    &hasher,
+                    &state.index,
+                    DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+                )
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?,
+            );
+        }
+
+        requirements
+    };
 
     // Add the requirements to the `pyproject.toml` or script.
     let mut toml = match &target {
@@ -343,15 +359,19 @@ pub(crate) async fn add(
             Target::Script(_, _) | Target::Project(_, _) if raw_sources => {
                 (pep508_rs::Requirement::from(requirement), None)
             }
-            Target::Script(ref script, _) => resolve_requirement(
-                requirement,
-                false,
-                editable,
-                rev.clone(),
-                tag.clone(),
-                branch.clone(),
-                &script.path,
-            )?,
+            Target::Script(ref script, _) => {
+                let script_path = std::path::absolute(&script.path)?;
+                let script_dir = script_path.parent().expect("script path has no parent");
+                resolve_requirement(
+                    requirement,
+                    false,
+                    editable,
+                    rev.clone(),
+                    tag.clone(),
+                    branch.clone(),
+                    script_dir,
+                )?
+            }
             Target::Project(ref project, _) => {
                 let workspace = project
                     .workspace()
@@ -410,21 +430,20 @@ pub(crate) async fn add(
             }
         };
 
-        // Keep track of the exact location of the edit.
-        let index = edit.index();
-
         // If the edit was inserted before the end of the list, update the existing edits.
-        for edit in &mut edits {
-            if *edit.dependency_type == dependency_type {
-                match &mut edit.edit {
-                    ArrayEdit::Add(existing) => {
-                        if *existing >= index {
-                            *existing += 1;
+        if let ArrayEdit::Add(index) = &edit {
+            for edit in &mut edits {
+                if *edit.dependency_type == dependency_type {
+                    match &mut edit.edit {
+                        ArrayEdit::Add(existing) => {
+                            if *existing >= *index {
+                                *existing += 1;
+                            }
                         }
-                    }
-                    ArrayEdit::Update(existing) => {
-                        if *existing >= index {
-                            *existing += 1;
+                        ArrayEdit::Update(existing) => {
+                            if *existing >= *index {
+                                *existing += 1;
+                            }
                         }
                     }
                 }
@@ -536,7 +555,7 @@ pub(crate) async fn add(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
             let header = err.header();
-            let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If this is intentional, run `uv add --frozen` to skip the lock and sync steps.") });
+            let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.") });
             anstream::eprint!("{report:?}");
 
             // Revert the changes to the `pyproject.toml`, if necessary.
@@ -701,17 +720,17 @@ async fn lock_and_sync(
     let (extras, dev) = match dependency_type {
         DependencyType::Production => {
             let extras = ExtrasSpecification::None;
-            let dev = false;
+            let dev = DevMode::Exclude;
             (extras, dev)
         }
         DependencyType::Dev => {
             let extras = ExtrasSpecification::None;
-            let dev = true;
+            let dev = DevMode::Include;
             (extras, dev)
         }
         DependencyType::Optional(ref group_name) => {
             let extras = ExtrasSpecification::Some(vec![group_name.clone()]);
-            let dev = false;
+            let dev = DevMode::Exclude;
             (extras, dev)
         }
     };
@@ -722,6 +741,7 @@ async fn lock_and_sync(
         &lock,
         &extras,
         dev,
+        EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,
         settings.into(),
@@ -736,6 +756,74 @@ async fn lock_and_sync(
     .await?;
 
     Ok(())
+}
+
+/// Augment a user-provided requirement by attaching any specification data that was provided
+/// separately from the requirement itself (e.g., `--branch main`).
+fn augment_requirement(
+    requirement: UnresolvedRequirement,
+    rev: Option<&str>,
+    tag: Option<&str>,
+    branch: Option<&str>,
+) -> UnresolvedRequirement {
+    match requirement {
+        UnresolvedRequirement::Named(requirement) => {
+            UnresolvedRequirement::Named(pypi_types::Requirement {
+                source: match requirement.source {
+                    RequirementSource::Git {
+                        repository,
+                        reference,
+                        precise,
+                        subdirectory,
+                        url,
+                    } => {
+                        let reference = if let Some(rev) = rev {
+                            GitReference::from_rev(rev.to_string())
+                        } else if let Some(tag) = tag {
+                            GitReference::Tag(tag.to_string())
+                        } else if let Some(branch) = branch {
+                            GitReference::Branch(branch.to_string())
+                        } else {
+                            reference
+                        };
+                        RequirementSource::Git {
+                            repository,
+                            reference,
+                            precise,
+                            subdirectory,
+                            url,
+                        }
+                    }
+                    _ => requirement.source,
+                },
+                ..requirement
+            })
+        }
+        UnresolvedRequirement::Unnamed(requirement) => {
+            UnresolvedRequirement::Unnamed(UnnamedRequirement {
+                url: match requirement.url.parsed_url {
+                    ParsedUrl::Git(mut git) => {
+                        let reference = if let Some(rev) = rev {
+                            Some(GitReference::from_rev(rev.to_string()))
+                        } else if let Some(tag) = tag {
+                            Some(GitReference::Tag(tag.to_string()))
+                        } else {
+                            branch.map(|branch| GitReference::Branch(branch.to_string()))
+                        };
+                        if let Some(reference) = reference {
+                            git.url = git.url.with_reference(reference);
+                        }
+                        VerbatimParsedUrl {
+                            parsed_url: ParsedUrl::Git(git),
+                            verbatim: requirement.url.verbatim,
+                        }
+                    }
+                    _ => requirement.url,
+                },
+                ..requirement
+            })
+        }
+    }
 }
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.

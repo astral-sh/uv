@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer};
 
 use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
 
@@ -12,12 +12,12 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 /// See:
 /// - <https://peps.python.org/pep-0735/>
 /// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct GroupName(String);
 
 impl GroupName {
-    /// Create a validated, normalized extra name.
+    /// Create a validated, normalized group name.
     pub fn new(name: String) -> Result<Self, InvalidNameError> {
         validate_and_normalize_owned(name).map(Self)
     }

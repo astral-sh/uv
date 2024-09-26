@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
-
-use crate::timestamp::Timestamp;
+use uv_cache_info::Timestamp;
 
 #[derive(Deserialize, Serialize)]
 pub struct CachedByTimestamp<Data> {

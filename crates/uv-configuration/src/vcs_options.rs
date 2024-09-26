@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 
@@ -24,14 +24,14 @@ pub enum VersionControl {
 
 impl VersionControl {
     /// Initializes the VCS system based on the provided path.
-    pub fn init(&self, path: &PathBuf) -> Result<()> {
+    pub fn init(&self, path: &Path) -> Result<()> {
         match self {
             VersionControl::None => Ok(()),
             VersionControl::Git => Self::init_git(path),
         }
     }
 
-    fn init_git(path: &PathBuf) -> Result<()> {
+    fn init_git(path: &Path) -> Result<()> {
         let Ok(git) = which::which("git") else {
             anyhow::bail!("could not find `git` in PATH");
         };

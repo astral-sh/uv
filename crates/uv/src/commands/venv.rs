@@ -9,7 +9,7 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use distribution_types::IndexLocations;
+use distribution_types::{DependencyMetadata, IndexLocations};
 use install_wheel_rs::linker::LinkMode;
 use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
@@ -20,7 +20,7 @@ use uv_configuration::{
     NoBinary, NoBuild, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
-use uv_fs::{Simplified, CWD};
+use uv_fs::Simplified;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionRequest,
@@ -41,6 +41,7 @@ use crate::printer::Printer;
 /// Create a virtual environment.
 #[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
 pub(crate) async fn venv(
+    project_dir: &Path,
     path: Option<PathBuf>,
     python_request: Option<&str>,
     python_preference: PythonPreference,
@@ -48,6 +49,7 @@ pub(crate) async fn venv(
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
+    dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     prompt: uv_virtualenv::Prompt,
@@ -65,11 +67,13 @@ pub(crate) async fn venv(
     relocatable: bool,
 ) -> Result<ExitStatus> {
     match venv_impl(
+        project_dir,
         path,
         python_request,
         link_mode,
         index_locations,
         index_strategy,
+        dependency_metadata,
         keyring_provider,
         allow_insecure_host,
         prompt,
@@ -120,11 +124,13 @@ enum VenvError {
 /// Create a virtual environment.
 #[allow(clippy::fn_params_excessive_bools)]
 async fn venv_impl(
+    project_dir: &Path,
     path: Option<PathBuf>,
     python_request: Option<&str>,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
+    dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     prompt: uv_virtualenv::Prompt,
@@ -146,7 +152,7 @@ async fn venv_impl(
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
             Ok(project) => Some(project),
             Err(WorkspaceError::MissingProject(_)) => None,
             Err(WorkspaceError::MissingPyprojectToml) => None,
@@ -166,7 +172,8 @@ async fn venv_impl(
                 // Only use the project environment path if we're invoked from the root
                 // This isn't strictly necessary and we may want to change it later, but this
                 // avoids a breaking change when adding project environment support to `uv venv`.
-                (project.workspace().install_path() == &*CWD).then(|| project.workspace().venv())
+                (project.workspace().install_path() == project_dir)
+                    .then(|| project.workspace().venv())
             })
             .unwrap_or(PathBuf::from(".venv")),
     );
@@ -182,7 +189,7 @@ async fn venv_impl(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(&*CWD, no_config, false)
+        interpreter_request = PythonVersionFile::discover(project_dir, no_config, false)
             .await
             .into_diagnostic()?
             .and_then(PythonVersionFile::into_version);
@@ -196,7 +203,7 @@ async fn venv_impl(
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone()))
+                    PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
                 });
         }
     }
@@ -215,6 +222,7 @@ async fn venv_impl(
     .into_diagnostic()?;
 
     let managed = python.source().is_managed();
+    let implementation = python.implementation();
     let interpreter = python.into_interpreter();
 
     // Add all authenticated sources to the cache.
@@ -225,14 +233,16 @@ async fn venv_impl(
     if managed {
         writeln!(
             printer.stderr(),
-            "Using Python {}",
+            "Using {} {}",
+            implementation.pretty(),
             interpreter.python_version().cyan()
         )
         .into_diagnostic()?;
     } else {
         writeln!(
             printer.stderr(),
-            "Using Python {} interpreter at: {}",
+            "Using {} {} interpreter at: {}",
+            implementation.pretty(),
             interpreter.python_version(),
             interpreter.sys_executable().user_display().cyan()
         )
@@ -241,7 +251,7 @@ async fn venv_impl(
 
     writeln!(
         printer.stderr(),
-        "Creating virtualenv {}at: {}",
+        "Creating virtual environment {}at: {}",
         if seed { "with seed packages " } else { "" },
         path.user_display().cyan()
     )
@@ -255,6 +265,7 @@ async fn venv_impl(
         system_site_packages,
         allow_existing,
         relocatable,
+        seed,
     )
     .map_err(VenvError::Creation)?;
 
@@ -316,8 +327,10 @@ async fn venv_impl(
             interpreter,
             index_locations,
             &flat_index,
+            &dependency_metadata,
             &state.index,
             &state.git,
+            &state.capabilities,
             &state.in_flight,
             index_strategy,
             &config_settings,

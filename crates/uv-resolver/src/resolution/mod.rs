@@ -5,13 +5,14 @@ use distribution_types::{
     VersionOrUrlRef,
 };
 use pep440_rs::Version;
+use pep508_rs::MarkerTree;
 use pypi_types::HashDigest;
 use uv_distribution::Metadata;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
 pub use crate::resolution::display::{AnnotationStyle, DisplayResolutionGraph};
-pub use crate::resolution::graph::ResolutionGraph;
 pub(crate) use crate::resolution::graph::ResolutionGraphNode;
+pub use crate::resolution::graph::{ConflictingDistributionError, ResolutionGraph};
 pub(crate) use crate::resolution::requirements_txt::RequirementsTxtDist;
 
 mod display;
@@ -30,6 +31,12 @@ pub(crate) struct AnnotatedDist {
     pub(crate) dev: Option<GroupName>,
     pub(crate) hashes: Vec<HashDigest>,
     pub(crate) metadata: Option<Metadata>,
+    /// The "full" marker for this distribution. It precisely describes all
+    /// marker environments for which this distribution _can_ be installed.
+    /// That is, when doing a traversal over all of the distributions in a
+    /// resolution, this marker corresponds to the disjunction of all paths to
+    /// this distribution in the resolution graph.
+    pub(crate) marker: MarkerTree,
 }
 
 impl AnnotatedDist {

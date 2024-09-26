@@ -1,0 +1,26 @@
+[package]
+name = "uv-metadata"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+distribution-filename = { workspace = true }
+pypi-types = { workspace = true }
+uv-normalize = { workspace = true }
+
+async_zip = { workspace = true }
+fs-err = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+zip = { workspace = true }
+
+[lints]
+workspace = true

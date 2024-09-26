@@ -135,7 +135,7 @@ create_exception!(
 );
 
 /// A PEP 508 dependency specifier.
-#[derive(Hash, Debug, Clone, Eq, PartialEq)]
+#[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// The distribution name such as `requests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
@@ -480,7 +480,9 @@ impl<T: Pep508Url> schemars::JsonSchema for Requirement<T> {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("A PEP 508 dependency specifier".to_string()),
+                description: Some(
+                    "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`".to_string(),
+                ),
                 ..schemars::schema::Metadata::default()
             })),
             ..schemars::schema::SchemaObject::default()
@@ -535,7 +537,7 @@ impl Extras {
 }
 
 /// The actual version specifier or URL to install.
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum VersionOrUrl<T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier set
     VersionSpecifier(VersionSpecifiers),
@@ -657,8 +659,13 @@ fn looks_like_unnamed_requirement(cursor: &mut Cursor) -> bool {
     // Expand any environment variables in the path.
     let expanded = expand_env_vars(url);
 
+    // Strip extras.
+    let url = split_extras(&expanded)
+        .map(|(url, _)| url)
+        .unwrap_or(&expanded);
+
     // Analyze the path.
-    let mut chars = expanded.chars();
+    let mut chars = url.chars();
 
     let Some(first_char) = chars.next() else {
         return false;
@@ -670,16 +677,45 @@ fn looks_like_unnamed_requirement(cursor: &mut Cursor) -> bool {
     }
 
     // Ex) `https://` or `C:`
-    if split_scheme(&expanded).is_some() {
+    if split_scheme(url).is_some() {
         return true;
     }
 
     // Ex) `foo/bar`
-    if expanded.contains('/') || expanded.contains('\\') {
+    if url.contains('/') || url.contains('\\') {
+        return true;
+    }
+
+    // Ex) `foo.tar.gz`
+    if looks_like_archive(url) {
         return true;
     }
 
     false
+}
+
+/// Returns `true` if a file looks like an archive.
+///
+/// See <https://github.com/pypa/pip/blob/111eed14b6e9fba7c78a5ec2b7594812d17b5d2b/src/pip/_internal/utils/filetypes.py#L8>
+/// for the list of supported archive extensions.
+fn looks_like_archive(file: impl AsRef<Path>) -> bool {
+    let file = file.as_ref();
+
+    // E.g., `gz` in `foo.tar.gz`
+    let Some(extension) = file.extension().and_then(|ext| ext.to_str()) else {
+        return false;
+    };
+
+    // E.g., `tar` in `foo.tar.gz`
+    let pre_extension = file
+        .file_stem()
+        .and_then(|stem| Path::new(stem).extension().and_then(|ext| ext.to_str()));
+
+    matches!(
+        (pre_extension, extension),
+        (_, "whl" | "tbz" | "txz" | "tlz" | "zip" | "tgz" | "tar")
+            | (Some("tar"), "bz2" | "xz" | "lz" | "lzma" | "gz")
+    )
 }
 
 /// parses extras in the `[extra1,extra2] format`
@@ -970,7 +1006,9 @@ fn parse_pep508_requirement<T: Pep508Url>(
     // wsp*
     cursor.eat_whitespace();
     // name
+    let name_start = cursor.pos();
     let name = parse_name(cursor)?;
+    let name_end = cursor.pos();
     // wsp*
     cursor.eat_whitespace();
     // extras?
@@ -1017,6 +1055,23 @@ fn parse_pep508_requirement<T: Pep508Url>(
     };
 
     let requirement_end = cursor.pos();
+
+    // If the requirement consists solely of a package name, and that name appears to be an archive,
+    // treat it as a URL requirement, for consistency and security. (E.g., `requests-2.26.0.tar.gz`
+    // is a valid Python package name, but we should treat it as a reference to a file.)
+    //
+    // See: https://github.com/pypa/pip/blob/111eed14b6e9fba7c78a5ec2b7594812d17b5d2b/src/pip/_internal/utils/filetypes.py#L8
+    if requirement_kind.is_none() {
+        if looks_like_archive(cursor.slice(name_start, name_end)) {
+            let clone = cursor.clone().at(start);
+            return Err(Pep508Error {
+                message: Pep508ErrorSource::UnsupportedRequirement("URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).".to_string()),
+                start,
+                len: clone.pos() - start,
+                input: clone.to_string(),
+            });
+        }
+    }
 
     // wsp*
     cursor.eat_whitespace();

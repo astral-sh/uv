@@ -27,8 +27,7 @@ use std::{
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Operator {
     /// `== 1.2.3`
@@ -288,15 +287,13 @@ impl std::fmt::Display for OperatorParseError {
 /// let version = Version::from_str("1.19").unwrap();
 /// ```
 #[derive(Clone, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 pub struct Version {
     inner: Arc<VersionInner>,
 }
 
 #[derive(Clone, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 enum VersionInner {
     Small { small: VersionSmall },
     Full { full: VersionFull },
@@ -327,6 +324,12 @@ impl Version {
     #[inline]
     pub fn any_prerelease(&self) -> bool {
         self.is_pre() || self.is_dev()
+    }
+
+    /// Whether this is a stable version (i.e., _not_ an alpha/beta/rc or dev version)
+    #[inline]
+    pub fn is_stable(&self) -> bool {
+        !self.is_pre() && !self.is_dev()
     }
 
     /// Whether this is an alpha/beta/rc version
@@ -879,8 +882,7 @@ impl FromStr for Version {
 /// Thankfully, such versions are incredibly rare. Virtually all versions have
 /// zero or one pre, dev or post release components.
 #[derive(Clone, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 struct VersionSmall {
     /// The representation discussed above.
     repr: u64,
@@ -1221,8 +1223,7 @@ impl VersionSmall {
 /// In general, the "full" representation is rarely used in practice since most
 /// versions will fit into the "small" representation.
 #[derive(Clone, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 struct VersionFull {
     /// The [versioning
     /// epoch](https://peps.python.org/pep-0440/#version-epochs). Normally
@@ -1355,8 +1356,7 @@ impl FromStr for VersionPattern {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Prerelease {
     /// The kind of pre-release.
@@ -1381,8 +1381,7 @@ pub struct Prerelease {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum PrereleaseKind {
     /// alpha pre-release
@@ -1403,6 +1402,12 @@ impl std::fmt::Display for PrereleaseKind {
     }
 }
 
+impl std::fmt::Display for Prerelease {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.kind, self.number)
+    }
+}
+
 /// A part of the [local version identifier](<https://peps.python.org/pep-0440/#local-version-identifiers>)
 ///
 /// Local versions are a mess:
@@ -1419,8 +1424,7 @@ impl std::fmt::Display for PrereleaseKind {
 ///
 /// Luckily the default `Ord` implementation for `Vec<LocalSegment>` matches the PEP 440 rules.
 #[derive(Eq, PartialEq, Debug, Clone, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
+#[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 pub enum LocalSegment {
     /// Not-parseable as integer segment of local version
     String(String),
@@ -1491,6 +1495,7 @@ struct Parser<'a> {
 impl<'a> Parser<'a> {
     /// The "separators" that are allowed in several different parts of a
     /// version.
+    #[allow(clippy::byte_char_slices)]
     const SEPARATOR: ByteSet = ByteSet::new(&[b'.', b'_', b'-']);
 
     /// Create a new `Parser` for parsing the version in the given byte string.

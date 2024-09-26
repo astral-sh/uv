@@ -1,13 +1,13 @@
-use std::fmt::Write;
-
 use anyhow::{Context, Result};
+use std::fmt::Write;
+use std::path::Path;
 
 use owo_colors::OwoColorize;
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions};
-use uv_fs::{Simplified, CWD};
+use uv_configuration::{Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions};
+use uv_fs::Simplified;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::Pep723Script;
 use uv_warnings::{warn_user, warn_user_once};
@@ -24,6 +24,7 @@ use crate::settings::ResolverInstallerSettings;
 /// Remove one or more packages from the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn remove(
+    project_dir: &Path,
     locked: bool,
     frozen: bool,
     no_sync: bool,
@@ -68,13 +69,13 @@ pub(crate) async fn remove(
         // Find the project in the workspace.
         let project = if let Some(package) = package {
             VirtualProject::Project(
-                Workspace::discover(&CWD, &DiscoveryOptions::default())
+                Workspace::discover(project_dir, &DiscoveryOptions::default())
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
         };
 
         Target::Project(project)
@@ -188,8 +189,8 @@ pub(crate) async fn remove(
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
+    let dev = DevMode::Include;
     let extras = ExtrasSpecification::All;
-    let dev = true;
     let install_options = InstallOptions::default();
 
     // Initialize any shared state.
@@ -201,6 +202,7 @@ pub(crate) async fn remove(
         &lock,
         &extras,
         dev,
+        EditableMode::Editable,
         install_options,
         Modifications::Exact,
         settings.as_ref().into(),

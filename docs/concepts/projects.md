@@ -67,9 +67,9 @@ project should be packaged and installed.
 uv uses the presence of a build system to determine if a project contains a package that should be
 installed in the project virtual environment. If a build system is not defined, uv will not attempt
 to build or install the project itself, just its dependencies. If a build system is defined, uv will
-build and install the project into the project environment. Projects are installed in
+build and install the project into the project environment. By default, projects are installed in
 [editable mode](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) so changes to
-the source code are reflected immediately, without reinstallation.
+the source code are reflected immediately, without re-installation.
 
 ### Configuring project packaging
 
@@ -161,6 +161,7 @@ example-lib
 ├── pyproject.toml
 └── src
     └── example_lib
+        ├── py.typed
         └── __init__.py
 ```
 
@@ -223,20 +224,20 @@ example-packaged-app
 ├── README.md
 ├── pyproject.toml
 └── src
-    └── example_packaged-app
+    └── example_packaged_app
         └── __init__.py
 ```
 
 But the module defines a CLI function:
 
 ```python title="__init__.py"
-def hello():
+def hello() -> None:
     print("Hello from example-packaged-app!")
 ```
 
 And the `pyproject.toml` includes a script entrypoint:
 
-```python title="pyproject.toml" hl_lines="9 10"
+```toml title="pyproject.toml" hl_lines="9 10"
 [project]
 name = "example-packaged-app"
 version = "0.1.0"
@@ -295,6 +296,12 @@ use [`uvx`](../guides/tools.md) or
     [tool.uv]
     managed = false
     ```
+
+By default, the project will be installed in editable mode, such that changes to the source code are
+immediately reflected in the environment. `uv sync` and `uv run` both accept a `--no-editable` flag,
+which instructs uv to install the project in non-editable mode. `--no-editable` is intended for
+deployment use-cases, such as building a Docker container, in which the project should be included
+in the deployed environment without a dependency on the originating source code.
 
 ### Configuring the project environment path
 
@@ -357,6 +364,8 @@ and not usable by other tools.
 
 To avoid updating the lockfile during `uv sync` and `uv run` invocations, use the `--frozen` flag.
 
+To avoid updating the environment during `uv run` invocations, use the `--no-sync` flag.
+
 To assert the lockfile matches the project metadata, use the `--locked` flag. If the lockfile is not
 up-to-date, an error will be raised instead of updating the lockfile.
 
@@ -372,7 +381,8 @@ To upgrade all packages:
 $ uv lock --upgrade
 ```
 
-To upgrade a single package to the latest version:
+To upgrade a single package to the latest version, while retaining the locked versions of all other
+packages:
 
 ```console
 $ uv lock --upgrade-package <package>
@@ -483,6 +493,38 @@ To add a dependency source, e.g., to use `httpx` from GitHub during development:
 $ uv add git+https://github.com/encode/httpx
 ```
 
+### Platform-specific dependencies
+
+To ensure that a dependency is only installed on a specific platform or on specific Python versions,
+use Python's standardized
+[environment markers](https://peps.python.org/pep-0508/#environment-markers) syntax.
+
+For example, to install `jax` on Linux, but not on Windows or macOS:
+
+```console
+$ uv add 'jax; sys_platform == "linux"'
+```
+
+The resulting `pyproject.toml` will then include the environment marker in the dependency
+definition:
+
+```toml title="pyproject.toml" hl_lines="6"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["jax; sys_platform == 'linux'"]
+```
+
+Similarly, to include `numpy` on Python 3.11 and later:
+
+```console
+$ uv add 'numpy; python_version >= "3.11"'
+```
+
+See Python's [environment marker](https://peps.python.org/pep-0508/#environment-markers)
+documentation for a complete enumeration of the available markers and operators.
+
 ## Running commands
 
 When working on a project, it is installed into virtual environment at `.venv`. This environment is
@@ -560,9 +602,9 @@ To distribute your project to others (e.g., to upload it to an index like PyPI),
 build it into a distributable format.
 
 Python projects are typically distributed as both source distributions (sdists) and binary
-distributions (wheels). The former is a `.tar.gz` file containing the project's source code along
-with some additional metadata, while the latter is a `.whl` file containing pre-built artifacts that
-can be installed directly.
+distributions (wheels). The former is typically a `.tar.gz` or `.zip` file containing the project's
+source code along with some additional metadata, while the latter is a `.whl` file containing
+pre-built artifacts that can be installed directly.
 
 `uv build` can be used to build both source distributions and binary distributions for your project.
 By default, `uv build` will build the project in the current directory, and place the built
@@ -581,11 +623,11 @@ You can build the project in a different directory by providing a path to `uv bu
 `uv build` will first build a source distribution, and then build a binary distribution (wheel) from
 that source distribution.
 
-You can limit `uv build` to building a source distribution with `uv build --source`, a binary
-distribution with `uv build --binary`, or build both distributions from source with
-`uv build --source --binary`.
+You can limit `uv build` to building a source distribution with `uv build --sdist`, a binary
+distribution with `uv build --wheel`, or build both distributions from source with
+`uv build --sdist --wheel`.
 
-`uv build` accepts `--build-constraints`, which can be used to constrain the versions of any build
+`uv build` accepts `--build-constraint`, which can be used to constrain the versions of any build
 requirements during the build process. When coupled with `--require-hashes`, uv will enforce that
 the requirement used to build the project match specific, known hashes, for reproducibility.
 
@@ -599,7 +641,7 @@ Running the following would build the project with the specified version of `set
 that the downloaded `setuptools` distribution matches the specified hash:
 
 ```console
-$ uv build --build-constraints constraints.txt --require-hashes
+$ uv build --build-constraint constraints.txt --require-hashes
 ```
 
 ## Build isolation
@@ -674,8 +716,8 @@ $ uv sync --extra build
 $ uv sync --extra build --extra compile
 ```
 
-Some packages, like `cchardet`, only require build dependencies for the _installation_ phase of
-`uv sync`. Others, like `flash-attn`, require their build dependencies to be present even just to
+Some packages, like `cchardet` above, only require build dependencies for the _installation_ phase
+of `uv sync`. Others, like `flash-attn`, require their build dependencies to be present even just to
 resolve the project's lockfile during the _resolution_ phase.
 
 In such cases, the build dependencies must be installed prior to running any `uv lock` or `uv sync`
@@ -694,10 +736,64 @@ dependencies = ["flash-attn"]
 no-build-isolation-package = ["flash-attn"]
 ```
 
-You could run the following sequence of commands:
+You could run the following sequence of commands to sync `flash-attn`:
 
 ```console
 $ uv venv
 $ uv pip install torch
 $ uv sync
+```
+
+Alternatively, you can provide the `flash-attn` metadata upfront via the
+[`dependency-metadata`](../reference/settings.md#dependency-metadata) setting, thereby forgoing the
+need to build the package during the dependency resolution phase. For example, to provide the
+`flash-attn` metadata upfront, include the following in your `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[[tool.uv.dependency-metadata]]
+name = "flash-attn"
+version = "2.6.3"
+requires-dist = ["torch", "einops"]
+```
+
+!!! tip
+
+    To determine the package metadata for a package like `flash-attn`, navigate to the appropriate Git repository,
+    or look it up on [PyPI](https://pypi.org/project/flash-attn) and download the package's source distribution.
+    The package requirements can typically be found in the `setup.py` or `setup.cfg` file.
+
+    (If the package includes a built distribution, you can unzip it to find the `METADATA` file; however, the presence
+    of a built distribution would negate the need to provide the metadata upfront, since it would already be available
+    to uv.)
+
+Once included, you can again use the two-step `uv sync` process to install the build dependencies.
+Given the following `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[project]
+name = "project"
+version = "0.1.0"
+description = "..."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+build = ["torch", "setuptools", "packaging"]
+compile = ["flash-attn"]
+
+[tool.uv]
+no-build-isolation-package = ["flash-attn"]
+
+[[tool.uv.dependency-metadata]]
+name = "flash-attn"
+version = "2.6.3"
+requires-dist = ["torch", "einops"]
+```
+
+You could run the following sequence of commands to sync `flash-attn`:
+
+```console
+$ uv sync --extra build
+$ uv sync --extra build --extra compile
 ```

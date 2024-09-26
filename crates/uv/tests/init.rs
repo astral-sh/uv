@@ -52,7 +52,7 @@ fn init() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
     "###);
 
@@ -130,8 +130,8 @@ fn init_application() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
     Audited in [TIME]
     "###);
@@ -297,7 +297,7 @@ fn init_application_package() -> Result<()> {
     }, {
         assert_snapshot!(
             init, @r###"
-        def hello():
+        def hello() -> None:
             print("Hello from foo!")
         "###
         );
@@ -311,8 +311,8 @@ fn init_application_package() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -332,6 +332,7 @@ fn init_library() -> Result<()> {
 
     let pyproject_toml = child.join("pyproject.toml");
     let init_py = child.join("src").join("foo").join("__init__.py");
+    let py_typed = child.join("src").join("foo").join("py.typed");
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib"), @r###"
     success: true
@@ -375,6 +376,15 @@ fn init_library() -> Result<()> {
         );
     });
 
+    let py_typed = fs_err::read_to_string(py_typed)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            py_typed, @""
+        );
+    });
+
     uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
     success: true
     exit_code: 0
@@ -383,14 +393,243 @@ fn init_library() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==0.1.0 (from file://[TEMP_DIR]/foo)
     "###);
 
+    Ok(())
+}
+
+// General init --script correctness test
+#[test]
+fn init_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let script = child.join("hello.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("hello.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `hello.py`
+    "###);
+
+    let script = fs_err::read_to_string(&script)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script, @r###"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+
+        def main() -> None:
+            print("Hello from hello.py!")
+
+
+        if __name__ == "__main__":
+            main()
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("python").arg("hello.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from hello.py!
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+// Ensure python versions passed as arguments are present in file metadata
+#[test]
+fn init_script_python_version() -> Result<()> {
+    let context = TestContext::new("3.11");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let script = child.join("version.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("version.py").arg("--python").arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `version.py`
+    "###);
+
+    let script = fs_err::read_to_string(&script)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script, @r###"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        # ///
+
+
+        def main() -> None:
+            print("Hello from version.py!")
+
+
+        if __name__ == "__main__":
+            main()
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+// Init script should create parent directories if they don't exist
+#[test]
+fn init_script_create_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let script = child.join("test").join("dir.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("test/dir.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `test/dir.py`
+    "###);
+
+    let script = fs_err::read_to_string(&script)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script, @r###"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+
+        def main() -> None:
+            print("Hello from dir.py!")
+
+
+        if __name__ == "__main__":
+            main()
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+// Init script should fail if file is already a PEP 723 script
+#[test]
+fn init_script_file_conflicts() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("name_conflict.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `name_conflict.py`
+    "###);
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("name_conflict.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `name_conflict.py` is already a PEP 723 script; use `uv run` to execute it
+    "###);
+
+    let contents = "print(\"Hello, world!\")";
+    fs_err::write(child.join("existing_script.py"), contents)?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("existing_script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `existing_script.py`
+    "###);
+
+    let existing_script = fs_err::read_to_string(child.join("existing_script.py"))?;
+
+    assert_snapshot!(
+        existing_script, @r###"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    print("Hello, world!")
+    "###
+    );
+
+    Ok(())
+}
+
+/// Run `uv init --lib` with an existing py.typed file
+#[test]
+fn init_py_typed_exists() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let foo = child.child("src").child("foo");
+    foo.create_dir_all()?;
+
+    let py_typed = foo.join("py.typed");
+    fs_err::write(&py_typed, "partial")?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let py_typed = fs_err::read_to_string(py_typed)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            py_typed, @"partial"
+        );
+    });
     Ok(())
 }
 
@@ -563,7 +802,7 @@ fn init_library_current_dir() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
     "###);
 
@@ -627,7 +866,7 @@ fn init_application_current_dir() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
     "###);
 
@@ -692,7 +931,7 @@ fn init_dot_args() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
     "###);
 
@@ -1028,7 +1267,7 @@ fn init_normalized_names() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project is already initialized in `[TEMP_DIR]/foo-bar`
+    error: Project is already initialized in `[TEMP_DIR]/foo-bar` (`pyproject.toml` file exists)
     "###);
 
     let child = context.temp_dir.child("foo-bar");

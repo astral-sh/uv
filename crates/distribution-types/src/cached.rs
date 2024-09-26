@@ -5,6 +5,7 @@ use anyhow::{anyhow, Result};
 use distribution_filename::WheelFilename;
 use pep508_rs::VerbatimUrl;
 use pypi_types::{HashDigest, ParsedDirectoryUrl};
+use uv_cache_info::CacheInfo;
 use uv_normalize::PackageName;
 
 use crate::{
@@ -26,6 +27,7 @@ pub struct CachedRegistryDist {
     pub filename: WheelFilename,
     pub path: PathBuf,
     pub hashes: Vec<HashDigest>,
+    pub cache_info: CacheInfo,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -36,6 +38,7 @@ pub struct CachedDirectUrlDist {
     pub editable: bool,
     pub r#virtual: bool,
     pub hashes: Vec<HashDigest>,
+    pub cache_info: CacheInfo,
 }
 
 impl CachedDist {
@@ -44,6 +47,7 @@ impl CachedDist {
         remote: Dist,
         filename: WheelFilename,
         hashes: Vec<HashDigest>,
+        cache_info: CacheInfo,
         path: PathBuf,
     ) -> Self {
         match remote {
@@ -51,11 +55,13 @@ impl CachedDist {
                 filename,
                 path,
                 hashes,
+                cache_info,
             }),
             Dist::Built(BuiltDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
                 hashes,
+                cache_info,
                 path,
                 editable: false,
                 r#virtual: false,
@@ -64,6 +70,7 @@ impl CachedDist {
                 filename,
                 url: dist.url,
                 hashes,
+                cache_info,
                 path,
                 editable: false,
                 r#virtual: false,
@@ -72,11 +79,13 @@ impl CachedDist {
                 filename,
                 path,
                 hashes,
+                cache_info,
             }),
             Dist::Source(SourceDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
                 hashes,
+                cache_info,
                 path,
                 editable: false,
                 r#virtual: false,
@@ -85,6 +94,7 @@ impl CachedDist {
                 filename,
                 url: dist.url,
                 hashes,
+                cache_info,
                 path,
                 editable: false,
                 r#virtual: false,
@@ -93,6 +103,7 @@ impl CachedDist {
                 filename,
                 url: dist.url,
                 hashes,
+                cache_info,
                 path,
                 editable: false,
                 r#virtual: false,
@@ -101,6 +112,7 @@ impl CachedDist {
                 filename,
                 url: dist.url,
                 hashes,
+                cache_info,
                 path,
                 editable: dist.editable,
                 r#virtual: dist.r#virtual,
@@ -113,6 +125,14 @@ impl CachedDist {
         match self {
             Self::Registry(dist) => &dist.path,
             Self::Url(dist) => &dist.path,
+        }
+    }
+
+    /// Return the [`CacheInfo`] of the distribution.
+    pub fn cache_info(&self) -> &CacheInfo {
+        match self {
+            Self::Registry(dist) => &dist.cache_info,
+            Self::Url(dist) => &dist.cache_info,
         }
     }
 
@@ -161,12 +181,14 @@ impl CachedDirectUrlDist {
         filename: WheelFilename,
         url: VerbatimUrl,
         hashes: Vec<HashDigest>,
+        cache_info: CacheInfo,
         path: PathBuf,
     ) -> Self {
         Self {
             filename,
             url,
             hashes,
+            cache_info,
             path,
             editable: false,
             r#virtual: false,

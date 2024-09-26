@@ -5,7 +5,7 @@ use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use insta::assert_snapshot;
 
-use common::{uv_snapshot, TestContext};
+use common::{uv_snapshot, venv_bin_path, TestContext};
 use predicates::prelude::predicate;
 use tempfile::tempdir_in;
 
@@ -358,8 +358,8 @@ fn mixed_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
@@ -377,8 +377,8 @@ fn mixed_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.8. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.8.[X]` followed by `uv pip install -e .`.
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    error: The requested interpreter resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.8. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.8.[X]` followed by `uv pip install -e .`.
     "###);
 
     Ok(())
@@ -632,7 +632,7 @@ fn sync_build_isolation_package() -> Result<()> {
 /// Use dedicated extra groups to install dependencies for `--no-build-isolation-package`.
 #[test]
 fn sync_build_isolation_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -666,7 +666,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved [N] packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
       Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
@@ -686,7 +686,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved [N] packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
       Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
@@ -706,9 +706,9 @@ fn sync_build_isolation_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + hatchling==1.22.4
      + packaging==24.0
      + pathspec==0.12.1
@@ -724,10 +724,10 @@ fn sync_build_isolation_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 5 packages in [TIME]
-    Installed 1 package in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      - hatchling==1.22.4
      - packaging==24.0
      - pathspec==0.12.1
@@ -945,6 +945,77 @@ fn sync_environment() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--only-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     - sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/astral-sh/uv/issues/6316>.
 ///
 /// Previously, we would read metadata statically from pyproject.toml and write that to `uv.lock`. In
@@ -1117,9 +1188,8 @@ fn no_install_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
-    Prepared 4 packages in [TIME]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
@@ -1217,6 +1287,61 @@ fn no_install_package() -> Result<()> {
     Installed 1 package in [TIME]
      + anyio==3.7.0
      - project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
+/// Ensure that `--no-build` isn't enforced for projects that aren't installed in the first place.
+#[test]
+fn no_install_project_no_build() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // `--no-build` should raise an error, since we try to install the project.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to validate existing lockfile: distribution project==0.1.0 @ editable+. can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 4 packages in [TIME]
+    error: distribution project==0.1.0 @ editable+. can't be installed because it is marked as `--no-build` but has no binary distribution
+    "###);
+
+    // But it's fine to combine `--no-install-project` with `--no-build`. We shouldn't error, since
+    // we aren't building the project.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project").arg("--no-build"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to validate existing lockfile: distribution project==0.1.0 @ editable+. can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###);
 
     Ok(())
@@ -1488,7 +1613,9 @@ fn convert_to_package() -> Result<()> {
 
 #[test]
 fn sync_custom_environment_path() -> Result<()> {
-    let mut context = TestContext::new("3.12");
+    let mut context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1508,6 +1635,8 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1526,10 +1655,9 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: foo
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: foo
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1552,10 +1680,9 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: foobar/.venv
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: foobar/.venv
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1578,10 +1705,9 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: bar
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: bar
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1600,10 +1726,9 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [OTHER_TEMPDIR]/.venv
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [OTHER_TEMPDIR]/.venv
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1611,6 +1736,50 @@ fn sync_custom_environment_path() -> Result<()> {
     ChildPath::new(tempdir.path())
         .child(".venv")
         .assert(predicate::path::is_dir());
+
+    // If the directory already exists and is not a virtual environment we should fail with an error
+    fs_err::remove_dir_all(context.temp_dir.join("foo"))?;
+    fs_err::create_dir(context.temp_dir.join("foo"))?;
+    fs_err::write(context.temp_dir.join("foo").join("file"), b"")?;
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project virtual environment directory `[TEMP_DIR]/foo` cannot be used because because it is not a valid Python environment (no Python executable was found)
+    "###);
+
+    // But if it's just an incompatible virtual environment...
+    fs_err::remove_dir_all(context.temp_dir.join("foo"))?;
+    uv_snapshot!(context.filters(), context.venv().arg("foo").arg("--python").arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: foo
+    Activate with: source foo/[BIN]/activate
+    "###);
+
+    // Even with some extraneous content...
+    fs_err::write(context.temp_dir.join("foo").join("file"), b"")?;
+
+    // We can delete and use it
+    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: foo
+    Creating virtual environment at: foo
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
 
     Ok(())
 }
@@ -1681,10 +1850,9 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: foo
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: foo
     Resolved 3 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1838,10 +2006,9 @@ fn sync_virtual_env_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: foo
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: foo
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1854,10 +2021,9 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=foo` does not match the project environment path `bar` and will be ignored
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: bar
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: bar
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -1917,8 +2083,8 @@ fn sync_update_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -1980,8 +2146,8 @@ fn sync_environment_prompt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2103,6 +2269,537 @@ fn no_build() -> Result<()> {
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn sync_wheel_url_source_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "uv-test"
+        version = "0.0.0"
+        requires-python = ">=3.10"
+        dependencies = [
+            "cffi @ https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: distribution cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because the binary distribution is incompatible with the current platform
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_wheel_path_source_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Download a wheel.
+    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl")?;
+    let archive = context
+        .temp_dir
+        .child("cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl");
+    let mut archive_file = fs_err::File::create(archive.path())?;
+    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "uv-test"
+        version = "0.0.0"
+        requires-python = ">=3.10"
+        dependencies = ["cffi"]
+
+        [tool.uv.sources]
+        cffi = { path = "cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: distribution cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because the binary distribution is incompatible with the current platform
+    "###);
+
+    Ok(())
+}
+
+/// Avoid installing dev dependencies of transitive dependencies.
+#[test]
+fn transitive_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv]
+        dev-dependencies = ["anyio>3"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv]
+        dev-dependencies = ["iniconfig>1"]
+        "#,
+    )?;
+
+    let src = child.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + idna==3.6
+     + root==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// Avoid installing dev dependencies of transitive dependencies.
+#[test]
+fn sync_no_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let src = child.child("src").child("child");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + root==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Remove the project.
+    fs_err::remove_dir_all(&child)?;
+
+    // Ensure that we can still import it.
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("python").arg("-c").arg("import child"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+/// Check warning message for <https://github.com/astral-sh/uv/issues/6998>
+/// if no `build-system` section is defined.
+fn sync_scripts_without_build_system() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        entry = "foo:custom_entry"
+        "#,
+    )?;
+
+    let test_script = context.temp_dir.child("src/__init__.py");
+    test_script.write_str(
+        r#"
+        def custom_entry():
+            print!("Hello")
+       "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+/// Check warning message for <https://github.com/astral-sh/uv/issues/6998>
+/// if the project is marked as `package = false`.
+fn sync_scripts_project_not_packaged() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        entry = "foo:custom_entry"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    let test_script = context.temp_dir.child("src/__init__.py");
+    test_script.write_str(
+        r#"
+        def custom_entry():
+            print!("Hello")
+       "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_invalid_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // If the directory already exists and is not a virtual environment we should fail with an error
+    fs_err::create_dir(context.temp_dir.join(".venv"))?;
+    fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project virtual environment directory `[VENV]/` cannot be used because because it is not a valid Python environment (no Python executable was found)
+    "###);
+
+    // But if it's just an incompatible virtual environment...
+    fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###);
+
+    // Even with some extraneous content...
+    fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
+
+    // We can delete and use it
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let bin = venv_bin_path(context.temp_dir.join(".venv"));
+
+    // If there's just a broken symlink, we should warn
+    #[cfg(unix)]
+    {
+        fs_err::remove_file(bin.join("python"))?;
+        fs_err::os::unix::fs::symlink(context.temp_dir.join("does-not-exist"), bin.join("python"))?;
+        uv_snapshot!(context.filters(), context.sync(), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/python -> python
+        Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+        Removed virtual environment at: .venv
+        Creating virtual environment at: .venv
+        Resolved 2 packages in [TIME]
+        Installed 1 package in [TIME]
+         + iniconfig==2.0.0
+        "###);
+    }
+
+    // But if the Python executable is missing entirely we should also fail
+    fs_err::remove_dir_all(&bin)?;
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project virtual environment directory `[VENV]/` cannot be used because because it is not a valid Python environment (no Python executable was found)
+    "###);
+
+    // But if it's not a virtual environment...
+    fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###);
+
+    // Which we detect by the presence of a `pyvenv.cfg` file
+    fs_err::remove_file(context.temp_dir.join(".venv").join("pyvenv.cfg"))?;
+
+    // Let's make sure some extraneous content isn't removed
+    fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
+
+    // We should never delete it
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: Project virtual environment directory `[VENV]/` cannot be used because it is not a compatible environment but cannot be recreated because it is not a virtual environment
+    "###);
+
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    context
+        .temp_dir
+        .child(".venv")
+        .child("file")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Avoid validating workspace members when `--no-sources` is provided. Rather than reporting that
+/// `./anyio` is missing, install `anyio` from the registry.
+#[test]
+fn sync_no_sources_missing_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        anyio = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["anyio"]
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + root==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
 
     Ok(())
 }

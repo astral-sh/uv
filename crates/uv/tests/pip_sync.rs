@@ -65,10 +65,28 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No virtual environment found
+    error: No virtual environment found; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
     "###);
 
     assert!(predicates::path::missing().eval(&context.venv));
+
+    Ok(())
+}
+
+#[test]
+fn missing_system() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("anyio")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").arg("--system"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No system Python installation found
+    "###);
 
     Ok(())
 }
@@ -2597,13 +2615,15 @@ fn incompatible_wheel() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `foo @ file://[TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl`
-      Caused by: Failed to unzip wheel: foo-1.2.3-not-compatible-wheel.whl
-      Caused by: unable to locate the end of central directory record
+      × No solution found when resolving dependencies:
+      ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
+
+          hint: The structure of foo was invalid:
+            Failed to read from zip file
     "###
     );
 
@@ -3197,7 +3217,7 @@ requires-python = ">=3.8"
     "###
     );
 
-    // Re-installing should be a no-op.
+    // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in"), @r###"
     success: true
@@ -5509,6 +5529,79 @@ fn compatible_build_constraint() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn sync_seed() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==1.2")?;
+
+    // Add `pip` to the environment.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("pip"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pip==24.0
+    "###
+    );
+
+    // Syncing should remove the seed packages.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - pip==24.0
+     + requests==1.2.0
+    "###
+    );
+
+    // Re-create the environment with seed packages.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--seed"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Creating virtual environment with seed packages at: .venv
+     + pip==24.0
+     + setuptools==69.2.0
+     + wheel==0.43.0
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    // Syncing should retain the seed packages.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
     "###

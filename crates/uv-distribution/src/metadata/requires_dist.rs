@@ -1,12 +1,12 @@
-use std::collections::BTreeMap;
-use std::path::Path;
-
-use uv_configuration::SourceStrategy;
-use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
-use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
-
 use crate::metadata::{LoweredRequirement, MetadataError};
 use crate::Metadata;
+use pypi_types::Requirement;
+use std::collections::BTreeMap;
+use std::path::Path;
+use uv_configuration::SourceStrategy;
+use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_workspace::pyproject::ToolUvSources;
+use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
@@ -39,39 +39,37 @@ impl RequiresDist {
         install_path: &Path,
         sources: SourceStrategy,
     ) -> Result<Self, MetadataError> {
-        match sources {
-            SourceStrategy::Enabled => {
-                // TODO(konsti): Limit discovery for Git checkouts to Git root.
-                // TODO(konsti): Cache workspace discovery.
-                let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
-                    install_path,
-                    &DiscoveryOptions::default(),
-                )
+        // TODO(konsti): Limit discovery for Git checkouts to Git root.
+        // TODO(konsti): Cache workspace discovery.
+        let Some(project_workspace) =
+            ProjectWorkspace::from_maybe_project_root(install_path, &DiscoveryOptions::default())
                 .await?
-                else {
-                    return Ok(Self::from_metadata23(metadata));
-                };
+        else {
+            return Ok(Self::from_metadata23(metadata));
+        };
 
-                Self::from_project_workspace(metadata, &project_workspace)
-            }
-            SourceStrategy::Disabled => Ok(Self::from_metadata23(metadata)),
-        }
+        Self::from_project_workspace(metadata, &project_workspace, sources)
     }
 
     fn from_project_workspace(
         metadata: pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
+        source_strategy: SourceStrategy,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
-        let sources = project_workspace
-            .current_project()
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.sources.as_ref())
-            .unwrap_or(&empty);
+        let sources = match source_strategy {
+            SourceStrategy::Enabled => project_workspace
+                .current_project()
+                .pyproject_toml()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.sources.as_ref())
+                .map(ToolUvSources::inner)
+                .unwrap_or(&empty),
+            SourceStrategy::Disabled => &empty,
+        };
 
         let dev_dependencies = {
             let dev_dependencies = project_workspace
@@ -83,7 +81,37 @@ impl RequiresDist {
                 .and_then(|uv| uv.dev_dependencies.as_ref())
                 .into_iter()
                 .flatten()
-                .cloned()
+                .cloned();
+            let dev_dependencies = match source_strategy {
+                SourceStrategy::Enabled => dev_dependencies
+                    .map(|requirement| {
+                        let requirement_name = requirement.name.clone();
+                        LoweredRequirement::from_requirement(
+                            requirement,
+                            &metadata.name,
+                            project_workspace.project_root(),
+                            sources,
+                            project_workspace.workspace(),
+                        )
+                        .map(LoweredRequirement::into_inner)
+                        .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                SourceStrategy::Disabled => dev_dependencies
+                    .into_iter()
+                    .map(Requirement::from)
+                    .collect(),
+            };
+            if dev_dependencies.is_empty() {
+                BTreeMap::default()
+            } else {
+                BTreeMap::from([(DEV_DEPENDENCIES.clone(), dev_dependencies)])
+            }
+        };
+
+        let requires_dist = metadata.requires_dist.into_iter();
+        let requires_dist = match source_strategy {
+            SourceStrategy::Enabled => requires_dist
                 .map(|requirement| {
                     let requirement_name = requirement.name.clone();
                     LoweredRequirement::from_requirement(
@@ -96,30 +124,9 @@ impl RequiresDist {
                     .map(LoweredRequirement::into_inner)
                     .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
                 })
-                .collect::<Result<Vec<_>, _>>()?;
-            if dev_dependencies.is_empty() {
-                BTreeMap::default()
-            } else {
-                BTreeMap::from([(DEV_DEPENDENCIES.clone(), dev_dependencies)])
-            }
+                .collect::<Result<_, _>>()?,
+            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
         };
-
-        let requires_dist = metadata
-            .requires_dist
-            .into_iter()
-            .map(|requirement| {
-                let requirement_name = requirement.name.clone();
-                LoweredRequirement::from_requirement(
-                    requirement,
-                    &metadata.name,
-                    project_workspace.project_root(),
-                    sources,
-                    project_workspace.workspace(),
-                )
-                .map(LoweredRequirement::into_inner)
-                .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
-            })
-            .collect::<Result<_, _>>()?;
 
         Ok(Self {
             name: metadata.name,
@@ -148,7 +155,7 @@ mod test {
     use anyhow::Context;
     use indoc::indoc;
     use insta::assert_snapshot;
-
+    use uv_configuration::SourceStrategy;
     use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
@@ -174,6 +181,7 @@ mod test {
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
+            SourceStrategy::Enabled,
         )?)
     }
 

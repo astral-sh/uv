@@ -42,9 +42,9 @@ uv-normalize = { workspace = true }
 uv-pubgrub = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.36.1" }
-log = { version = "0.4.21" }
-serde_json = { version = "1.0.114" }
+insta = { version = "1.40.0" }
+log = { version = "0.4.22" }
+serde_json = { version = "1.0.128" }
 testing_logger = { version = "0.1.1" }
 
 [features]

@@ -6,24 +6,35 @@
 //!
 //! Then lowers them into a dependency specification.
 
+use glob::Pattern;
+use serde::{de::IntoDeserializer, Deserialize, Serialize};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::{collections::BTreeMap, mem};
-
-use glob::Pattern;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
-use uv_fs::relative_to;
+use uv_fs::{relative_to, PortablePathBuf};
 use uv_git::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, PackageName};
 
+#[derive(Error, Debug)]
+pub enum PyprojectTomlError {
+    #[error(transparent)]
+    TomlSyntax(#[from] toml_edit::TomlError),
+    #[error(transparent)]
+    TomlSchema(#[from] toml_edit::de::Error),
+    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set")]
+    MissingName(#[source] toml_edit::de::Error),
+}
+
 /// A `pyproject.toml` as specified in PEP 517.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "kebab-case")]
 pub struct PyProjectToml {
     /// PEP 621-compliant project metadata.
@@ -34,15 +45,25 @@ pub struct PyProjectToml {
     #[serde(skip)]
     pub raw: String,
 
-    /// Used to determine whether a `build-system` is present.
+    /// Used to determine whether a `build-system` section is present.
     #[serde(default, skip_serializing)]
     build_system: Option<serde::de::IgnoredAny>,
 }
 
 impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
-    pub fn from_string(raw: String) -> Result<Self, toml::de::Error> {
-        let pyproject = toml::from_str(&raw)?;
+    pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
+        let pyproject: toml_edit::ImDocument<_> =
+            toml_edit::ImDocument::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
+        let pyproject =
+            PyProjectToml::deserialize(pyproject.into_deserializer()).map_err(|err| {
+                // TODO(konsti): A typed error would be nicer, this can break on toml upgrades.
+                if err.message().contains("missing field `name`") {
+                    PyprojectTomlError::MissingName(err)
+                } else {
+                    PyprojectTomlError::TomlSchema(err)
+                }
+            })?;
         Ok(PyProjectToml { raw, ..pyproject })
     }
 
@@ -61,6 +82,15 @@ impl PyProjectToml {
 
         // Otherwise, a project is assumed to be a package if `build-system` is present.
         self.build_system.is_some()
+    }
+
+    /// Returns whether the project manifest contains any script table.
+    pub fn has_scripts(&self) -> bool {
+        if let Some(ref project) = self.project {
+            project.gui_scripts.is_some() || project.scripts.is_some()
+        } else {
+            false
+        }
     }
 }
 
@@ -82,7 +112,8 @@ impl AsRef<[u8]> for PyProjectToml {
 /// PEP 621 project metadata (`project`).
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "kebab-case")]
 pub struct Project {
     /// The name of the project
@@ -91,11 +122,21 @@ pub struct Project {
     pub version: Option<Version>,
     /// The Python versions this project is compatible with.
     pub requires_python: Option<VersionSpecifiers>,
+    /// The dependencies of the project.
+    pub dependencies: Option<Vec<String>>,
     /// The optional dependencies of the project.
     pub optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
+
+    /// Used to determine whether a `gui-scripts` section is present.
+    #[serde(default, skip_serializing)]
+    pub(crate) gui_scripts: Option<serde::de::IgnoredAny>,
+    /// Used to determine whether a `scripts` section is present.
+    #[serde(default, skip_serializing)]
+    pub(crate) scripts: Option<serde::de::IgnoredAny>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Tool {
     pub uv: Option<ToolUv>,
@@ -103,13 +144,14 @@ pub struct Tool {
 
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
-#[derive(Serialize, Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUv {
     /// The sources to use (e.g., workspace members, Git repositories, local paths) when resolving
     /// dependencies.
-    pub sources: Option<BTreeMap<PackageName, Source>>,
+    pub sources: Option<ToolUvSources>,
     /// The workspace definition for the project, if any.
     #[option_group]
     pub workspace: Option<ToolUvWorkspace>,
@@ -192,6 +234,10 @@ pub struct ToolUv {
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of any constituent packages.
     ///
+    /// Including a package as an override will _not_ trigger installation of the package on its
+    /// own; instead, the package must be requested elsewhere in the project's first-party or
+    /// transitive dependencies.
+    ///
     /// !!! note
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
@@ -245,7 +291,67 @@ pub struct ToolUv {
     pub constraint_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
 }
 
-#[derive(Serialize, Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ToolUvSources(BTreeMap<PackageName, Source>);
+
+impl ToolUvSources {
+    /// Returns the underlying `BTreeMap` of package names to sources.
+    pub fn inner(&self) -> &BTreeMap<PackageName, Source> {
+        &self.0
+    }
+
+    /// Convert the [`ToolUvSources`] into its inner `BTreeMap`.
+    #[must_use]
+    pub fn into_inner(self) -> BTreeMap<PackageName, Source> {
+        self.0
+    }
+}
+
+/// Ensure that all keys in the TOML table are unique.
+impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct SourcesVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for SourcesVisitor {
+            type Value = ToolUvSources;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a map with unique keys")
+            }
+
+            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                let mut sources = BTreeMap::new();
+                while let Some((key, value)) = access.next_entry::<PackageName, Source>()? {
+                    match sources.entry(key) {
+                        std::collections::btree_map::Entry::Occupied(entry) => {
+                            return Err(serde::de::Error::custom(format!(
+                                "duplicate sources for package `{}`",
+                                entry.key()
+                            )));
+                        }
+                        std::collections::btree_map::Entry::Vacant(entry) => {
+                            entry.insert(value);
+                        }
+                    }
+                }
+                Ok(ToolUvSources(sources))
+            }
+        }
+
+        deserializer.deserialize_map(SourcesVisitor)
+    }
+}
+
+#[derive(Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ToolUvWorkspace {
@@ -316,7 +422,7 @@ pub enum Source {
         /// The repository URL (without the `git+` prefix).
         git: Url,
         /// The path to the directory with the `pyproject.toml`, if it's not in the archive root.
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<PortablePathBuf>,
         // Only one of the three may be used; we'll validate this later and emit a custom error.
         rev: Option<String>,
         tag: Option<String>,
@@ -333,13 +439,13 @@ pub enum Source {
         url: Url,
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<PortablePathBuf>,
     },
     /// The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or
     /// `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
     /// `setup.py` file in the root).
     Path {
-        path: PathBuf,
+        path: PortablePathBuf,
         /// `false` by default.
         editable: Option<bool>,
     },
@@ -357,12 +463,12 @@ pub enum Source {
     /// A catch-all variant used to emit precise error messages when deserializing.
     CatchAll {
         git: String,
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<PortablePathBuf>,
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
         url: String,
-        path: PathBuf,
+        path: PortablePathBuf,
         index: String,
         workspace: bool,
     },
@@ -437,15 +543,17 @@ impl Source {
             RequirementSource::Path { install_path, .. }
             | RequirementSource::Directory { install_path, .. } => Source::Path {
                 editable,
-                path: relative_to(&install_path, root)
-                    .or_else(|_| std::path::absolute(&install_path))
-                    .map_err(SourceError::Absolute)?,
+                path: PortablePathBuf::from(
+                    relative_to(&install_path, root)
+                        .or_else(|_| std::path::absolute(&install_path))
+                        .map_err(SourceError::Absolute)?,
+                ),
             },
             RequirementSource::Url {
                 subdirectory, url, ..
             } => Source::Url {
                 url: url.to_url(),
-                subdirectory,
+                subdirectory: subdirectory.map(PortablePathBuf::from),
             },
             RequirementSource::Git {
                 repository,
@@ -469,7 +577,7 @@ impl Source {
                         tag,
                         branch,
                         git: repository,
-                        subdirectory,
+                        subdirectory: subdirectory.map(PortablePathBuf::from),
                     }
                 } else {
                     Source::Git {
@@ -477,7 +585,7 @@ impl Source {
                         tag,
                         branch,
                         git: repository,
-                        subdirectory,
+                        subdirectory: subdirectory.map(PortablePathBuf::from),
                     }
                 }
             }

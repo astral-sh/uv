@@ -4222,10 +4222,10 @@ fn fork_requires_python_full() -> Result<()> {
 /// with a `python_version == '3.10'` marker.
 ///
 /// This is a regression test for the universal resolver where it would
-/// convert a `Requires-Python: >=3.10.1` specifier into a `python_version
-/// >= '3.10.1'` marker expression, which would be considered disjoint
-/// with `python_version == '3.10'`. Thus, the dependency `a` below was
-/// erroneously excluded. It should be included.
+/// convert a `Requires-Python: >=3.10.1` specifier into a
+/// `python_version >= '3.10.1'` marker expression, which would be
+/// considered disjoint with `python_version == '3.10'`. Thus, the
+/// dependency `a` below was erroneously excluded. It should be included.
 ///
 /// ```text
 /// fork-requires-python-patch-overlap
@@ -4444,7 +4444,7 @@ fn unreachable_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "###
     );
 

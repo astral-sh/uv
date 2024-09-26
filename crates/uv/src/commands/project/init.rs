@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use owo_colors::OwoColorize;
@@ -16,11 +16,12 @@ use uv_python::{
     PythonVersionFile, VersionRequest,
 };
 use uv_resolver::RequiresPython;
-use uv_warnings::warn_user;
+use uv_scripts::{Pep723Script, ScriptTag};
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
 
-use crate::commands::project::find_requires_python;
+use crate::commands::project::{find_requires_python, script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -28,10 +29,11 @@ use crate::printer::Printer;
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
-    explicit_path: Option<String>,
+    project_dir: &Path,
+    explicit_path: Option<PathBuf>,
     name: Option<PackageName>,
     package: bool,
-    project_kind: InitProjectKind,
+    init_kind: InitKind,
     no_readme: bool,
     no_pin_python: bool,
     python: Option<String>,
@@ -44,99 +46,185 @@ pub(crate) async fn init(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // Default to the current directory if a path was not provided.
-    let path = match explicit_path {
-        None => CWD.to_path_buf(),
-        Some(ref path) => std::path::absolute(path)?,
-    };
+    match init_kind {
+        InitKind::Script => {
+            let Some(path) = explicit_path.as_deref() else {
+                anyhow::bail!("Script initialization requires a file path")
+            };
 
-    // Make sure a project does not already exist in the given directory.
-    if path.join("pyproject.toml").exists() {
-        let path = std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
-        anyhow::bail!(
-            "Project is already initialized in `{}`",
-            path.display().cyan()
-        );
-    }
-
-    // Default to the directory name if a name was not provided.
-    let name = match name {
-        Some(name) => name,
-        None => {
-            let name = path
-                .file_name()
-                .and_then(|path| path.to_str())
-                .context("Missing directory name")?;
-
-            PackageName::new(name.to_string())?
-        }
-    };
-
-    init_project(
-        &path,
-        &name,
-        package,
-        project_kind,
-        no_readme,
-        no_pin_python,
-        python,
-        no_workspace,
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?;
-
-    // Create the `README.md` if it does not already exist.
-    if !no_readme {
-        let readme = path.join("README.md");
-        if !readme.exists() {
-            fs_err::write(readme, String::new())?;
-        }
-    }
-
-    // Initialize the version control system.
-    let in_existing_vcs = existing_vcs_repo(path.parent().unwrap_or(&path));
-    let vcs = match (version_control, in_existing_vcs) {
-        (None, false) => VersionControl::default(),
-        (None, true) => VersionControl::None,
-        (Some(vcs), false) => vcs,
-        (Some(vcs), true) => {
-            warn_user!(
-                "The project is already in a version control system, `--vcs {vcs}` is ignored",
-            );
-            VersionControl::None
-        }
-    };
-    if let Err(err) = vcs.init(&path) {
-        if version_control.is_some() {
-            return Err(err);
-        }
-        debug!("Failed to initialize version control: {:#}", err);
-    }
-
-    match explicit_path {
-        // Initialized a project in the current directory.
-        None => {
-            writeln!(printer.stderr(), "Initialized project `{}`", name.cyan())?;
-        }
-        // Initialized a project in the given directory.
-        Some(path) => {
-            let path =
-                std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
+            init_script(
+                path,
+                python,
+                connectivity,
+                python_preference,
+                python_downloads,
+                cache,
+                printer,
+                no_workspace,
+                no_readme,
+                no_pin_python,
+                package,
+                native_tls,
+            )
+            .await?;
             writeln!(
                 printer.stderr(),
-                "Initialized project `{}` at `{}`",
-                name.cyan(),
-                path.display().cyan()
+                "Initialized script at `{}`",
+                path.user_display().cyan()
             )?;
+        }
+        InitKind::Project(project_kind) => {
+            // Default to the current directory if a path was not provided.
+            let path = match explicit_path {
+                None => project_dir.to_path_buf(),
+                Some(ref path) => std::path::absolute(path)?,
+            };
+
+            // Make sure a project does not already exist in the given directory.
+            if path.join("pyproject.toml").exists() {
+                let path =
+                    std::path::absolute(&path).unwrap_or_else(|_| path.simplified().to_path_buf());
+                anyhow::bail!(
+                    "Project is already initialized in `{}` (`pyproject.toml` file exists)",
+                    path.display().cyan()
+                );
+            }
+
+            // Default to the directory name if a name was not provided.
+            let name = match name {
+                Some(name) => name,
+                None => {
+                    let name = path
+                        .file_name()
+                        .and_then(|path| path.to_str())
+                        .context("Missing directory name")?;
+
+                    PackageName::new(name.to_string())?
+                }
+            };
+
+            init_project(
+                &path,
+                &name,
+                package,
+                project_kind,
+                no_readme,
+                version_control,
+                no_pin_python,
+                python,
+                no_workspace,
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?;
+
+            // Create the `README.md` if it does not already exist.
+            if !no_readme {
+                let readme = path.join("README.md");
+                if !readme.exists() {
+                    fs_err::write(readme, String::new())?;
+                }
+            }
+
+            match explicit_path {
+                // Initialized a project in the current directory.
+                None => {
+                    writeln!(printer.stderr(), "Initialized project `{}`", name.cyan())?;
+                }
+                // Initialized a project in the given directory.
+                Some(path) => {
+                    let path = std::path::absolute(&path)
+                        .unwrap_or_else(|_| path.simplified().to_path_buf());
+                    writeln!(
+                        printer.stderr(),
+                        "Initialized project `{}` at `{}`",
+                        name.cyan(),
+                        path.display().cyan()
+                    )?;
+                }
+            }
         }
     }
 
     Ok(ExitStatus::Success)
+}
+
+#[allow(clippy::fn_params_excessive_bools)]
+async fn init_script(
+    script_path: &Path,
+    python: Option<String>,
+    connectivity: Connectivity,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    cache: &Cache,
+    printer: Printer,
+    no_workspace: bool,
+    no_readme: bool,
+    no_pin_python: bool,
+    package: bool,
+    native_tls: bool,
+) -> Result<()> {
+    if no_workspace {
+        warn_user_once!("`--no_workspace` is a no-op for Python scripts, which are standalone");
+    }
+    if no_readme {
+        warn_user_once!("`--no_readme` is a no-op for Python scripts, which are standalone");
+    }
+    if package {
+        warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
+    }
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
+
+    let reporter = PythonDownloadReporter::single(printer);
+
+    // If the file already exists, read its content.
+    let content = match fs_err::tokio::read(script_path).await {
+        Ok(metadata) => {
+            // If the file is already a script, raise an error.
+            if ScriptTag::parse(&metadata)?.is_some() {
+                anyhow::bail!(
+                    "`{}` is already a PEP 723 script; use `{}` to execute it",
+                    script_path.simplified_display().cyan(),
+                    "uv run".green()
+                );
+            }
+
+            Some(metadata)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => {
+            return Err(anyhow::Error::from(err).context(format!(
+                "Failed to read script at `{}`",
+                script_path.simplified_display().cyan()
+            )));
+        }
+    };
+
+    let requires_python = script_python_requirement(
+        python.as_deref(),
+        &CWD,
+        no_pin_python,
+        python_preference,
+        python_downloads,
+        &client_builder,
+        cache,
+        &reporter,
+    )
+    .await?;
+
+    if let Some(parent) = script_path.parent() {
+        fs_err::tokio::create_dir_all(parent).await?;
+    }
+
+    Pep723Script::create(script_path, requires_python.specifiers(), content).await?;
+
+    Ok(())
 }
 
 /// Initialize a project (and, implicitly, a workspace root) at the given path.
@@ -147,6 +235,7 @@ async fn init_project(
     package: bool,
     project_kind: InitProjectKind,
     no_readme: bool,
+    version_control: Option<VersionControl>,
     no_pin_python: bool,
     python: Option<String>,
     no_workspace: bool,
@@ -209,7 +298,7 @@ async fn init_project(
     let (requires_python, python_request) = if let Some(request) = python.as_deref() {
         // (1) Explicit request from user
         match PythonRequest::parse(request) {
-            PythonRequest::Version(VersionRequest::MajorMinor(major, minor)) => {
+            PythonRequest::Version(VersionRequest::MajorMinor(major, minor, false)) => {
                 let requires_python = RequiresPython::greater_than_equal_version(&Version::new([
                     u64::from(major),
                     u64::from(minor),
@@ -219,13 +308,13 @@ async fn init_project(
                     None
                 } else {
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
-                        major, minor,
+                        major, minor, false,
                     )))
                 };
 
                 (requires_python, python_request)
             }
-            PythonRequest::Version(VersionRequest::MajorMinorPatch(major, minor, patch)) => {
+            PythonRequest::Version(VersionRequest::MajorMinorPatch(major, minor, patch, false)) => {
                 let requires_python = RequiresPython::greater_than_equal_version(&Version::new([
                     u64::from(major),
                     u64::from(minor),
@@ -236,13 +325,14 @@ async fn init_project(
                     None
                 } else {
                     Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(
-                        major, minor, patch,
+                        major, minor, patch, false,
                     )))
                 };
 
                 (requires_python, python_request)
             }
-            ref python_request @ PythonRequest::Version(VersionRequest::Range(ref specifiers)) => {
+            ref
+            python_request @ PythonRequest::Version(VersionRequest::Range(ref specifiers, _)) => {
                 let requires_python = RequiresPython::from_specifiers(specifiers)?;
 
                 let python_request = if no_pin_python {
@@ -263,6 +353,7 @@ async fn init_project(
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         interpreter.python_major(),
                         interpreter.python_minor(),
+                        false,
                     )))
                 };
 
@@ -290,6 +381,7 @@ async fn init_project(
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         interpreter.python_major(),
                         interpreter.python_minor(),
+                        false,
                     )))
                 };
 
@@ -301,8 +393,10 @@ async fn init_project(
         .and_then(|workspace| find_requires_python(workspace).ok().flatten())
     {
         // (2) `Requires-Python` from the workspace
-        let python_request =
-            PythonRequest::Version(VersionRequest::Range(requires_python.specifiers().clone()));
+        let python_request = PythonRequest::Version(VersionRequest::Range(
+            requires_python.specifiers().clone(),
+            false,
+        ));
 
         // Pin to the minor version.
         let python_request = if no_pin_python {
@@ -323,6 +417,7 @@ async fn init_project(
             Some(PythonRequest::Version(VersionRequest::MajorMinor(
                 interpreter.python_major(),
                 interpreter.python_minor(),
+                false,
             )))
         };
 
@@ -351,6 +446,7 @@ async fn init_project(
             Some(PythonRequest::Version(VersionRequest::MajorMinor(
                 interpreter.python_major(),
                 interpreter.python_minor(),
+                false,
             )))
         };
 
@@ -363,6 +459,7 @@ async fn init_project(
             path,
             &requires_python,
             python_request.as_ref(),
+            version_control,
             no_readme,
             package,
         )
@@ -411,11 +508,36 @@ async fn init_project(
     Ok(())
 }
 
+/// The kind of entity to initialize (either a PEP 723 script or a Python project).
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum InitKind {
+    /// Initialize a Python project.
+    Project(InitProjectKind),
+    /// Initialize a PEP 723 script.
+    Script,
+}
+
+impl Default for InitKind {
+    fn default() -> Self {
+        InitKind::Project(InitProjectKind::default())
+    }
+}
+
+/// The kind of Python project to initialize (either an application or a library).
 #[derive(Debug, Copy, Clone, Default)]
 pub(crate) enum InitProjectKind {
+    /// Initialize a Python application.
     #[default]
     Application,
+    /// Initialize a Python library.
     Library,
+}
+
+impl InitKind {
+    /// Returns `true` if the project should be packaged by default.
+    pub(crate) fn packaged_by_default(self) -> bool {
+        matches!(self, InitKind::Project(InitProjectKind::Library))
+    }
 }
 
 impl InitProjectKind {
@@ -426,6 +548,7 @@ impl InitProjectKind {
         path: &Path,
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
+        version_control: Option<VersionControl>,
         no_readme: bool,
         package: bool,
     ) -> Result<()> {
@@ -436,6 +559,7 @@ impl InitProjectKind {
                     path,
                     requires_python,
                     python_request,
+                    version_control,
                     no_readme,
                     package,
                 )
@@ -447,6 +571,7 @@ impl InitProjectKind {
                     path,
                     requires_python,
                     python_request,
+                    version_control,
                     no_readme,
                     package,
                 )
@@ -455,17 +580,13 @@ impl InitProjectKind {
         }
     }
 
-    /// Whether this project kind is packaged by default.
-    pub(crate) fn packaged_by_default(self) -> bool {
-        matches!(self, InitProjectKind::Library)
-    }
-
     async fn init_application(
         self,
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
+        version_control: Option<VersionControl>,
         no_readme: bool,
         package: bool,
     ) -> Result<()> {
@@ -495,7 +616,7 @@ impl InitProjectKind {
                 fs_err::write(
                     init_py,
                     indoc::formatdoc! {r#"
-                    def hello():
+                    def hello() -> None:
                         print("Hello from {name}!")
                     "#},
                 )?;
@@ -533,6 +654,26 @@ impl InitProjectKind {
             }
         }
 
+        // Initialize the version control system.
+        let in_existing_vcs = existing_vcs_repo(path.parent().unwrap_or(&path));
+        let vcs = match (version_control, in_existing_vcs) {
+            (None, false) => VersionControl::default(),
+            (None, true) => VersionControl::None,
+            (Some(vcs), false) => vcs,
+            (Some(vcs), true) => {
+                warn_user!(
+                    "The project is already in a version control system, `--vcs {vcs}` is ignored",
+                );
+                VersionControl::None
+            }
+        };
+        if let Err(err) = vcs.init(path) {
+            if version_control.is_some() {
+                return Err(err);
+            }
+            debug!("Failed to initialize version control: {:#}", err);
+        }
+
         Ok(())
     }
 
@@ -542,6 +683,7 @@ impl InitProjectKind {
         path: &Path,
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
+        version_control: Option<VersionControl>,
         no_readme: bool,
         package: bool,
     ) -> Result<()> {
@@ -561,9 +703,10 @@ impl InitProjectKind {
 
         // Create `src/{name}/__init__.py`, if it doesn't exist already.
         let src_dir = path.join("src").join(&*name.as_dist_info_name());
+        fs_err::create_dir_all(&src_dir)?;
+
         let init_py = src_dir.join("__init__.py");
         if !init_py.try_exists()? {
-            fs_err::create_dir_all(&src_dir)?;
             fs_err::write(
                 init_py,
                 indoc::formatdoc! {r#"
@@ -571,6 +714,12 @@ impl InitProjectKind {
                     return "Hello from {name}!"
                 "#},
             )?;
+        }
+
+        // Create a `py.typed` file
+        let py_typed = src_dir.join("py.typed");
+        if !py_typed.try_exists()? {
+            fs_err::write(py_typed, "")?;
         }
 
         // Write .python-version if it doesn't exist.
@@ -586,6 +735,26 @@ impl InitProjectKind {
             }
         }
 
+        // Initialize the version control system.
+        let in_existing_vcs = existing_vcs_repo(path.parent().unwrap_or(&path));
+        let vcs = match (version_control, in_existing_vcs) {
+            (None, false) => VersionControl::default(),
+            (None, true) => VersionControl::None,
+            (Some(vcs), false) => vcs,
+            (Some(vcs), true) => {
+                warn_user!(
+                    "The project is already in a version control system, `--vcs {vcs}` is ignored",
+                );
+                VersionControl::None
+            }
+        };
+        if let Err(err) = vcs.init(path) {
+            if version_control.is_some() {
+                return Err(err);
+            }
+            debug!("Failed to initialize version control: {:#}", err);
+        }
+
         Ok(())
     }
 }
@@ -597,13 +766,13 @@ fn pyproject_project(
     no_readme: bool,
 ) -> String {
     indoc::formatdoc! {r#"
-            [project]
-            name = "{name}"
-            version = "0.1.0"
-            description = "Add your description here"{readme}
-            requires-python = "{requires_python}"
-            dependencies = []
-            "#,
+        [project]
+        name = "{name}"
+        version = "0.1.0"
+        description = "Add your description here"{readme}
+        requires-python = "{requires_python}"
+        dependencies = []
+    "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
         requires_python = requires_python.specifiers(),
     }

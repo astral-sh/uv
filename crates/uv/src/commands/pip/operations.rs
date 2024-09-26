@@ -10,7 +10,7 @@ use tracing::debug;
 
 use distribution_types::{
     CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification,
-    ResolutionDiagnostic, UnresolvedRequirementSpecification,
+    ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
@@ -21,7 +21,8 @@ use pypi_types::ResolverMarkerEnvironment;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, ExtrasSpecification, Overrides, Reinstall, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, Overrides,
+    Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -115,16 +116,33 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
 
     // Resolve the requirements from the provided sources.
     let requirements = {
-        // Convert from unnamed to named requirements.
-        let mut requirements = NamedRequirementsResolver::new(
-            requirements,
-            hasher,
-            index,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
-        )
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve()
-        .await?;
+        // Partition the requirements into named and unnamed requirements.
+        let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
+            requirements
+                .into_iter()
+                .partition_map(|spec| match spec.requirement {
+                    UnresolvedRequirement::Named(requirement) => {
+                        itertools::Either::Left(requirement)
+                    }
+                    UnresolvedRequirement::Unnamed(requirement) => {
+                        itertools::Either::Right(requirement)
+                    }
+                });
+
+        // Resolve any unnamed requirements.
+        if !unnamed.is_empty() {
+            requirements.extend(
+                NamedRequirementsResolver::new(
+                    unnamed,
+                    hasher,
+                    index,
+                    DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                )
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?,
+            );
+        }
 
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
@@ -182,15 +200,37 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     };
 
     // Resolve the overrides from the provided sources.
-    let overrides = NamedRequirementsResolver::new(
-        overrides,
-        hasher,
-        index,
-        DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve()
-    .await?;
+    let overrides = {
+        // Partition the overrides into named and unnamed requirements.
+        let (mut overrides, unnamed): (Vec<_>, Vec<_>) =
+            overrides
+                .into_iter()
+                .partition_map(|spec| match spec.requirement {
+                    UnresolvedRequirement::Named(requirement) => {
+                        itertools::Either::Left(requirement)
+                    }
+                    UnresolvedRequirement::Unnamed(requirement) => {
+                        itertools::Either::Right(requirement)
+                    }
+                });
+
+        // Resolve any unnamed overrides.
+        if !unnamed.is_empty() {
+            overrides.extend(
+                NamedRequirementsResolver::new(
+                    unnamed,
+                    hasher,
+                    index,
+                    DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                )
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?,
+            );
+        }
+
+        overrides
+    };
 
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(
@@ -349,6 +389,7 @@ pub(crate) async fn install(
     link_mode: LinkMode,
     compile: bool,
     index_urls: &IndexLocations,
+    config_settings: &ConfigSettings,
     hasher: &HashStrategy,
     markers: &ResolverMarkerEnvironment,
     tags: &Tags,
@@ -376,6 +417,7 @@ pub(crate) async fn install(
             build_options,
             hasher,
             index_urls,
+            config_settings,
             cache,
             venv,
             markers,

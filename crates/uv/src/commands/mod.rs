@@ -11,7 +11,7 @@ pub(crate) use build::build;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 pub(crate) use cache_prune::cache_prune;
-use distribution_types::InstalledMetadata;
+use distribution_types::{IndexCapabilities, InstalledMetadata};
 pub(crate) use help::help;
 pub(crate) use pip::check::pip_check;
 pub(crate) use pip::compile::pip_compile;
@@ -24,12 +24,13 @@ pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
 pub(crate) use project::add::add;
 pub(crate) use project::export::export;
-pub(crate) use project::init::{init, InitProjectKind};
+pub(crate) use project::init::{init, InitKind, InitProjectKind};
 pub(crate) use project::lock::lock;
 pub(crate) use project::remove::remove;
 pub(crate) use project::run::{run, RunCommand};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
+pub(crate) use publish::publish;
 pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
 pub(crate) use python::install::install as python_install;
@@ -59,19 +60,20 @@ pub(crate) use version::version;
 
 use crate::printer::Printer;
 
+mod build;
+pub(crate) mod build_backend;
 mod cache_clean;
 mod cache_dir;
 mod cache_prune;
 mod help;
 pub(crate) mod pip;
 mod project;
+mod publish;
 mod python;
 pub(crate) mod reporters;
-mod tool;
-
-mod build;
 #[cfg(feature = "self-update")]
 mod self_update;
+mod tool;
 mod venv;
 mod version;
 
@@ -200,6 +202,8 @@ pub(crate) struct SharedState {
     pub(crate) index: InMemoryIndex,
     /// The downloaded distributions.
     pub(crate) in_flight: InFlight,
+    /// The discovered capabilities for each registry index.
+    pub(crate) capabilities: IndexCapabilities,
 }
 
 /// A multicasting writer that writes to both the standard output and an output file, if present.

@@ -9,7 +9,7 @@ use std::path::Path;
 ///
 /// See: <https://github.com/restic/restic/issues/2179>
 /// See: <https://apenwarr.ca/log/20181113>
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct Timestamp(std::time::SystemTime);
 
 impl Timestamp {

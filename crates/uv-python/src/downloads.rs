@@ -96,6 +96,10 @@ pub struct PythonDownloadRequest {
     arch: Option<Arch>,
     os: Option<Os>,
     libc: Option<Libc>,
+
+    /// Whether to allow pre-releases or not. If not set, defaults to true if [`Self::version`] is
+    /// not None, and false otherwise.
+    prereleases: Option<bool>,
 }
 
 impl PythonDownloadRequest {
@@ -105,6 +109,7 @@ impl PythonDownloadRequest {
         arch: Option<Arch>,
         os: Option<Os>,
         libc: Option<Libc>,
+        prereleases: Option<bool>,
     ) -> Self {
         Self {
             version,
@@ -112,6 +117,7 @@ impl PythonDownloadRequest {
             arch,
             os,
             libc,
+            prereleases,
         }
     }
 
@@ -145,6 +151,12 @@ impl PythonDownloadRequest {
         self
     }
 
+    #[must_use]
+    pub fn with_prereleases(mut self, prereleases: bool) -> Self {
+        self.prereleases = Some(prereleases);
+        self
+    }
+
     /// Construct a new [`PythonDownloadRequest`] from a [`PythonRequest`] if possible.
     ///
     /// Returns [`None`] if the request kind is not compatible with a download, e.g., it is
@@ -161,7 +173,7 @@ impl PythonDownloadRequest {
                     .with_version(version.clone()),
             ),
             PythonRequest::Key(request) => Some(request.clone()),
-            PythonRequest::Any => Some(Self::default()),
+            PythonRequest::Default | PythonRequest::Any => Some(Self::default()),
             // We can't download a managed installation for these request kinds
             PythonRequest::Directory(_)
             | PythonRequest::ExecutableName(_)
@@ -196,6 +208,7 @@ impl PythonDownloadRequest {
             Some(Arch::from_env()),
             Some(Os::from_env()),
             Some(Libc::from_env()?),
+            None,
         ))
     }
 
@@ -225,6 +238,7 @@ impl PythonDownloadRequest {
             .filter(move |download| self.satisfied_by_download(download))
     }
 
+    /// Whether this request is satisfied by the key of an existing installation.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
         if let Some(arch) = &self.arch {
             if key.arch != *arch {
@@ -250,12 +264,35 @@ impl PythonDownloadRequest {
             if !version.matches_major_minor_patch(key.major, key.minor, key.patch) {
                 return false;
             }
+            if version.is_free_threaded_requested() {
+                debug!("Installing managed free-threaded Python is not yet supported");
+                return false;
+            }
+        }
+        // If we don't allow pre-releases, don't match a key with a pre-release tag
+        if !self.allows_prereleases() && !key.prerelease.is_empty() {
+            return false;
         }
         true
     }
 
+    /// Whether this request is satisfied by a Python download.
     pub fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
         self.satisfied_by_key(download.key())
+    }
+
+    /// Whether this download request opts-in to pre-release Python versions.
+    pub fn allows_prereleases(&self) -> bool {
+        self.prereleases.unwrap_or_else(|| {
+            self.version
+                .as_ref()
+                .is_some_and(VersionRequest::allows_prereleases)
+        })
+    }
+
+    /// Whether this download request opts-in to alternative Python implementations.
+    pub fn allows_alternative_implementations(&self) -> bool {
+        self.implementation.is_some()
     }
 
     pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
@@ -367,7 +404,7 @@ impl FromStr for PythonDownloadRequest {
 
             return Err(Error::TooManyParts(s.to_string()));
         }
-        Ok(Self::new(version, implementation, arch, os, libc))
+        Ok(Self::new(version, implementation, arch, os, libc, None))
     }
 }
 
@@ -529,9 +566,7 @@ impl ManagedPythonDownload {
     }
 
     pub fn python_version(&self) -> PythonVersion {
-        self.key
-            .version()
-            .expect("Managed Python downloads should always have valid versions")
+        self.key.version()
     }
 
     /// Return the [`Url`] to use when downloading the distribution. If a mirror is set via the

@@ -17,17 +17,15 @@ use crate::{
 
 #[derive(Debug, Clone)]
 /// A pinned package with its resolved distribution and all the extras that were pinned for it.
-pub(crate) struct RequirementsTxtDist {
-    pub(crate) dist: ResolvedDist,
-    pub(crate) version: Version,
+pub(crate) struct RequirementsTxtDist<'dist> {
+    pub(crate) dist: &'dist ResolvedDist,
+    pub(crate) version: &'dist Version,
+    pub(crate) hashes: &'dist [HashDigest],
+    pub(crate) markers: &'dist MarkerTree,
     pub(crate) extras: Vec<ExtraName>,
-    pub(crate) hashes: Vec<HashDigest>,
-    /// Propagated markers that determine whether this package should be installed on the current
-    /// platform, without looking at which packages depend on it.
-    pub(crate) markers: MarkerTree,
 }
 
-impl RequirementsTxtDist {
+impl<'dist> RequirementsTxtDist<'dist> {
     /// Convert the [`RequirementsTxtDist`] to a requirement that adheres to the `requirements.txt`
     /// format.
     ///
@@ -153,29 +151,29 @@ impl RequirementsTxtDist {
         if let VersionOrUrlRef::Url(url) = self.version_or_url() {
             RequirementsTxtComparator::Name {
                 name: self.name(),
-                version: &self.version,
+                version: self.version,
                 url: Some(url.verbatim()),
             }
         } else {
             RequirementsTxtComparator::Name {
                 name: self.name(),
-                version: &self.version,
+                version: self.version,
                 url: None,
             }
         }
     }
 
-    pub(crate) fn from_annotated_dist(annotated: &AnnotatedDist, markers: MarkerTree) -> Self {
+    pub(crate) fn from_annotated_dist(annotated: &'dist AnnotatedDist) -> Self {
         Self {
-            dist: annotated.dist.clone(),
-            version: annotated.version.clone(),
+            dist: &annotated.dist,
+            version: &annotated.version,
+            hashes: &annotated.hashes,
+            markers: &annotated.marker,
             extras: if let Some(extra) = annotated.extra.clone() {
                 vec![extra]
             } else {
                 vec![]
             },
-            hashes: annotated.hashes.clone(),
-            markers,
         }
     }
 }
@@ -192,19 +190,19 @@ pub(crate) enum RequirementsTxtComparator<'a> {
     },
 }
 
-impl Name for RequirementsTxtDist {
+impl Name for RequirementsTxtDist<'_> {
     fn name(&self) -> &PackageName {
         self.dist.name()
     }
 }
 
-impl DistributionMetadata for RequirementsTxtDist {
+impl DistributionMetadata for RequirementsTxtDist<'_> {
     fn version_or_url(&self) -> VersionOrUrlRef {
         self.dist.version_or_url()
     }
 }
 
-impl Display for RequirementsTxtDist {
+impl Display for RequirementsTxtDist<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.dist, f)
     }

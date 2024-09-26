@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
-use distribution_types::{CompatibleDist, DistributionMetadata};
+use distribution_types::{CompatibleDist, DistributionMetadata, IndexCapabilities};
 use pep440_rs::Version;
 
 use crate::candidate_selector::CandidateSelector;
@@ -52,6 +52,7 @@ impl BatchPrefetcher {
         python_requirement: &PythonRequirement,
         request_sink: &Sender<Request>,
         index: &InMemoryIndex,
+        capabilities: &IndexCapabilities,
         selector: &CandidateSelector,
         markers: &ResolverMarkers,
     ) -> anyhow::Result<(), ResolveError> {
@@ -135,8 +136,17 @@ impl BatchPrefetcher {
             };
 
             // Avoid prefetching source distributions, which could be expensive.
-            if !dist.prefetchable() {
+            let Some(wheel) = dist.wheel() else {
                 continue;
+            };
+
+            // Avoid prefetching built distributions that don't support _either_ PEP 658 (`.metadata`)
+            // or range requests.
+            if !(wheel.file.dist_info_metadata
+                || capabilities.supports_range_requests(&wheel.index))
+            {
+                debug!("Abandoning prefetch for {wheel} due to missing registry capabilities");
+                return Ok(());
             }
 
             // Avoid prefetching for distributions that don't satisfy the Python requirement.

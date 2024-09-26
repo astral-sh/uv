@@ -112,6 +112,7 @@ Ok(
             requirements: {},
             constraints: {},
             overrides: {},
+            dependency_metadata: {},
         },
     },
 )

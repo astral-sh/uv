@@ -5,6 +5,12 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
+use crate::script::{scripts_from_ini, Script};
+use crate::wheel::{
+    extra_dist_info, install_data, parse_wheel_file, read_record_file, write_script_entrypoints,
+    LibKind,
+};
+use crate::{Error, Layout};
 use distribution_filename::WheelFilename;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
@@ -14,15 +20,9 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
+use uv_cache_info::CacheInfo;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
-
-use crate::script::{scripts_from_ini, Script};
-use crate::wheel::{
-    extra_dist_info, install_data, parse_wheel_file, read_record_file, write_script_entrypoints,
-    LibKind,
-};
-use crate::{Error, Layout};
 
 #[derive(Debug, Default)]
 pub struct Locks(Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>);
@@ -41,6 +41,7 @@ pub fn install_wheel(
     wheel: impl AsRef<Path>,
     filename: &WheelFilename,
     direct_url: Option<&DirectUrl>,
+    cache_info: Option<&CacheInfo>,
     installer: Option<&str>,
     link_mode: LinkMode,
     locks: &Locks,
@@ -145,6 +146,7 @@ pub fn install_wheel(
         &dist_info_prefix,
         true,
         direct_url,
+        cache_info,
         installer,
         &mut record,
     )?;
@@ -294,10 +296,17 @@ fn clone_wheel_files(
     let mut count = 0usize;
     let mut attempt = Attempt::default();
 
-    // On macOS, directly can be recursively copied with a single `clonefile` call.
+    // On macOS, directories can be recursively copied with a single `clonefile` call.
     // So we only need to iterate over the top-level of the directory, and copy each file or
     // subdirectory unless the subdirectory exists already in which case we'll need to recursively
     // merge its contents with the existing directory.
+    //
+    // On linux, we need to always reflink recursively, as `FICLONE` ioctl does not support directories.
+    // Also note, that reflink is only supported on certain filesystems (btrfs, xfs, ...), and only when
+    // it does not cross filesystem boundaries.
+    //
+    // On windows, we also always need to reflink recursively, as `FSCTL_DUPLICATE_EXTENTS_TO_FILE` ioctl
+    // is not supported on directories. Also, it is only supported on certain filesystems (ReFS, SMB, ...).
     for entry in fs::read_dir(wheel.as_ref())? {
         clone_recursive(
             site_packages.as_ref(),
@@ -363,7 +372,7 @@ fn clone_recursive(
 
     debug!("Cloning {} to {}", from.display(), to.display());
 
-    if cfg!(windows) && from.is_dir() {
+    if (cfg!(windows) || cfg!(target_os = "linux")) && from.is_dir() {
         // On Windows, reflinking directories is not supported, so we copy each file instead.
         fs::create_dir_all(&to)?;
         for entry in fs::read_dir(from)? {
