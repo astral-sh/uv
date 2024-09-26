@@ -36,7 +36,6 @@ futures = { workspace = true }
 goblin = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
-procfs = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
@@ -57,6 +56,9 @@ which = { workspace = true }
 [target.'cfg(any(unix, target_os = "wasi", target_os = "redox"))'.dependencies]
 rustix = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = { workspace = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true }
 winsafe = { workspace = true }
@@ -70,4 +72,6 @@ indoc = { version = "2.0.5" }
 itertools = { version = "0.13.0" }
 temp-env = { version = "0.3.6" }
 tempfile = { version = "3.12.0" }
-test-log = { version = "0.2.16", features = ["trace"], default-features = false }
+test-log = { version = "0.2.16", features = [
+    "trace"
+], default-features = false }
