@@ -2,7 +2,7 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#   "rich",
+#   "rich==13.8.1",
 # ]
 # ///
 import sys
