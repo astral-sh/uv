@@ -691,6 +691,7 @@ fn python_pin_with_comments() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "python-patch")]
 #[test]
 fn python_pin_upgrade_version() -> Result<()> {
     let context = TestContext::new("3.8.12");
@@ -711,6 +712,7 @@ fn python_pin_upgrade_version() -> Result<()> {
 
 /// NOTE: This test is not deterministic. If new patches for Python 3.10 are released,
 /// the test will need to be changed to reflect this.
+#[cfg(feature = "python-patch")]
 #[test]
 fn python_pin_upgrade_versions() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.8.12", "3.9.18", "3.10.13"]);
