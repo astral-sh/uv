@@ -53,7 +53,7 @@ use crate::settings::ResolverInstallerSettings;
 pub(crate) async fn run(
     project_dir: &Path,
     script: Option<Pep723Script>,
-    command: RunCommand,
+    command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
     locked: bool,
@@ -721,7 +721,7 @@ pub(crate) async fn run(
 
     // Check if any run command is given.
     // If not, print the available scripts for the current interpreter.
-    if let RunCommand::Empty = command {
+    let Some(command) = command else {
         writeln!(
             printer.stdout(),
             "Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.\n"
@@ -753,7 +753,7 @@ pub(crate) async fn run(
             .filter(|path| is_executable(path))
             .map(|path| {
                 if cfg!(windows) {
-                    // remove the extensions
+                    // Remove the extensions.
                     path.with_extension("")
                 } else {
                     path
@@ -766,7 +766,7 @@ pub(crate) async fn run(
                     .to_string()
             })
             .filter(|command| {
-                !command.starts_with("activate") || !command.starts_with("deactivate")
+                !command.starts_with("activate") && !command.starts_with("deactivate")
             })
             .collect_vec();
         commands.sort();

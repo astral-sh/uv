@@ -241,8 +241,8 @@ fn run_no_args() -> Result<()> {
 
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run(), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
     Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 

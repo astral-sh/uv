@@ -131,11 +131,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     // Parse the external command, if necessary.
     let run_command = if let Commands::Project(command) = &*cli.command {
-        if let ProjectCommand::Run(uv_cli::RunArgs { command, .. }) = &**command {
-            match command {
-                Some(command) => Some(RunCommand::try_from(command)?),
-                None => Some(RunCommand::Empty),
-            }
+        if let ProjectCommand::Run(uv_cli::RunArgs {
+            command: Some(command),
+            ..
+        }) = &**command
+        {
+            Some(RunCommand::try_from(command)?)
         } else {
             None
         }
@@ -1231,9 +1232,6 @@ async fn run_project(
                         .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Vec<_>>();
-
-            // Given `ProjectCommand::Run`, we always expect a `RunCommand` to be present.
-            let command = command.expect("run command is required");
 
             Box::pin(commands::run(
                 project_dir,
