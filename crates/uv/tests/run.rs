@@ -2136,7 +2136,7 @@ fn run_remote_pep723_script() {
         r"(?m)^Reading inline script metadata from:.*\.py$",
         "Reading inline script metadata from: [TEMP_PATH].py",
     ));
-    uv_snapshot!(filters, context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/7a8f4f93cc7e87bb1e42ff1ac8532dbf8ad4671b/scripts/uv-run-remote-script-test.py").arg("CI"), @r###"
+    uv_snapshot!(filters, context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/1d7163cc04c1a9d4774e5e8665ace1dbe2386222/scripts/uv-run-remote-script-test.py").arg("CI"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2149,8 +2149,8 @@ fn run_remote_pep723_script() {
     Installed 4 packages in [TIME]
      + markdown-it-py==3.0.0
      + mdurl==0.1.2
-     + pygments==2.18.0
-     + rich==13.8.1
+     + pygments==2.17.2
+     + rich==13.7.1
     "###);
 }
 
