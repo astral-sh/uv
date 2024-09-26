@@ -63,25 +63,27 @@ async fn resolve_script_target(
     }
 
     let maybe_url = target.to_string_lossy();
-    if maybe_url.starts_with("http://") || maybe_url.starts_with("https://") {
-        let script_url = url::Url::parse(&maybe_url)?;
-        let file_name = script_url
-            .path_segments()
-            .and_then(|segments| segments.last())
-            .unwrap_or("script.py");
 
-        let temp_file = tempfile::Builder::new()
-            .prefix(file_name)
-            .suffix(".py")
-            .tempfile()?;
-        let response = reqwest::get(script_url).await?;
-        let contents = response.bytes().await?;
-        write_atomic(&temp_file, &contents).await?;
-        *target = temp_file.path().into();
-        return Ok(Some(temp_file));
+    // Only continue if the target truly looks like a URL.
+    if !(maybe_url.starts_with("http://") || maybe_url.starts_with("https://")) {
+        return Ok(None);
     }
 
-    Ok(None)
+    let script_url = url::Url::parse(&maybe_url)?;
+    let file_name = script_url
+        .path_segments()
+        .and_then(std::iter::Iterator::last)
+        .unwrap_or("script.py");
+
+    let temp_file = tempfile::Builder::new()
+        .prefix(file_name)
+        .suffix(".py")
+        .tempfile()?;
+    let response = reqwest::get(script_url).await?;
+    let contents = response.bytes().await?;
+    write_atomic(&temp_file, &contents).await?;
+    *target = temp_file.path().into();
+    Ok(Some(temp_file))
 }
 
 #[instrument(skip_all)]
