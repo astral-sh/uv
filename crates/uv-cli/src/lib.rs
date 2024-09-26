@@ -14,7 +14,7 @@ use url::Url;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    TargetTriple, TrustedHost, TrustedPublishing,
+    TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -2372,6 +2372,13 @@ pub struct InitArgs {
     /// alternative Python version requirement.
     #[arg(long, alias="script", conflicts_with_all=["app", "lib", "package"])]
     pub r#script: bool,
+
+    /// Initialize a version control system for the project.
+    ///
+    /// By default, uv will initialize a Git repository (`git`). Use `--vcs none` to explicitly
+    /// avoid initializing a version control system.
+    #[arg(long, value_enum, conflicts_with = "script")]
+    pub vcs: Option<VersionControlSystem>,
 
     /// Do not create a `README.md` file.
     #[arg(long)]

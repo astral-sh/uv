@@ -4711,6 +4711,7 @@ dependencies = [
  "cache-key",
  "clap",
  "either",
+ "fs-err",
  "pep508_rs",
  "platform-tags",
  "pypi-types",
@@ -4725,6 +4726,7 @@ dependencies = [
  "uv-cache",
  "uv-cache-info",
  "uv-normalize",
+ "which",
 ]
 
 [[package]]

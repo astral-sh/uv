@@ -558,6 +558,17 @@ uv init [OPTIONS] [PATH]
 
 <p>By default, adds a requirement on the system Python version; use <code>--python</code> to specify an alternative Python version requirement.</p>
 
+</dd><dt><code>--vcs</code> <i>vcs</i></dt><dd><p>Initialize a version control system for the project.</p>
+
+<p>By default, uv will initialize a Git repository (<code>git</code>). Use <code>--vcs none</code> to explicitly avoid initializing a version control system.</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>git</code>:  Use Git for version control</li>
+
+<li><code>none</code>:  Do not use any version control system</li>
+</ul>
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
