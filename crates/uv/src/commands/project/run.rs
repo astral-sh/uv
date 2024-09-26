@@ -782,7 +782,7 @@ pub(crate) async fn run(
             "\nSee `uv run --help` for more information."
         )?;
 
-        return Ok(ExitStatus::Failure);
+        return Ok(ExitStatus::Error);
     };
 
     debug!("Running `{command}`");
