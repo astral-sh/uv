@@ -45,6 +45,7 @@ pub(crate) mod settings;
 pub(crate) mod version;
 
 /// Resolves the script target for a run command.
+///
 /// If it's a local file, does nothing. If it's a URL, downloads the content
 /// to a temporary file and updates the command. Prioritizes local files over URLs.
 /// Returns Some(NamedTempFile) if a remote script was downloaded, None otherwise.
