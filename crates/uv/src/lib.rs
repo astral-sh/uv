@@ -173,10 +173,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     };
 
     // Parse the external command, if necessary.
-    let mut _maybe_tempfile: Option<tempfile::NamedTempFile> = None;
+    let mut maybe_tempfile: Option<tempfile::NamedTempFile> = None;
     let run_command = if let Commands::Project(command) = &mut *cli.command {
         if let ProjectCommand::Run(uv_cli::RunArgs { command, .. }) = &mut **command {
-            _maybe_tempfile = resolve_script_target(command).await?;
+            maybe_tempfile = resolve_script_target(command).await?;
             Some(RunCommand::try_from(&*command)?)
         } else {
             None
@@ -297,7 +297,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Configure the cache.
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
 
-    match *cli.command {
+    let result = match *cli.command {
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
             printer,
@@ -1184,7 +1184,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory)
             }
         },
-    }
+    };
+    drop(maybe_tempfile);
+    result
 }
 
 /// Run a [`ProjectCommand`].
