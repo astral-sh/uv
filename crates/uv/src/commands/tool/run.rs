@@ -77,10 +77,13 @@ pub(crate) async fn run(
     cache: Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    // treat empty command similar to `uv tool list`, list available tools
-    // but without propagating malformed tool errors.
+    // Treat empty command similar to `uv tool list`, list available tools.
     let Some(command) = command else {
-        return list_available_tools(invocation_source, &cache, printer).await;
+        match list_available_tools(invocation_source, &cache, printer).await {
+            // It is a failure because user misses a required tool name.
+            Ok(()) => return Ok(ExitStatus::Error),
+            Err(err) => return Err(err),
+        };
     };
 
     let (target, args) = command.split();
@@ -268,7 +271,7 @@ async fn list_available_tools(
     invocation_source: ToolRunCommand,
     cache: &Cache,
     printer: Printer,
-) -> anyhow::Result<ExitStatus> {
+) -> anyhow::Result<()> {
     writeln!(
         printer.stdout(),
         "Provide a command to invoke with `{invocation_source} <command>` \
@@ -282,7 +285,7 @@ async fn list_available_tools(
         Ok(lock) => lock,
         Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
             writeln!(printer.stdout(), "{no_tools_installed_msg}")?;
-            return Ok(ExitStatus::Success);
+            return Ok(());
         }
         Err(err) => return Err(err.into()),
     };
@@ -292,7 +295,7 @@ async fn list_available_tools(
 
     if tools.is_empty() {
         writeln!(printer.stdout(), "{no_tools_installed_msg}")?;
-        return Ok(ExitStatus::Success);
+        return Ok(());
     }
 
     let mut buf = String::new();
@@ -317,7 +320,7 @@ async fn list_available_tools(
     // Installed tools were malformed or failed fetching versions.
     if buf.is_empty() {
         writeln!(printer.stderr(), "{no_tools_installed_msg}")?;
-        return Ok(ExitStatus::Success);
+        return Ok(());
     }
 
     writeln!(
@@ -329,7 +332,7 @@ async fn list_available_tools(
         printer.stdout(),
         "See `{invocation_source} --help` for more information."
     )?;
-    Ok(ExitStatus::Success)
+    Ok(())
 }
 
 /// Display a warning if an executable is not provided by package.

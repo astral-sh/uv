@@ -750,8 +750,8 @@ fn tool_run_list_installed() {
     uv_snapshot!(context.filters(), context.tool_run()
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
     Provide a command to invoke with `uv tool run <command>` or `uv tool run --from <package> <command>`.
 
@@ -773,8 +773,8 @@ fn tool_run_list_installed() {
     uv_snapshot!(context.filters(), context.tool_run()
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
     Provide a command to invoke with `uv tool run <command>` or `uv tool run --from <package> <command>`.
 
@@ -899,9 +899,8 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
     "###);
 
     // Requesting an editable requirement should install it in a layer, even if it satisfied
-    uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg("./src/anyio_local").arg("flask").arg("--version").env("UV_TOOL_DIR", tool_dir.as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str())
-    
-    , @r###"
+    uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg("./src/anyio_local").arg("flask").arg("--version").env("UV_TOOL_DIR", tool_dir.as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str()),
+    @r###"
     success: true
     exit_code: 0
     ----- stdout -----
