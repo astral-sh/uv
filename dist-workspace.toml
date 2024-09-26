@@ -89,8 +89,8 @@ riscv64gc-unknown-linux-gnu = "2.31"
 "actions/attest-build-provenance" = "00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8" # v3.1.0
 
 [dist.binaries]
-"*" = ["uv", "uvx"]
+"*" = ["uv", "uvx", "uv-python"]
 # Add "uvw" binary for Windows targets
-aarch64-pc-windows-msvc = ["uv", "uvx", "uvw"]
-i686-pc-windows-msvc = ["uv", "uvx", "uvw"]
-x86_64-pc-windows-msvc = ["uv", "uvx", "uvw"]
+aarch64-pc-windows-msvc = ["uv", "uvx", "uv-python", "uvw"]
+i686-pc-windows-msvc = ["uv", "uvx", "uv-python", "uvw"]
+x86_64-pc-windows-msvc = ["uv", "uvx", "uv-python", "uvw"]

@@ -62,6 +62,7 @@ jobs:
           ${MODULE_NAME} --help
           python -m ${MODULE_NAME} --help
           uvx --help
+          uv-python --help
       - name: "Upload sdist"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -135,6 +136,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp "target/$TARGET/release/uv-python" "$ARCHIVE_NAME/uv-python"
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -217,6 +219,7 @@ jobs:
           ${MODULE_NAME} --help
           python -m ${MODULE_NAME} --help
           uvx --help
+          uv-python --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -231,6 +234,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp "target/$TARGET/release/uv-python" "$ARCHIVE_NAME/uv-python"
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -339,7 +343,7 @@ jobs:
         run: |
           LLVM_READOBJ="$(rustc --print sysroot)/lib/rustlib/${{ matrix.platform.target }}/bin/llvm-readobj.exe"
 
-          for binary in uv uvx uvw; do
+          for binary in uv uvx uv-python uvw; do
             IMPORTS_FILE="$RUNNER_TEMP/${binary}-coff-imports.txt"
             "$LLVM_READOBJ" --coff-imports "target/${{ matrix.platform.target }}/release/${binary}.exe" > "$IMPORTS_FILE"
 
@@ -355,6 +359,7 @@ jobs:
           ${MODULE_NAME} --help
           python -m ${MODULE_NAME} --help
           uvx --help
+          uv-python --help
           uvw --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -367,6 +372,7 @@ jobs:
           ARCHIVE_FILE=uv-${PLATFORM_TARGET}.zip
           7z a $ARCHIVE_FILE ./target/${PLATFORM_TARGET}/release/uv.exe
           7z a $ARCHIVE_FILE ./target/${PLATFORM_TARGET}/release/uvx.exe
+          7z a "$ARCHIVE_FILE" "./target/${PLATFORM_TARGET}/release/uv-python.exe"
           7z a $ARCHIVE_FILE ./target/${PLATFORM_TARGET}/release/uvw.exe
           sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -478,6 +484,7 @@ jobs:
           ${MODULE_NAME} --help
           python -m ${MODULE_NAME} --help
           uvx --help
+          uv-python --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -492,6 +499,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp "target/$TARGET/release/uv-python" "$ARCHIVE_NAME/uv-python"
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -611,6 +619,7 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME} --help
             uvx --help
+            uv-python --help
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
@@ -628,6 +637,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp "target/$TARGET/release/uv-python" "$ARCHIVE_NAME/uv-python"
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -734,6 +744,7 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME} --help
             uvx --help
+            uv-python --help
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
@@ -751,6 +762,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp "target/$TARGET/release/uv-python" "$ARCHIVE_NAME/uv-python"
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -874,6 +886,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp "target/$TARGET/release/uv-python" "$ARCHIVE_NAME/uv-python"
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -966,6 +979,7 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME} --help
             uvx --help
+            uv-python --help
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
@@ -983,6 +997,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp "target/$TARGET/release/uv-python" "$ARCHIVE_NAME/uv-python"
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -1080,6 +1095,7 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # .venv/bin/python -m ${MODULE_NAME} --help;
             .venv/bin/uvx --help;
+            .venv/bin/uv-python --help;
           "
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -1095,6 +1111,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp "target/$TARGET/release/uv-python" "$ARCHIVE_NAME/uv-python"
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -1198,6 +1215,7 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # .venv/bin/python -m ${MODULE_NAME} --help
             .venv/bin/uvx --help
+            .venv/bin/uv-python --help
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
@@ -1217,6 +1235,7 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME} --help
             uvx --help
+            uv-python --help
           env: |
             PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
             MODULE_NAME: ${{ env.MODULE_NAME }}
@@ -1234,6 +1253,7 @@ jobs:
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/$PROFILE/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/$PROFILE/uvx $ARCHIVE_NAME/uvx
+          cp "target/$TARGET/$PROFILE/uv-python" "$ARCHIVE_NAME/uv-python"
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:

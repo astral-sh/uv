@@ -49,6 +49,7 @@ jobs:
           path: |
             ./target/no-debug-nightly/uv
             ./target/no-debug-nightly/uvx
+            ./target/no-debug-nightly/uv-python
           retention-days: 1
 
   build-binary-linux-aarch64:
@@ -84,6 +85,7 @@ jobs:
           path: |
             ./target/no-debug-nightly/uv
             ./target/no-debug-nightly/uvx
+            ./target/no-debug-nightly/uv-python
           retention-days: 1
 
   build-binary-linux-armv7-gnueabihf:
@@ -119,7 +121,7 @@ jobs:
       - name: "Build"
         env:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx --bin uv-python
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -128,6 +130,7 @@ jobs:
           path: |
             ./target/armv7-unknown-linux-gnueabihf/no-debug-nightly/uv
             ./target/armv7-unknown-linux-gnueabihf/no-debug-nightly/uvx
+            ./target/armv7-unknown-linux-gnueabihf/no-debug-nightly/uv-python
           retention-days: 1
 
   build-binary-linux-musl:
@@ -159,7 +162,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target x86_64-unknown-linux-musl --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target x86_64-unknown-linux-musl --bin uv --bin uvx --bin uv-python
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -168,6 +171,7 @@ jobs:
           path: |
             ./target/x86_64-unknown-linux-musl/no-debug-nightly/uv
             ./target/x86_64-unknown-linux-musl/no-debug-nightly/uvx
+            ./target/x86_64-unknown-linux-musl/no-debug-nightly/uv-python
           retention-days: 1
 
   build-binary-macos-aarch64:
@@ -191,7 +195,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
           cache-bin: false
       - name: "Build"
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx --bin uv-python
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -200,6 +204,7 @@ jobs:
           path: |
             ./target/no-debug-nightly/uv
             ./target/no-debug-nightly/uvx
+            ./target/no-debug-nightly/uv-python
           retention-days: 1
 
   build-binary-macos-x86_64:
@@ -223,7 +228,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
           cache-bin: false
       - name: "Build"
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx --bin uv-python
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -232,6 +237,7 @@ jobs:
           path: |
             ./target/no-debug-nightly/uv
             ./target/no-debug-nightly/uvx
+            ./target/no-debug-nightly/uv-python
           retention-days: 1
 
   build-binary-windows-x86_64:
@@ -266,7 +272,7 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx --bin uv-python
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -275,6 +281,7 @@ jobs:
           path: |
             ${{ env.UV_WORKSPACE }}/target/no-debug-nightly/uv.exe
             ${{ env.UV_WORKSPACE }}/target/no-debug-nightly/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug-nightly/uv-python.exe
           retention-days: 1
 
   build-binary-windows-aarch64:
@@ -309,7 +316,7 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx --bin uv-python
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -318,6 +325,7 @@ jobs:
           path: |
             ${{ env.UV_WORKSPACE }}/target/no-debug-nightly/uv.exe
             ${{ env.UV_WORKSPACE }}/target/no-debug-nightly/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug-nightly/uv-python.exe
           retention-days: 1
 
   build-binary-msrv:
@@ -393,7 +401,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target aarch64-linux-android --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target aarch64-linux-android --bin uv --bin uvx --bin uv-python
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -402,6 +410,7 @@ jobs:
           path: |
             ./target/aarch64-linux-android/no-debug-nightly/uv
             ./target/aarch64-linux-android/no-debug-nightly/uvx
+            ./target/aarch64-linux-android/no-debug-nightly/uv-python
           retention-days: 1
 
   build-binary-freebsd:

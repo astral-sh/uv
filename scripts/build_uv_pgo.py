@@ -575,6 +575,8 @@ def cargo_command(target: str, *, debug: bool = False) -> list[str]:
         "uv",
         "--bin",
         "uvx",
+        "--bin",
+        "uv-python",
         *(("--bin", "uvw") if windows else ()),
         *(() if debug else ("--release",)),
         "--locked",

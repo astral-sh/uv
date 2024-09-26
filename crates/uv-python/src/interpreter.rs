@@ -993,7 +993,8 @@ impl InterpreterInfo {
             .arg("-I") // Isolated mode.
             .arg("-B") // Don't write bytecode.
             .arg("-c")
-            .arg(script);
+            .arg(script)
+            .env(EnvVars::UV_INTERNAL__PYTHON_QUERY, "1");
 
         // Disable Apple's SYSTEM_VERSION_COMPAT shim so that `platform.mac_ver()` reports
         // the real macOS version instead of "10.16" for interpreters built against older SDKs
