@@ -2136,6 +2136,10 @@ fn run_remote_pep723_script() {
         r"(?m)^Reading inline script metadata from:.*\.py$",
         "Reading inline script metadata from: [TEMP_PATH].py",
     ));
+    filters.push((
+        r"(?m)^Downloading remote script to:.*\.py$",
+        "Downloading remote script to: [TEMP_PATH].py",
+    ));
     uv_snapshot!(filters, context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg("CI"), @r###"
     success: true
     exit_code: 0
@@ -2143,6 +2147,7 @@ fn run_remote_pep723_script() {
     Hello CI, from uv!
 
     ----- stderr -----
+    Downloading remote script to: [TEMP_PATH].py
     Reading inline script metadata from: [TEMP_PATH].py
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]

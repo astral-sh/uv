@@ -81,7 +81,7 @@ async fn resolve_script_target(
         .tempfile()?;
 
     eprintln!(
-        "Downloading remote script to {}",
+        "Downloading remote script to: {}",
         temp_file.path().display().cyan()
     );
 
