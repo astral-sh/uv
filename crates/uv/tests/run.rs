@@ -2136,37 +2136,21 @@ fn run_remote_pep723_script() {
         r"(?m)^Reading inline script metadata from:.*\.py$",
         "Reading inline script metadata from: [TEMP_PATH].py",
     ));
-    uv_snapshot!(filters, context.run().arg("https://gist.githubusercontent.com/manzt/cb24f3066c32983672025b04b9f98d1f/raw/d675b26fe8b3a8e301705af80a53fe5de15a0273/pep723.py"), @r###"
+    uv_snapshot!(filters, context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/2b7997/scripts/uv-run-remote-script-test.py").arg("CI"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    [
-    │   ('1', 'PEP Purpose and Guidelines'),
-    │   ('2', 'Procedure for Adding New Modules'),
-    │   ('3', 'Guidelines for Handling Bug Reports'),
-    │   ('4', 'Deprecation of Standard Modules'),
-    │   ('5', 'Guidelines for Language Evolution'),
-    │   ('6', 'Bug Fix Releases'),
-    │   ('7', 'Style Guide for C Code'),
-    │   ('8', 'Style Guide for Python Code'),
-    │   ('9', 'Sample Plaintext PEP Template'),
-    │   ('10', 'Voting Guidelines')
-    ]
+    Hello CI, from uv!
 
     ----- stderr -----
     Reading inline script metadata from: [TEMP_PATH].py
-    Resolved 9 packages in [TIME]
-    Prepared 9 packages in [TIME]
-    Installed 9 packages in [TIME]
-     + certifi==2024.2.2
-     + charset-normalizer==3.3.2
-     + idna==3.6
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + markdown-it-py==3.0.0
      + mdurl==0.1.2
-     + pygments==2.17.2
-     + requests==2.31.0
-     + rich==13.7.1
-     + urllib3==2.2.1
+     + pygments==2.18.0
+     + rich==13.8.1
     "###);
 }
 
