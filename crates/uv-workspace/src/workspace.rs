@@ -637,11 +637,12 @@ impl Workspace {
 
         // Add all other workspace members.
         for member_glob in workspace_definition.clone().members.unwrap_or_default() {
-            let absolute_glob = workspace_root
-                .simplified()
-                .join(member_glob.as_str())
-                .to_string_lossy()
-                .to_string();
+            let absolute_glob = PathBuf::from(glob::Pattern::escape(
+                workspace_root.simplified().to_string_lossy().as_ref(),
+            ))
+            .join(member_glob.as_str())
+            .to_string_lossy()
+            .to_string();
             for member_root in glob(&absolute_glob)
                 .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
             {
@@ -1284,11 +1285,12 @@ fn is_excluded_from_workspace(
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
     for exclude_glob in workspace.exclude.iter().flatten() {
-        let absolute_glob = workspace_root
-            .simplified()
-            .join(exclude_glob.as_str())
-            .to_string_lossy()
-            .to_string();
+        let absolute_glob = PathBuf::from(glob::Pattern::escape(
+            workspace_root.simplified().to_string_lossy().as_ref(),
+        ))
+        .join(exclude_glob.as_str())
+        .to_string_lossy()
+        .to_string();
         for excluded_root in glob(&absolute_glob)
             .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
         {
@@ -1309,11 +1311,12 @@ fn is_included_in_workspace(
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
     for member_glob in workspace.members.iter().flatten() {
-        let absolute_glob = workspace_root
-            .simplified()
-            .join(member_glob.as_str())
-            .to_string_lossy()
-            .to_string();
+        let absolute_glob = PathBuf::from(glob::Pattern::escape(
+            workspace_root.simplified().to_string_lossy().as_ref(),
+        ))
+        .join(member_glob.as_str())
+        .to_string_lossy()
+        .to_string();
         for member_root in glob(&absolute_glob)
             .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
         {
