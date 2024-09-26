@@ -79,6 +79,12 @@ async fn resolve_script_target(
         .prefix(file_stem)
         .suffix(".py")
         .tempfile()?;
+
+    eprintln!(
+        "Downloading remote script to {}",
+        temp_file.path().display().cyan()
+    );
+
     let response = reqwest::get(script_url).await?;
     let contents = response.bytes().await?;
     write_atomic(&temp_file, &contents).await?;
