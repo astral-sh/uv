@@ -9,6 +9,5 @@ import sys
 
 import rich
 
-
 who = sys.argv[1]
 rich.print(f"Hello {who}, from uv!")
