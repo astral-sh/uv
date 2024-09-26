@@ -4,12 +4,17 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use distribution_filename::SourceDistExtension;
+use distribution_types::{DependencyMetadata, IndexLocations};
+use install_wheel_rs::linker::LinkMode;
 use owo_colors::OwoColorize;
 
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{BuildKind, BuildOutput, Concurrency, Constraints, HashCheckingMode};
+use uv_configuration::{
+    BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, SourceStrategy, TrustedHost,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -18,9 +23,9 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::RequirementsSource;
-use uv_resolver::{FlatIndex, RequiresPython};
+use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
-use uv_workspace::{DiscoveryOptions, Workspace};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
 
 use crate::commands::pip::operations;
 use crate::commands::project::find_requires_python;
@@ -35,6 +40,7 @@ pub(crate) async fn build(
     project_dir: &Path,
     src: Option<PathBuf>,
     package: Option<PackageName>,
+    all: bool,
     output_dir: Option<PathBuf>,
     sdist: bool,
     wheel: bool,
@@ -51,10 +57,11 @@ pub(crate) async fn build(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let assets = build_impl(
+    let results = build_impl(
         project_dir,
         src.as_deref(),
         package.as_ref(),
+        all,
         output_dir.as_deref(),
         sdist,
         wheel,
@@ -73,32 +80,53 @@ pub(crate) async fn build(
     )
     .await?;
 
-    match assets {
-        BuiltDistributions::Wheel(wheel) => {
-            writeln!(
-                printer.stderr(),
-                "Successfully built {}",
-                wheel.user_display().bold().cyan()
-            )?;
-        }
-        BuiltDistributions::Sdist(sdist) => {
-            writeln!(
-                printer.stderr(),
-                "Successfully built {}",
-                sdist.user_display().bold().cyan()
-            )?;
-        }
-        BuiltDistributions::Both(sdist, wheel) => {
-            writeln!(
-                printer.stderr(),
-                "Successfully built {} and {}",
-                sdist.user_display().bold().cyan(),
-                wheel.user_display().bold().cyan()
-            )?;
+    for result in &results {
+        match result {
+            Ok(assets) => match assets {
+                BuiltDistributions::Wheel(wheel) => {
+                    writeln!(
+                        printer.stderr(),
+                        "Successfully built {}",
+                        wheel.user_display().bold().cyan()
+                    )?;
+                }
+                BuiltDistributions::Sdist(sdist) => {
+                    writeln!(
+                        printer.stderr(),
+                        "Successfully built {}",
+                        sdist.user_display().bold().cyan()
+                    )?;
+                }
+                BuiltDistributions::Both(sdist, wheel) => {
+                    writeln!(
+                        printer.stderr(),
+                        "Successfully built {} and {}",
+                        sdist.user_display().bold().cyan(),
+                        wheel.user_display().bold().cyan()
+                    )?;
+                }
+            },
+            Err(err) => {
+                let mut causes = err.chain();
+                writeln!(
+                    printer.stderr(),
+                    "{}: {}",
+                    "error".red().bold(),
+                    causes.next().unwrap()
+                )?;
+
+                for err in causes {
+                    writeln!(printer.stderr(), "  {}: {}", "Caused by".red().bold(), err)?;
+                }
+            }
         }
     }
 
-    Ok(ExitStatus::Success)
+    if results.iter().any(std::result::Result::is_err) {
+        Ok(ExitStatus::Error)
+    } else {
+        Ok(ExitStatus::Success)
+    }
 }
 
 #[allow(clippy::fn_params_excessive_bools)]
@@ -106,6 +134,7 @@ async fn build_impl(
     project_dir: &Path,
     src: Option<&Path>,
     package: Option<&PackageName>,
+    all: bool,
     output_dir: Option<&Path>,
     sdist: bool,
     wheel: bool,
@@ -121,7 +150,7 @@ async fn build_impl(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<BuiltDistributions> {
+) -> Result<Vec<Result<BuiltDistributions, anyhow::Error>>> {
     // Extract the resolver settings.
     let ResolverSettingsRef {
         index_locations,
@@ -170,8 +199,8 @@ async fn build_impl(
     // Attempt to discover the workspace; on failure, save the error for later.
     let workspace = Workspace::discover(src.directory(), &DiscoveryOptions::default()).await;
 
-    // If a `--package` was provided, adjust the source directory.
-    let src = if let Some(package) = package {
+    // If a `--package` or `--all` was provided, adjust the source directory.
+    let packages = if let Some(package) = package {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
                 "Cannot specify a `--package` when building from a file"
@@ -195,11 +224,101 @@ async fn build_impl(
             .root()
             .clone();
 
-        Source::Directory(Cow::Owned(project))
+        vec![Source::Directory(Cow::Owned(project))]
+    } else if all {
+        if matches!(src, Source::File(_)) {
+            return Err(anyhow::anyhow!(
+                "Cannot specify a `--all` when building from a file"
+            ));
+        }
+        let workspace = match workspace {
+            Ok(ref workspace) => workspace,
+            Err(err) => {
+                return Err(
+                    anyhow::anyhow!("`--all` was provided, but no workspace was found")
+                        .context(err),
+                )
+            }
+        };
+        workspace
+            .packages()
+            .values()
+            .map(|package| Source::Directory(Cow::Owned(package.root().clone())))
+            .collect()
     } else {
-        src
+        vec![src]
     };
 
+    let build_futures = packages.iter().map(|src| {
+        build_package(
+            src,
+            output_dir,
+            python_request,
+            no_config,
+            workspace.as_ref(),
+            python_preference,
+            python_downloads,
+            cache,
+            printer,
+            index_locations,
+            &client_builder,
+            hash_checking,
+            build_constraints,
+            no_build_isolation,
+            no_build_isolation_package,
+            native_tls,
+            connectivity,
+            index_strategy,
+            keyring_provider,
+            allow_insecure_host,
+            exclude_newer,
+            sources,
+            concurrency,
+            build_options,
+            sdist,
+            wheel,
+            dependency_metadata,
+            link_mode,
+            config_setting,
+        )
+    });
+
+    let results = futures::future::join_all(build_futures).await;
+    Ok(results)
+}
+
+#[allow(clippy::fn_params_excessive_bools)]
+async fn build_package(
+    src: &Source<'_>,
+    output_dir: Option<&Path>,
+    python_request: Option<&str>,
+    no_config: bool,
+    workspace: Result<&Workspace, &WorkspaceError>,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    cache: &Cache,
+    printer: Printer,
+    index_locations: &IndexLocations,
+    client_builder: &BaseClientBuilder<'_>,
+    hash_checking: Option<HashCheckingMode>,
+    build_constraints: &[RequirementsSource],
+    no_build_isolation: bool,
+    no_build_isolation_package: &[PackageName],
+    native_tls: bool,
+    connectivity: Connectivity,
+    index_strategy: IndexStrategy,
+    keyring_provider: KeyringProviderType,
+    allow_insecure_host: &[TrustedHost],
+    exclude_newer: Option<ExcludeNewer>,
+    sources: SourceStrategy,
+    concurrency: Concurrency,
+    build_options: &BuildOptions,
+    sdist: bool,
+    wheel: bool,
+    dependency_metadata: &DependencyMetadata,
+    link_mode: LinkMode,
+    config_setting: &ConfigSettings,
+) -> Result<BuiltDistributions> {
     let output_dir = if let Some(output_dir) = output_dir {
         Cow::Owned(std::path::absolute(output_dir)?)
     } else {
@@ -221,7 +340,7 @@ async fn build_impl(
 
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
-        if let Ok(ref workspace) = workspace {
+        if let Ok(workspace) = workspace {
             interpreter_request = find_requires_python(workspace)?
                 .as_ref()
                 .map(RequiresPython::specifiers)
@@ -237,7 +356,7 @@ async fn build_impl(
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,
-        &client_builder,
+        client_builder,
         cache,
         Some(&PythonDownloadReporter::single(printer)),
     )
@@ -250,8 +369,7 @@ async fn build_impl(
     }
 
     // Read build constraints.
-    let build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
+    let build_constraints = operations::read_constraints(build_constraints, client_builder).await?;
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {

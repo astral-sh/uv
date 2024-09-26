@@ -2011,8 +2011,17 @@ pub struct BuildArgs {
     /// directory if no source directory is provided.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long)]
+    #[arg(long, conflicts_with("all"))]
     pub package: Option<PackageName>,
+
+    /// Builds all packages in the workspace.
+    ///
+    /// The workspace will be discovered from the provided source directory, or the current
+    /// directory if no source directory is provided.
+    ///
+    /// If the workspace member does not exist, uv will exit with an error.
+    #[arg(long, conflicts_with("package"))]
+    pub all: bool,
 
     /// The output directory to which distributions should be written.
     ///

@@ -6778,7 +6778,13 @@ uv build [OPTIONS] [SRC]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<dl class="cli-reference"><dt><code>--all</code></dt><dd><p>Builds all packages in the workspace.</p>
+
+<p>The workspace will be discovered from the provided source directory, or the current directory if no source directory is provided.</p>
+
+<p>If the workspace member does not exist, uv will exit with an error.</p>
+
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
 

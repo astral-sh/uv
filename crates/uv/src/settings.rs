@@ -1671,6 +1671,7 @@ impl PipCheckSettings {
 pub(crate) struct BuildSettings {
     pub(crate) src: Option<PathBuf>,
     pub(crate) package: Option<PackageName>,
+    pub(crate) all: bool,
     pub(crate) out_dir: Option<PathBuf>,
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
@@ -1688,6 +1689,7 @@ impl BuildSettings {
             src,
             out_dir,
             package,
+            all,
             sdist,
             wheel,
             build_constraint,
@@ -1704,6 +1706,7 @@ impl BuildSettings {
         Self {
             src,
             package,
+            all,
             out_dir,
             sdist,
             wheel,

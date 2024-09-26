@@ -683,6 +683,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &project_dir,
                 args.src,
                 args.package,
+                args.all,
                 args.out_dir,
                 args.sdist,
                 args.wheel,
