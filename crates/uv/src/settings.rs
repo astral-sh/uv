@@ -26,7 +26,7 @@ use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, DevMode, EditableMode, ExportFormat,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
     NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost,
-    TrustedPublishing, Upgrade, VersionControl,
+    TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
@@ -162,7 +162,7 @@ pub(crate) struct InitSettings {
     pub(crate) name: Option<PackageName>,
     pub(crate) package: bool,
     pub(crate) kind: InitKind,
-    pub(crate) version_control: Option<VersionControl>,
+    pub(crate) vcs: Option<VersionControlSystem>,
     pub(crate) no_readme: bool,
     pub(crate) no_pin_python: bool,
     pub(crate) no_workspace: bool,
@@ -204,7 +204,7 @@ impl InitSettings {
             name,
             package,
             kind,
-            version_control: vcs,
+            vcs,
             no_readme,
             no_pin_python,
             no_workspace,

@@ -2156,7 +2156,7 @@ fn init_git() -> Result<()> {
     }, {
         assert_snapshot!(
             gitignore, @r###"
-        # Python generated files
+        # Python-generated files
         __pycache__/
         *.py[oc]
         build/
@@ -2164,7 +2164,7 @@ fn init_git() -> Result<()> {
         wheels/
         *.egg-info
 
-        # venv
+        # Virtual environments
         .venv
         "###
         );
@@ -2212,7 +2212,6 @@ fn init_inside_git_repo() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The project is already in a version control system, `--vcs git` is ignored
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
@@ -2253,11 +2252,11 @@ fn init_git_not_installed() {
     let child = context.temp_dir.child("bar");
     // Set `PATH` to child to make `git` command cannot be found.
     uv_snapshot!(context.filters(), context.init().env("PATH", &*child).arg(child.as_ref()).arg("--vcs").arg("git"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        error: could not find `git` in PATH
-        "###);
+    ----- stderr -----
+    error: Attempted to initialize a Git repository, but `git` was not found in PATH
+    "###);
 }

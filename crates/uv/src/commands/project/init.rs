@@ -9,7 +9,7 @@ use pep508_rs::PackageName;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{existing_vcs_repo, VersionControl};
+use uv_configuration::{VersionControlError, VersionControlSystem};
 use uv_fs::{Simplified, CWD};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
@@ -17,7 +17,7 @@ use uv_python::{
 };
 use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
 
@@ -34,11 +34,11 @@ pub(crate) async fn init(
     name: Option<PackageName>,
     package: bool,
     init_kind: InitKind,
+    vcs: Option<VersionControlSystem>,
     no_readme: bool,
     no_pin_python: bool,
     python: Option<String>,
     no_workspace: bool,
-    version_control: Option<VersionControl>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -67,6 +67,7 @@ pub(crate) async fn init(
                 native_tls,
             )
             .await?;
+
             writeln!(
                 printer.stderr(),
                 "Initialized script at `{}`",
@@ -108,8 +109,8 @@ pub(crate) async fn init(
                 &name,
                 package,
                 project_kind,
+                vcs,
                 no_readme,
-                version_control,
                 no_pin_python,
                 python,
                 no_workspace,
@@ -234,8 +235,8 @@ async fn init_project(
     name: &PackageName,
     package: bool,
     project_kind: InitProjectKind,
+    vcs: Option<VersionControlSystem>,
     no_readme: bool,
-    version_control: Option<VersionControl>,
     no_pin_python: bool,
     python: Option<String>,
     no_workspace: bool,
@@ -459,7 +460,7 @@ async fn init_project(
             path,
             &requires_python,
             python_request.as_ref(),
-            version_control,
+            vcs,
             no_readme,
             package,
         )
@@ -548,7 +549,7 @@ impl InitProjectKind {
         path: &Path,
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
-        version_control: Option<VersionControl>,
+        vcs: Option<VersionControlSystem>,
         no_readme: bool,
         package: bool,
     ) -> Result<()> {
@@ -559,7 +560,7 @@ impl InitProjectKind {
                     path,
                     requires_python,
                     python_request,
-                    version_control,
+                    vcs,
                     no_readme,
                     package,
                 )
@@ -571,7 +572,7 @@ impl InitProjectKind {
                     path,
                     requires_python,
                     python_request,
-                    version_control,
+                    vcs,
                     no_readme,
                     package,
                 )
@@ -580,13 +581,14 @@ impl InitProjectKind {
         }
     }
 
+    /// Initialize a Python application at the target path.
     async fn init_application(
         self,
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
-        version_control: Option<VersionControl>,
+        vcs: Option<VersionControlSystem>,
         no_readme: bool,
         package: bool,
     ) -> Result<()> {
@@ -655,35 +657,19 @@ impl InitProjectKind {
         }
 
         // Initialize the version control system.
-        let in_existing_vcs = existing_vcs_repo(path.parent().unwrap_or(&path));
-        let vcs = match (version_control, in_existing_vcs) {
-            (None, false) => VersionControl::default(),
-            (None, true) => VersionControl::None,
-            (Some(vcs), false) => vcs,
-            (Some(vcs), true) => {
-                warn_user!(
-                    "The project is already in a version control system, `--vcs {vcs}` is ignored",
-                );
-                VersionControl::None
-            }
-        };
-        if let Err(err) = vcs.init(path) {
-            if version_control.is_some() {
-                return Err(err);
-            }
-            debug!("Failed to initialize version control: {:#}", err);
-        }
+        init_vcs(path, vcs)?;
 
         Ok(())
     }
 
+    /// Initialize a library project at the target path.
     async fn init_library(
         self,
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
-        version_control: Option<VersionControl>,
+        vcs: Option<VersionControlSystem>,
         no_readme: bool,
         package: bool,
     ) -> Result<()> {
@@ -736,24 +722,7 @@ impl InitProjectKind {
         }
 
         // Initialize the version control system.
-        let in_existing_vcs = existing_vcs_repo(path.parent().unwrap_or(&path));
-        let vcs = match (version_control, in_existing_vcs) {
-            (None, false) => VersionControl::default(),
-            (None, true) => VersionControl::None,
-            (Some(vcs), false) => vcs,
-            (Some(vcs), true) => {
-                warn_user!(
-                    "The project is already in a version control system, `--vcs {vcs}` is ignored",
-                );
-                VersionControl::None
-            }
-        };
-        if let Err(err) = vcs.init(path) {
-            if version_control.is_some() {
-                return Err(err);
-            }
-            debug!("Failed to initialize version control: {:#}", err);
-        }
+        init_vcs(path, vcs)?;
 
         Ok(())
     }
@@ -794,4 +763,52 @@ fn pyproject_project_scripts(package: &PackageName, executable_name: &str, targe
         [project.scripts]
         {executable_name} = "{module_name}:{target}"
     "#}
+}
+
+/// Initialize the version control system at the given path.
+fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
+    // Detect any existing version control system.
+    let existing = VersionControlSystem::detect(path);
+
+    let implicit = vcs.is_none();
+
+    let vcs = match (vcs, existing) {
+        // If no version control system was specified, and none was detected, default to Git.
+        (None, None) => VersionControlSystem::default(),
+        // If no version control system was specified, but a VCS was detected, leave it as-is.
+        (None, Some(existing)) => {
+            debug!("Detected existing version control system: {existing}");
+            VersionControlSystem::None
+        }
+        // If the user provides an explicit `--vcs none`,
+        (Some(VersionControlSystem::None), _) => VersionControlSystem::None,
+        // If a version control system was specified, use it.
+        (Some(vcs), None) => vcs,
+        // If a version control system was specified, but a VCS was detected...
+        (Some(vcs), Some(existing)) => {
+            // If they differ, raise an error.
+            if vcs != existing {
+                anyhow::bail!("The project is already in a version control system (`{existing}`); cannot initialize with `--vcs {vcs}`");
+            }
+
+            // Otherwise, ignore the specified VCS, since it's already in use.
+            VersionControlSystem::None
+        }
+    };
+
+    // Attempt to initialize the VCS.
+    match vcs.init(path) {
+        Ok(()) => (),
+        // If the VCS isn't installed, only raise an error if a VCS was explicitly specified.
+        Err(err @ VersionControlError::GitNotInstalled) => {
+            if implicit {
+                debug!("Failed to initialize version control: {err}");
+            } else {
+                return Err(err.into());
+            }
+        }
+        Err(err) => return Err(err.into()),
+    }
+
+    Ok(())
 }

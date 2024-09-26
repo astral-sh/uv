@@ -4712,7 +4712,6 @@ dependencies = [
  "clap",
  "either",
  "fs-err",
- "indoc",
  "pep508_rs",
  "platform-tags",
  "pypi-types",
@@ -4726,9 +4725,7 @@ dependencies = [
  "uv-auth",
  "uv-cache",
  "uv-cache-info",
- "uv-fs",
  "uv-normalize",
- "uv-warnings",
  "which",
 ]
 
