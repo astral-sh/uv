@@ -69,13 +69,14 @@ async fn resolve_script_target(
     }
 
     let script_url = url::Url::parse(&maybe_url)?;
-    let file_name = script_url
+    let file_stem = script_url
         .path_segments()
         .and_then(std::iter::Iterator::last)
-        .unwrap_or("script.py");
+        .and_then(|segment| segment.strip_suffix(".py"))
+        .unwrap_or("script");
 
     let temp_file = tempfile::Builder::new()
-        .prefix(file_name)
+        .prefix(file_stem)
         .suffix(".py")
         .tempfile()?;
     let response = reqwest::get(script_url).await?;
