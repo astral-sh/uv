@@ -1674,6 +1674,7 @@ pub(crate) struct BuildSettings {
     pub(crate) out_dir: Option<PathBuf>,
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
+    pub(crate) build_logs: bool,
     pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
@@ -1695,6 +1696,8 @@ impl BuildSettings {
             no_require_hashes,
             verify_hashes,
             no_verify_hashes,
+            build_logs,
+            no_build_logs,
             python,
             build,
             refresh,
@@ -1707,6 +1710,7 @@ impl BuildSettings {
             out_dir,
             sdist,
             wheel,
+            build_logs: flag(build_logs, no_build_logs).unwrap_or(true),
             build_constraint: build_constraint
                 .into_iter()
                 .filter_map(Maybe::into_option)
