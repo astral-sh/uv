@@ -18,6 +18,7 @@ pub use crate::version_files::{
 };
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
 
+mod cpuinfo;
 mod discovery;
 pub mod downloads;
 mod environment;
