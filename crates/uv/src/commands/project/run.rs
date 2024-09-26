@@ -724,7 +724,19 @@ pub(crate) async fn run(
     let new_path = std::env::join_paths(
         ephemeral_env
             .as_ref()
-            .map(PythonEnvironment::scripts)
+            .map(|ephemeral_env| {
+                process.env(
+                    "PYTHONPATH",
+                    ephemeral_env
+                        .interpreter()
+                        .sys_path()
+                        .into_iter()
+                        .map(|path| path.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join(if cfg!(windows) { ";" } else { ":" }),
+                );
+                PythonEnvironment::scripts(ephemeral_env)
+            })
             .into_iter()
             .chain(std::iter::once(base_interpreter.scripts()))
             .map(PathBuf::from)
