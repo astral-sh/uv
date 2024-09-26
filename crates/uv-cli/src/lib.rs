@@ -2033,7 +2033,7 @@ pub struct BuildArgs {
     pub build_logs: bool,
 
     /// Hide logs from the build backend.
-    #[arg(long, overrides_with("build_logs"))]
+    #[arg(long, overrides_with("build_logs"), hide = true)]
     pub no_build_logs: bool,
 
     /// Constrain build dependencies using the given requirements files when building
