@@ -728,8 +728,8 @@ fn python_pin_upgrade_versions() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     Bumped patch for version 3.8.18 to 20
-    Bumped patch for version 3.9.18 to 20
     Bumped patch for version 3.10.13 to 15
+    Bumped patch for version 3.9.18 to 20
 
     ----- stderr -----
     "###);
