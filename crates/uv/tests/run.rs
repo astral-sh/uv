@@ -2136,7 +2136,7 @@ fn run_remote_pep723_script() {
         r"(?m)^Reading inline script metadata from:.*\.py$",
         "Reading inline script metadata from: [TEMP_PATH].py",
     ));
-    uv_snapshot!(filters, context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/2b7997/scripts/uv-run-remote-script-test.py").arg("CI"), @r###"
+    uv_snapshot!(filters, context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/7a8f4f93cc7e87bb1e42ff1ac8532dbf8ad4671b/scripts/uv-run-remote-script-test.py").arg("CI"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
