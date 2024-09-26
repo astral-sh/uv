@@ -11,6 +11,7 @@ use which::{which, which_all};
 
 use pep440_rs::{Prerelease, Version, VersionSpecifier, VersionSpecifiers};
 use uv_cache::Cache;
+use uv_fs::which::is_executable;
 use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
 
@@ -27,7 +28,6 @@ use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable,
 };
-use crate::which::is_executable;
 use crate::{Interpreter, PythonVersion};
 
 /// A request to find a Python installation.

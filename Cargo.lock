@@ -4875,12 +4875,14 @@ dependencies = [
  "fs2",
  "junction",
  "path-slash",
+ "rustix",
  "schemars",
  "serde",
  "tempfile",
  "tokio",
  "tracing",
  "urlencoding",
+ "winsafe 0.0.22",
 ]
 
 [[package]]
@@ -5066,7 +5068,6 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "rmp-serde",
- "rustix",
  "same-file",
  "schemars",
  "serde",
@@ -5091,7 +5092,6 @@ dependencies = [
  "windows-registry",
  "windows-result 0.2.0",
  "windows-sys 0.59.0",
- "winsafe 0.0.22",
 ]
 
 [[package]]

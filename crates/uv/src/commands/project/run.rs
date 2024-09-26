@@ -18,10 +18,11 @@ use uv_configuration::{
     Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, SourceStrategy,
 };
 use uv_distribution::LoweredRequirement;
+use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
-use uv_python::which::is_executable;
+
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
@@ -723,10 +724,11 @@ pub(crate) async fn run(
     if let RunCommand::Empty = command {
         writeln!(
             printer.stdout(),
-            "Provide a command or script to invoke with `uv run <command>` or `uv run script.py`.\n"
+            "Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.\n"
         )?;
 
-        let mut scripts = interpreter
+        #[allow(clippy::map_identity)]
+        let mut commands = interpreter
             .scripts()
             .read_dir()
             .ok()
@@ -735,7 +737,10 @@ pub(crate) async fn run(
             .filter_map(|entry| match entry {
                 Ok(entry) => Some(entry),
                 Err(err) => {
-                    debug!("Failed to read entry: {}", err);
+                    // If we can't read the entry, skip it.
+                    // However, let the user know that we failed to read it.
+                    // This could be a symptom of a more serious problem.
+                    warn!("Failed to read entry: {}", err);
                     None
                 }
             })
@@ -747,24 +752,37 @@ pub(crate) async fn run(
             .map(|entry| entry.path())
             .filter(|path| is_executable(path))
             .map(|path| {
+                if cfg!(windows) {
+                    // remove the extensions
+                    path.with_extension("")
+                } else {
+                    path
+                }
+            })
+            .map(|path| {
                 path.file_name()
                     .unwrap_or_default()
                     .to_string_lossy()
                     .to_string()
             })
+            .filter(|command| {
+                !command.starts_with("activate") || !command.starts_with("deactivate")
+            })
             .collect_vec();
-        scripts.sort();
+        commands.sort();
 
-        if !scripts.is_empty() {
-            writeln!(printer.stdout(), "The following scripts are available:\n")?;
-            writeln!(printer.stdout(), "{}", scripts.join("\n"))?;
+        if !commands.is_empty() {
+            writeln!(printer.stdout(), "The following commands are available:")?;
+            for command in commands {
+                writeln!(printer.stdout(), "- {command}")?;
+            }
         }
         writeln!(
             printer.stdout(),
             "\nSee `uv run --help` for more information."
         )?;
 
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::Failure);
     };
 
     debug!("Running `{command}`");

@@ -12,6 +12,7 @@ pub use crate::path::*;
 
 pub mod cachedir;
 mod path;
+pub mod which;
 
 /// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
 ///

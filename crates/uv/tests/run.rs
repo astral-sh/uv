@@ -220,16 +220,15 @@ fn run_no_args() -> Result<()> {
     // Run without specifying any argunments.
     #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.run(), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
-    Provide a command or script to invoke with `uv run <command>` or `uv run script.py`.
+    Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 
-    The following scripts are available:
-
-    python
-    python3
-    python3.12
+    The following commands are available:
+    - python
+    - python3
+    - python3.12
 
     See `uv run --help` for more information.
 
@@ -245,20 +244,12 @@ fn run_no_args() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Provide a command or script to invoke with `uv run <command>` or `uv run script.py`.
+    Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 
-    The following scripts are available:
-
-    activate.bat
-    activate.csh
-    activate.fish
-    activate.nu
-    activate.ps1
-    activate_this.py
-    deactivate.bat
-    pydoc.bat
-    python.exe
-    pythonw.exe
+    The following commands are available:
+    - pydoc
+    - python
+    - pythonw
 
     See `uv run --help` for more information.
 
