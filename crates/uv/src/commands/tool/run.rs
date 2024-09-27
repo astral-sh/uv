@@ -36,9 +36,7 @@ use crate::commands::pip::operations;
 use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::Target;
-use crate::commands::{
-    project::environment::CachedEnvironment, tool::common::matching_packages, tool_list,
-};
+use crate::commands::{project::environment::CachedEnvironment, tool::common::matching_packages};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -79,9 +77,13 @@ pub(crate) async fn run(
     cache: Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    // treat empty command as `uv tool list`
+    // Treat empty command similar to `uv tool list`, list available tools.
     let Some(command) = command else {
-        return tool_list(false, false, &cache, printer).await;
+        match list_available_tools(invocation_source, &cache, printer).await {
+            // It is a failure because user misses a required tool name.
+            Ok(()) => return Ok(ExitStatus::Error),
+            Err(err) => return Err(err),
+        };
     };
 
     let (target, args) = command.split();
@@ -260,6 +262,77 @@ fn get_entrypoints(
         installed_dist.name(),
         installed_dist.version(),
     )?)
+}
+
+/// Display a list of tools that provide the executable.
+///
+/// If there is no package providing the executable, we will display a message to how to install a package.
+async fn list_available_tools(
+    invocation_source: ToolRunCommand,
+    cache: &Cache,
+    printer: Printer,
+) -> anyhow::Result<()> {
+    writeln!(
+        printer.stdout(),
+        "Provide a command to invoke with `{invocation_source} <command>` \
+            or `{invocation_source} --from <package> <command>`.\n"
+    )?;
+
+    let installed_tools = InstalledTools::from_settings()?;
+    let no_tools_installed_msg =
+        "No tools installed. See `uv tool install --help` for more information.";
+    let _lock = match installed_tools.lock().await {
+        Ok(lock) => lock,
+        Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            writeln!(printer.stdout(), "{no_tools_installed_msg}")?;
+            return Ok(());
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    let mut tools = installed_tools.tools()?.into_iter().collect::<Vec<_>>();
+    tools.sort_by_key(|(name, _)| name.clone());
+
+    if tools.is_empty() {
+        writeln!(printer.stdout(), "{no_tools_installed_msg}")?;
+        return Ok(());
+    }
+
+    let mut buf = String::new();
+    for (name, tool) in tools {
+        // Skip invalid tools.
+        let Ok(tool) = tool else {
+            continue;
+        };
+
+        // Output tool name and version.
+        let Ok(version) = installed_tools.version(&name, cache) else {
+            continue;
+        };
+        writeln!(buf, "{}", format!("{name} v{version}").bold())?;
+
+        // Output tool entrypoints.
+        for entrypoint in tool.entrypoints() {
+            writeln!(buf, "- {}", entrypoint.name)?;
+        }
+    }
+
+    // Installed tools were malformed or failed fetching versions.
+    if buf.is_empty() {
+        writeln!(printer.stderr(), "{no_tools_installed_msg}")?;
+        return Ok(());
+    }
+
+    writeln!(
+        printer.stdout(),
+        "The following tools are already installed:\n"
+    )?;
+    writeln!(printer.stdout(), "{buf}")?;
+    writeln!(
+        printer.stdout(),
+        "See `{invocation_source} --help` for more information."
+    )?;
+    Ok(())
 }
 
 /// Display a warning if an executable is not provided by package.

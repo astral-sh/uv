@@ -1216,9 +1216,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         false,
                         "Dependencies were requested for a package that is not available"
                     );
-                    return Err(ResolveError::Failure(format!(
-                        "The package is unavailable: {name}"
-                    )));
+                    return Err(ResolveError::PackageUnavailable(name.clone()));
                 }
 
                 // Wait for the metadata to be available.

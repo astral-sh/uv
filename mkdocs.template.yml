@@ -61,7 +61,6 @@ markdown_extensions:
       alternate_style: true
 plugins:
   - search
-  - typeset
 extra_css:
   - stylesheets/extra.css
 extra_javascript:

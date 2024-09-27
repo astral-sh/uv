@@ -616,7 +616,8 @@ impl InterpreterInfo {
             tempdir.path().escape_for_python()
         );
         let output = Command::new(interpreter)
-            .arg("-I")
+            .arg("-I") // Isolated mode.
+            .arg("-B") // Don't write bytecode.
             .arg("-c")
             .arg(script)
             .output()

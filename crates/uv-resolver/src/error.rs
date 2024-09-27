@@ -36,12 +36,6 @@ pub enum ResolveError {
     #[error("Attempted to wait on an unregistered task: `{_0}`")]
     UnregisteredTask(String),
 
-    #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
-    NameMismatch {
-        given: PackageName,
-        metadata: PackageName,
-    },
-
     #[error(transparent)]
     PubGrubSpecifier(#[from] PubGrubSpecifierError),
 
@@ -60,9 +54,6 @@ pub enum ResolveError {
 
     #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
     DisallowedUrl(PackageName, String),
-
-    #[error("There are conflicting editable requirements for package `{0}`:\n- {1}\n- {2}")]
-    ConflictingEditables(PackageName, String, String),
 
     #[error(transparent)]
     DistributionType(#[from] distribution_types::Error),
@@ -89,14 +80,6 @@ pub enum ResolveError {
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),
 
-    #[error("{package} {version} depends on itself")]
-    SelfDependency {
-        /// Package whose dependencies we want.
-        package: Box<PubGrubPackage>,
-        /// Version of the package for which we want the dependencies.
-        version: Box<Version>,
-    },
-
     #[error("Attempted to construct an invalid version specifier")]
     InvalidVersion(#[from] pep440_rs::VersionSpecifierBuildError),
 
@@ -106,9 +89,8 @@ pub enum ResolveError {
     #[error("found conflicting distribution in resolution: {0}")]
     ConflictingDistribution(ConflictingDistributionError),
 
-    /// Something unexpected happened.
-    #[error("{0}")]
-    Failure(String),
+    #[error("Package `{0}` is unavailable")]
+    PackageUnavailable(PackageName),
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {

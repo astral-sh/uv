@@ -44,6 +44,7 @@ pub(crate) async fn build(
     output_dir: Option<PathBuf>,
     sdist: bool,
     wheel: bool,
+    build_logs: bool,
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
@@ -65,6 +66,7 @@ pub(crate) async fn build(
         output_dir.as_deref(),
         sdist,
         wheel,
+        build_logs,
         &build_constraints,
         hash_checking,
         python.as_deref(),
@@ -138,6 +140,7 @@ async fn build_impl(
     output_dir: Option<&Path>,
     sdist: bool,
     wheel: bool,
+    build_logs: bool,
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
@@ -487,7 +490,13 @@ async fn build_package(
     let dist = None;
 
     let build_output = match printer {
-        Printer::Default | Printer::NoProgress | Printer::Verbose => BuildOutput::Stderr,
+        Printer::Default | Printer::NoProgress | Printer::Verbose => {
+            if build_logs {
+                BuildOutput::Stderr
+            } else {
+                BuildOutput::Quiet
+            }
+        }
         Printer::Quiet => BuildOutput::Quiet,
     };
 
