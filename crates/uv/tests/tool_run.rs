@@ -753,9 +753,9 @@ fn tool_run_list_installed() {
     success: false
     exit_code: 2
     ----- stdout -----
-    Provide a command to invoke with `uv tool run <command>` or `uv tool run --from <package> <command>`.
+    Provide a command to run with `uv tool run <command>`.
 
-    No tools installed. See `uv tool install --help` for more information.
+    See `uv tool run --help` for more information.
 
     ----- stderr -----
     "###);
@@ -776,13 +776,11 @@ fn tool_run_list_installed() {
     success: false
     exit_code: 2
     ----- stdout -----
-    Provide a command to invoke with `uv tool run <command>` or `uv tool run --from <package> <command>`.
+    Provide a command to run with `uv tool run <command>`.
 
-    The following tools are already installed:
+    The following tools are installed:
 
-    black v24.2.0
-    - black
-    - blackd
+    - black v24.2.0
 
     See `uv tool run --help` for more information.
 

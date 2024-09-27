@@ -77,13 +77,11 @@ pub(crate) async fn run(
     cache: Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    // Treat empty command similar to `uv tool list`, list available tools.
     let Some(command) = command else {
-        match list_available_tools(invocation_source, &cache, printer).await {
-            // It is a failure because user misses a required tool name.
-            Ok(()) => return Ok(ExitStatus::Error),
-            Err(err) => return Err(err),
-        };
+        // When a command isn't provided, we'll show a brief help including available tools
+        show_help(invocation_source, &cache, printer).await?;
+        // Exit as Clap would after displaying help
+        return Ok(ExitStatus::Error);
     };
 
     let (target, args) = command.split();
@@ -267,71 +265,65 @@ fn get_entrypoints(
 /// Display a list of tools that provide the executable.
 ///
 /// If there is no package providing the executable, we will display a message to how to install a package.
-async fn list_available_tools(
+async fn show_help(
     invocation_source: ToolRunCommand,
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<()> {
+    let help = format!(
+        "See `{}` for more information.",
+        format!("{invocation_source} --help").bold()
+    );
+
     writeln!(
         printer.stdout(),
-        "Provide a command to invoke with `{invocation_source} <command>` \
-            or `{invocation_source} --from <package> <command>`.\n"
+        "Provide a command to run with `{}`.\n",
+        format!("{invocation_source} <command>").bold()
     )?;
 
     let installed_tools = InstalledTools::from_settings()?;
-    let no_tools_installed_msg =
-        "No tools installed. See `uv tool install --help` for more information.";
     let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
         Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-            writeln!(printer.stdout(), "{no_tools_installed_msg}")?;
+            writeln!(printer.stdout(), "{help}")?;
             return Ok(());
         }
         Err(err) => return Err(err.into()),
     };
 
-    let mut tools = installed_tools.tools()?.into_iter().collect::<Vec<_>>();
-    tools.sort_by_key(|(name, _)| name.clone());
+    let tools = installed_tools
+        .tools()?
+        .into_iter()
+        // Skip invalid tools
+        .filter_map(|(name, tool)| {
+            tool.ok().and_then(|_| {
+                installed_tools
+                    .version(&name, cache)
+                    .ok()
+                    .map(|version| (name, version))
+            })
+        })
+        .sorted_by(|(name1, ..), (name2, ..)| name1.cmp(name2))
+        .collect::<Vec<_>>();
 
+    // No tools installed or they're all malformed
     if tools.is_empty() {
-        writeln!(printer.stdout(), "{no_tools_installed_msg}")?;
+        writeln!(printer.stdout(), "{help}")?;
         return Ok(());
     }
 
-    let mut buf = String::new();
-    for (name, tool) in tools {
-        // Skip invalid tools.
-        let Ok(tool) = tool else {
-            continue;
-        };
-
-        // Output tool name and version.
-        let Ok(version) = installed_tools.version(&name, cache) else {
-            continue;
-        };
-        writeln!(buf, "{}", format!("{name} v{version}").bold())?;
-
-        // Output tool entrypoints.
-        for entrypoint in tool.entrypoints() {
-            writeln!(buf, "- {}", entrypoint.name)?;
-        }
+    // Display the tools
+    writeln!(printer.stdout(), "The following tools are installed:\n")?;
+    for (name, version) in tools {
+        writeln!(
+            printer.stdout(),
+            "- {} v{version}",
+            format!("{name}").bold()
+        )?;
     }
 
-    // Installed tools were malformed or failed fetching versions.
-    if buf.is_empty() {
-        writeln!(printer.stderr(), "{no_tools_installed_msg}")?;
-        return Ok(());
-    }
+    writeln!(printer.stdout(), "\n{help}")?;
 
-    writeln!(
-        printer.stdout(),
-        "The following tools are already installed:\n"
-    )?;
-    writeln!(printer.stdout(), "{buf}")?;
-    writeln!(
-        printer.stdout(),
-        "See `{invocation_source} --help` for more information."
-    )?;
     Ok(())
 }
 
