@@ -84,7 +84,7 @@ impl RequiresDist {
                 .cloned();
             let dev_dependencies = match source_strategy {
                 SourceStrategy::Enabled => dev_dependencies
-                    .map(|requirement| {
+                    .flat_map(|requirement| {
                         let requirement_name = requirement.name.clone();
                         LoweredRequirement::from_requirement(
                             requirement,
@@ -93,8 +93,12 @@ impl RequiresDist {
                             sources,
                             project_workspace.workspace(),
                         )
-                        .map(LoweredRequirement::into_inner)
-                        .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
+                        .map(move |requirement| match requirement {
+                            Ok(requirement) => Ok(requirement.into_inner()),
+                            Err(err) => {
+                                Err(MetadataError::LoweringError(requirement_name.clone(), err))
+                            }
+                        })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
                 SourceStrategy::Disabled => dev_dependencies
@@ -112,7 +116,7 @@ impl RequiresDist {
         let requires_dist = metadata.requires_dist.into_iter();
         let requires_dist = match source_strategy {
             SourceStrategy::Enabled => requires_dist
-                .map(|requirement| {
+                .flat_map(|requirement| {
                     let requirement_name = requirement.name.clone();
                     LoweredRequirement::from_requirement(
                         requirement,
@@ -121,8 +125,12 @@ impl RequiresDist {
                         sources,
                         project_workspace.workspace(),
                     )
-                    .map(LoweredRequirement::into_inner)
-                    .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
+                    .map(move |requirement| match requirement {
+                        Ok(requirement) => Ok(requirement.into_inner()),
+                        Err(err) => {
+                            Err(MetadataError::LoweringError(requirement_name.clone(), err))
+                        }
+                    })
                 })
                 .collect::<Result<_, _>>()?,
             SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),

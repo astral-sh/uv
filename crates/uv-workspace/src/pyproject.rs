@@ -294,17 +294,17 @@ pub struct ToolUv {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ToolUvSources(BTreeMap<PackageName, Source>);
+pub struct ToolUvSources(BTreeMap<PackageName, Sources>);
 
 impl ToolUvSources {
     /// Returns the underlying `BTreeMap` of package names to sources.
-    pub fn inner(&self) -> &BTreeMap<PackageName, Source> {
+    pub fn inner(&self) -> &BTreeMap<PackageName, Sources> {
         &self.0
     }
 
     /// Convert the [`ToolUvSources`] into its inner `BTreeMap`.
     #[must_use]
-    pub fn into_inner(self) -> BTreeMap<PackageName, Source> {
+    pub fn into_inner(self) -> BTreeMap<PackageName, Sources> {
         self.0
     }
 }
@@ -329,7 +329,7 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
                 M: serde::de::MapAccess<'de>,
             {
                 let mut sources = BTreeMap::new();
-                while let Some((key, value)) = access.next_entry::<PackageName, Source>()? {
+                while let Some((key, value)) = access.next_entry::<PackageName, Sources>()? {
                     match sources.entry(key) {
                         std::collections::btree_map::Entry::Occupied(entry) => {
                             return Err(serde::de::Error::custom(format!(
@@ -404,6 +404,37 @@ impl Deref for SerdePattern {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case", from = "SourcesWire")]
+pub struct Sources(Vec<Source>);
+
+impl Sources {
+    pub fn inner(&self) -> &[Source] {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> Vec<Source> {
+        self.0
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case", untagged)]
+enum SourcesWire {
+    One(Source),
+    Many(Vec<Source>),
+}
+
+impl From<SourcesWire> for Sources {
+    fn from(wire: SourcesWire) -> Self {
+        match wire {
+            SourcesWire::One(source) => Sources(vec![source]),
+            SourcesWire::Many(sources) => Sources(sources),
+        }
     }
 }
 

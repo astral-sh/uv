@@ -14,7 +14,7 @@ use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::pyproject::{
-    Project, PyProjectToml, PyprojectTomlError, Source, ToolUvSources, ToolUvWorkspace,
+    Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources, ToolUvWorkspace,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -78,7 +78,7 @@ pub struct Workspace {
     /// The sources table from the workspace `pyproject.toml`.
     ///
     /// This table is overridden by the project sources.
-    sources: BTreeMap<PackageName, Source>,
+    sources: BTreeMap<PackageName, Sources>,
     /// The `pyproject.toml` of the workspace root.
     pyproject_toml: PyProjectToml,
 }
@@ -517,7 +517,7 @@ impl Workspace {
     }
 
     /// The sources table from the workspace `pyproject.toml`.
-    pub fn sources(&self) -> &BTreeMap<PackageName, Source> {
+    pub fn sources(&self) -> &BTreeMap<PackageName, Sources> {
         &self.sources
     }
 
@@ -531,7 +531,7 @@ impl Workspace {
                         .as_ref()
                         .and_then(|uv| uv.sources.as_ref())
                         .map(ToolUvSources::inner)
-                        .map(|sources| sources.values())
+                        .map(|sources| sources.values().flat_map(Sources::inner))
                 })
             })
             .flatten()

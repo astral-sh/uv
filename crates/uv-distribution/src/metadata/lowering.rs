@@ -1,7 +1,7 @@
+use either::Either;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
-
 use thiserror::Error;
 use url::Url;
 
@@ -12,7 +12,7 @@ use pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedU
 use uv_git::GitReference;
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::{PyProjectToml, Source};
+use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 use uv_workspace::Workspace;
 
 #[derive(Debug, Clone)]
@@ -28,13 +28,13 @@ enum Origin {
 
 impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
-    pub(crate) fn from_requirement(
+    pub(crate) fn from_requirement<'data>(
         requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
-        project_name: &PackageName,
-        project_dir: &Path,
-        project_sources: &BTreeMap<PackageName, Source>,
-        workspace: &Workspace,
-    ) -> Result<Self, LoweringError> {
+        project_name: &'data PackageName,
+        project_dir: &'data Path,
+        project_sources: &'data BTreeMap<PackageName, Sources>,
+        workspace: &'data Workspace,
+    ) -> impl Iterator<Item = Result<LoweredRequirement, LoweringError>> + 'data {
         let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), Origin::Project)
         } else if let Some(source) = workspace.sources().get(&requirement.name) {
@@ -48,18 +48,16 @@ impl LoweredRequirement {
             // We require that when you use a package that's part of the workspace, ...
             !workspace.packages().contains_key(&requirement.name)
                 // ... it must be declared as a workspace dependency (`workspace = true`), ...
-                || matches!(
-                    source,
-                    Some(Source::Workspace {
-                        // By using toml, we technically support `workspace = false`.
-                        workspace: true
-                    })
-                )
+                || source.as_ref().is_some_and(|source| source.inner().iter().all(|source| {
+                    matches!(source, Source::Workspace { workspace: true })
+                }))
                 // ... except for recursive self-inclusion (extras that activate other extras), e.g.
                 // `framework[machine_learning]` depends on `framework[cuda]`.
                 || &requirement.name == project_name;
         if !workspace_package_declared {
-            return Err(LoweringError::UndeclaredWorkspacePackage);
+            return Either::Left(std::iter::once(Err(
+                LoweringError::UndeclaredWorkspacePackage,
+            )));
         }
 
         let Some(source) = source else {
@@ -74,171 +72,176 @@ impl LoweredRequirement {
                     requirement.name
                 );
             }
-            return Ok(Self(Requirement::from(requirement)));
+            return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
         };
 
-        let source = match source {
-            Source::Git {
-                git,
-                subdirectory,
-                rev,
-                tag,
-                branch,
-            } => {
-                if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                    return Err(LoweringError::ConflictingUrls);
-                }
-                git_source(&git, subdirectory.map(PathBuf::from), rev, tag, branch)?
-            }
-            Source::Url { url, subdirectory } => {
-                if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                    return Err(LoweringError::ConflictingUrls);
-                }
-                url_source(url, subdirectory.map(PathBuf::from))?
-            }
-            Source::Path { path, editable } => {
-                if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                    return Err(LoweringError::ConflictingUrls);
-                }
-                path_source(
-                    PathBuf::from(path),
-                    origin,
-                    project_dir,
-                    workspace.install_path(),
-                    editable.unwrap_or(false),
-                )?
-            }
-            Source::Registry { index } => registry_source(&requirement, index)?,
-            Source::Workspace {
-                workspace: is_workspace,
-            } => {
-                if !is_workspace {
-                    return Err(LoweringError::WorkspaceFalse);
-                }
-                if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                    return Err(LoweringError::ConflictingUrls);
-                }
-                let member = workspace
-                    .packages()
-                    .get(&requirement.name)
-                    .ok_or(LoweringError::UndeclaredWorkspacePackage)?
-                    .clone();
-
-                // Say we have:
-                // ```
-                // root
-                // ├── main_workspace  <- We want to the path from here ...
-                // │   ├── pyproject.toml
-                // │   └── uv.lock
-                // └──current_workspace
-                //    └── packages
-                //        └── current_package  <- ... to here.
-                //            └── pyproject.toml
-                // ```
-                // The path we need in the lockfile: `../current_workspace/packages/current_project`
-                // member root: `/root/current_workspace/packages/current_project`
-                // workspace install root: `/root/current_workspace`
-                // relative to workspace: `packages/current_project`
-                // workspace lock root: `../current_workspace`
-                // relative to main workspace: `../current_workspace/packages/current_project`
-                let url = VerbatimUrl::from_absolute_path(member.root())?;
-                let install_path = url.to_file_path().map_err(|()| {
-                    LoweringError::RelativeTo(io::Error::new(
-                        io::ErrorKind::Other,
-                        "Invalid path in file URL",
-                    ))
-                })?;
-
-                if member.pyproject_toml().is_package() {
-                    RequirementSource::Directory {
-                        install_path,
-                        url,
-                        editable: true,
-                        r#virtual: false,
+        Either::Right(source.into_inner().into_iter().map(move |source| {
+            let source = match source {
+                Source::Git {
+                    git,
+                    subdirectory,
+                    rev,
+                    tag,
+                    branch,
+                } => {
+                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                        return Err(LoweringError::ConflictingUrls);
                     }
-                } else {
-                    RequirementSource::Directory {
-                        install_path,
-                        url,
-                        editable: false,
-                        r#virtual: true,
+                    git_source(&git, subdirectory.map(PathBuf::from), rev, tag, branch)?
+                }
+                Source::Url { url, subdirectory } => {
+                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                        return Err(LoweringError::ConflictingUrls);
+                    }
+                    url_source(url, subdirectory.map(PathBuf::from))?
+                }
+                Source::Path { path, editable } => {
+                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                        return Err(LoweringError::ConflictingUrls);
+                    }
+                    path_source(
+                        PathBuf::from(path),
+                        origin,
+                        project_dir,
+                        workspace.install_path(),
+                        editable.unwrap_or(false),
+                    )?
+                }
+                Source::Registry { index } => registry_source(&requirement, index)?,
+                Source::Workspace {
+                    workspace: is_workspace,
+                } => {
+                    if !is_workspace {
+                        return Err(LoweringError::WorkspaceFalse);
+                    }
+                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                        return Err(LoweringError::ConflictingUrls);
+                    }
+                    let member = workspace
+                        .packages()
+                        .get(&requirement.name)
+                        .ok_or(LoweringError::UndeclaredWorkspacePackage)?
+                        .clone();
+
+                    // Say we have:
+                    // ```
+                    // root
+                    // ├── main_workspace  <- We want to the path from here ...
+                    // │   ├── pyproject.toml
+                    // │   └── uv.lock
+                    // └──current_workspace
+                    //    └── packages
+                    //        └── current_package  <- ... to here.
+                    //            └── pyproject.toml
+                    // ```
+                    // The path we need in the lockfile: `../current_workspace/packages/current_project`
+                    // member root: `/root/current_workspace/packages/current_project`
+                    // workspace install root: `/root/current_workspace`
+                    // relative to workspace: `packages/current_project`
+                    // workspace lock root: `../current_workspace`
+                    // relative to main workspace: `../current_workspace/packages/current_project`
+                    let url = VerbatimUrl::from_absolute_path(member.root())?;
+                    let install_path = url.to_file_path().map_err(|()| {
+                        LoweringError::RelativeTo(io::Error::new(
+                            io::ErrorKind::Other,
+                            "Invalid path in file URL",
+                        ))
+                    })?;
+
+                    if member.pyproject_toml().is_package() {
+                        RequirementSource::Directory {
+                            install_path,
+                            url,
+                            editable: true,
+                            r#virtual: false,
+                        }
+                    } else {
+                        RequirementSource::Directory {
+                            install_path,
+                            url,
+                            editable: false,
+                            r#virtual: true,
+                        }
                     }
                 }
-            }
-            Source::CatchAll { .. } => {
-                // Emit a dedicated error message, which is an improvement over Serde's default error.
-                return Err(LoweringError::InvalidEntry);
-            }
-        };
-        Ok(Self(Requirement {
-            name: requirement.name,
-            extras: requirement.extras,
-            marker: requirement.marker,
-            source,
-            origin: requirement.origin,
+                Source::CatchAll { .. } => {
+                    // Emit a dedicated error message, which is an improvement over Serde's default error.
+                    return Err(LoweringError::InvalidEntry);
+                }
+            };
+            Ok(Self(Requirement {
+                name: requirement.name.clone(),
+                extras: requirement.extras.clone(),
+                marker: requirement.marker.clone(),
+                source,
+                origin: requirement.origin.clone(),
+            }))
         }))
     }
 
     /// Lower a [`pep508_rs::Requirement`] in a non-workspace setting (for example, in a PEP 723
     /// script, which runs in an isolated context).
-    pub fn from_non_workspace_requirement(
+    pub fn from_non_workspace_requirement<'data>(
         requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
-        dir: &Path,
-        sources: &BTreeMap<PackageName, Source>,
-    ) -> Result<Self, LoweringError> {
+        dir: &'data Path,
+        sources: &'data BTreeMap<PackageName, Sources>,
+    ) -> impl Iterator<Item = Result<LoweredRequirement, LoweringError>> + 'data {
         let source = sources.get(&requirement.name).cloned();
 
         let Some(source) = source else {
-            return Ok(Self(Requirement::from(requirement)));
+            return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
         };
 
-        let source = match source {
-            Source::Git {
-                git,
-                subdirectory,
-                rev,
-                tag,
-                branch,
-            } => {
-                if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                    return Err(LoweringError::ConflictingUrls);
+        Either::Right(source.into_inner().into_iter().map(move |source| {
+            let source = match source {
+                Source::Git {
+                    git,
+                    subdirectory,
+                    rev,
+                    tag,
+                    branch,
+                } => {
+                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                        return Err(LoweringError::ConflictingUrls);
+                    }
+                    git_source(&git, subdirectory.map(PathBuf::from), rev, tag, branch)?
                 }
-                git_source(&git, subdirectory.map(PathBuf::from), rev, tag, branch)?
-            }
-            Source::Url { url, subdirectory } => {
-                if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                    return Err(LoweringError::ConflictingUrls);
+                Source::Url { url, subdirectory } => {
+                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                        return Err(LoweringError::ConflictingUrls);
+                    }
+                    url_source(url, subdirectory.map(PathBuf::from))?
                 }
-                url_source(url, subdirectory.map(PathBuf::from))?
-            }
-            Source::Path { path, editable } => {
-                if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                    return Err(LoweringError::ConflictingUrls);
+                Source::Path { path, editable } => {
+                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                        return Err(LoweringError::ConflictingUrls);
+                    }
+                    path_source(
+                        PathBuf::from(path),
+                        Origin::Project,
+                        dir,
+                        dir,
+                        editable.unwrap_or(false),
+                    )?
                 }
-                path_source(
-                    PathBuf::from(path),
-                    Origin::Project,
-                    dir,
-                    dir,
-                    editable.unwrap_or(false),
-                )?
-            }
-            Source::Registry { index } => registry_source(&requirement, index)?,
-            Source::Workspace { .. } => {
-                return Err(LoweringError::WorkspaceMember);
-            }
-            Source::CatchAll { .. } => {
-                // Emit a dedicated error message, which is an improvement over Serde's default
-                // error.
-                return Err(LoweringError::InvalidEntry);
-            }
-        };
-        Ok(Self(Requirement {
-            name: requirement.name,
-            extras: requirement.extras,
-            marker: requirement.marker,
-            source,
-            origin: requirement.origin,
+                Source::Registry { index } => registry_source(&requirement, index)?,
+                Source::Workspace { .. } => {
+                    return Err(LoweringError::WorkspaceMember);
+                }
+                Source::CatchAll { .. } => {
+                    // Emit a dedicated error message, which is an improvement over Serde's default
+                    // error.
+                    return Err(LoweringError::InvalidEntry);
+                }
+            };
+
+            Ok(Self(Requirement {
+                name: requirement.name.clone(),
+                extras: requirement.extras.clone(),
+                marker: requirement.marker.clone(),
+                source,
+                origin: requirement.origin.clone(),
+            }))
         }))
     }
 

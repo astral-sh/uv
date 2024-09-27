@@ -4789,6 +4789,7 @@ dependencies = [
  "cache-key",
  "distribution-filename",
  "distribution-types",
+ "either",
  "fs-err",
  "futures",
  "indoc",
