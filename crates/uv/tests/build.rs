@@ -904,6 +904,8 @@ fn workspace() -> Result<()> {
             (r"exit code: 1", "exit status: 1"),
             (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
             (r"\\\.", ""),
+            (r"\[project\]", "[PKG]"),
+            (r"\[member\]", "[PKG]"),
         ])
         .collect::<Vec<_>>();
 
@@ -949,6 +951,22 @@ fn workspace() -> Result<()> {
 
     member.child("src").child("__init__.py").touch()?;
     member.child("README").touch()?;
+
+    let r#virtual = project.child("packages").child("virtual");
+    fs_err::create_dir_all(r#virtual.path())?;
+
+    r#virtual.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "virtual"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    r#virtual.child("src").child("__init__.py").touch()?;
+    r#virtual.child("README").touch()?;
 
     // Build the member.
     uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @r###"
@@ -1042,6 +1060,38 @@ fn workspace() -> Result<()> {
         .child("member-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
 
+    // Build all packages.
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    [PKG] Building source distribution...
+    [PKG] Building source distribution...
+    [PKG] Building wheel from source distribution...
+    [PKG] Building wheel from source distribution...
+    Successfully built packages/member/dist/member-0.1.0.tar.gz and packages/member/dist/member-0.1.0-py3-none-any.whl
+    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    member
+        .child("dist")
+        .child("member-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    member
+        .child("dist")
+        .child("member-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
     // If a source is provided, discover the workspace from the source.
     uv_snapshot!(&filters, context.build().arg("./project").arg("--package").arg("member"), @r###"
     success: true
@@ -1123,6 +1173,21 @@ fn workspace() -> Result<()> {
     Successfully built project/packages/member/dist/member-0.1.0.tar.gz and project/packages/member/dist/member-0.1.0-py3-none-any.whl
     "###);
 
+    // If a source is provided, discover the workspace from the source.
+    uv_snapshot!(&filters, context.build().arg("./project").arg("--all").arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    [PKG] Building source distribution...
+    [PKG] Building source distribution...
+    [PKG] Building wheel from source distribution...
+    [PKG] Building wheel from source distribution...
+    Successfully built project/packages/member/dist/member-0.1.0.tar.gz and project/packages/member/dist/member-0.1.0-py3-none-any.whl
+    Successfully built project/dist/project-0.1.0.tar.gz and project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
     // Fail when `--package` is provided without a workspace.
     uv_snapshot!(&filters, context.build().arg("--package").arg("member"), @r###"
     success: false
@@ -1130,8 +1195,19 @@ fn workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `pyproject.toml` found in current directory or any parent directory
-      Caused by: `--package` was provided, but no workspace was found
+    error: `--package` was provided, but no workspace was found
+      Caused by: No `pyproject.toml` found in current directory or any parent directory
+    "###);
+
+    // Fail when `--all` is provided without a workspace.
+    uv_snapshot!(&filters, context.build().arg("--all"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--all` was provided, but no workspace was found
+      Caused by: No `pyproject.toml` found in current directory or any parent directory
     "###);
 
     // Fail when `--package` is a non-existent member without a workspace.
@@ -1143,6 +1219,137 @@ fn workspace() -> Result<()> {
     ----- stderr -----
     error: Package `fail` not found in workspace
     "###);
+
+    Ok(())
+}
+
+#[test]
+fn build_all_with_failure() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
+            (r"\\\.", ""),
+            (r"\[project\]", "[PKG]"),
+            (r"\[member-\w+\]", "[PKG]"),
+        ])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    project.child("src").child("__init__.py").touch()?;
+    project.child("README").touch()?;
+
+    let member_a = project.child("packages").child("member_a");
+    fs_err::create_dir_all(member_a.path())?;
+
+    let member_b = project.child("packages").child("member_b");
+    fs_err::create_dir_all(member_b.path())?;
+
+    member_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member_a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    member_a.child("src").child("__init__.py").touch()?;
+    member_a.child("README").touch()?;
+
+    member_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member_b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    member_b.child("src").child("__init__.py").touch()?;
+    member_b.child("README").touch()?;
+
+    // member_b build should fail
+    member_b.child("setup.py").write_str(
+        r#"
+        from setuptools import setup
+
+        setup(
+            name="project",
+            version="0.1.0",
+            packages=["project"],
+            install_requires=["foo==3.7.0"],
+        )
+        "#,
+    )?;
+
+    // Build all the packages
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    [PKG] Building source distribution...
+    [PKG] Building source distribution...
+    [PKG] Building source distribution...
+    [PKG] Building wheel from source distribution...
+    [PKG] Building wheel from source distribution...
+    Successfully built packages/member_a/dist/member_a-0.1.0.tar.gz and packages/member_a/dist/member_a-0.1.0-py3-none-any.whl
+    error: Build backend failed to determine extra requires with `build_sdist()` with exit status: 1
+    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    // project and member_a should be built, regardless of member_b build failure
+    project
+        .child("dist")
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    member_a
+        .child("dist")
+        .child("member_a-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    member_a
+        .child("dist")
+        .child("member_a-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
 
     Ok(())
 }
