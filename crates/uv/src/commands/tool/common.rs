@@ -159,19 +159,17 @@ pub(crate) fn install_executables(
         )
     }
 
+    let mut names = BTreeSet::new();
     for (name, source_path, target_path) in &target_entry_points {
         debug!("Installing executable: `{name}`");
         #[cfg(unix)]
         replace_symlink(source_path, target_path).context("Failed to install executable")?;
         #[cfg(windows)]
         fs_err::copy(source_path, target_path).context("Failed to install entrypoint")?;
+        names.insert(name.trim_end_matches(".exe"));
     }
 
-    let s = if target_entry_points.len() == 1 {
-        ""
-    } else {
-        "s"
-    };
+    let s = if names.len() == 1 { "" } else { "s" };
     let from_pkg = if tool_name == name {
         String::new()
     } else {
@@ -180,11 +178,8 @@ pub(crate) fn install_executables(
     writeln!(
         printer.stderr(),
         "Installed {} executable{s}{from_pkg}: {}",
-        target_entry_points.len(),
-        target_entry_points
-            .iter()
-            .map(|(name, _, _)| name.bold())
-            .join(", ")
+        names.len(),
+        names.iter().map(|name| name.bold()).join(", ")
     )?;
 
     debug!("Adding receipt for tool `{tool_name}`");

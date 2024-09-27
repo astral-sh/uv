@@ -147,7 +147,11 @@ async fn do_uninstall(
         }
         entrypoints
     };
-    entrypoints.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+    entrypoints.sort_unstable_by(|a, b| {
+        let a_trimmed = a.name.trim_end_matches(".exe");
+        let b_trimmed = b.name.trim_end_matches(".exe");
+        a_trimmed.cmp(b_trimmed)
+    });
 
     if entrypoints.is_empty() {
         // If we removed at least one dangling environment, there's no need to summarize.
