@@ -5129,7 +5129,7 @@ fn add_no_warn_index_url() -> Result<()> {
 
 /// Add an index provided via `--index`.
 #[test]
-fn add_index_url() -> Result<()> {
+fn add_index() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -5214,6 +5214,7 @@ fn add_index_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Missing version constraint (e.g., a lower bound) for `jinja2`
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -5243,6 +5244,9 @@ fn add_index_url() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
         "###
         );
     });
@@ -5302,7 +5306,7 @@ fn add_index_url() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3" },
+            { name = "jinja2", specifier = ">=3.1.3", index = "https://download.pytorch.org/whl/cu121" },
         ]
         "###
         );
@@ -5341,6 +5345,9 @@ fn add_index_url() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
         "###
         );
     });
@@ -5406,7 +5413,7 @@ fn add_index_url() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3" },
+            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
         ]
         "###
         );
@@ -5419,6 +5426,7 @@ fn add_index_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Missing version constraint (e.g., a lower bound) for `typing-extensions`
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5448,6 +5456,9 @@ fn add_index_url() -> Result<()> {
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://test.pypi.org/simple"
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
         "###
         );
     });
@@ -5474,13 +5485,13 @@ fn add_index_url() -> Result<()> {
         [[package]]
         name = "jinja2"
         version = "3.1.3"
-        source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://test.pypi.org/simple" }
         dependencies = [
             { name = "markupsafe" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
+        sdist = { url = "https://test-files.pythonhosted.org/packages/3e/f0/69ae37cced6b277dc0419dbb1c6e4fb259e5e319a1a971061a2776316bec/Jinja2-3.1.3.tar.gz", hash = "sha256:27fb536952e578492fa66d8681d8967d8bdf1eb36368b1f842b53251c9f0bfe1", size = 268254 }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
+            { url = "https://test-files.pythonhosted.org/packages/47/dc/9d1c0f1ddbedb1e67f7d00e91819b5a9157056ad83bfa64c12ecef8a4f4e/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:ddd11470e8a1dc4c30e3146400f0130fed7d85886c5f8082f309355b4b0c1128", size = 133236 },
         ]
 
         [[package]]
@@ -5514,7 +5525,7 @@ fn add_index_url() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3" },
+            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
             { name = "typing-extensions", specifier = ">=4.12.2" },
         ]
 
@@ -5564,6 +5575,9 @@ fn add_index_url() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
         "###
         );
     });
@@ -5590,13 +5604,13 @@ fn add_index_url() -> Result<()> {
         [[package]]
         name = "jinja2"
         version = "3.1.3"
-        source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://test.pypi.org/simple" }
         dependencies = [
             { name = "markupsafe" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
+        sdist = { url = "https://test-files.pythonhosted.org/packages/3e/f0/69ae37cced6b277dc0419dbb1c6e4fb259e5e319a1a971061a2776316bec/Jinja2-3.1.3.tar.gz", hash = "sha256:27fb536952e578492fa66d8681d8967d8bdf1eb36368b1f842b53251c9f0bfe1", size = 268254 }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
+            { url = "https://test-files.pythonhosted.org/packages/47/dc/9d1c0f1ddbedb1e67f7d00e91819b5a9157056ad83bfa64c12ecef8a4f4e/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:ddd11470e8a1dc4c30e3146400f0130fed7d85886c5f8082f309355b4b0c1128", size = 133236 },
         ]
 
         [[package]]
@@ -5630,7 +5644,7 @@ fn add_index_url() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3" },
+            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
             { name = "typing-extensions", specifier = ">=4.12.2" },
         ]
 
