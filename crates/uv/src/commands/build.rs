@@ -89,10 +89,11 @@ pub(crate) async fn build(
 }
 
 /// Represents the overall result of a build process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BuildResult {
-    /// Indicates that at least one of the builds has failed.
+    /// Indicates that at least one of the builds failed.
     Failure,
-    /// Indicates that all builds have succeeded.
+    /// Indicates that all builds succeeded.
     Success,
 }
 
@@ -226,9 +227,9 @@ async fn build_impl(
         vec![AnnotatedSource::from(src)]
     };
 
-    let results: Vec<_> = futures::future::join_all(packages.into_iter().map(|src| {
+    let results: Vec<_> = futures::future::join_all(packages.into_iter().map(|source| {
         let future = build_package(
-            src.clone(),
+            source.clone(),
             output_dir,
             python_request,
             no_config,
@@ -261,7 +262,7 @@ async fn build_impl(
         );
         async {
             let result = future.await;
-            (src, result)
+            (source, result)
         }
     }))
     .await;
