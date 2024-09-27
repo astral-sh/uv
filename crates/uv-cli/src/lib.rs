@@ -2548,6 +2548,9 @@ pub struct RunArgs {
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
+    #[arg(long)]
+    pub script: bool,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 

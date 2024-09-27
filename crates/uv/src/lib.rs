@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anstream::eprintln;
@@ -131,8 +131,21 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     // Parse the external command, if necessary.
     let run_command = if let Commands::Project(command) = &*cli.command {
-        if let ProjectCommand::Run(uv_cli::RunArgs { command, .. }) = &**command {
-            Some(RunCommand::try_from(command)?)
+        if let ProjectCommand::Run(uv_cli::RunArgs {
+            command, script, ..
+        }) = &**command
+        {
+            if *script {
+                let (target, args) = command.split();
+                if let Some(target) = target {
+                    let path = PathBuf::from(&target);
+                    Some(RunCommand::PythonScript(path, args.to_vec()))
+                } else {
+                    Some(RunCommand::Empty)
+                }
+            } else {
+                Some(RunCommand::try_from(command)?)
+            }
         } else {
             None
         }
