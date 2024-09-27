@@ -5,12 +5,11 @@ use std::ops::{Bound, Deref};
 use std::str::FromStr;
 
 use itertools::Itertools;
+use pep440_rs::{Version, VersionParseError, VersionSpecifier};
 use pubgrub::Range;
 #[cfg(feature = "pyo3")]
 use pyo3::{basic::CompareOp, pyclass, pymethods};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-
-use pep440_rs::{Version, VersionParseError, VersionSpecifier};
 use uv_normalize::ExtraName;
 
 use crate::cursor::Cursor;
@@ -1631,6 +1630,20 @@ impl Serialize for MarkerTreeContents {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for MarkerTreeContents {
+    fn deserialize<D>(deserializer: D) -> Result<MarkerTreeContents, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let marker = MarkerTree::from_str(&s).map_err(de::Error::custom)?;
+        let marker = marker
+            .contents()
+            .ok_or_else(|| de::Error::custom("expected at least one marker expression"))?;
+        Ok(marker)
+    }
+}
+
 impl Display for MarkerTreeContents {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // Normalize all `false` expressions to the same trivially false expression.
@@ -1664,6 +1677,28 @@ impl Display for MarkerTreeContents {
         };
 
         f.write_str(&expr)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for MarkerTreeContents {
+    fn schema_name() -> String {
+        "MarkerTreeContents".to_string()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                description: Some(
+                    "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`"
+                        .to_string(),
+                ),
+                ..schemars::schema::Metadata::default()
+            })),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
     }
 }
 

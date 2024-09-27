@@ -26,6 +26,8 @@ uv-options-metadata = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true }
 glob = { workspace = true }
+itertools = { workspace = true }
+owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
@@ -36,7 +38,6 @@ toml =  { workspace = true }
 toml_edit =  { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-itertools = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

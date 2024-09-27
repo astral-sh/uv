@@ -453,6 +453,7 @@ pub(crate) async fn add(
                 rev,
                 tag,
                 branch,
+                marker,
             }) => {
                 let credentials = Credentials::from_url(&git);
                 if let Some(credentials) = credentials {
@@ -468,6 +469,7 @@ pub(crate) async fn add(
                     rev,
                     tag,
                     branch,
+                    marker,
                 })
             }
             _ => source,

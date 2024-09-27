@@ -261,7 +261,7 @@ mod test {
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum Source
+        data did not match any variant of untagged enum SourcesWire
 
         "###);
     }
@@ -285,7 +285,7 @@ mod test {
           |
         8 | tqdm = { path = "tqdm", index = "torch" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum Source
+        data did not match any variant of untagged enum SourcesWire
 
         "###);
     }
@@ -345,7 +345,7 @@ mod test {
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum Source
+        data did not match any variant of untagged enum SourcesWire
 
         "###);
     }

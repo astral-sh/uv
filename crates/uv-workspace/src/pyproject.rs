@@ -7,6 +7,7 @@
 //! Then lowers them into a dependency specification.
 
 use glob::Pattern;
+use owo_colors::OwoColorize;
 use serde::{de::IntoDeserializer, Deserialize, Serialize};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -16,6 +17,7 @@ use thiserror::Error;
 use url::Url;
 
 use pep440_rs::{Version, VersionSpecifiers};
+use pep508_rs::{MarkerTree, MarkerTreeContents};
 use pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 use uv_fs::{relative_to, PortablePathBuf};
 use uv_git::GitReference;
@@ -409,31 +411,85 @@ impl Deref for SerdePattern {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(rename_all = "kebab-case", from = "SourcesWire")]
-pub struct Sources(Vec<Source>);
+#[serde(rename_all = "kebab-case", try_from = "SourcesWire")]
+pub struct Sources(#[cfg_attr(feature = "schemars", schemars(with = "SourcesWire"))] Vec<Source>);
 
 impl Sources {
-    pub fn inner(&self) -> &[Source] {
-        &self.0
+    /// Return an [`Iterator`] over the sources.
+    pub fn iter(&self) -> impl Iterator<Item = &Source> {
+        self.0.iter()
     }
+}
 
-    pub fn into_inner(self) -> Vec<Source> {
-        self.0
+impl IntoIterator for Sources {
+    type Item = Source;
+    type IntoIter = std::vec::IntoIter<Source>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case", untagged)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[allow(clippy::large_enum_variant)]
 enum SourcesWire {
     One(Source),
     Many(Vec<Source>),
 }
 
-impl From<SourcesWire> for Sources {
-    fn from(wire: SourcesWire) -> Self {
+impl TryFrom<SourcesWire> for Sources {
+    type Error = SourceError;
+
+    fn try_from(wire: SourcesWire) -> Result<Self, Self::Error> {
         match wire {
-            SourcesWire::One(source) => Sources(vec![source]),
-            SourcesWire::Many(sources) => Sources(sources),
+            SourcesWire::One(source) => Ok(Self(vec![source])),
+            SourcesWire::Many(sources) => {
+                // Ensure that the markers are disjoint.
+                for (lhs, rhs) in sources
+                    .iter()
+                    .map(Source::marker)
+                    .zip(sources.iter().skip(1).map(Source::marker))
+                {
+                    if !lhs.is_disjoint(&rhs) {
+                        let mut hint = lhs.negate();
+                        hint.and(rhs.clone());
+
+                        let lhs = lhs
+                            .contents()
+                            .map(|contents| contents.to_string())
+                            .unwrap_or("true".to_string());
+                        let rhs = rhs
+                            .contents()
+                            .map(|contents| contents.to_string())
+                            .unwrap_or("true".to_string());
+                        let hint = hint
+                            .contents()
+                            .map(|contents| contents.to_string())
+                            .unwrap_or("true".to_string());
+
+                        return Err(SourceError::OverlappingMarkers(lhs, rhs, hint));
+                    }
+                }
+
+                // Ensure that there is at least one source.
+                if sources.is_empty() {
+                    return Err(SourceError::EmptySources);
+                }
+
+                // Ensure that there is at most one registry source.
+                if sources
+                    .iter()
+                    .filter(|source| matches!(source, Source::Registry { .. }))
+                    .nth(1)
+                    .is_some()
+                {
+                    return Err(SourceError::MultipleIndexes);
+                }
+
+                Ok(Self(sources))
+            }
         }
     }
 }
@@ -458,6 +514,7 @@ pub enum Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        marker: Option<MarkerTreeContents>,
     },
     /// A remote `http://` or `https://` URL, either a wheel (`.whl`) or a source distribution
     /// (`.zip`, `.tar.gz`).
@@ -471,6 +528,7 @@ pub enum Source {
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
         subdirectory: Option<PortablePathBuf>,
+        marker: Option<MarkerTreeContents>,
     },
     /// The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or
     /// `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
@@ -479,17 +537,20 @@ pub enum Source {
         path: PortablePathBuf,
         /// `false` by default.
         editable: Option<bool>,
+        marker: Option<MarkerTreeContents>,
     },
     /// A dependency pinned to a specific index, e.g., `torch` after setting `torch` to `https://download.pytorch.org/whl/cu118`.
     Registry {
         // TODO(konstin): The string is more-or-less a placeholder
         index: String,
+        marker: Option<MarkerTreeContents>,
     },
     /// A dependency on another package in the workspace.
     Workspace {
         /// When set to `false`, the package will be fetched from the remote index, rather than
         /// included as a workspace package.
         workspace: bool,
+        marker: Option<MarkerTreeContents>,
     },
     /// A catch-all variant used to emit precise error messages when deserializing.
     CatchAll {
@@ -502,6 +563,7 @@ pub enum Source {
         path: PortablePathBuf,
         index: String,
         workspace: bool,
+        marker: Option<MarkerTreeContents>,
     },
 }
 
@@ -525,6 +587,12 @@ pub enum SourceError {
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
     NonUtf8Path(PathBuf),
+    #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
+    OverlappingMarkers(String, String, String),
+    #[error("Must provide at least one source")]
+    EmptySources,
+    #[error("Sources can only include a single index source")]
+    MultipleIndexes,
 }
 
 impl Source {
@@ -555,7 +623,10 @@ impl Source {
         if workspace {
             return match source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
-                    Ok(Some(Source::Workspace { workspace: true }))
+                    Ok(Some(Source::Workspace {
+                        workspace: true,
+                        marker: None,
+                    }))
                 }
                 RequirementSource::Url { .. } => {
                     Err(SourceError::WorkspacePackageUrl(name.to_string()))
@@ -579,12 +650,14 @@ impl Source {
                         .or_else(|_| std::path::absolute(&install_path))
                         .map_err(SourceError::Absolute)?,
                 ),
+                marker: None,
             },
             RequirementSource::Url {
                 subdirectory, url, ..
             } => Source::Url {
                 url: url.to_url(),
                 subdirectory: subdirectory.map(PortablePathBuf::from),
+                marker: None,
             },
             RequirementSource::Git {
                 repository,
@@ -609,6 +682,7 @@ impl Source {
                         branch,
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
+                        marker: None,
                     }
                 } else {
                     Source::Git {
@@ -617,12 +691,25 @@ impl Source {
                         branch,
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
+                        marker: None,
                     }
                 }
             }
         };
 
         Ok(Some(source))
+    }
+
+    /// Return the [`MarkerTree`] for the source.
+    pub fn marker(&self) -> MarkerTree {
+        match self {
+            Source::Git { marker, .. } => MarkerTree::from(marker.clone()),
+            Source::Url { marker, .. } => MarkerTree::from(marker.clone()),
+            Source::Path { marker, .. } => MarkerTree::from(marker.clone()),
+            Source::Registry { marker, .. } => MarkerTree::from(marker.clone()),
+            Source::Workspace { marker, .. } => MarkerTree::from(marker.clone()),
+            Source::CatchAll { marker, .. } => MarkerTree::from(marker.clone()),
+        }
     }
 }
 

@@ -531,7 +531,7 @@ impl Workspace {
                         .as_ref()
                         .and_then(|uv| uv.sources.as_ref())
                         .map(ToolUvSources::inner)
-                        .map(|sources| sources.values().flat_map(Sources::inner))
+                        .map(|sources| sources.values().flat_map(Sources::iter))
                 })
             })
             .flatten()
@@ -1755,9 +1755,12 @@ mod tests {
                   }
                 },
                 "sources": {
-                  "bird-feeder": {
-                    "workspace": true
-                  }
+                  "bird-feeder": [
+                    {
+                      "workspace": true,
+                      "marker": null
+                    }
+                  ]
                 },
                 "pyproject_toml": {
                   "project": {
@@ -1773,9 +1776,12 @@ mod tests {
                   "tool": {
                     "uv": {
                       "sources": {
-                        "bird-feeder": {
-                          "workspace": true
-                        }
+                        "bird-feeder": [
+                          {
+                            "workspace": true,
+                            "marker": null
+                          }
+                        ]
                       },
                       "workspace": {
                         "members": [

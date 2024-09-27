@@ -625,6 +625,10 @@
         }
       ]
     },
+    "MarkerTreeContents": {
+      "description": "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`",
+      "type": "string"
+    },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`. For example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
@@ -1240,6 +1244,16 @@
               "type": "string",
               "format": "uri"
             },
+            "marker": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MarkerTreeContents"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "rev": {
               "type": [
                 "string",
@@ -1273,6 +1287,16 @@
             "url"
           ],
           "properties": {
+            "marker": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MarkerTreeContents"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "subdirectory": {
               "description": "For source distributions, the path to the directory with the `pyproject.toml`, if it's not in the archive root.",
               "anyOf": [
@@ -1305,6 +1329,16 @@
                 "null"
               ]
             },
+            "marker": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MarkerTreeContents"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "path": {
               "$ref": "#/definitions/String"
             }
@@ -1320,6 +1354,16 @@
           "properties": {
             "index": {
               "type": "string"
+            },
+            "marker": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MarkerTreeContents"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "additionalProperties": false
@@ -1331,6 +1375,16 @@
             "workspace"
           ],
           "properties": {
+            "marker": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MarkerTreeContents"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "workspace": {
               "description": "When set to `false`, the package will be fetched from the remote index, rather than included as a workspace package.",
               "type": "boolean"
@@ -1360,6 +1414,16 @@
             },
             "index": {
               "type": "string"
+            },
+            "marker": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MarkerTreeContents"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "path": {
               "$ref": "#/definitions/String"
@@ -1394,6 +1458,22 @@
             }
           },
           "additionalProperties": false
+        }
+      ]
+    },
+    "Sources": {
+      "$ref": "#/definitions/SourcesWire"
+    },
+    "SourcesWire": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Source"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Source"
+          }
         }
       ]
     },
@@ -1565,7 +1645,7 @@
     "ToolUvSources": {
       "type": "object",
       "additionalProperties": {
-        "$ref": "#/definitions/Source"
+        "$ref": "#/definitions/Sources"
       }
     },
     "ToolUvWorkspace": {

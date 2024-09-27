@@ -5320,6 +5320,7 @@ dependencies = [
  "glob",
  "insta",
  "itertools 0.13.0",
+ "owo-colors",
  "pep440_rs",
  "pep508_rs",
  "pypi-types",

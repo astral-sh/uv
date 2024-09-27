@@ -7,7 +7,7 @@ use url::Url;
 
 use distribution_filename::DistExtension;
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{VerbatimUrl, VersionOrUrl};
+use pep508_rs::{MarkerTree, VerbatimUrl, VersionOrUrl};
 use pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
 use uv_git::GitReference;
 use uv_normalize::PackageName;
@@ -48,8 +48,8 @@ impl LoweredRequirement {
             // We require that when you use a package that's part of the workspace, ...
             !workspace.packages().contains_key(&requirement.name)
                 // ... it must be declared as a workspace dependency (`workspace = true`), ...
-                || source.as_ref().is_some_and(|source| source.inner().iter().all(|source| {
-                    matches!(source, Source::Workspace { workspace: true })
+                || source.as_ref().is_some_and(|source| source.iter().all(|source| {
+                    matches!(source, Source::Workspace { workspace: true, .. })
                 }))
                 // ... except for recursive self-inclusion (extras that activate other extras), e.g.
                 // `framework[machine_learning]` depends on `framework[cuda]`.
@@ -75,41 +75,62 @@ impl LoweredRequirement {
             return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
         };
 
-        Either::Right(source.into_inner().into_iter().map(move |source| {
-            let source = match source {
+        Either::Right(source.into_iter().map(move |source| {
+            let (source, mut marker) = match source {
                 Source::Git {
                     git,
                     subdirectory,
                     rev,
                     tag,
                     branch,
+                    marker,
                 } => {
                     if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                         return Err(LoweringError::ConflictingUrls);
                     }
-                    git_source(&git, subdirectory.map(PathBuf::from), rev, tag, branch)?
+                    let source =
+                        git_source(&git, subdirectory.map(PathBuf::from), rev, tag, branch)?;
+                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                    (source, marker)
                 }
-                Source::Url { url, subdirectory } => {
+                Source::Url {
+                    url,
+                    subdirectory,
+                    marker,
+                } => {
                     if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                         return Err(LoweringError::ConflictingUrls);
                     }
-                    url_source(url, subdirectory.map(PathBuf::from))?
+                    let source = url_source(url, subdirectory.map(PathBuf::from))?;
+                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                    (source, marker)
                 }
-                Source::Path { path, editable } => {
+                Source::Path {
+                    path,
+                    editable,
+                    marker,
+                } => {
                     if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                         return Err(LoweringError::ConflictingUrls);
                     }
-                    path_source(
+                    let source = path_source(
                         PathBuf::from(path),
                         origin,
                         project_dir,
                         workspace.install_path(),
                         editable.unwrap_or(false),
-                    )?
+                    )?;
+                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                    (source, marker)
                 }
-                Source::Registry { index } => registry_source(&requirement, index)?,
+                Source::Registry { index, marker } => {
+                    let source = registry_source(&requirement, index)?;
+                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                    (source, marker)
+                }
                 Source::Workspace {
                     workspace: is_workspace,
+                    marker,
                 } => {
                     if !is_workspace {
                         return Err(LoweringError::WorkspaceFalse);
@@ -148,7 +169,7 @@ impl LoweredRequirement {
                         ))
                     })?;
 
-                    if member.pyproject_toml().is_package() {
+                    let source = if member.pyproject_toml().is_package() {
                         RequirementSource::Directory {
                             install_path,
                             url,
@@ -162,17 +183,22 @@ impl LoweredRequirement {
                             editable: false,
                             r#virtual: true,
                         }
-                    }
+                    };
+                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                    (source, marker)
                 }
                 Source::CatchAll { .. } => {
                     // Emit a dedicated error message, which is an improvement over Serde's default error.
                     return Err(LoweringError::InvalidEntry);
                 }
             };
+
+            marker.and(requirement.marker.clone());
+
             Ok(Self(Requirement {
                 name: requirement.name.clone(),
                 extras: requirement.extras.clone(),
-                marker: requirement.marker.clone(),
+                marker,
                 source,
                 origin: requirement.origin.clone(),
             }))
@@ -192,39 +218,59 @@ impl LoweredRequirement {
             return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
         };
 
-        Either::Right(source.into_inner().into_iter().map(move |source| {
-            let source = match source {
+        Either::Right(source.into_iter().map(move |source| {
+            let (source, mut marker) = match source {
                 Source::Git {
                     git,
                     subdirectory,
                     rev,
                     tag,
                     branch,
+                    marker,
                 } => {
                     if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                         return Err(LoweringError::ConflictingUrls);
                     }
-                    git_source(&git, subdirectory.map(PathBuf::from), rev, tag, branch)?
+                    let source =
+                        git_source(&git, subdirectory.map(PathBuf::from), rev, tag, branch)?;
+                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                    (source, marker)
                 }
-                Source::Url { url, subdirectory } => {
+                Source::Url {
+                    url,
+                    subdirectory,
+                    marker,
+                } => {
                     if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                         return Err(LoweringError::ConflictingUrls);
                     }
-                    url_source(url, subdirectory.map(PathBuf::from))?
+                    let source = url_source(url, subdirectory.map(PathBuf::from))?;
+                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                    (source, marker)
                 }
-                Source::Path { path, editable } => {
+                Source::Path {
+                    path,
+                    editable,
+                    marker,
+                } => {
                     if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                         return Err(LoweringError::ConflictingUrls);
                     }
-                    path_source(
+                    let source = path_source(
                         PathBuf::from(path),
                         Origin::Project,
                         dir,
                         dir,
                         editable.unwrap_or(false),
-                    )?
+                    )?;
+                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                    (source, marker)
                 }
-                Source::Registry { index } => registry_source(&requirement, index)?,
+                Source::Registry { index, marker } => {
+                    let source = registry_source(&requirement, index)?;
+                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                    (source, marker)
+                }
                 Source::Workspace { .. } => {
                     return Err(LoweringError::WorkspaceMember);
                 }
@@ -235,10 +281,12 @@ impl LoweredRequirement {
                 }
             };
 
+            marker.and(requirement.marker.clone());
+
             Ok(Self(Requirement {
                 name: requirement.name.clone(),
                 extras: requirement.extras.clone(),
-                marker: requirement.marker.clone(),
+                marker,
                 source,
                 origin: requirement.origin.clone(),
             }))
