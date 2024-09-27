@@ -2137,8 +2137,8 @@ fn run_remote_pep723_script() {
         "Reading inline script metadata from: [TEMP_PATH].py",
     ));
     filters.push((
-        r"(?m)^Downloading remote script to:.*\.py$",
-        "Downloading remote script to: [TEMP_PATH].py",
+        r"(?m)^Downloaded remote script to:.*\.py$",
+        "Downloaded remote script to: [TEMP_PATH].py",
     ));
     uv_snapshot!(filters, context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg("CI"), @r###"
     success: true
@@ -2159,6 +2159,7 @@ fn run_remote_pep723_script() {
     "###);
 }
 
+#[cfg(unix)] // A URL could be a valid filepath on Unix but not on Windows
 #[test]
 fn run_url_like_with_local_file_priority() -> Result<()> {
     let context = TestContext::new("3.12");
