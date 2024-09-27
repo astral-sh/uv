@@ -728,22 +728,23 @@ pub(crate) async fn run(
         )?;
 
         #[allow(clippy::map_identity)]
-        let mut commands = interpreter
+        let commands = interpreter
             .scripts()
             .read_dir()
             .ok()
             .into_iter()
             .flatten()
             .filter_map(|entry| match entry {
-                Ok(entry) => Some(entry),
+                Ok(entry) => Some(Ok(entry)),
                 Err(err) => {
-                    // If we can't read the entry, skip it.
-                    // However, let the user know that we failed to read it.
+                    // If we can't read the entry, fail.
                     // This could be a symptom of a more serious problem.
                     warn!("Failed to read entry: {}", err);
-                    None
+                    Some(Err(err))
                 }
             })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .filter(|entry| {
                 entry
                     .file_type()
@@ -768,8 +769,8 @@ pub(crate) async fn run(
             .filter(|command| {
                 !command.starts_with("activate") && !command.starts_with("deactivate")
             })
+            .sorted()
             .collect_vec();
-        commands.sort();
 
         if !commands.is_empty() {
             writeln!(printer.stdout(), "The following commands are available:")?;
