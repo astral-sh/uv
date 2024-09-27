@@ -600,12 +600,13 @@ pub enum ProjectCommand {
     ///
     /// Ensures that the command runs in a Python environment.
     ///
-    /// When used with a file ending in `.py`, the file will be treated as a
-    /// script and run with a Python interpreter, i.e., `uv run file.py` is
-    /// equivalent to `uv run python file.py`. If the script contains inline
-    /// dependency metadata, it will be installed into an isolated, ephemeral
-    /// environment. When used with `-`, the input will be read from stdin,
-    /// and treated as a Python script.
+    /// When used with a file ending in `.py` or an HTTP(S) URL, the file
+    /// will be treated as a script and run with a Python interpreter,
+    /// i.e., `uv run file.py` is equivalent to `uv run python file.py`.
+    /// For URLs, the script is temporarily downloaded before execution. If
+    /// the script contains inline dependency metadata, it will be installed
+    /// into an isolated, ephemeral environment. When used with `-`, the
+    /// input will be read from stdin, and treated as a Python script.
     ///
     /// When used in a project, the project environment will be created and
     /// updated before invoking the command.
