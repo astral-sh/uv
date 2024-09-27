@@ -153,7 +153,7 @@ async fn build_impl(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<Vec<Result<BuiltDistributions, anyhow::Error>>> {
+) -> Result<Vec<Result<BuiltDistributions>>> {
     // Extract the resolver settings.
     let ResolverSettingsRef {
         index_locations,
@@ -266,6 +266,7 @@ async fn build_impl(
             index_locations,
             &client_builder,
             hash_checking,
+            build_logs,
             build_constraints,
             no_build_isolation,
             no_build_isolation_package,
@@ -304,6 +305,7 @@ async fn build_package(
     index_locations: &IndexLocations,
     client_builder: &BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
+    build_logs: bool,
     build_constraints: &[RequirementsSource],
     no_build_isolation: bool,
     no_build_isolation_package: &[PackageName],

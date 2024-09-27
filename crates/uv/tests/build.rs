@@ -1043,12 +1043,18 @@ fn workspace() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // Build all packages.
-    uv_snapshot!(&filters, context.build().arg("--all").arg("--quiet").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Building source distribution...
+    Building source distribution...
+    Building wheel from source distribution...
+    Building wheel from source distribution...
+    Successfully built packages/member/dist/member-0.1.0.tar.gz and packages/member/dist/member-0.1.0-py3-none-any.whl
+    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
     "###);
 
     member
@@ -1150,12 +1156,18 @@ fn workspace() -> Result<()> {
     "###);
 
     // If a source is provided, discover the workspace from the source.
-    uv_snapshot!(&filters, context.build().arg("./project").arg("--all").arg("--quiet"), @r###"
+    uv_snapshot!(&filters, context.build().arg("./project").arg("--all").arg("--no-build-logs"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Building source distribution...
+    Building source distribution...
+    Building wheel from source distribution...
+    Building wheel from source distribution...
+    Successfully built project/packages/member/dist/member-0.1.0.tar.gz and project/packages/member/dist/member-0.1.0-py3-none-any.whl
+    Successfully built project/dist/project-0.1.0.tar.gz and project/dist/project-0.1.0-py3-none-any.whl
     "###);
 
     // Fail when `--package` is provided without a workspace.
@@ -1284,12 +1296,20 @@ fn build_all_with_failure() -> Result<()> {
     )?;
 
     // Build all the packages
-    uv_snapshot!(&filters, context.build().arg("--all").arg("--quiet").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    Building source distribution...
+    Building source distribution...
+    Building source distribution...
+    Building wheel from source distribution...
+    Building wheel from source distribution...
+    Successfully built packages/member_a/dist/member_a-0.1.0.tar.gz and packages/member_a/dist/member_a-0.1.0-py3-none-any.whl
+    error: Build backend failed to determine extra requires with `build_sdist()` with exit status: 1
+    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
     "###);
 
     // project and member_a should be built, regardless of member_b build failure
