@@ -950,6 +950,22 @@ fn workspace() -> Result<()> {
     member.child("src").child("__init__.py").touch()?;
     member.child("README").touch()?;
 
+    let r#virtual = project.child("packages").child("virtual");
+    fs_err::create_dir_all(r#virtual.path())?;
+
+    r#virtual.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "virtual"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    r#virtual.child("src").child("__init__.py").touch()?;
+    r#virtual.child("README").touch()?;
+
     // Build the member.
     uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @r###"
     success: true
@@ -1177,8 +1193,8 @@ fn workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `pyproject.toml` found in current directory or any parent directory
-      Caused by: `--package` was provided, but no workspace was found
+    error: `--package` was provided, but no workspace was found
+      Caused by: No `pyproject.toml` found in current directory or any parent directory
     "###);
 
     // Fail when `--all` is provided without a workspace.
@@ -1188,8 +1204,8 @@ fn workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `pyproject.toml` found in current directory or any parent directory
-      Caused by: `--all` was provided, but no workspace was found
+    error: `--all` was provided, but no workspace was found
+      Caused by: No `pyproject.toml` found in current directory or any parent directory
     "###);
 
     // Fail when `--package` is a non-existent member without a workspace.

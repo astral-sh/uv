@@ -206,17 +206,15 @@ async fn build_impl(
     let packages = if let Some(package) = package {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
-                "Cannot specify a `--package` when building from a file"
+                "Cannot specify `--package` when building from a file"
             ));
         }
 
         let workspace = match workspace {
             Ok(ref workspace) => workspace,
             Err(err) => {
-                return Err(
-                    anyhow::anyhow!("`--package` was provided, but no workspace was found")
-                        .context(err),
-                )
+                return Err(anyhow::Error::from(err)
+                    .context("`--package` was provided, but no workspace was found"));
             }
         };
 
@@ -224,35 +222,41 @@ async fn build_impl(
             .packages()
             .get(package)
             .ok_or_else(|| anyhow::anyhow!("Package `{}` not found in workspace", package))?
-            .root()
-            .clone();
+            .root();
 
-        vec![Source::Directory(Cow::Owned(project))]
+        vec![Source::Directory(Cow::Borrowed(project))]
     } else if all {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
-                "Cannot specify a `--all` when building from a file"
+                "Cannot specify `--all` when building from a file"
             ));
         }
+
         let workspace = match workspace {
             Ok(ref workspace) => workspace,
             Err(err) => {
-                return Err(
-                    anyhow::anyhow!("`--all` was provided, but no workspace was found")
-                        .context(err),
-                )
+                return Err(anyhow::Error::from(err)
+                    .context("`--all` was provided, but no workspace was found"));
             }
         };
-        workspace
+
+        let packages: Vec<_> = workspace
             .packages()
             .values()
-            .map(|package| Source::Directory(Cow::Owned(package.root().clone())))
-            .collect()
+            .filter(|package| package.pyproject_toml().is_package())
+            .map(|package| Source::Directory(Cow::Borrowed(package.root())))
+            .collect();
+
+        if packages.is_empty() {
+            return Err(anyhow::anyhow!("No packages found in workspace"));
+        }
+
+        packages
     } else {
         vec![src]
     };
 
-    let build_futures = packages.iter().map(|src| {
+    let builds = packages.iter().map(|src| {
         build_package(
             src,
             output_dir,
@@ -287,8 +291,7 @@ async fn build_impl(
         )
     });
 
-    let results = futures::future::join_all(build_futures).await;
-    Ok(results)
+    Ok(futures::future::join_all(builds).await)
 }
 
 #[allow(clippy::fn_params_excessive_bools)]
