@@ -57,7 +57,10 @@ async fn resolve_script_target(
     };
 
     // Only continue if we are absolutely certain no local file exists.
-    if !matches!(Path::new(target).try_exists(), Ok(false)) {
+    //
+    // We don't do this check on Windows since the file path would
+    // be invalid anyway, and thus couldn't refer to a local file.
+    if cfg!(unix) && !matches!(Path::new(target).try_exists(), Ok(false)) {
         return Ok(None);
     }
 
