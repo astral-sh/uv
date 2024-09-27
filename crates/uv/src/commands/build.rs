@@ -58,7 +58,7 @@ pub(crate) async fn build(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let results = build_impl(
+    let build_result = build_impl(
         project_dir,
         src.as_deref(),
         package.as_ref(),
@@ -82,53 +82,18 @@ pub(crate) async fn build(
     )
     .await?;
 
-    for result in &results {
-        match result {
-            Ok(assets) => match assets {
-                BuiltDistributions::Wheel(wheel) => {
-                    writeln!(
-                        printer.stderr(),
-                        "Successfully built {}",
-                        wheel.user_display().bold().cyan()
-                    )?;
-                }
-                BuiltDistributions::Sdist(sdist) => {
-                    writeln!(
-                        printer.stderr(),
-                        "Successfully built {}",
-                        sdist.user_display().bold().cyan()
-                    )?;
-                }
-                BuiltDistributions::Both(sdist, wheel) => {
-                    writeln!(
-                        printer.stderr(),
-                        "Successfully built {} and {}",
-                        sdist.user_display().bold().cyan(),
-                        wheel.user_display().bold().cyan()
-                    )?;
-                }
-            },
-            Err(err) => {
-                let mut causes = err.chain();
-                writeln!(
-                    printer.stderr(),
-                    "{}: {}",
-                    "error".red().bold(),
-                    causes.next().unwrap()
-                )?;
-
-                for err in causes {
-                    writeln!(printer.stderr(), "  {}: {}", "Caused by".red().bold(), err)?;
-                }
-            }
-        }
+    match build_result {
+        BuildResult::Failure => Ok(ExitStatus::Error),
+        BuildResult::Success => Ok(ExitStatus::Success),
     }
+}
 
-    if results.iter().any(std::result::Result::is_err) {
-        Ok(ExitStatus::Error)
-    } else {
-        Ok(ExitStatus::Success)
-    }
+/// Represents the overall result of a build process.
+enum BuildResult {
+    /// Indicates that at least one of the builds has failed.
+    Failure,
+    /// Indicates that all builds have succeeded.
+    Success,
 }
 
 #[allow(clippy::fn_params_excessive_bools)]
@@ -153,7 +118,7 @@ async fn build_impl(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<Vec<Result<BuiltDistributions>>> {
+) -> Result<BuildResult> {
     // Extract the resolver settings.
     let ResolverSettingsRef {
         index_locations,
@@ -261,9 +226,9 @@ async fn build_impl(
         vec![AnnotatedSource::from(src)]
     };
 
-    let builds = packages.into_iter().map(|src| {
-        build_package(
-            src,
+    let results: Vec<_> = futures::future::join_all(packages.into_iter().map(|src| {
+        let future = build_package(
+            src.clone(),
             output_dir,
             python_request,
             no_config,
@@ -293,10 +258,58 @@ async fn build_impl(
             dependency_metadata,
             link_mode,
             config_setting,
-        )
-    });
+        );
+        async {
+            let result = future.await;
+            (src, result)
+        }
+    }))
+    .await;
 
-    Ok(futures::future::join_all(builds).await)
+    for (source, result) in &results {
+        match result {
+            Ok(assets) => match assets {
+                BuiltDistributions::Wheel(wheel) => {
+                    writeln!(
+                        printer.stderr(),
+                        "Successfully built {}",
+                        wheel.user_display().bold().cyan()
+                    )?;
+                }
+                BuiltDistributions::Sdist(sdist) => {
+                    writeln!(
+                        printer.stderr(),
+                        "Successfully built {}",
+                        sdist.user_display().bold().cyan()
+                    )?;
+                }
+                BuiltDistributions::Both(sdist, wheel) => {
+                    writeln!(
+                        printer.stderr(),
+                        "Successfully built {} and {}",
+                        sdist.user_display().bold().cyan(),
+                        wheel.user_display().bold().cyan()
+                    )?;
+                }
+            },
+            Err(err) => {
+                let mut causes = err.chain();
+
+                let message = format!("{}: {}", "error".red().bold(), causes.next().unwrap());
+                writeln!(printer.stderr(), "{}", source.annotate(&message))?;
+
+                for err in causes {
+                    writeln!(printer.stderr(), "  {}: {}", "Caused by".red().bold(), err)?;
+                }
+            }
+        }
+    }
+
+    if results.iter().any(|(_, result)| result.is_err()) {
+        Ok(BuildResult::Failure)
+    } else {
+        Ok(BuildResult::Success)
+    }
 }
 
 #[allow(clippy::fn_params_excessive_bools)]

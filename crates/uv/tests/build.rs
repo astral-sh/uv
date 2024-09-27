@@ -1328,7 +1328,7 @@ fn build_all_with_failure() -> Result<()> {
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
     Successfully built packages/member_a/dist/member_a-0.1.0.tar.gz and packages/member_a/dist/member_a-0.1.0-py3-none-any.whl
-    error: Build backend failed to determine extra requires with `build_sdist()` with exit status: 1
+    [PKG] error: Build backend failed to determine extra requires with `build_sdist()` with exit status: 1
     Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
     "###);
 
