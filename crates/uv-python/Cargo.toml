@@ -72,6 +72,4 @@ indoc = { version = "2.0.5" }
 itertools = { version = "0.13.0" }
 temp-env = { version = "0.3.6" }
 tempfile = { version = "3.12.0" }
-test-log = { version = "0.2.16", features = [
-    "trace"
-], default-features = false }
+test-log = { version = "0.2.16", features = ["trace"], default-features = false }

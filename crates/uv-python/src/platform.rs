@@ -32,6 +32,8 @@ impl Libc {
         match std::env::consts::OS {
             "linux" => Ok(Self::Some(match detect_linux_libc()? {
                 LibcVersion::Manylinux { .. } => match std::env::consts::ARCH {
+                    // Checks if the CPU supports hardware floating-point operations.
+                    // Depending on the result, it selects either the `gnueabihf` (hard-float) or `gnueabi` (soft-float) environment.
                     // download-metadata.json only includes armv7.
                     "arm" | "armv7" => match detect_hardware_floating_point_support() {
                         Ok(true) => target_lexicon::Environment::Gnueabihf,
