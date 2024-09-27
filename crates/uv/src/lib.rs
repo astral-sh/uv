@@ -83,11 +83,6 @@ async fn resolve_script_target(
         .suffix(".py")
         .tempfile()?;
 
-    eprintln!(
-        "Downloading remote script to: {}",
-        temp_file.path().display().cyan()
-    );
-
     let response = reqwest::get(script_url).await?;
     let contents = response.bytes().await?;
     write_atomic(&temp_file, &contents).await?;
@@ -259,6 +254,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     } else {
         Printer::Default
     };
+
+    // We only have a tempfile if we downloaded a remote script.
+    if let Some(temp_file) = maybe_tempfile.as_ref() {
+        writeln!(
+            printer.stderr(),
+            "Downloaded remote script to: {}",
+            temp_file.path().display().cyan(),
+        )?;
+    }
 
     // Configure the `warn!` macros, which control user-facing warnings in the CLI.
     if globals.quiet {
