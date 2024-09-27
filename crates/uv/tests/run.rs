@@ -2147,7 +2147,7 @@ fn run_remote_pep723_script() {
     Hello CI, from uv!
 
     ----- stderr -----
-    Downloading remote script to: [TEMP_PATH].py
+    Downloaded remote script to: [TEMP_PATH].py
     Reading inline script metadata from: [TEMP_PATH].py
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
