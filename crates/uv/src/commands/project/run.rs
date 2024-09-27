@@ -734,13 +734,13 @@ pub(crate) async fn run(
             .ok()
             .into_iter()
             .flatten()
-            .filter_map(|entry| match entry {
-                Ok(entry) => Some(Ok(entry)),
+            .map(|entry| match entry {
+                Ok(entry) => Ok(entry),
                 Err(err) => {
                     // If we can't read the entry, fail.
                     // This could be a symptom of a more serious problem.
                     warn!("Failed to read entry: {}", err);
-                    Some(Err(err))
+                    Err(err)
                 }
             })
             .collect::<Result<Vec<_>, _>>()?
@@ -773,16 +773,13 @@ pub(crate) async fn run(
             .collect_vec();
 
         if !commands.is_empty() {
-            writeln!(printer.stdout(), "The following commands are available:")?;
+            writeln!(printer.stdout(), "The following commands are available:\n")?;
             for command in commands {
                 writeln!(printer.stdout(), "- {command}")?;
             }
         }
-        writeln!(
-            printer.stdout(),
-            "\nSee `uv run --help` for more information."
-        )?;
-
+        let help = format!("See `{}` for more information.", "uv run --help".bold());
+        writeln!(printer.stdout(), "\n{help}")?;
         return Ok(ExitStatus::Error);
     };
 

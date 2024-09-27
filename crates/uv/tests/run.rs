@@ -226,6 +226,7 @@ fn run_no_args() -> Result<()> {
     Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 
     The following commands are available:
+
     - python
     - python3
     - python3.12
@@ -247,6 +248,7 @@ fn run_no_args() -> Result<()> {
     Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 
     The following commands are available:
+    
     - pydoc
     - python
     - pythonw
