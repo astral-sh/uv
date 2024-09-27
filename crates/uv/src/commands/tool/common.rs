@@ -1,3 +1,4 @@
+use std::env::consts::EXE_SUFFIX;
 use std::fmt::Write;
 use std::path::Path;
 use std::{collections::BTreeSet, ffi::OsString};
@@ -166,7 +167,7 @@ pub(crate) fn install_executables(
         replace_symlink(source_path, target_path).context("Failed to install executable")?;
         #[cfg(windows)]
         fs_err::copy(source_path, target_path).context("Failed to install entrypoint")?;
-        names.insert(name.trim_end_matches(".exe"));
+        names.insert(name.trim_end_matches(EXE_SUFFIX));
     }
 
     let s = if names.len() == 1 { "" } else { "s" };

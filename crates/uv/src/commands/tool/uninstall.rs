@@ -1,3 +1,4 @@
+use std::env::consts::EXE_SUFFIX;
 use std::fmt::Write;
 
 use anyhow::{bail, Result};
@@ -148,8 +149,8 @@ async fn do_uninstall(
         entrypoints
     };
     entrypoints.sort_unstable_by(|a, b| {
-        let a_trimmed = a.name.trim_end_matches(".exe");
-        let b_trimmed = b.name.trim_end_matches(".exe");
+        let a_trimmed = a.name.trim_end_matches(EXE_SUFFIX);
+        let b_trimmed = b.name.trim_end_matches(EXE_SUFFIX);
         a_trimmed.cmp(b_trimmed)
     });
 
