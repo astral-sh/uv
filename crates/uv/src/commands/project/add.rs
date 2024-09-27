@@ -18,7 +18,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{UnresolvedRequirement, VersionId};
+use uv_distribution_types::{Index, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
@@ -59,6 +59,7 @@ pub(crate) async fn add(
     editable: Option<bool>,
     dependency_type: DependencyType,
     raw_sources: bool,
+    indexes: Vec<Index>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -485,6 +486,13 @@ pub(crate) async fn add(
             source,
             edit,
         });
+    }
+
+    // Add any indexes that were provided on the command-line.
+    if !raw_sources {
+        for index in indexes {
+            toml.add_index(&index)?;
+        }
     }
 
     let content = toml.to_string();
