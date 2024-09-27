@@ -224,7 +224,9 @@ async fn build_impl(
             .ok_or_else(|| anyhow::anyhow!("Package `{}` not found in workspace", package))?
             .root();
 
-        vec![Source::Directory(Cow::Borrowed(project))]
+        vec![AnnotatedSource::from(Source::Directory(Cow::Borrowed(
+            project,
+        )))]
     } else if all {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
@@ -244,7 +246,10 @@ async fn build_impl(
             .packages()
             .values()
             .filter(|package| package.pyproject_toml().is_package())
-            .map(|package| Source::Directory(Cow::Borrowed(package.root())))
+            .map(|package| AnnotatedSource {
+                source: Source::Directory(Cow::Borrowed(package.root())),
+                package: Some(package.project().name.clone()),
+            })
             .collect();
 
         if packages.is_empty() {
@@ -253,10 +258,10 @@ async fn build_impl(
 
         packages
     } else {
-        vec![src]
+        vec![AnnotatedSource::from(src)]
     };
 
-    let builds = packages.iter().map(|src| {
+    let builds = packages.into_iter().map(|src| {
         build_package(
             src,
             output_dir,
@@ -296,7 +301,7 @@ async fn build_impl(
 
 #[allow(clippy::fn_params_excessive_bools)]
 async fn build_package(
-    src: &Source<'_>,
+    source: AnnotatedSource<'_>,
     output_dir: Option<&Path>,
     python_request: Option<&str>,
     no_config: bool,
@@ -330,9 +335,9 @@ async fn build_package(
     let output_dir = if let Some(output_dir) = output_dir {
         Cow::Owned(std::path::absolute(output_dir)?)
     } else {
-        match src {
-            Source::Directory(ref src) => Cow::Owned(src.join("dist")),
-            Source::File(ref src) => Cow::Borrowed(src.parent().unwrap()),
+        match &source.source {
+            Source::Directory(src) => Cow::Owned(src.join("dist")),
+            Source::File(src) => Cow::Borrowed(src.parent().unwrap()),
         }
     };
 
@@ -341,7 +346,7 @@ async fn build_package(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(src.directory(), no_config, false)
+        interpreter_request = PythonVersionFile::discover(source.directory(), no_config, false)
             .await?
             .and_then(PythonVersionFile::into_version);
     }
@@ -461,7 +466,7 @@ async fn build_package(
     fs_err::tokio::create_dir_all(&output_dir).await?;
 
     // Determine the build plan.
-    let plan = match &src {
+    let plan = match &source.source {
         Source::File(_) => {
             // We're building from a file, which must be a source distribution.
             match (sdist, wheel) {
@@ -491,7 +496,7 @@ async fn build_package(
 
     // Prepare some common arguments for the build.
     let subdirectory = None;
-    let version_id = src.path().file_name().and_then(|name| name.to_str());
+    let version_id = source.path().file_name().and_then(|name| name.to_str());
     let dist = None;
 
     let build_output = match printer {
@@ -510,13 +515,13 @@ async fn build_package(
             writeln!(
                 printer.stderr(),
                 "{}",
-                "Building source distribution...".bold()
+                source.annotate("Building source distribution...").bold()
             )?;
 
             // Build the sdist.
             let builder = build_dispatch
                 .setup_build(
-                    src.path(),
+                    source.path(),
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
@@ -545,7 +550,9 @@ async fn build_package(
             writeln!(
                 printer.stderr(),
                 "{}",
-                "Building wheel from source distribution...".bold()
+                source
+                    .annotate("Building wheel from source distribution...")
+                    .bold()
             )?;
 
             // Build a wheel from the source distribution.
@@ -567,12 +574,12 @@ async fn build_package(
             writeln!(
                 printer.stderr(),
                 "{}",
-                "Building source distribution...".bold()
+                source.annotate("Building source distribution...").bold()
             )?;
 
             let builder = build_dispatch
                 .setup_build(
-                    src.path(),
+                    source.path(),
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
@@ -585,11 +592,15 @@ async fn build_package(
             BuiltDistributions::Sdist(output_dir.join(sdist))
         }
         BuildPlan::Wheel => {
-            writeln!(printer.stderr(), "{}", "Building wheel...".bold())?;
+            writeln!(
+                printer.stderr(),
+                "{}",
+                source.annotate("Building wheel...").bold()
+            )?;
 
             let builder = build_dispatch
                 .setup_build(
-                    src.path(),
+                    source.path(),
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
@@ -605,11 +616,11 @@ async fn build_package(
             writeln!(
                 printer.stderr(),
                 "{}",
-                "Building source distribution...".bold()
+                source.annotate("Building source distribution...").bold()
             )?;
             let builder = build_dispatch
                 .setup_build(
-                    src.path(),
+                    source.path(),
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
@@ -619,10 +630,14 @@ async fn build_package(
                 .await?;
             let sdist = builder.build(&output_dir).await?;
 
-            writeln!(printer.stderr(), "{}", "Building wheel...".bold())?;
+            writeln!(
+                printer.stderr(),
+                "{}",
+                source.annotate("Building wheel...").bold()
+            )?;
             let builder = build_dispatch
                 .setup_build(
-                    src.path(),
+                    source.path(),
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
@@ -638,13 +653,15 @@ async fn build_package(
             writeln!(
                 printer.stderr(),
                 "{}",
-                "Building wheel from source distribution...".bold()
+                source
+                    .annotate("Building wheel from source distribution...")
+                    .bold()
             )?;
 
             // Extract the source distribution into a temporary directory.
-            let reader = fs_err::tokio::File::open(src.path()).await?;
-            let ext = SourceDistExtension::from_path(src.path()).map_err(|err| {
-                anyhow::anyhow!("`{}` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: {err}.", src.path().user_display())
+            let reader = fs_err::tokio::File::open(source.path()).await?;
+            let ext = SourceDistExtension::from_path(source.path()).map_err(|err| {
+                anyhow::anyhow!("`{}` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: {err}.", source.path().user_display())
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
             uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
@@ -674,6 +691,41 @@ async fn build_package(
     };
 
     Ok(assets)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AnnotatedSource<'a> {
+    /// The underlying [`Source`] to build.
+    source: Source<'a>,
+    /// The package name, if known.
+    package: Option<PackageName>,
+}
+
+impl AnnotatedSource<'_> {
+    fn path(&self) -> &Path {
+        self.source.path()
+    }
+
+    fn directory(&self) -> &Path {
+        self.source.directory()
+    }
+
+    fn annotate<'a>(&self, s: &'a str) -> Cow<'a, str> {
+        if let Some(package) = &self.package {
+            Cow::Owned(format!("[{}] {s}", package.cyan()))
+        } else {
+            Cow::Borrowed(s)
+        }
+    }
+}
+
+impl<'a> From<Source<'a>> for AnnotatedSource<'a> {
+    fn from(source: Source<'a>) -> Self {
+        Self {
+            source,
+            package: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
