@@ -135,13 +135,15 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command, script, ..
         }) = &**command
         {
+            // If the --script flag was passed, attempt to parse the command
+            // as a PEP 723 script
             if *script {
                 let (target, args) = command.split();
                 if let Some(target) = target {
                     let path = PathBuf::from(&target);
                     Some(RunCommand::PythonScript(path, args.to_vec()))
                 } else {
-                    Some(RunCommand::Empty)
+                    anyhow::bail!("Script path must be supplied when using `uv run --script`");
                 }
             } else {
                 Some(RunCommand::try_from(command)?)
