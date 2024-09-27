@@ -2548,9 +2548,10 @@ pub struct RunArgs {
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
-    /// Run the given path as a PEP 723 script.
+    /// Run the given path as a Python script.
     ///
-    /// Parses the file as a PEP 723 script, irrespective of its extension.
+    /// Using `--script` will attempt to parse the path as a PEP 723 script,
+    /// irrespective of its extension.
     #[arg(long)]
     pub script: bool,
 

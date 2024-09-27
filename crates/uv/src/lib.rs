@@ -135,8 +135,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command, script, ..
         }) = &**command
         {
-            // If the --script flag was passed, attempt to parse the command
-            // as a PEP 723 script
             if *script {
                 let (target, args) = command.split();
                 if let Some(target) = target {
