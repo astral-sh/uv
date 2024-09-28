@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::Read;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use anstream::eprint;
@@ -835,7 +834,7 @@ pub(crate) enum RunCommand {
     PythonScript(PathBuf, Vec<OsString>),
     /// Search `sys.path` for the named module and execute its contents as the `__main__` module.
     /// Equivalent to `python -m module`.
-    PythonModule(String, Vec<OsString>),
+    PythonModule(OsString, Vec<OsString>),
     /// Execute a `pythonw` script (Windows only).
     PythonGuiScript(PathBuf, Vec<OsString>),
     /// Execute a Python package containing a `__main__.py` file.
@@ -957,7 +956,8 @@ impl std::fmt::Display for RunCommand {
                 Ok(())
             }
             Self::PythonModule(module, args) => {
-                write!(f, "python -m {module}")?;
+                write!(f, "python -m")?;
+                write!(f, " {}", module.to_string_lossy())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
                 }
@@ -990,28 +990,17 @@ impl std::fmt::Display for RunCommand {
 }
 
 impl RunCommand {
-    pub(crate) fn from_args(
-        command: &Option<ExternalCommand>,
-        module: Option<String>,
-    ) -> anyhow::Result<Self> {
-        if let Some(module) = module {
-            let args: Vec<OsString> = command
-                .as_ref()
-                .map(|cmd| cmd.deref().clone())
-                .unwrap_or_default();
-            return Ok(Self::PythonModule(module, args));
-        }
-
-        let (target, args) = if let Some(command) = command {
-            command.split()
-        } else {
-            (None, &[][..])
-        };
+    pub(crate) fn from_args(command: &ExternalCommand, module: bool) -> anyhow::Result<Self> {
+        let (target, args) = command.split();
         let Some(target) = target else {
             return Ok(Self::Empty);
         };
 
-        let target_path = PathBuf::from(&target);
+        if module {
+            return Ok(Self::PythonModule(target.clone(), args.to_vec()));
+        }
+
+        let target_path = PathBuf::from(target);
         let metadata = target_path.metadata();
         let is_file = metadata.as_ref().map_or(false, std::fs::Metadata::is_file);
         let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);

@@ -135,7 +135,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command, module, ..
         }) = &**command
         {
-            Some(RunCommand::from_args(command, module.clone())?)
+            Some(RunCommand::from_args(command, *module)?)
         } else {
             None
         }

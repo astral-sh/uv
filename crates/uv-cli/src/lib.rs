@@ -2473,8 +2473,8 @@ pub struct RunArgs {
     ///
     /// Equivalent to `python -m <module>`.
     #[arg(short = 'm')]
-    pub module: Option<String>,
-    
+    pub module: bool,
+
     /// Omit non-development dependencies.
     ///
     /// The project itself will also be omitted.
@@ -2491,7 +2491,7 @@ pub struct RunArgs {
     /// If the path to a Python script (i.e., ending in `.py`), it will be
     /// executed with the Python interpreter.
     #[command(subcommand)]
-    pub command: Option<ExternalCommand>,
+    pub command: ExternalCommand,
 
     /// Run with the given packages installed.
     ///

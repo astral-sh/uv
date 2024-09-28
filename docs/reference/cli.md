@@ -65,7 +65,7 @@ Arguments following the command (or script) are not interpreted as arguments to 
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv run [OPTIONS] [COMMAND]
+uv run [OPTIONS] <COMMAND>
 ```
 
 <h3 class="cli-reference">Options</h3>
@@ -380,7 +380,7 @@ uv run [OPTIONS] [COMMAND]
 
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 
-</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed as editables</p>
+</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed as editables.</p>
 
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 
