@@ -2472,7 +2472,7 @@ pub struct RunArgs {
     /// Run a Python module.
     ///
     /// Equivalent to `python -m <module>`.
-    #[arg(short = 'm')]
+    #[arg(short, long)]
     pub module: bool,
 
     /// Omit non-development dependencies.

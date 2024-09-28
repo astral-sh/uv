@@ -217,6 +217,10 @@ uv run [OPTIONS] <COMMAND>
 
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
+</dd><dt><code>--module</code>, <code>-m</code></dt><dd><p>Run a Python module.</p>
+
+<p>Equivalent to <code>python -m &lt;module&gt;</code>.</p>
+
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
