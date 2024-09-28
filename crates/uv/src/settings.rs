@@ -245,6 +245,7 @@ impl RunSettings {
             no_all_extras,
             dev,
             no_dev,
+            module: _,
             only_dev,
             no_editable,
             command: _,
