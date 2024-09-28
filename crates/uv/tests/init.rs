@@ -40,6 +40,7 @@ fn init() -> Result<()> {
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.12"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
@@ -101,6 +102,7 @@ fn init_application() -> Result<()> {
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.12"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
@@ -172,6 +174,7 @@ fn init_application_hello_exists() -> Result<()> {
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.12"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
@@ -223,6 +226,7 @@ fn init_application_other_python_exists() -> Result<()> {
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.12"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
@@ -702,6 +706,7 @@ fn init_no_readme() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         requires-python = ">=3.12"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
@@ -737,6 +742,7 @@ fn init_no_pin_python() -> Result<()> {
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.12"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
@@ -839,6 +845,7 @@ fn init_application_current_dir() -> Result<()> {
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.12"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
@@ -1456,6 +1463,7 @@ fn init_no_workspace_warning() -> Result<()> {
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.12"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
@@ -1530,6 +1538,7 @@ fn init_project_inside_project() -> Result<()> {
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.12"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
@@ -1902,6 +1911,7 @@ fn init_requires_python_workspace() -> Result<()> {
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.10"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
@@ -1960,6 +1970,7 @@ fn init_requires_python_version() -> Result<()> {
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.8"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
@@ -2019,6 +2030,7 @@ fn init_requires_python_specifiers() -> Result<()> {
         description = "Add your description here"
         readme = "README.md"
         requires-python = "==3.8.*"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
@@ -2127,6 +2139,7 @@ fn init_failure() -> Result<()> {
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.12"
+        classifiers = [ "Private :: Do Not Upload" ]
         dependencies = []
         "###
         );
