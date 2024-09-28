@@ -2254,7 +2254,7 @@ fn init_git_not_installed() {
 }
 
 #[test]
-fn init_with_author() -> Result<()>{
+fn init_with_author() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create a Git repository and set the author.

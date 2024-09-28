@@ -896,15 +896,16 @@ fn get_author_info_from_git(path: &Path) -> Result<Author> {
 
     let mut author = Author::default();
 
-    let rv = Command::new(git)
+    let output = Command::new(git)
         .arg("config")
         .arg("--get-regexp")
         .current_dir(path)
         .arg("^user.(name|email)$")
         .stdout(Stdio::piped())
+        .stderr(Stdio::null())
         .output()?;
 
-    for line in std::str::from_utf8(&rv.stdout)?.lines() {
+    for line in std::str::from_utf8(&output.stdout)?.lines() {
         match line.split_once(' ') {
             Some(("user.email", value)) => {
                 author.email = Some(value.to_string());
