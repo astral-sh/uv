@@ -155,7 +155,7 @@ See https://github.com/astral-sh/uv/issues/5130 */
 }
 
 /* Increase the size of the index nav item to match the sections */
-.md-nav__item:first-child {
+.md-nav--primary .md-nav__item:first-child {
   font-size: 17.5px;
   font-weight: normal;
 }
