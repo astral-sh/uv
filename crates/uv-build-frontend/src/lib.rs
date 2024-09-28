@@ -939,6 +939,7 @@ impl PythonRunner {
             .env("PATH", modified_path)
             .env("VIRTUAL_ENV", venv.root())
             .env("CLICOLOR_FORCE", "1")
+            .env("PYTHONIOENCODING", "utf-8")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
