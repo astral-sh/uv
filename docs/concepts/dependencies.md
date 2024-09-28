@@ -272,7 +272,9 @@ download the source from GitHub on macOS, and fall back to PyPI on all other pla
 
 You can specify multiple sources for a single dependency by providing a list of sources,
 disambiguated by [PEP 508](https://peps.python.org/pep-0508/#environment-markers)-compatible
-environment markers. For example, to pull in different `httpx` commits on macOS vs. Linux:
+environment markers.
+
+For example, to pull in different `httpx` commits on macOS vs. Linux:
 
 ```toml title="pyproject.toml"
 [project]
@@ -285,6 +287,29 @@ httpx = [
   { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" },
   { git = "https://github.com/encode/httpx", tag = "0.24.1", marker = "sys_platform == 'linux'" },
 ]
+```
+
+This strategy even extends to pulling packages from different indexes based on environment markers.
+For example, to pull `torch` from different PyTorch indexes based on the platform:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["torch"]
+
+[tool.uv.sources]
+torch = [
+  { index = "torch-cu118", marker = "sys_platform == 'darwin'"},
+  { index = "torch-cu124", marker = "sys_platform != 'darwin'"},
+]
+
+[[tool.uv.index]]
+name = "torch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+
+[[tool.uv.index]]
+name = "torch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+
 ```
 
 ## Optional dependencies
