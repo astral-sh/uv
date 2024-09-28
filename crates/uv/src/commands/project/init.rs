@@ -593,7 +593,7 @@ impl InitProjectKind {
         package: bool,
     ) -> Result<()> {
         // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(name, requires_python, no_readme);
+        let mut pyproject = pyproject_project(name, requires_python, package, no_readme);
 
         // Include additional project configuration for packaged applications
         if package {
@@ -678,7 +678,7 @@ impl InitProjectKind {
         }
 
         // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(name, requires_python, no_readme);
+        let mut pyproject = pyproject_project(name, requires_python, true, no_readme);
 
         // Always include a build system if the project is packaged.
         pyproject.push('\n');
@@ -732,6 +732,7 @@ impl InitProjectKind {
 fn pyproject_project(
     name: &PackageName,
     requires_python: &RequiresPython,
+    package: bool,
     no_readme: bool,
 ) -> String {
     indoc::formatdoc! {r#"
@@ -739,11 +740,12 @@ fn pyproject_project(
         name = "{name}"
         version = "0.1.0"
         description = "Add your description here"{readme}
-        requires-python = "{requires_python}"
+        requires-python = "{requires_python}"{classifiers}
         dependencies = []
     "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
         requires_python = requires_python.specifiers(),
+        classifiers = if package { "" } else { "\nclassifiers = [ \"Private :: Do Not Upload\" ]" },
     }
 }
 
