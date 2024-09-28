@@ -94,7 +94,7 @@ impl RequirementsSource {
             let term = Term::stderr();
             if term.is_term() {
                 let prompt = format!(
-                    "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `-r {name}`?"
+                    "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `--with-requirements {name}`?"
                 );
                 let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
                 if confirmation {
@@ -111,7 +111,7 @@ impl RequirementsSource {
             let term = Term::stderr();
             if term.is_term() {
                 let prompt = format!(
-                    "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `-r {name}`?"
+                    "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `--with-requirements {name}`?"
                 );
                 let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
                 if confirmation {

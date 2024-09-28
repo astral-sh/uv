@@ -915,7 +915,7 @@ impl Display for RequirementsTxtParserError {
                 write!(f, "Unsupported editable requirement")
             }
             Self::MissingRequirementPrefix(given) => {
-                write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
+                write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `--with-requirements {given}`?")
             }
             Self::NoBinary { specifier, .. } => {
                 write!(f, "Invalid specifier for `--no-binary`: {specifier}")
@@ -1035,7 +1035,7 @@ impl Display for RequirementsTxtFileError {
             RequirementsTxtParserError::MissingRequirementPrefix(given) => {
                 write!(
                     f,
-                    "Requirement `{given}` in `{}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?",
+                    "Requirement `{given}` in `{}` looks like a requirements file but was passed as a package name. Did you mean `--with-requirements {given}`?",
                     self.file.user_display(),
                 )
             }
@@ -1658,7 +1658,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @"Requirement `file.txt` in `<REQUIREMENTS_TXT>` looks like a requirements file but was passed as a package name. Did you mean `-r file.txt`?");
+            insta::assert_snapshot!(errors, @"Requirement `file.txt` in `<REQUIREMENTS_TXT>` looks like a requirements file but was passed as a package name. Did you mean `--with-requirements file.txt`?");
         });
 
         Ok(())
