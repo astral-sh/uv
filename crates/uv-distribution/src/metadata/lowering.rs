@@ -75,134 +75,167 @@ impl LoweredRequirement {
             return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
         };
 
-        Either::Right(source.into_iter().map(move |source| {
-            let (source, mut marker) = match source {
-                Source::Git {
-                    git,
-                    subdirectory,
-                    rev,
-                    tag,
-                    branch,
-                    marker,
-                } => {
-                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                        return Err(LoweringError::ConflictingUrls);
-                    }
-                    let source =
-                        git_source(&git, subdirectory.map(PathBuf::from), rev, tag, branch)?;
-                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
-                    (source, marker)
-                }
-                Source::Url {
-                    url,
-                    subdirectory,
-                    marker,
-                } => {
-                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                        return Err(LoweringError::ConflictingUrls);
-                    }
-                    let source = url_source(url, subdirectory.map(PathBuf::from))?;
-                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
-                    (source, marker)
-                }
-                Source::Path {
-                    path,
-                    editable,
-                    marker,
-                } => {
-                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                        return Err(LoweringError::ConflictingUrls);
-                    }
-                    let source = path_source(
-                        PathBuf::from(path),
-                        origin,
-                        project_dir,
-                        workspace.install_path(),
-                        editable.unwrap_or(false),
-                    )?;
-                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
-                    (source, marker)
-                }
-                Source::Registry { index, marker } => {
-                    let source = registry_source(&requirement, index)?;
-                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
-                    (source, marker)
-                }
-                Source::Workspace {
-                    workspace: is_workspace,
-                    marker,
-                } => {
-                    if !is_workspace {
-                        return Err(LoweringError::WorkspaceFalse);
-                    }
-                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                        return Err(LoweringError::ConflictingUrls);
-                    }
-                    let member = workspace
-                        .packages()
-                        .get(&requirement.name)
-                        .ok_or(LoweringError::UndeclaredWorkspacePackage)?
-                        .clone();
+        // Determine whether the markers cover the full space for the requirement. If not, fill the
+        // remaining space with the negation of the sources.
+        let remaining = {
+            // Determine the space covered by the sources.
+            let mut total = MarkerTree::FALSE;
+            for source in source.iter() {
+                total.or(source.marker());
+            }
 
-                    // Say we have:
-                    // ```
-                    // root
-                    // ├── main_workspace  <- We want to the path from here ...
-                    // │   ├── pyproject.toml
-                    // │   └── uv.lock
-                    // └──current_workspace
-                    //    └── packages
-                    //        └── current_package  <- ... to here.
-                    //            └── pyproject.toml
-                    // ```
-                    // The path we need in the lockfile: `../current_workspace/packages/current_project`
-                    // member root: `/root/current_workspace/packages/current_project`
-                    // workspace install root: `/root/current_workspace`
-                    // relative to workspace: `packages/current_project`
-                    // workspace lock root: `../current_workspace`
-                    // relative to main workspace: `../current_workspace/packages/current_project`
-                    let url = VerbatimUrl::from_absolute_path(member.root())?;
-                    let install_path = url.to_file_path().map_err(|()| {
-                        LoweringError::RelativeTo(io::Error::new(
-                            io::ErrorKind::Other,
-                            "Invalid path in file URL",
-                        ))
-                    })?;
+            // Determine the space covered by the requirement.
+            let mut remaining = total.negate();
+            remaining.and(requirement.marker.clone());
 
-                    let source = if member.pyproject_toml().is_package() {
-                        RequirementSource::Directory {
-                            install_path,
-                            url,
-                            editable: true,
-                            r#virtual: false,
+            LoweredRequirement(Requirement {
+                marker: remaining,
+                ..Requirement::from(requirement.clone())
+            })
+        };
+
+        Either::Right(
+            source
+                .into_iter()
+                .map(move |source| {
+                    let (source, mut marker) = match source {
+                        Source::Git {
+                            git,
+                            subdirectory,
+                            rev,
+                            tag,
+                            branch,
+                            marker,
+                        } => {
+                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                                return Err(LoweringError::ConflictingUrls);
+                            }
+                            let source = git_source(
+                                &git,
+                                subdirectory.map(PathBuf::from),
+                                rev,
+                                tag,
+                                branch,
+                            )?;
+                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                            (source, marker)
                         }
-                    } else {
-                        RequirementSource::Directory {
-                            install_path,
+                        Source::Url {
                             url,
-                            editable: false,
-                            r#virtual: true,
+                            subdirectory,
+                            marker,
+                        } => {
+                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                                return Err(LoweringError::ConflictingUrls);
+                            }
+                            let source = url_source(url, subdirectory.map(PathBuf::from))?;
+                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                            (source, marker)
+                        }
+                        Source::Path {
+                            path,
+                            editable,
+                            marker,
+                        } => {
+                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                                return Err(LoweringError::ConflictingUrls);
+                            }
+                            let source = path_source(
+                                PathBuf::from(path),
+                                origin,
+                                project_dir,
+                                workspace.install_path(),
+                                editable.unwrap_or(false),
+                            )?;
+                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                            (source, marker)
+                        }
+                        Source::Registry { index, marker } => {
+                            let source = registry_source(&requirement, index)?;
+                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                            (source, marker)
+                        }
+                        Source::Workspace {
+                            workspace: is_workspace,
+                            marker,
+                        } => {
+                            if !is_workspace {
+                                return Err(LoweringError::WorkspaceFalse);
+                            }
+                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                                return Err(LoweringError::ConflictingUrls);
+                            }
+                            let member = workspace
+                                .packages()
+                                .get(&requirement.name)
+                                .ok_or(LoweringError::UndeclaredWorkspacePackage)?
+                                .clone();
+
+                            // Say we have:
+                            // ```
+                            // root
+                            // ├── main_workspace  <- We want to the path from here ...
+                            // │   ├── pyproject.toml
+                            // │   └── uv.lock
+                            // └──current_workspace
+                            //    └── packages
+                            //        └── current_package  <- ... to here.
+                            //            └── pyproject.toml
+                            // ```
+                            // The path we need in the lockfile: `../current_workspace/packages/current_project`
+                            // member root: `/root/current_workspace/packages/current_project`
+                            // workspace install root: `/root/current_workspace`
+                            // relative to workspace: `packages/current_project`
+                            // workspace lock root: `../current_workspace`
+                            // relative to main workspace: `../current_workspace/packages/current_project`
+                            let url = VerbatimUrl::from_absolute_path(member.root())?;
+                            let install_path = url.to_file_path().map_err(|()| {
+                                LoweringError::RelativeTo(io::Error::new(
+                                    io::ErrorKind::Other,
+                                    "Invalid path in file URL",
+                                ))
+                            })?;
+
+                            let source = if member.pyproject_toml().is_package() {
+                                RequirementSource::Directory {
+                                    install_path,
+                                    url,
+                                    editable: true,
+                                    r#virtual: false,
+                                }
+                            } else {
+                                RequirementSource::Directory {
+                                    install_path,
+                                    url,
+                                    editable: false,
+                                    r#virtual: true,
+                                }
+                            };
+                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                            (source, marker)
+                        }
+                        Source::CatchAll { .. } => {
+                            // Emit a dedicated error message, which is an improvement over Serde's default error.
+                            return Err(LoweringError::InvalidEntry);
                         }
                     };
-                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
-                    (source, marker)
-                }
-                Source::CatchAll { .. } => {
-                    // Emit a dedicated error message, which is an improvement over Serde's default error.
-                    return Err(LoweringError::InvalidEntry);
-                }
-            };
 
-            marker.and(requirement.marker.clone());
+                    marker.and(requirement.marker.clone());
 
-            Ok(Self(Requirement {
-                name: requirement.name.clone(),
-                extras: requirement.extras.clone(),
-                marker,
-                source,
-                origin: requirement.origin.clone(),
-            }))
-        }))
+                    Ok(Self(Requirement {
+                        name: requirement.name.clone(),
+                        extras: requirement.extras.clone(),
+                        marker,
+                        source,
+                        origin: requirement.origin.clone(),
+                    }))
+                })
+                .chain(std::iter::once(Ok(remaining)))
+                .filter(|requirement| match requirement {
+                    Ok(requirement) => !requirement.0.marker.is_false(),
+                    Err(_) => true,
+                }),
+        )
     }
 
     /// Lower a [`pep508_rs::Requirement`] in a non-workspace setting (for example, in a PEP 723
@@ -218,79 +251,112 @@ impl LoweredRequirement {
             return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
         };
 
-        Either::Right(source.into_iter().map(move |source| {
-            let (source, mut marker) = match source {
-                Source::Git {
-                    git,
-                    subdirectory,
-                    rev,
-                    tag,
-                    branch,
-                    marker,
-                } => {
-                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                        return Err(LoweringError::ConflictingUrls);
-                    }
-                    let source =
-                        git_source(&git, subdirectory.map(PathBuf::from), rev, tag, branch)?;
-                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
-                    (source, marker)
-                }
-                Source::Url {
-                    url,
-                    subdirectory,
-                    marker,
-                } => {
-                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                        return Err(LoweringError::ConflictingUrls);
-                    }
-                    let source = url_source(url, subdirectory.map(PathBuf::from))?;
-                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
-                    (source, marker)
-                }
-                Source::Path {
-                    path,
-                    editable,
-                    marker,
-                } => {
-                    if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                        return Err(LoweringError::ConflictingUrls);
-                    }
-                    let source = path_source(
-                        PathBuf::from(path),
-                        Origin::Project,
-                        dir,
-                        dir,
-                        editable.unwrap_or(false),
-                    )?;
-                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
-                    (source, marker)
-                }
-                Source::Registry { index, marker } => {
-                    let source = registry_source(&requirement, index)?;
-                    let marker = marker.map(MarkerTree::from).unwrap_or_default();
-                    (source, marker)
-                }
-                Source::Workspace { .. } => {
-                    return Err(LoweringError::WorkspaceMember);
-                }
-                Source::CatchAll { .. } => {
-                    // Emit a dedicated error message, which is an improvement over Serde's default
-                    // error.
-                    return Err(LoweringError::InvalidEntry);
-                }
-            };
+        // Determine whether the markers cover the full space for the requirement. If not, fill the
+        // remaining space with the negation of the sources.
+        let remaining = {
+            // Determine the space covered by the sources.
+            let mut total = MarkerTree::FALSE;
+            for source in source.iter() {
+                total.or(source.marker());
+            }
 
-            marker.and(requirement.marker.clone());
+            // Determine the space covered by the requirement.
+            let mut remaining = total.negate();
+            remaining.and(requirement.marker.clone());
 
-            Ok(Self(Requirement {
-                name: requirement.name.clone(),
-                extras: requirement.extras.clone(),
-                marker,
-                source,
-                origin: requirement.origin.clone(),
-            }))
-        }))
+            LoweredRequirement(Requirement {
+                marker: remaining,
+                ..Requirement::from(requirement.clone())
+            })
+        };
+
+        Either::Right(
+            source
+                .into_iter()
+                .map(move |source| {
+                    let (source, mut marker) = match source {
+                        Source::Git {
+                            git,
+                            subdirectory,
+                            rev,
+                            tag,
+                            branch,
+                            marker,
+                        } => {
+                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                                return Err(LoweringError::ConflictingUrls);
+                            }
+                            let source = git_source(
+                                &git,
+                                subdirectory.map(PathBuf::from),
+                                rev,
+                                tag,
+                                branch,
+                            )?;
+                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                            (source, marker)
+                        }
+                        Source::Url {
+                            url,
+                            subdirectory,
+                            marker,
+                        } => {
+                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                                return Err(LoweringError::ConflictingUrls);
+                            }
+                            let source = url_source(url, subdirectory.map(PathBuf::from))?;
+                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                            (source, marker)
+                        }
+                        Source::Path {
+                            path,
+                            editable,
+                            marker,
+                        } => {
+                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                                return Err(LoweringError::ConflictingUrls);
+                            }
+                            let source = path_source(
+                                PathBuf::from(path),
+                                Origin::Project,
+                                dir,
+                                dir,
+                                editable.unwrap_or(false),
+                            )?;
+                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                            (source, marker)
+                        }
+                        Source::Registry { index, marker } => {
+                            let source = registry_source(&requirement, index)?;
+                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
+                            (source, marker)
+                        }
+                        Source::Workspace { .. } => {
+                            return Err(LoweringError::WorkspaceMember);
+                        }
+                        Source::CatchAll { .. } => {
+                            // Emit a dedicated error message, which is an improvement over Serde's default
+                            // error.
+                            return Err(LoweringError::InvalidEntry);
+                        }
+                    };
+
+                    marker.and(requirement.marker.clone());
+
+                    Ok(Self(Requirement {
+                        name: requirement.name.clone(),
+                        extras: requirement.extras.clone(),
+                        marker,
+                        source,
+                        origin: requirement.origin.clone(),
+                    }))
+                })
+                .chain(std::iter::once(Ok(remaining)))
+                .filter(|requirement| match requirement {
+                    Ok(requirement) => !requirement.0.marker.is_false(),
+                    Err(_) => true,
+                }),
+        )
     }
 
     /// Convert back into a [`Requirement`].
