@@ -2400,6 +2400,10 @@ pub struct InitArgs {
     #[arg(long)]
     pub no_readme: bool,
 
+    /// Do not fill in the `authors` field in the `pyproject.toml`.
+    #[arg(long)]
+    pub no_authors: bool,
+
     /// Do not create a `.python-version` file for the project.
     ///
     /// By default, uv will create a `.python-version` file containing the minor version of

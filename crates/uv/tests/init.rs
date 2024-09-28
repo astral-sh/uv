@@ -2252,3 +2252,59 @@ fn init_git_not_installed() {
     error: Attempted to initialize a Git repository, but `git` was not found in PATH
     "###);
 }
+
+#[test]
+fn init_with_author() -> Result<()>{
+    let context = TestContext::new("3.12");
+
+    // Create a Git repository and set the author.
+    Command::new("git")
+        .arg("init")
+        .current_dir(&context.temp_dir)
+        .status()?;
+    Command::new("git")
+        .arg("config")
+        .arg("user.name")
+        .arg("Alice")
+        .arg("--local")
+        .current_dir(&context.temp_dir)
+        .status()?;
+    Command::new("git")
+        .arg("config")
+        .arg("user.email")
+        .arg("alice@example.com")
+        .arg("--local")
+        .current_dir(&context.temp_dir)
+        .status()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `temp`
+    "###);
+
+    let pyproject = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "temp"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        authors = [
+          { name = "Alice", email = "alice@example.com" } 
+        ]
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
+
+    Ok(())
+}

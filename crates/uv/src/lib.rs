@@ -1195,6 +1195,7 @@ async fn run_project(
                 args.kind,
                 args.vcs,
                 args.no_readme,
+                args.no_authors,
                 args.no_pin_python,
                 args.python,
                 args.no_workspace,
