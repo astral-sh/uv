@@ -2528,7 +2528,7 @@ pub struct RunArgs {
     ///
     /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
     /// be updated, since the environment will not be synced regardless).
-    #[arg(long, conflicts_with = "frozen")]
+    #[arg(long, env = "UV_NO_SYNC", value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
@@ -2844,7 +2844,7 @@ pub struct AddArgs {
     pub extra: Option<Vec<ExtraName>>,
 
     /// Avoid syncing the virtual environment.
-    #[arg(long, conflicts_with = "frozen")]
+    #[arg(long, env = "UV_NO_SYNC", value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
@@ -2913,7 +2913,7 @@ pub struct RemoveArgs {
     pub optional: Option<ExtraName>,
 
     /// Avoid syncing the virtual environment after re-locking the project.
-    #[arg(long, conflicts_with = "frozen")]
+    #[arg(long, env = "UV_NO_SYNC", value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.

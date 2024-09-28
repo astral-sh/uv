@@ -279,6 +279,7 @@ uv run [OPTIONS] <COMMAND>
 
 <p>Implies <code>--frozen</code>, as the project dependencies will be ignored (i.e., the lockfile will not be updated, since the environment will not be synced regardless).</p>
 
+<p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -792,6 +793,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 </dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment</p>
 
+<p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -1108,6 +1110,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 </dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
 
+<p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>

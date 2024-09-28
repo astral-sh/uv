@@ -71,6 +71,8 @@ uv accepts the following command-line arguments as environment variables:
   set, uv will use this username for publishing.
 - `UV_PUBLISH_PASSWORD`: Equivalent to the `--password` command-line argument in `uv publish`. If
   set, uv will use this password for publishing.
+- `UV_NO_SYNC`: Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
+  the environment.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
