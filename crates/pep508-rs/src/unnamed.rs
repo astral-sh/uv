@@ -175,16 +175,20 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
     // wsp*
     cursor.eat_whitespace();
     if let Some((pos, char)) = cursor.next() {
-        if let Some(given) = url.given() {
-            if given.ends_with(';') && marker.is_none() {
-                return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(
-                        "Missing space before ';', the end of the URL is ambiguous".to_string(),
-                    ),
-                    start: requirement_end - ';'.len_utf8(),
-                    len: ';'.len_utf8(),
-                    input: cursor.to_string(),
-                });
+        if marker.is_none() {
+            if let Some(given) = url.given() {
+                for c in [';', '#'] {
+                    if given.ends_with(c) {
+                        return Err(Pep508Error {
+                            message: Pep508ErrorSource::String(format!(
+                                "Missing space before '{c}', the end of the URL is ambiguous"
+                            )),
+                            start: requirement_end - c.len_utf8(),
+                            len: c.len_utf8(),
+                            input: cursor.to_string(),
+                        });
+                    }
+                }
             }
         }
         let message = if marker.is_none() {
@@ -349,9 +353,20 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
 /// Like [`crate::parse_url`], but allows for extras to be present at the end of the URL, to comply
 /// with the non-PEP 508 extensions.
 ///
+/// When parsing, we eat characters until we see any of the following:
+/// - A newline.
+/// - A semicolon (marker) or hash (comment), _preceded_ by a space. We parse the URL until the last
+///   non-whitespace character (inclusive).
+/// - A semicolon (marker) or hash (comment) _followed_ by a space. We treat this as an error, since
+///   the end of the URL is ambiguous.
+///
+/// URLs can include extras at the end, enclosed in square brackets.
+///
 /// For example:
 /// - `https://download.pytorch.org/whl/torch_stable.html[dev]`
 /// - `../editable[dev]`
+/// - `https://download.pytorch.org/whl/torch_stable.html ; python_version > "3.8"`
+/// - `https://download.pytorch.org/whl/torch_stable.html # this is a comment`
 fn parse_unnamed_url<Url: UnnamedRequirementUrl>(
     cursor: &mut Cursor,
     working_dir: Option<&Path>,
@@ -363,30 +378,44 @@ fn parse_unnamed_url<Url: UnnamedRequirementUrl>(
     let (start, len) = {
         let start = cursor.pos();
         let mut len = 0;
-        let mut backslash = false;
         let mut depth = 0u32;
         while let Some((_, c)) = cursor.next() {
-            if backslash {
-                backslash = false;
-            } else if c == '\\' {
-                backslash = true;
-            } else if c == '[' {
-                depth = depth.saturating_add(1);
-            } else if c == ']' {
-                depth = depth.saturating_sub(1);
-            }
-
-            // If we see top-level whitespace, we're done.
-            if depth == 0 && c.is_whitespace() {
-                break;
-            }
-
             // If we see a line break, we're done.
             if matches!(c, '\r' | '\n') {
                 break;
             }
 
+            // Track the depth of brackets.
+            if c == '[' {
+                depth = depth.saturating_add(1);
+            } else if c == ']' {
+                depth = depth.saturating_sub(1);
+            }
+
+            // If we see top-level whitespace, check if it's followed by a semicolon or hash. If so,
+            // end the URL at the last non-whitespace character.
+            if depth == 0 && c.is_whitespace() {
+                let mut cursor = cursor.clone();
+                cursor.eat_whitespace();
+                if matches!(cursor.peek_char(), None | Some(';' | '#')) {
+                    break;
+                }
+            }
+
             len += c.len_utf8();
+
+            // If we see a top-level semicolon or hash followed by whitespace, we're done.
+            if depth == 0 {
+                match c {
+                    ';' if cursor.peek_char().is_some_and(char::is_whitespace) => {
+                        break;
+                    }
+                    '#' if cursor.peek_char().is_some_and(char::is_whitespace) => {
+                        break;
+                    }
+                    _ => {}
+                }
+            }
         }
         (start, len)
     };
