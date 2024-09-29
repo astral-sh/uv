@@ -104,6 +104,7 @@ impl<'a> Planner<'a> {
 
             // Check if installation of a binary version of the package should be allowed.
             let no_binary = build_options.no_binary_package(&requirement.name);
+            let no_build = build_options.no_build_package(&requirement.name);
 
             let installed_dists = site_packages.remove_packages(&requirement.name);
 
@@ -143,9 +144,19 @@ impl<'a> Planner<'a> {
             // Identify any cached distributions that satisfy the requirement.
             match &requirement.source {
                 RequirementSource::Registry { specifier, .. } => {
-                    if let Some((_version, distribution)) = registry_index
-                        .get(&requirement.name)
-                        .find(|(version, _)| specifier.contains(version))
+                    if let Some(distribution) =
+                        registry_index.get(&requirement.name).find_map(|entry| {
+                            if !specifier.contains(&entry.dist.filename.version) {
+                                return None;
+                            };
+                            if entry.built && no_build {
+                                return None;
+                            }
+                            if !entry.built && no_binary {
+                                return None;
+                            }
+                            Some(&entry.dist)
+                        })
                     {
                         debug!("Requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
