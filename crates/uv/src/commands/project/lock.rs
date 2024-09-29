@@ -107,10 +107,8 @@ pub(crate) async fn lock(
     if dry_run {
         let state = SharedState::default();
 
-        // Read the existing lockfile.
         let existing = read(&workspace).await?;
 
-        // Perform the lock operation.
         let result = do_lock(
             &workspace,
             &interpreter,
@@ -126,15 +124,25 @@ pub(crate) async fn lock(
         )
         .await?;
 
-        if let LockResult::Changed(Some(previous), result) = result {
-            writeln!(printer.stderr(), "{}", "Lockfile modifications:".bold())?;
-            report_upgrades(&previous, &result, printer, true)?;
-        } else {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                "No lockfile changes detected".bold()
-            )?;
+        match result {
+            LockResult::Changed(Some(previous), result) => {
+                writeln!(printer.stderr(), "{}", "Lockfile modifications:".bold())?;
+                report_upgrades(&previous, &result, printer, true)?;
+            }
+            LockResult::Changed(None, _) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    "Existing lockfile not detected".bold()
+                )?;
+            }
+            LockResult::Unchanged(_) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    "No lockfile changes detected".bold()
+                )?;
+            }
         }
 
         Ok(ExitStatus::Success)

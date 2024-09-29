@@ -13323,3 +13323,121 @@ fn lock_change_requires_python() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn lock_dry_run() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio <3 ; python_version == '3.12'",
+            "anyio >3, <4 ; python_version > '3.12'",
+            "matplotlib==3.1.0"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 12 packages in [TIME]
+    "###);
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "requests==2.25.1",
+            "matplotlib==3.5.0"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--dry-run"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    Lockfile modifications:
+    Remove anyio v2.2.0, v3.7.1
+    Add certifi v2024.2.2
+    Add chardet v4.0.0
+    Add fonttools v4.50.0
+    Update idna v3.6 -> v2.10
+    Update matplotlib v3.1.0 -> v3.5.0
+    Add packaging v24.0
+    Add pillow v10.2.0
+    Add requests v2.25.1
+    Add setuptools v69.2.0
+    Add setuptools-scm v8.0.4
+    Remove sniffio v1.3.1
+    Add typing-extensions v4.10.0
+    Add urllib3 v1.26.18
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_dry_run_noop() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio <3 ; python_version == '3.12'",
+            "anyio >3, <4 ; python_version > '3.12'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--dry-run"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Existing lockfile not detected
+    "###);
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.lock().arg("--dry-run"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    No lockfile changes detected
+    "###);
+
+    Ok(())
+}
