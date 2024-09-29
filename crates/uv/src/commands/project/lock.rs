@@ -113,6 +113,7 @@ pub(crate) async fn lock(
             &workspace,
             &interpreter,
             existing,
+            dry_run,
             settings.as_ref(),
             &state,
             Box::new(DefaultResolveLogger),
@@ -125,9 +126,13 @@ pub(crate) async fn lock(
         .await?;
 
         match result {
-            LockResult::Changed(Some(previous), result) => {
-                writeln!(printer.stderr(), "{}", "Lockfile modifications:".bold())?;
-                report_upgrades(&previous, &result, printer, true)?;
+            LockResult::Changed(Some(previous), lock) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    "Planned lockfile modifications:".bold()
+                )?;
+                report_upgrades(&previous, &lock, printer, true)?;
             }
             LockResult::Changed(None, _) => {
                 writeln!(
@@ -223,6 +228,7 @@ pub(super) async fn do_safe_lock(
             workspace,
             interpreter,
             Some(existing),
+            false,
             settings,
             &state,
             logger,
@@ -249,6 +255,7 @@ pub(super) async fn do_safe_lock(
             workspace,
             interpreter,
             existing,
+            false,
             settings,
             &state,
             logger,
@@ -274,6 +281,7 @@ async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
+    dry_run: bool,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
@@ -496,6 +504,7 @@ async fn do_lock(
             index_locations,
             build_options,
             upgrade,
+            dry_run,
             &options,
             &database,
             printer,
@@ -670,6 +679,7 @@ impl ValidatedLock {
         index_locations: &IndexLocations,
         build_options: &BuildOptions,
         upgrade: &Upgrade,
+        dry_run: bool,
         options: &Options,
         database: &DistributionDatabase<'_, Context>,
         printer: Printer,
@@ -745,14 +755,18 @@ impl ValidatedLock {
         match upgrade {
             Upgrade::None => {}
             Upgrade::All => {
-                // If the user specified `--upgrade`, then we can't use the existing lockfile.
-                debug!("Ignoring existing lockfile due to `--upgrade`");
-                return Ok(Self::Unusable(lock));
+                if !dry_run {
+                    // If the user specified `--upgrade`, then we can't use the existing lockfile.
+                    debug!("Ignoring existing lockfile due to `--upgrade`");
+                    return Ok(Self::Unusable(lock));
+                }
             }
             Upgrade::Packages(_) => {
-                // If the user specified `--upgrade-package`, then at best we can prefer some of
-                // the existing versions.
-                return Ok(Self::Preferable(lock));
+                if !dry_run {
+                    // If the user specified `--upgrade-package`, then at best we can prefer some of
+                    // the existing versions.
+                    return Ok(Self::Preferable(lock));
+                }
             }
         }
 
