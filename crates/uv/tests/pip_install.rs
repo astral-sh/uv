@@ -2010,6 +2010,66 @@ fn install_only_binary_all_and_no_binary_all() {
     context.assert_command("import anyio").failure();
 }
 
+/// Binary dependencies in the cache should be reused when the user provides `--no-build`.
+#[test]
+fn install_no_binary_cache() {
+    let context = TestContext::new("3.12");
+
+    // Install a binary distribution.
+    uv_snapshot!(
+        context.pip_install().arg("idna"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+
+    // Re-create the virtual environment.
+    context.venv().assert().success();
+
+    // Re-install. The distribution should be installed from the cache.
+    uv_snapshot!(
+        context.pip_install().arg("idna"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+
+    // Re-create the virtual environment.
+    context.venv().assert().success();
+
+    // Install with `--no-binary`. The distribution should be built from source, despite a binary
+    // distribution being available in the cache.
+    uv_snapshot!(
+        context.pip_install().arg("idna").arg("--no-binary").arg(":all:"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+}
+
 /// Respect `--only-binary` flags in `requirements.txt`
 #[test]
 fn only_binary_requirements_txt() {
@@ -2120,6 +2180,63 @@ fn only_binary_editable_setup_py() {
      + idna==3.6
      + setup-py-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/setup_py_editable)
      + sniffio==1.3.1
+    "###
+    );
+}
+
+#[test]
+fn cache_priority() {
+    let context = TestContext::new("3.12");
+
+    // Install a specific `idna` version.
+    uv_snapshot!(
+        context.pip_install().arg("idna==3.6"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+
+    // Install a lower `idna` version.
+    uv_snapshot!(
+        context.pip_install().arg("idna==3.0"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - idna==3.6
+     + idna==3.0
+    "###
+    );
+
+    // Re-create the virtual environment.
+    context.venv().assert().success();
+
+    // Install `idna` without a version specifier.
+    uv_snapshot!(
+        context.pip_install().arg("idna"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
     "###
     );
 }

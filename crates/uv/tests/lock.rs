@@ -7473,7 +7473,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + packaging==23.2
      + project==0.1.0 (from file://[TEMP_DIR]/)
