@@ -97,7 +97,7 @@ impl CachedWheel {
         let path = path.as_ref();
 
         // Determine the wheel filename.
-        let filename = path.file_name()?.to_str()?;
+        let filename = path.file_stem()?.to_str()?;
         let filename = WheelFilename::from_stem(filename).ok()?;
 
         // Read the pointer.
@@ -121,7 +121,7 @@ impl CachedWheel {
         let path = path.as_ref();
 
         // Determine the wheel filename.
-        let filename = path.file_name()?.to_str()?;
+        let filename = path.file_stem()?.to_str()?;
         let filename = WheelFilename::from_stem(filename).ok()?;
 
         // Read the pointer.
