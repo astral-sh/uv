@@ -2264,16 +2264,16 @@ fn init_with_author() -> Result<()> {
         .status()?;
     Command::new("git")
         .arg("config")
+        .arg("--local")
         .arg("user.name")
         .arg("Alice")
-        .arg("--local")
         .current_dir(&context.temp_dir)
         .status()?;
     Command::new("git")
         .arg("config")
+        .arg("--local")
         .arg("user.email")
         .arg("alice@example.com")
-        .arg("--local")
         .current_dir(&context.temp_dir)
         .status()?;
 
@@ -2291,18 +2291,18 @@ fn init_with_author() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "temp"
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
         authors = [
-          { name = "Alice", email = "alice@example.com" } 
+            { name = "Alice", email = "alice@example.com" } 
         ]
         requires-python = ">=3.12"
         dependencies = []
-        "###
+        "#
         );
     });
 

@@ -817,7 +817,7 @@ fn pyproject_project(
         dependencies = []
     "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
-        authors = if author.is_empty() { String::new() } else { format!("\nauthors = [\n  {} \n]", author.to_toml_string()) },
+        authors = if author.is_empty() { String::new() } else { format!("\nauthors = [\n    {} \n]", author.to_toml_string()) },
         requires_python = requires_python.specifiers(),
     }
 }
