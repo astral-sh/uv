@@ -66,6 +66,7 @@ impl LockResult {
 }
 
 /// Resolve the project requirements into a lockfile.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn lock(
     project_dir: &Path,
     locked: bool,
