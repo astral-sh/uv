@@ -13372,7 +13372,7 @@ fn lock_dry_run() -> Result<()> {
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    Lockfile modifications:
+    Planned lockfile modifications:
     Remove anyio v2.2.0, v3.7.1
     Add certifi v2024.2.2
     Add chardet v4.0.0
