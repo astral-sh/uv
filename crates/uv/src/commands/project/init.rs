@@ -626,7 +626,7 @@ impl InitProjectKind {
         let author = if no_authors {
             Author::default()
         } else {
-            get_author_info_from_git(path)
+            get_author_from_git(path)
                 .inspect_err(|err| {
                     debug!("Failed to get author information from git: {err}");
                 })
@@ -723,9 +723,9 @@ impl InitProjectKind {
         let author = if no_authors {
             Author::default()
         } else {
-            get_author_info_from_git(path)
+            get_author_from_git(path)
                 .inspect_err(|err| {
-                    debug!("Failed to get author information from git: {err}");
+                    debug!("Failed to get author from git: {err}");
                 })
                 .unwrap_or_default()
         };
@@ -888,33 +888,36 @@ fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
     Ok(())
 }
 
-/// Returns the default author from git configuration.
-fn get_author_info_from_git(path: &Path) -> Result<Author> {
+/// Fetch the default author from git configuration.
+fn get_author_from_git(path: &Path) -> Result<Author> {
     let Ok(git) = which::which("git") else {
         anyhow::bail!("`git` not found in PATH")
     };
 
     let mut author = Author::default();
 
-    let output = Command::new(git)
+    let output = Command::new(&git)
         .arg("config")
-        .arg("--get-regexp")
+        .arg("get")
+        .arg("user.name")
         .current_dir(path)
-        .arg("^user.(name|email)$")
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .output()?;
+    if output.status.success() {
+        author.name = Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
+    }
 
-    for line in std::str::from_utf8(&output.stdout)?.lines() {
-        match line.split_once(' ') {
-            Some(("user.email", value)) => {
-                author.email = Some(value.to_string());
-            }
-            Some(("user.name", value)) => {
-                author.name = Some(value.to_string());
-            }
-            _ => {}
-        }
+    let output = Command::new(&git)
+        .arg("config")
+        .arg("get")
+        .arg("user.email")
+        .current_dir(path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()?;
+    if output.status.success() {
+        author.email = Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
     }
 
     Ok(author)
