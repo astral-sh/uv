@@ -70,6 +70,7 @@ pub(crate) async fn lock(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
+    dry_run: bool,
     python: Option<String>,
     settings: ResolverSettings,
     python_preference: PythonPreference,
@@ -80,6 +81,12 @@ pub(crate) async fn lock(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
+    if dry_run && frozen {
+        warn_user_once!("`--dry_run` is a no-op when used with `--frozen`");
+    } else if dry_run && locked {
+        warn_user_once!("`--dry_run` is a no-op when used with `--locked`");
+    }
+
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
@@ -97,36 +104,72 @@ pub(crate) async fn lock(
     .await?
     .into_interpreter();
 
-    // Perform the lock operation.
-    match do_safe_lock(
-        locked,
-        frozen,
-        &workspace,
-        &interpreter,
-        settings.as_ref(),
-        Box::new(DefaultResolveLogger),
-        connectivity,
-        concurrency,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await
-    {
-        Ok(lock) => {
-            if let LockResult::Changed(Some(previous), lock) = &lock {
-                report_upgrades(previous, lock, printer)?;
+    if dry_run {
+        let state = SharedState::default();
+
+        // Read the existing lockfile.
+        let existing = read(&workspace).await?;
+
+        // Perform the lock operation.
+        let result = do_lock(
+            &workspace,
+            &interpreter,
+            existing,
+            settings.as_ref(),
+            &state,
+            Box::new(DefaultResolveLogger),
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?;
+
+        if let LockResult::Changed(Some(previous), result) = result {
+            writeln!(printer.stderr(), "{}", "Lockfile modifications:".bold())?;
+            report_upgrades(&previous, &result, printer, true)?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                "No lockfile changes detected".bold()
+            )?;
+        }
+
+        Ok(ExitStatus::Success)
+    } else {
+        // Perform the lock operation.
+        match do_safe_lock(
+            locked,
+            frozen,
+            &workspace,
+            &interpreter,
+            settings.as_ref(),
+            Box::new(DefaultResolveLogger),
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await
+        {
+            Ok(lock) => {
+                if let LockResult::Changed(Some(previous), lock) = &lock {
+                    report_upgrades(previous, lock, printer, false)?;
+                }
+                Ok(ExitStatus::Success)
             }
-            Ok(ExitStatus::Success)
+            Err(ProjectError::Operation(pip::operations::Error::Resolve(
+                uv_resolver::ResolveError::NoSolution(err),
+            ))) => {
+                let report = miette::Report::msg(format!("{err}")).context(err.header());
+                eprint!("{report:?}");
+                Ok(ExitStatus::Failure)
+            }
+            Err(err) => Err(err.into()),
         }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            let report = miette::Report::msg(format!("{err}")).context(err.header());
-            eprint!("{report:?}");
-            Ok(ExitStatus::Failure)
-        }
-        Err(err) => Err(err.into()),
     }
 }
 
@@ -873,7 +916,12 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
 }
 
 /// Reports on the versions that were upgraded in the new lockfile.
-fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> anyhow::Result<()> {
+fn report_upgrades(
+    existing_lock: &Lock,
+    new_lock: &Lock,
+    printer: Printer,
+    dry_run: bool,
+) -> anyhow::Result<()> {
     let existing_packages: FxHashMap<&PackageName, BTreeSet<&Version>> =
         existing_lock.packages().iter().fold(
             FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
@@ -917,7 +965,7 @@ fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> a
                     writeln!(
                         printer.stderr(),
                         "{} {name} {existing_versions} -> {new_versions}",
-                        "Updated".green().bold()
+                        if dry_run { "Update" } else { "Updated" }.green().bold()
                     )?;
                 }
             }
@@ -930,7 +978,7 @@ fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> a
                 writeln!(
                     printer.stderr(),
                     "{} {name} {existing_versions}",
-                    "Removed".red().bold()
+                    if dry_run { "Remove" } else { "Removed" }.red().bold()
                 )?;
             }
             (None, Some(new_versions)) => {
@@ -942,7 +990,7 @@ fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> a
                 writeln!(
                     printer.stderr(),
                     "{} {name} {new_versions}",
-                    "Added".green().bold()
+                    if dry_run { "Add" } else { "Added" }.green().bold()
                 )?;
             }
             (None, None) => {
