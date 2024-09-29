@@ -753,17 +753,15 @@ impl ValidatedLock {
             };
         }
 
-        match upgrade {
-            Upgrade::None => {}
-            Upgrade::All => {
-                if !dry_run {
+        if !dry_run {
+            match upgrade {
+                Upgrade::None => {}
+                Upgrade::All => {
                     // If the user specified `--upgrade`, then we can't use the existing lockfile.
                     debug!("Ignoring existing lockfile due to `--upgrade`");
                     return Ok(Self::Unusable(lock));
                 }
-            }
-            Upgrade::Packages(_) => {
-                if !dry_run {
+                Upgrade::Packages(_) => {
                     // If the user specified `--upgrade-package`, then at best we can prefer some of
                     // the existing versions.
                     return Ok(Self::Preferable(lock));
