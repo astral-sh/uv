@@ -444,13 +444,24 @@ impl IntoIterator for Sources {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case", untagged)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
 #[allow(clippy::large_enum_variant)]
 enum SourcesWire {
     One(Source),
     Many(Vec<Source>),
+}
+
+impl<'de> serde::de::Deserialize<'de> for SourcesWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        serde_untagged::UntaggedEnumVisitor::new()
+            .map(|map| map.deserialize().map(SourcesWire::One))
+            .seq(|seq| seq.deserialize().map(SourcesWire::Many))
+            .deserialize(deserializer)
+    }
 }
 
 impl TryFrom<SourcesWire> for Sources {
