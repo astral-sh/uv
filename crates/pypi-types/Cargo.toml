@@ -27,6 +27,7 @@ mailparse = { workspace = true }
 regex = { workspace = true }
 rkyv = { workspace = true }
 serde = { workspace = true }
+serde-untagged = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }

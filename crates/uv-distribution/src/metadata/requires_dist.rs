@@ -227,6 +227,29 @@ mod test {
     }
 
     #[tokio::test]
+    async fn wrong_type() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm",
+            ]
+            [tool.uv.sources]
+            tqdm = true
+        "#};
+
+        assert_snapshot!(format_err(input).await, @r###"
+        error: TOML parse error at line 8, column 8
+          |
+        8 | tqdm = true
+          |        ^^^^
+        invalid type: boolean `true`, expected an array or map
+
+        "###);
+    }
+
+    #[tokio::test]
     async fn too_many_git_specs() {
         let input = indoc! {r#"
             [project]
@@ -264,7 +287,7 @@ mod test {
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum SourcesWire
+        data did not match any variant of untagged enum Source
 
         "###);
     }
@@ -288,7 +311,7 @@ mod test {
           |
         8 | tqdm = { path = "tqdm", index = "torch" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum SourcesWire
+        data did not match any variant of untagged enum Source
 
         "###);
     }
@@ -348,7 +371,7 @@ mod test {
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum SourcesWire
+        data did not match any variant of untagged enum Source
 
         "###);
     }
