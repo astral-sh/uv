@@ -349,9 +349,13 @@ async fn build_package(
     let output_dir = if let Some(output_dir) = output_dir {
         Cow::Owned(std::path::absolute(output_dir)?)
     } else {
-        match &source.source {
-            Source::Directory(src) => Cow::Owned(src.join("dist")),
-            Source::File(src) => Cow::Borrowed(src.parent().unwrap()),
+        if let Ok(workspace) = workspace {
+            Cow::Owned(workspace.install_path().join("dist"))
+        } else {
+            match &source.source {
+                Source::Directory(src) => Cow::Owned(src.join("dist")),
+                Source::File(src) => Cow::Borrowed(src.parent().unwrap()),
+            }
         }
     };
 
