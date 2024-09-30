@@ -1,3 +1,4 @@
+use std::str::FromStr as _;
 use std::{collections::BTreeSet, fmt::Write};
 
 use anyhow::{Context as _, Result};
@@ -317,6 +318,7 @@ async fn upgrade_tool(
         (environment, outcome)
     };
 
+    // If we modified the target tool, reinstall the entrypoints.
     if matches!(
         outcome,
         UpgradeOutcome::UpgradeEnvironment | UpgradeOutcome::UpgradeTool
@@ -330,13 +332,45 @@ async fn upgrade_tool(
         fs_err::create_dir_all(&executable_directory)
             .context("Failed to create executable directory")?;
 
-        // If we modified the target tool, reinstall the entrypoints.
+        // Install additional entrypoints from dependencies,
+        let mut extra_entrypoints_packages = BTreeSet::new();
+        for entry in existing_tool_receipt.entrypoints() {
+            if let Some(Ok(from)) = entry.from.as_ref().map(|v| PackageName::from_str(v)) {
+                if from != *name {
+                    extra_entrypoints_packages.insert(from);
+                }
+            }
+        }
+        let mut deps_entrypoints = vec![];
+        for pkg in extra_entrypoints_packages {
+            debug!(
+                "Installing entrypoints for {} as part of tool {}",
+                pkg, name
+            );
+            let mut entrypoints = install_executables(
+                &environment,
+                name,
+                &pkg,
+                installed_tools,
+                &deps_entrypoints,
+                &executable_directory,
+                ToolOptions::from(options.clone()),
+                true,
+                existing_tool_receipt.python().to_owned(),
+                requirements.to_vec(),
+                printer,
+            )?;
+            deps_entrypoints.append(&mut entrypoints);
+        }
+
+        // Install entrypoints from the target package.
+        debug!("Installing entrypoints for tool {name}");
         install_executables(
             &environment,
             name,
             name,
             installed_tools,
-            &[],
+            &deps_entrypoints,
             &executable_directory,
             ToolOptions::from(options),
             true,

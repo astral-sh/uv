@@ -446,7 +446,7 @@ pub(crate) async fn install(
     }
 
     // Install entrypoints from the target package.
-    debug!("Installing entrypoints tool {}", from.name);
+    debug!("Installing entrypoints for tool {}", from.name);
     install_executables(
         &environment,
         &from.name,
