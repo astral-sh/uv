@@ -364,7 +364,6 @@ pub(crate) async fn pip_sync(
         &index_locations,
         config_settings,
         &hasher,
-        &markers,
         &tags,
         &client,
         &state.in_flight,

@@ -336,7 +336,6 @@ pub(super) async fn do_sync(
         index_locations,
         config_setting,
         &hasher,
-        &markers,
         tags,
         &client,
         &state.in_flight,
