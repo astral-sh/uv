@@ -1325,6 +1325,7 @@ mod test {
 
     #[cfg(unix)]
     #[test_case(Path::new("semicolon.txt"))]
+    #[test_case(Path::new("hash.txt"))]
     #[tokio::test]
     async fn parse_err(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");

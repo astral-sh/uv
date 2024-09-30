@@ -834,11 +834,19 @@ fn parse_extras_cursor<T: Pep508Url>(
 /// Parse a raw string for a URL requirement, which could be either a URL or a local path, and which
 /// could contain unexpanded environment variables.
 ///
+/// When parsing, we eat characters until we see any of the following:
+/// - A newline.
+/// - A semicolon (marker) or hash (comment), _preceded_ by a space. We parse the URL until the last
+///   non-whitespace character (inclusive).
+/// - A semicolon (marker) or hash (comment) _followed_ by a space. We treat this as an error, since
+///   the end of the URL is ambiguous.
+///
 /// For example:
 /// - `https://pypi.org/project/requests/...`
 /// - `file:///home/ferris/project/scripts/...`
 /// - `file:../editable/`
 /// - `../editable/`
+/// - `../path to editable/`
 /// - `https://download.pytorch.org/whl/torch_stable.html`
 fn parse_url<T: Pep508Url>(
     cursor: &mut Cursor,
@@ -847,7 +855,40 @@ fn parse_url<T: Pep508Url>(
     // wsp*
     cursor.eat_whitespace();
     // <URI_reference>
-    let (start, len) = cursor.take_while(|char| !char.is_whitespace());
+    let (start, len) = {
+        let start = cursor.pos();
+        let mut len = 0;
+        while let Some((_, c)) = cursor.next() {
+            // If we see a line break, we're done.
+            if matches!(c, '\r' | '\n') {
+                break;
+            }
+
+            // If we see top-level whitespace, check if it's followed by a semicolon or hash. If so,
+            // end the URL at the last non-whitespace character.
+            if c.is_whitespace() {
+                let mut cursor = cursor.clone();
+                cursor.eat_whitespace();
+                if matches!(cursor.peek_char(), None | Some(';' | '#')) {
+                    break;
+                }
+            }
+
+            len += c.len_utf8();
+
+            // If we see a top-level semicolon or hash followed by whitespace, we're done.
+            match c {
+                ';' if cursor.peek_char().is_some_and(char::is_whitespace) => {
+                    break;
+                }
+                '#' if cursor.peek_char().is_some_and(char::is_whitespace) => {
+                    break;
+                }
+                _ => {}
+            }
+        }
+        (start, len)
+    };
     let url = cursor.slice(start, len);
     if url.is_empty() {
         return Err(Pep508Error {
@@ -1087,16 +1128,21 @@ fn parse_pep508_requirement<T: Pep508Url>(
     // wsp*
     cursor.eat_whitespace();
     if let Some((pos, char)) = cursor.next() {
-        if let Some(VersionOrUrl::Url(url)) = requirement_kind {
-            if marker.is_none() && url.to_string().ends_with(';') {
-                return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(
-                        "Missing space before ';', the end of the URL is ambiguous".to_string(),
-                    ),
-                    start: requirement_end - ';'.len_utf8(),
-                    len: ';'.len_utf8(),
-                    input: cursor.to_string(),
-                });
+        if marker.is_none() {
+            if let Some(VersionOrUrl::Url(url)) = requirement_kind {
+                let url = url.to_string();
+                for c in [';', '#'] {
+                    if url.ends_with(c) {
+                        return Err(Pep508Error {
+                            message: Pep508ErrorSource::String(format!(
+                                "Missing space before '{c}', the end of the URL is ambiguous"
+                            )),
+                            start: requirement_end - c.len_utf8(),
+                            len: c.len_utf8(),
+                            input: cursor.to_string(),
+                        });
+                    }
+                }
             }
         }
         let message = if marker.is_none() {
