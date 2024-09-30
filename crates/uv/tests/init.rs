@@ -3,6 +3,7 @@
 use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::prelude::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
@@ -2188,13 +2189,14 @@ fn init_vcs_none() {
 
 /// Run `uv init` from within a Git repository. Do not try to reinitialize one.
 #[test]
-fn init_inside_git_repo() -> Result<()> {
+fn init_inside_git_repo() {
     let context = TestContext::new("3.12");
 
     Command::new("git")
         .arg("init")
         .current_dir(&context.temp_dir)
-        .status()?;
+        .assert()
+        .success();
 
     let child = context.temp_dir.child("foo");
 
@@ -2220,8 +2222,6 @@ fn init_inside_git_repo() -> Result<()> {
     "###);
 
     child.child(".gitignore").assert(predicate::path::missing());
-
-    Ok(())
 }
 
 #[test]
@@ -2261,39 +2261,59 @@ fn init_with_author() -> Result<()> {
     Command::new("git")
         .arg("init")
         .current_dir(&context.temp_dir)
-        .status()?;
+        .assert()
+        .success();
     Command::new("git")
         .arg("config")
         .arg("--local")
         .arg("user.name")
         .arg("Alice")
         .current_dir(&context.temp_dir)
-        .status()?;
+        .assert()
+        .success();
     Command::new("git")
         .arg("config")
         .arg("--local")
         .arg("user.email")
         .arg("alice@example.com")
         .current_dir(&context.temp_dir)
-        .status()?;
+        .assert()
+        .success();
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Initialized project `temp`
-    "###);
-
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    // `authors` is not filled for non-package application by default,
+    context.init().arg("foo").assert().success();
+    let pyproject = fs_err::read_to_string(context.temp_dir.join("foo/pyproject.toml"))?;
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(
             pyproject, @r#"
         [project]
-        name = "temp"
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        );
+    });
+
+    // use `--authors` to explicitly fill it.
+    context
+        .init()
+        .arg("bar")
+        .arg("--authors")
+        .assert()
+        .success();
+    let pyproject = fs_err::read_to_string(context.temp_dir.join("bar/pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "bar"
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
@@ -2302,6 +2322,61 @@ fn init_with_author() -> Result<()> {
         ]
         requires-python = ">=3.12"
         dependencies = []
+        "#
+        );
+    });
+
+    // Fill `authors` for library by default,
+    context.init().arg("baz").arg("--lib").assert().success();
+    let pyproject = fs_err::read_to_string(context.temp_dir.join("baz/pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "baz"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        authors = [
+            { name = "Alice", email = "alice@example.com" } 
+        ]
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+        );
+    });
+
+    // use `--no-authors` to prevent it.
+    context
+        .init()
+        .arg("qux")
+        .arg("--lib")
+        .arg("--no-authors")
+        .assert()
+        .success();
+    let pyproject = fs_err::read_to_string(context.temp_dir.join("qux/pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "qux"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#
         );
     });

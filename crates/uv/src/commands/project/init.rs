@@ -37,7 +37,7 @@ pub(crate) async fn init(
     init_kind: InitKind,
     vcs: Option<VersionControlSystem>,
     no_readme: bool,
-    no_authors: bool,
+    with_authors: Option<bool>,
     no_pin_python: bool,
     python: Option<String>,
     no_workspace: bool,
@@ -64,7 +64,7 @@ pub(crate) async fn init(
                 printer,
                 no_workspace,
                 no_readme,
-                no_authors,
+                with_authors,
                 no_pin_python,
                 package,
                 native_tls,
@@ -114,7 +114,7 @@ pub(crate) async fn init(
                 project_kind,
                 vcs,
                 no_readme,
-                no_authors,
+                with_authors,
                 no_pin_python,
                 python,
                 no_workspace,
@@ -169,7 +169,7 @@ async fn init_script(
     printer: Printer,
     no_workspace: bool,
     no_readme: bool,
-    no_authors: bool,
+    with_authors: Option<bool>,
     no_pin_python: bool,
     package: bool,
     native_tls: bool,
@@ -180,7 +180,7 @@ async fn init_script(
     if no_readme {
         warn_user_once!("`--no_readme` is a no-op for Python scripts, which are standalone");
     }
-    if no_authors {
+    if with_authors.is_some() {
         warn_user_once!("`--no_authors` is a no-op for Python scripts, which are standalone");
     }
     if package {
@@ -245,7 +245,7 @@ async fn init_project(
     project_kind: InitProjectKind,
     vcs: Option<VersionControlSystem>,
     no_readme: bool,
-    no_authors: bool,
+    with_authors: Option<bool>,
     no_pin_python: bool,
     python: Option<String>,
     no_workspace: bool,
@@ -484,7 +484,7 @@ async fn init_project(
             &requires_python,
             python_request.as_ref(),
             vcs,
-            no_authors,
+            with_authors,
             no_readme,
             package,
         )
@@ -574,7 +574,7 @@ impl InitProjectKind {
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
-        no_authors: bool,
+        with_authors: Option<bool>,
         no_readme: bool,
         package: bool,
     ) -> Result<()> {
@@ -586,7 +586,7 @@ impl InitProjectKind {
                     requires_python,
                     python_request,
                     vcs,
-                    no_authors,
+                    with_authors,
                     no_readme,
                     package,
                 )
@@ -599,7 +599,7 @@ impl InitProjectKind {
                     requires_python,
                     python_request,
                     vcs,
-                    no_authors,
+                    with_authors,
                     no_readme,
                     package,
                 )
@@ -616,25 +616,21 @@ impl InitProjectKind {
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
-        no_authors: bool,
+        with_authors: Option<bool>,
         no_readme: bool,
         package: bool,
     ) -> Result<()> {
         fs_err::create_dir_all(path)?;
 
-        // Get the author information from git configuration.
-        let author = if no_authors {
-            Author::default()
+        // Do no fill in `authors` for non-packaged applications unless explicitly requested.
+        let author = if with_authors.unwrap_or(package) {
+            get_author_info(path)
         } else {
-            get_author_from_git(path)
-                .inspect_err(|err| {
-                    debug!("Failed to get author information from git: {err}");
-                })
-                .unwrap_or_default()
+            None
         };
 
         // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(name, requires_python, &author, no_readme);
+        let mut pyproject = pyproject_project(name, requires_python, author.as_ref(), no_readme);
 
         // Include additional project configuration for packaged applications
         if package {
@@ -709,7 +705,7 @@ impl InitProjectKind {
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
-        no_authors: bool,
+        with_authors: Option<bool>,
         no_readme: bool,
         package: bool,
     ) -> Result<()> {
@@ -719,19 +715,14 @@ impl InitProjectKind {
 
         fs_err::create_dir_all(path)?;
 
-        // Get the author information from git configuration.
-        let author = if no_authors {
-            Author::default()
+        let author = if with_authors.unwrap_or(true) {
+            get_author_info(path)
         } else {
-            get_author_from_git(path)
-                .inspect_err(|err| {
-                    debug!("Failed to get author from git: {err}");
-                })
-                .unwrap_or_default()
+            None
         };
 
         // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(name, requires_python, &author, no_readme);
+        let mut pyproject = pyproject_project(name, requires_python, author.as_ref(), no_readme);
 
         // Always include a build system if the project is packaged.
         pyproject.push('\n');
@@ -780,23 +771,21 @@ impl InitProjectKind {
     }
 }
 
-#[derive(Debug, Default)]
-struct Author {
-    name: Option<String>,
-    email: Option<String>,
+#[derive(Debug)]
+enum Author {
+    Name(String),
+    Email(String),
+    NameEmail { name: String, email: String },
 }
 
 impl Author {
-    fn is_empty(&self) -> bool {
-        self.name.is_none() && self.email.is_none()
-    }
-
     fn to_toml_string(&self) -> String {
-        match (self.name.as_deref(), self.email.as_deref()) {
-            (Some(name), Some(email)) => format!("{{ name = \"{name}\", email = \"{email}\" }}"),
-            (Some(name), None) => format!("{{ name = \"{name}\" }}"),
-            (None, Some(email)) => format!("{{ email = \"{email}\" }}"),
-            (None, None) => String::new(),
+        match self {
+            Self::NameEmail { name, email } => {
+                format!("{{ name = \"{name}\", email = \"{email}\" }}")
+            }
+            Self::Name(name) => format!("{{ name = \"{name}\" }}"),
+            Self::Email(email) => format!("{{ email = \"{email}\" }}"),
         }
     }
 }
@@ -805,7 +794,7 @@ impl Author {
 fn pyproject_project(
     name: &PackageName,
     requires_python: &RequiresPython,
-    author: &Author,
+    author: Option<&Author>,
     no_readme: bool,
 ) -> String {
     indoc::formatdoc! {r#"
@@ -817,7 +806,7 @@ fn pyproject_project(
         dependencies = []
     "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
-        authors = if author.is_empty() { String::new() } else { format!("\nauthors = [\n    {} \n]", author.to_toml_string()) },
+        authors = author.map_or_else(String::new, |author| format!("\nauthors = [\n    {} \n]", author.to_toml_string())),
         requires_python = requires_python.specifiers(),
     }
 }
@@ -888,13 +877,26 @@ fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
     Ok(())
 }
 
+/// Try to get the author information.
+///
+/// Currently, this only tries to get the author information from git.
+fn get_author_info(path: &Path) -> Option<Author> {
+    match get_author_from_git(path) {
+        Ok(author) => return Some(author),
+        Err(err) => warn!("Failed to get author from git: {err}"),
+    }
+
+    None
+}
+
 /// Fetch the default author from git configuration.
 fn get_author_from_git(path: &Path) -> Result<Author> {
     let Ok(git) = which::which("git") else {
         anyhow::bail!("`git` not found in PATH")
     };
 
-    let mut author = Author::default();
+    let mut name = None;
+    let mut email = None;
 
     let output = Command::new(&git)
         .arg("config")
@@ -905,7 +907,7 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
         .stderr(Stdio::null())
         .output()?;
     if output.status.success() {
-        author.name = Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
+        name = Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
     }
 
     let output = Command::new(&git)
@@ -917,8 +919,15 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
         .stderr(Stdio::null())
         .output()?;
     if output.status.success() {
-        author.email = Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
+        email = Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
     }
+
+    let author = match (name, email) {
+        (Some(name), Some(email)) => Author::NameEmail { name, email },
+        (Some(name), None) => Author::Name(name),
+        (None, Some(email)) => Author::Email(email),
+        (None, None) => anyhow::bail!("No author information found"),
+    };
 
     Ok(author)
 }
