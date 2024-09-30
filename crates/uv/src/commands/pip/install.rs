@@ -413,7 +413,6 @@ pub(crate) async fn pip_install(
         &index_locations,
         config_settings,
         &hasher,
-        &markers,
         &tags,
         &client,
         &state.in_flight,
