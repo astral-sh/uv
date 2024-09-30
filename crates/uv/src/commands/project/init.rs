@@ -13,7 +13,7 @@ use uv_configuration::{VersionControlError, VersionControlSystem};
 use uv_fs::{Simplified, CWD};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVersionFile, VersionRequest,
+    PythonVersionFile, VersionRequest, PYTHON_VERSION_FILENAME,
 };
 use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
@@ -458,6 +458,7 @@ async fn init_project(
         .init(
             name,
             path,
+            workspace.as_ref(),
             &requires_python,
             python_request.as_ref(),
             vcs,
@@ -547,6 +548,7 @@ impl InitProjectKind {
         self,
         name: &PackageName,
         path: &Path,
+        workspace: Option<&Workspace>,
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
@@ -558,6 +560,7 @@ impl InitProjectKind {
                 self.init_application(
                     name,
                     path,
+                    workspace,
                     requires_python,
                     python_request,
                     vcs,
@@ -570,6 +573,7 @@ impl InitProjectKind {
                 self.init_library(
                     name,
                     path,
+                    workspace,
                     requires_python,
                     python_request,
                     vcs,
@@ -586,6 +590,7 @@ impl InitProjectKind {
         self,
         name: &PackageName,
         path: &Path,
+        workspace: Option<&Workspace>,
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
@@ -643,18 +648,8 @@ impl InitProjectKind {
         }
         fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
-        // Write .python-version if it doesn't exist.
-        if let Some(python_request) = python_request {
-            if PythonVersionFile::discover(path, false, false)
-                .await?
-                .is_none()
-            {
-                PythonVersionFile::new(path.join(".python-version"))
-                    .with_versions(vec![python_request.clone()])
-                    .write()
-                    .await?;
-            }
-        }
+        // Write `.python-version` if it doesn't exist.
+        write_python_version_file(path, python_request, workspace).await?;
 
         // Initialize the version control system.
         init_vcs(path, vcs)?;
@@ -667,6 +662,7 @@ impl InitProjectKind {
         self,
         name: &PackageName,
         path: &Path,
+        workspace: Option<&Workspace>,
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
@@ -708,18 +704,8 @@ impl InitProjectKind {
             fs_err::write(py_typed, "")?;
         }
 
-        // Write .python-version if it doesn't exist.
-        if let Some(python_request) = python_request {
-            if PythonVersionFile::discover(path, false, false)
-                .await?
-                .is_none()
-            {
-                PythonVersionFile::new(path.join(".python-version"))
-                    .with_versions(vec![python_request.clone()])
-                    .write()
-                    .await?;
-            }
-        }
+        // Write `.python-version` if it doesn't exist.
+        write_python_version_file(path, python_request, workspace).await?;
 
         // Initialize the version control system.
         init_vcs(path, vcs)?;
@@ -763,6 +749,43 @@ fn pyproject_project_scripts(package: &PackageName, executable_name: &str, targe
         [project.scripts]
         {executable_name} = "{module_name}:{target}"
     "#}
+}
+
+/// Create or update the `.python-version` file in the given path or workspace.
+async fn write_python_version_file(
+    path: &Path,
+    python_request: Option<&PythonRequest>,
+    workspace: Option<&Workspace>,
+) -> Result<()> {
+    let Some(python_request) = python_request else {
+        return Ok(());
+    };
+
+    if let Some(workspace) = workspace {
+        let version_file = workspace.python_version_file();
+        // TODO: If the version file already exists, but does not contain the requested version,
+        // should we update it? (add the version, or replace the existing one)
+        // For now, we keep the existing behavior: if the file exists, we don't update it.
+        if !version_file.path().try_exists()? {
+            version_file
+                .clone()
+                .with_versions(vec![python_request.clone()])
+                .write()
+                .await?;
+        }
+    } else {
+        if PythonVersionFile::discover(path, false, false)
+            .await?
+            .is_none()
+        {
+            PythonVersionFile::new(path.join(PYTHON_VERSION_FILENAME))
+                .with_versions(vec![python_request.clone()])
+                .write()
+                .await?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Initialize the version control system at the given path.

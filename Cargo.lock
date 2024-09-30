@@ -5329,6 +5329,7 @@ dependencies = [
  "uv-macros",
  "uv-normalize",
  "uv-options-metadata",
+ "uv-python",
  "uv-warnings",
 ]
 
