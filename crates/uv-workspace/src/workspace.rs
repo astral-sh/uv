@@ -1757,8 +1757,7 @@ mod tests {
                 "sources": {
                   "bird-feeder": [
                     {
-                      "workspace": true,
-                      "marker": null
+                      "workspace": true
                     }
                   ]
                 },
@@ -1778,8 +1777,7 @@ mod tests {
                       "sources": {
                         "bird-feeder": [
                           {
-                            "workspace": true,
-                            "marker": null
+                            "workspace": true
                           }
                         ]
                       },

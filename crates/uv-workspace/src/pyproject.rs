@@ -423,6 +423,16 @@ impl Sources {
     pub fn iter(&self) -> impl Iterator<Item = &Source> {
         self.0.iter()
     }
+
+    /// Returns `true` if the sources list is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Returns the number of sources in the list.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl IntoIterator for Sources {

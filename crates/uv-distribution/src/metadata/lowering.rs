@@ -34,10 +34,7 @@ impl LoweredRequirement {
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
         workspace: &'data Workspace,
-    ) -> Result<
-        impl Iterator<Item = Result<LoweredRequirement, LoweringError>> + 'data,
-        LoweringError,
-    > {
+    ) -> impl Iterator<Item = Result<LoweredRequirement, LoweringError>> + 'data {
         let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), Origin::Project)
         } else if let Some(source) = workspace.sources().get(&requirement.name) {
@@ -51,14 +48,16 @@ impl LoweredRequirement {
             // We require that when you use a package that's part of the workspace, ...
             !workspace.packages().contains_key(&requirement.name)
                 // ... it must be declared as a workspace dependency (`workspace = true`), ...
-                || source.as_ref().is_some_and(|source| source.iter().all(|source| {
+                || source.as_ref().filter(|sources| !sources.is_empty()).is_some_and(|source| source.iter().all(|source| {
                     matches!(source, Source::Workspace { workspace: true, .. })
                 }))
                 // ... except for recursive self-inclusion (extras that activate other extras), e.g.
                 // `framework[machine_learning]` depends on `framework[cuda]`.
                 || &requirement.name == project_name;
         if !workspace_package_declared {
-            return Err(LoweringError::UndeclaredWorkspacePackage);
+            return Either::Left(std::iter::once(Err(
+                LoweringError::UndeclaredWorkspacePackage,
+            )));
         }
 
         let Some(source) = source else {
@@ -73,9 +72,7 @@ impl LoweredRequirement {
                     requirement.name
                 );
             }
-            return Ok(Either::Left(std::iter::once(Ok(Self(Requirement::from(
-                requirement,
-            ))))));
+            return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
         };
 
         // Determine whether the markers cover the full space for the requirement. If not, fill the
@@ -97,7 +94,7 @@ impl LoweredRequirement {
             })
         };
 
-        Ok(Either::Right(
+        Either::Right(
             source
                 .into_iter()
                 .map(move |source| {
@@ -233,7 +230,7 @@ impl LoweredRequirement {
                     Ok(requirement) => !requirement.0.marker.is_false(),
                     Err(_) => true,
                 }),
-        ))
+        )
     }
 
     /// Lower a [`pep508_rs::Requirement`] in a non-workspace setting (for example, in a PEP 723

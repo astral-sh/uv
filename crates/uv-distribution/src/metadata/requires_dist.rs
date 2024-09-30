@@ -1,6 +1,6 @@
 use crate::metadata::{LoweredRequirement, MetadataError};
 use crate::Metadata;
-use pypi_types::Requirement;
+
 use std::collections::BTreeMap;
 use std::path::Path;
 use uv_configuration::SourceStrategy;
@@ -93,8 +93,6 @@ impl RequiresDist {
                             sources,
                             project_workspace.workspace(),
                         )
-                        .into_iter()
-                        .flatten()
                         .map(move |requirement| match requirement {
                             Ok(requirement) => Ok(requirement.into_inner()),
                             Err(err) => {
@@ -105,7 +103,7 @@ impl RequiresDist {
                     .collect::<Result<Vec<_>, _>>()?,
                 SourceStrategy::Disabled => dev_dependencies
                     .into_iter()
-                    .map(Requirement::from)
+                    .map(pypi_types::Requirement::from)
                     .collect(),
             };
             if dev_dependencies.is_empty() {
@@ -127,8 +125,6 @@ impl RequiresDist {
                         sources,
                         project_workspace.workspace(),
                     )
-                    .into_iter()
-                    .flatten()
                     .map(move |requirement| match requirement {
                         Ok(requirement) => Ok(requirement.into_inner()),
                         Err(err) => {
@@ -136,8 +132,11 @@ impl RequiresDist {
                         }
                     })
                 })
-                .collect::<Result<_, _>>()?,
-            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
+                .collect::<Result<Vec<_>, _>>()?,
+            SourceStrategy::Disabled => requires_dist
+                .into_iter()
+                .map(pypi_types::Requirement::from)
+                .collect(),
         };
 
         Ok(Self {
