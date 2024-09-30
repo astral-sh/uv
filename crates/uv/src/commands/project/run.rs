@@ -196,13 +196,13 @@ pub(crate) async fn run(
 
             let requirements = dependencies
                 .into_iter()
-                .map(|requirement| {
+                .flat_map(|requirement| {
                     LoweredRequirement::from_non_workspace_requirement(
                         requirement,
                         script_dir,
                         script_sources,
                     )
-                    .map(LoweredRequirement::into_inner)
+                    .map_ok(uv_distribution::LoweredRequirement::into_inner)
                 })
                 .collect::<Result<_, _>>()?;
             let spec = RequirementsSpecification::from_requirements(requirements);

@@ -1,6 +1,6 @@
 use crate::metadata::{LoweredRequirement, MetadataError};
 use crate::Metadata;
-use pypi_types::Requirement;
+
 use std::collections::BTreeMap;
 use std::path::Path;
 use uv_configuration::SourceStrategy;
@@ -84,7 +84,7 @@ impl RequiresDist {
                 .cloned();
             let dev_dependencies = match source_strategy {
                 SourceStrategy::Enabled => dev_dependencies
-                    .map(|requirement| {
+                    .flat_map(|requirement| {
                         let requirement_name = requirement.name.clone();
                         LoweredRequirement::from_requirement(
                             requirement,
@@ -93,13 +93,17 @@ impl RequiresDist {
                             sources,
                             project_workspace.workspace(),
                         )
-                        .map(LoweredRequirement::into_inner)
-                        .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
+                        .map(move |requirement| match requirement {
+                            Ok(requirement) => Ok(requirement.into_inner()),
+                            Err(err) => {
+                                Err(MetadataError::LoweringError(requirement_name.clone(), err))
+                            }
+                        })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
                 SourceStrategy::Disabled => dev_dependencies
                     .into_iter()
-                    .map(Requirement::from)
+                    .map(pypi_types::Requirement::from)
                     .collect(),
             };
             if dev_dependencies.is_empty() {
@@ -112,7 +116,7 @@ impl RequiresDist {
         let requires_dist = metadata.requires_dist.into_iter();
         let requires_dist = match source_strategy {
             SourceStrategy::Enabled => requires_dist
-                .map(|requirement| {
+                .flat_map(|requirement| {
                     let requirement_name = requirement.name.clone();
                     LoweredRequirement::from_requirement(
                         requirement,
@@ -121,11 +125,18 @@ impl RequiresDist {
                         sources,
                         project_workspace.workspace(),
                     )
-                    .map(LoweredRequirement::into_inner)
-                    .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
+                    .map(move |requirement| match requirement {
+                        Ok(requirement) => Ok(requirement.into_inner()),
+                        Err(err) => {
+                            Err(MetadataError::LoweringError(requirement_name.clone(), err))
+                        }
+                    })
                 })
-                .collect::<Result<_, _>>()?,
-            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
+                .collect::<Result<Vec<_>, _>>()?,
+            SourceStrategy::Disabled => requires_dist
+                .into_iter()
+                .map(pypi_types::Requirement::from)
+                .collect(),
         };
 
         Ok(Self {
@@ -253,7 +264,7 @@ mod test {
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum Source
+        data did not match any variant of untagged enum SourcesWire
 
         "###);
     }
@@ -277,7 +288,7 @@ mod test {
           |
         8 | tqdm = { path = "tqdm", index = "torch" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum Source
+        data did not match any variant of untagged enum SourcesWire
 
         "###);
     }
@@ -337,7 +348,7 @@ mod test {
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum Source
+        data did not match any variant of untagged enum SourcesWire
 
         "###);
     }

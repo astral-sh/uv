@@ -5,12 +5,11 @@ use std::ops::{Bound, Deref};
 use std::str::FromStr;
 
 use itertools::Itertools;
+use pep440_rs::{Version, VersionParseError, VersionSpecifier};
 use pubgrub::Range;
 #[cfg(feature = "pyo3")]
 use pyo3::{basic::CompareOp, pyclass, pymethods};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-
-use pep440_rs::{Version, VersionParseError, VersionSpecifier};
 use uv_normalize::ExtraName;
 
 use crate::cursor::Cursor;
@@ -1664,6 +1663,28 @@ impl Display for MarkerTreeContents {
         };
 
         f.write_str(&expr)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for MarkerTree {
+    fn schema_name() -> String {
+        "MarkerTree".to_string()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                description: Some(
+                    "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`"
+                        .to_string(),
+                ),
+                ..schemars::schema::Metadata::default()
+            })),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
     }
 }
 

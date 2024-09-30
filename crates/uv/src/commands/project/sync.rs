@@ -28,7 +28,7 @@ use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequ
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::{Source, ToolUvSources};
+use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
 
 /// Sync the project environment.
@@ -425,7 +425,7 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
             .and_then(|uv| uv.sources.as_ref())
             .map(ToolUvSources::inner)
             .iter()
-            .flat_map(|sources| sources.values())
+            .flat_map(|sources| sources.values().flat_map(Sources::iter))
         {
             match source {
                 Source::Git { git, .. } => {

@@ -34,6 +34,7 @@ uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
+either = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 nanoid = { workspace = true }

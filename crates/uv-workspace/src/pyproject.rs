@@ -7,6 +7,7 @@
 //! Then lowers them into a dependency specification.
 
 use glob::Pattern;
+use owo_colors::OwoColorize;
 use serde::{de::IntoDeserializer, Deserialize, Serialize};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -16,6 +17,7 @@ use thiserror::Error;
 use url::Url;
 
 use pep440_rs::{Version, VersionSpecifiers};
+use pep508_rs::MarkerTree;
 use pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 use uv_fs::{relative_to, PortablePathBuf};
 use uv_git::GitReference;
@@ -294,17 +296,17 @@ pub struct ToolUv {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ToolUvSources(BTreeMap<PackageName, Source>);
+pub struct ToolUvSources(BTreeMap<PackageName, Sources>);
 
 impl ToolUvSources {
     /// Returns the underlying `BTreeMap` of package names to sources.
-    pub fn inner(&self) -> &BTreeMap<PackageName, Source> {
+    pub fn inner(&self) -> &BTreeMap<PackageName, Sources> {
         &self.0
     }
 
     /// Convert the [`ToolUvSources`] into its inner `BTreeMap`.
     #[must_use]
-    pub fn into_inner(self) -> BTreeMap<PackageName, Source> {
+    pub fn into_inner(self) -> BTreeMap<PackageName, Sources> {
         self.0
     }
 }
@@ -329,7 +331,7 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
                 M: serde::de::MapAccess<'de>,
             {
                 let mut sources = BTreeMap::new();
-                while let Some((key, value)) = access.next_entry::<PackageName, Source>()? {
+                while let Some((key, value)) = access.next_entry::<PackageName, Sources>()? {
                     match sources.entry(key) {
                         std::collections::btree_map::Entry::Occupied(entry) => {
                             return Err(serde::de::Error::custom(format!(
@@ -407,6 +409,105 @@ impl Deref for SerdePattern {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case", try_from = "SourcesWire")]
+pub struct Sources(#[cfg_attr(feature = "schemars", schemars(with = "SourcesWire"))] Vec<Source>);
+
+impl Sources {
+    /// Return an [`Iterator`] over the sources.
+    ///
+    /// If the iterator contains multiple entries, they will always use disjoint markers.
+    ///
+    /// The iterator will contain at most one registry source.
+    pub fn iter(&self) -> impl Iterator<Item = &Source> {
+        self.0.iter()
+    }
+
+    /// Returns `true` if the sources list is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Returns the number of sources in the list.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl IntoIterator for Sources {
+    type Item = Source;
+    type IntoIter = std::vec::IntoIter<Source>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case", untagged)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[allow(clippy::large_enum_variant)]
+enum SourcesWire {
+    One(Source),
+    Many(Vec<Source>),
+}
+
+impl TryFrom<SourcesWire> for Sources {
+    type Error = SourceError;
+
+    fn try_from(wire: SourcesWire) -> Result<Self, Self::Error> {
+        match wire {
+            SourcesWire::One(source) => Ok(Self(vec![source])),
+            SourcesWire::Many(sources) => {
+                // Ensure that the markers are disjoint.
+                for (lhs, rhs) in sources
+                    .iter()
+                    .map(Source::marker)
+                    .zip(sources.iter().skip(1).map(Source::marker))
+                {
+                    if !lhs.is_disjoint(&rhs) {
+                        let mut hint = lhs.negate();
+                        hint.and(rhs.clone());
+
+                        let lhs = lhs
+                            .contents()
+                            .map(|contents| contents.to_string())
+                            .unwrap_or_else(|| "true".to_string());
+                        let rhs = rhs
+                            .contents()
+                            .map(|contents| contents.to_string())
+                            .unwrap_or_else(|| "true".to_string());
+                        let hint = hint
+                            .contents()
+                            .map(|contents| contents.to_string())
+                            .unwrap_or_else(|| "true".to_string());
+
+                        return Err(SourceError::OverlappingMarkers(lhs, rhs, hint));
+                    }
+                }
+
+                // Ensure that there is at least one source.
+                if sources.is_empty() {
+                    return Err(SourceError::EmptySources);
+                }
+
+                // Ensure that there is at most one registry source.
+                if sources
+                    .iter()
+                    .filter(|source| matches!(source, Source::Registry { .. }))
+                    .nth(1)
+                    .is_some()
+                {
+                    return Err(SourceError::MultipleIndexes);
+                }
+
+                Ok(Self(sources))
+            }
+        }
+    }
+}
+
 /// A `tool.uv.sources` value.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -427,6 +528,12 @@ pub enum Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        #[serde(
+            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+            serialize_with = "pep508_rs::marker::ser::serialize",
+            default
+        )]
+        marker: MarkerTree,
     },
     /// A remote `http://` or `https://` URL, either a wheel (`.whl`) or a source distribution
     /// (`.zip`, `.tar.gz`).
@@ -440,6 +547,12 @@ pub enum Source {
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
         subdirectory: Option<PortablePathBuf>,
+        #[serde(
+            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+            serialize_with = "pep508_rs::marker::ser::serialize",
+            default
+        )]
+        marker: MarkerTree,
     },
     /// The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or
     /// `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
@@ -448,17 +561,35 @@ pub enum Source {
         path: PortablePathBuf,
         /// `false` by default.
         editable: Option<bool>,
+        #[serde(
+            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+            serialize_with = "pep508_rs::marker::ser::serialize",
+            default
+        )]
+        marker: MarkerTree,
     },
     /// A dependency pinned to a specific index, e.g., `torch` after setting `torch` to `https://download.pytorch.org/whl/cu118`.
     Registry {
         // TODO(konstin): The string is more-or-less a placeholder
         index: String,
+        #[serde(
+            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+            serialize_with = "pep508_rs::marker::ser::serialize",
+            default
+        )]
+        marker: MarkerTree,
     },
     /// A dependency on another package in the workspace.
     Workspace {
         /// When set to `false`, the package will be fetched from the remote index, rather than
         /// included as a workspace package.
         workspace: bool,
+        #[serde(
+            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+            serialize_with = "pep508_rs::marker::ser::serialize",
+            default
+        )]
+        marker: MarkerTree,
     },
     /// A catch-all variant used to emit precise error messages when deserializing.
     CatchAll {
@@ -471,6 +602,12 @@ pub enum Source {
         path: PortablePathBuf,
         index: String,
         workspace: bool,
+        #[serde(
+            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+            serialize_with = "pep508_rs::marker::ser::serialize",
+            default
+        )]
+        marker: MarkerTree,
     },
 }
 
@@ -494,6 +631,12 @@ pub enum SourceError {
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
     NonUtf8Path(PathBuf),
+    #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
+    OverlappingMarkers(String, String, String),
+    #[error("Must provide at least one source")]
+    EmptySources,
+    #[error("Sources can only include a single index source")]
+    MultipleIndexes,
 }
 
 impl Source {
@@ -524,7 +667,10 @@ impl Source {
         if workspace {
             return match source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
-                    Ok(Some(Source::Workspace { workspace: true }))
+                    Ok(Some(Source::Workspace {
+                        workspace: true,
+                        marker: MarkerTree::TRUE,
+                    }))
                 }
                 RequirementSource::Url { .. } => {
                     Err(SourceError::WorkspacePackageUrl(name.to_string()))
@@ -548,12 +694,14 @@ impl Source {
                         .or_else(|_| std::path::absolute(&install_path))
                         .map_err(SourceError::Absolute)?,
                 ),
+                marker: MarkerTree::TRUE,
             },
             RequirementSource::Url {
                 subdirectory, url, ..
             } => Source::Url {
                 url: url.to_url(),
                 subdirectory: subdirectory.map(PortablePathBuf::from),
+                marker: MarkerTree::TRUE,
             },
             RequirementSource::Git {
                 repository,
@@ -578,6 +726,7 @@ impl Source {
                         branch,
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
+                        marker: MarkerTree::TRUE,
                     }
                 } else {
                     Source::Git {
@@ -586,12 +735,25 @@ impl Source {
                         branch,
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
+                        marker: MarkerTree::TRUE,
                     }
                 }
             }
         };
 
         Ok(Some(source))
+    }
+
+    /// Return the [`MarkerTree`] for the source.
+    pub fn marker(&self) -> MarkerTree {
+        match self {
+            Source::Git { marker, .. } => marker.clone(),
+            Source::Url { marker, .. } => marker.clone(),
+            Source::Path { marker, .. } => marker.clone(),
+            Source::Registry { marker, .. } => marker.clone(),
+            Source::Workspace { marker, .. } => marker.clone(),
+            Source::CatchAll { marker, .. } => marker.clone(),
+        }
     }
 }
 

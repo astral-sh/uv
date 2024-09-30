@@ -22,6 +22,8 @@ pub enum MetadataError {
     Workspace(#[from] WorkspaceError),
     #[error("Failed to parse entry for: `{0}`")]
     LoweringError(PackageName, #[source] LoweringError),
+    #[error(transparent)]
+    Lower(#[from] LoweringError),
 }
 
 #[derive(Debug, Clone)]
