@@ -44,7 +44,6 @@ impl<'env> TreeDisplay<'env> {
         invert: bool,
     ) -> Self {
         let mut non_roots = FxHashSet::default();
-        let mut skipped = FxHashSet::default();
 
         // Index all the dependencies. We could read these from the `Lock` directly, but we have to
         // support `--invert`, so we might as well build them up in either case.
@@ -60,7 +59,7 @@ impl<'env> TreeDisplay<'env> {
                         .complexified_marker
                         .evaluate(environment_markers, &[])
                     {
-                        skipped.insert(dependency.package_id.clone());
+                        non_roots.insert(dependency.package_id.clone());
                         continue;
                     }
                 }
@@ -94,7 +93,7 @@ impl<'env> TreeDisplay<'env> {
                             .complexified_marker
                             .evaluate(environment_markers, &[])
                         {
-                            skipped.insert(dependency.package_id.clone());
+                            non_roots.insert(dependency.package_id.clone());
                             continue;
                         }
                     }
@@ -134,7 +133,7 @@ impl<'env> TreeDisplay<'env> {
                             .complexified_marker
                             .evaluate(environment_markers, &[])
                         {
-                            skipped.insert(dependency.package_id.clone());
+                            non_roots.insert(dependency.package_id.clone());
                             continue;
                         }
                     }
@@ -172,7 +171,7 @@ impl<'env> TreeDisplay<'env> {
             .packages
             .iter()
             .map(|dist| &dist.id)
-            .filter(|id| !non_roots.contains(*id) && !skipped.contains(*id))
+            .filter(|id| !non_roots.contains(*id))
             .collect::<Vec<_>>();
 
         Self {
