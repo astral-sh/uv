@@ -38,6 +38,7 @@ uv-cache-info = { path = "crates/uv-cache-info" }
 uv-cli = { path = "crates/uv-cli" }
 uv-client = { path = "crates/uv-client" }
 uv-configuration = { path = "crates/uv-configuration" }
+uv-console = { path = "crates/uv-console" }
 uv-dispatch = { path = "crates/uv-dispatch" }
 uv-distribution = { path = "crates/uv-distribution" }
 uv-extract = { path = "crates/uv-extract" }

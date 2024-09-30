@@ -4440,6 +4440,7 @@ dependencies = [
  "byteorder",
  "cache-key",
  "clap",
+ "console",
  "ctrlc",
  "distribution-filename",
  "distribution-types",
@@ -4488,6 +4489,7 @@ dependencies = [
  "uv-cli",
  "uv-client",
  "uv-configuration",
+ "uv-console",
  "uv-dispatch",
  "uv-distribution",
  "uv-extract",
@@ -4705,6 +4707,14 @@ dependencies = [
  "uv-cache-info",
  "uv-normalize",
  "which",
+]
+
+[[package]]
+name = "uv-console"
+version = "0.0.1"
+dependencies = [
+ "console",
+ "ctrlc",
 ]
 
 [[package]]
@@ -5078,7 +5088,6 @@ dependencies = [
  "cache-key",
  "configparser",
  "console",
- "ctrlc",
  "distribution-filename",
  "distribution-types",
  "fs-err",
@@ -5094,6 +5103,7 @@ dependencies = [
  "url",
  "uv-client",
  "uv-configuration",
+ "uv-console",
  "uv-distribution",
  "uv-fs",
  "uv-git",

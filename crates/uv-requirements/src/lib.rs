@@ -4,7 +4,6 @@ pub use crate::sources::*;
 pub use crate::specification::*;
 pub use crate::unnamed::*;
 
-mod confirm;
 mod lookahead;
 mod source_tree;
 mod sources;
