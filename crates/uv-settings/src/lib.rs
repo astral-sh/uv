@@ -36,7 +36,7 @@ impl Deref for FilesystemOptions {
 impl FilesystemOptions {
     /// Load the user [`FilesystemOptions`].
     pub fn user() -> Result<Option<Self>, Error> {
-        let Some(dir) = config_dir() else {
+        let Some(dir) = user_config_dir() else {
             return Ok(None);
         };
         let root = dir.join("uv");
@@ -57,6 +57,25 @@ impl FilesystemOptions {
                 );
                 Ok(None)
             }
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn system() -> Result<Option<Self>, Error> {
+        let dir = system_config_dir();
+        let root = dir.join("uv");
+        let file = root.join("uv.toml");
+
+        debug!(
+            "Searching for system configuration in: `{}`",
+            file.display()
+        );
+        match read_file(&file) {
+            Ok(options) => {
+                debug!("Found system configuration in: `{}`", file.display());
+                Ok(Some(Self(options)))
+            }
+            Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err),
         }
     }
@@ -171,7 +190,7 @@ impl From<Options> for FilesystemOptions {
 /// This is similar to the `config_dir()` returned by the `dirs` crate, but it uses the
 /// `XDG_CONFIG_HOME` environment variable on both Linux _and_ macOS, rather than the
 /// `Application Support` directory on macOS.
-fn config_dir() -> Option<PathBuf> {
+fn user_config_dir() -> Option<PathBuf> {
     // On Windows, use, e.g., C:\Users\Alice\AppData\Roaming
     #[cfg(windows)]
     {
@@ -184,6 +203,23 @@ fn config_dir() -> Option<PathBuf> {
         std::env::var_os(EnvVars::XDG_CONFIG_HOME)
             .and_then(dirs_sys::is_absolute_path)
             .or_else(|| dirs_sys::home_dir().map(|path| path.join(".config")))
+    }
+}
+
+/// Returns the path to the system configuration directory.
+///
+/// Right now this defaults to "/etc/" in *nix systems and "C:\ProgramData" on Windows.
+fn system_config_dir() -> PathBuf {
+    // On Windows, use, e.g., C:\ProgramData
+    #[cfg(windows)]
+    {
+        PathBuf::from("C:\\ProgramData")
+    }
+
+    // On Linux and macOS, use /etc/uv/uv.toml.
+    #[cfg(not(windows))]
+    {
+        PathBuf::from("/etc")
     }
 }
 
