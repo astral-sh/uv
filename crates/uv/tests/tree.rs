@@ -259,6 +259,52 @@ fn platform_dependencies() -> Result<()> {
 }
 
 #[test]
+fn platform_dependencies_inverted() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "click"
+        ]
+    "#,
+    )?;
+
+    // When `--universal` is _not_ provided, `colorama` should _not_ be included.
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.tree().arg("--invert"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    click v8.1.7
+    └── project v0.1.0
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    // Unless `--python-platform` is set to `windows`, in which case it should be included.
+    uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--python-platform").arg("windows"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    colorama v0.4.6
+    └── click v8.1.7
+        └── project v0.1.0
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn repeated_dependencies() -> Result<()> {
     let context = TestContext::new("3.12");
 
