@@ -413,6 +413,7 @@ impl VersionMapLazy {
                 // Prioritize amongst all available files.
                 let yanked = file.yanked.clone();
                 let hashes = file.hashes.clone();
+                let size = file.size;
                 match filename {
                     DistFilename::WheelFilename(filename) => {
                         let compatibility = self.wheel_compatibility(
@@ -420,6 +421,7 @@ impl VersionMapLazy {
                             &filename.name,
                             &filename.version,
                             &hashes,
+                            size,
                             yanked,
                             excluded,
                             upload_time,
@@ -513,6 +515,7 @@ impl VersionMapLazy {
         name: &PackageName,
         version: &Version,
         hashes: &[HashDigest],
+        size: Option<u64>,
         yanked: Option<Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
@@ -569,7 +572,7 @@ impl VersionMapLazy {
         // Break ties with the build tag.
         let build_tag = filename.build_tag.clone();
 
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        WheelCompatibility::Compatible(hash, priority, build_tag, size)
     }
 }
 
