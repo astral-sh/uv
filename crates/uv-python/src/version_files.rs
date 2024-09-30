@@ -114,6 +114,11 @@ impl PythonVersionFile {
         self.versions.iter()
     }
 
+    /// Check if the file contains the given version request.
+    pub fn contains(&self, request: &PythonRequest) -> bool {
+        self.versions.contains(request)
+    }
+
     /// Cast to a list of all versions declared in the file.
     pub fn into_versions(self) -> Vec<PythonRequest> {
         self.versions

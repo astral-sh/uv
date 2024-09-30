@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use owo_colors::OwoColorize;
-
 use pep440_rs::Version;
 use pep508_rs::PackageName;
 use tracing::{debug, warn};
@@ -761,28 +760,29 @@ async fn write_python_version_file(
         return Ok(());
     };
 
-    if let Some(workspace) = workspace {
-        let version_file = workspace.python_version_file();
-        // TODO: If the version file already exists, but does not contain the requested version,
-        // should we update it? (add the version, or replace the existing one)
-        // For now, we keep the existing behavior: if the file exists, we don't update it.
-        if !version_file.path().try_exists()? {
-            version_file
-                .clone()
-                .with_versions(vec![python_request.clone()])
-                .write()
-                .await?;
+    // TODO: If the version file already exists, but does not contain the requested version,
+    // should we update it? (add the version, or replace the existing one)
+
+    // Only write the `.python-version` file if it doesn't already exist.
+    let new_path = if let Some(workspace) = workspace {
+        if workspace.python_version_file().is_none() {
+            Some(workspace.install_path().join(PYTHON_VERSION_FILENAME))
+        } else {
+            None
         }
     } else {
-        if PythonVersionFile::discover(path, false, false)
-            .await?
-            .is_none()
-        {
-            PythonVersionFile::new(path.join(PYTHON_VERSION_FILENAME))
-                .with_versions(vec![python_request.clone()])
-                .write()
-                .await?;
+        let existing = PythonVersionFile::discover(path, false, false).await?;
+        if existing.is_none() {
+            Some(path.join(PYTHON_VERSION_FILENAME))
+        } else {
+            None
         }
+    };
+    if let Some(path) = new_path {
+        PythonVersionFile::new(path)
+            .with_versions(vec![python_request.clone()])
+            .write()
+            .await?;
     }
 
     Ok(())

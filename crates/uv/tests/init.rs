@@ -1908,8 +1908,12 @@ fn init_requires_python_workspace() -> Result<()> {
     });
 
     // `.python-version` should be written in the workspace root.
-    child.child(".python-version").assert(predicate::path::missing());
-    child.child(".python-versions").assert(predicate::path::missing());
+    child
+        .child(".python-version")
+        .assert(predicate::path::missing());
+    child
+        .child(".python-versions")
+        .assert(predicate::path::missing());
 
     let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version"))?;
     insta::with_settings!({
@@ -1970,8 +1974,12 @@ fn init_requires_python_version() -> Result<()> {
     });
 
     // `.python-version` should be written in the workspace root.
-    child.child(".python-version").assert(predicate::path::missing());
-    child.child(".python-versions").assert(predicate::path::missing());
+    child
+        .child(".python-version")
+        .assert(predicate::path::missing());
+    child
+        .child(".python-versions")
+        .assert(predicate::path::missing());
 
     let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version"))?;
     insta::with_settings!({
@@ -2033,8 +2041,12 @@ fn init_requires_python_specifiers() -> Result<()> {
     });
 
     // `.python-version` should be written in the workspace root.
-    child.child(".python-version").assert(predicate::path::missing());
-    child.child(".python-versions").assert(predicate::path::missing());
+    child
+        .child(".python-version")
+        .assert(predicate::path::missing());
+    child
+        .child(".python-versions")
+        .assert(predicate::path::missing());
 
     let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version"))?;
     insta::with_settings!({

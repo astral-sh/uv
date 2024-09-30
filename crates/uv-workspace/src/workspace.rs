@@ -11,7 +11,7 @@ use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
 use pypi_types::{Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
-use uv_python::{PythonVersionFile, PYTHON_VERSION_FILENAME};
+use uv_python::PythonVersionFile;
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::pyproject::{
@@ -84,7 +84,7 @@ pub struct Workspace {
     pyproject_toml: PyProjectToml,
     /// The `.python-version` or `.python-versions` file of the workspace.
     #[cfg_attr(test, serde(skip))]
-    python_version_file: PythonVersionFile,
+    python_version_file: Option<PythonVersionFile>,
 }
 
 impl Workspace {
@@ -176,12 +176,8 @@ impl Workspace {
                 )
             };
 
-        // Discover the `.python-version` or `.python-versions` file.
         let python_version_file =
-            match PythonVersionFile::discover(&workspace_root, false, false).await? {
-                Some(file) => file,
-                None => PythonVersionFile::new(workspace_root.join(PYTHON_VERSION_FILENAME)),
-            };
+            PythonVersionFile::discover(&workspace_root, false, false).await?;
 
         debug!(
             "Found workspace root: `{}`",
@@ -555,8 +551,8 @@ impl Workspace {
     }
 
     /// The `.python-version` or `.python-versions` file in the workspace.
-    pub fn python_version_file(&self) -> &PythonVersionFile {
-        &self.python_version_file
+    pub fn python_version_file(&self) -> Option<&PythonVersionFile> {
+        self.python_version_file.as_ref()
     }
 
     /// Returns `true` if the path is excluded by the workspace.
@@ -594,7 +590,7 @@ impl Workspace {
         workspace_root: PathBuf,
         workspace_definition: ToolUvWorkspace,
         workspace_pyproject_toml: PyProjectToml,
-        workspace_python_version_file: PythonVersionFile,
+        workspace_python_version_file: Option<PythonVersionFile>,
         current_project: Option<WorkspaceMember>,
         options: &DiscoveryOptions<'_>,
     ) -> Result<Workspace, WorkspaceError> {
@@ -1065,12 +1061,8 @@ impl ProjectWorkspace {
             // above it, so the project is an implicit workspace root identical to the project root.
             debug!("No workspace root found, using project root");
 
-            // Discover the `.python-version` or `.python-versions` file.
             let python_version_file =
-                match PythonVersionFile::discover(&project_path, false, false).await? {
-                    Some(file) => file,
-                    None => PythonVersionFile::new(project_path.join(PYTHON_VERSION_FILENAME)),
-                };
+                PythonVersionFile::discover(&project_path, false, false).await?;
 
             let current_project_as_members =
                 BTreeMap::from_iter([(project.name.clone(), current_project)]);
@@ -1090,10 +1082,7 @@ impl ProjectWorkspace {
         };
 
         let python_version_file =
-            match PythonVersionFile::discover(&workspace_root, false, false).await? {
-                Some(file) => file,
-                None => PythonVersionFile::new(workspace_root.join(PYTHON_VERSION_FILENAME)),
-            };
+            PythonVersionFile::discover(&workspace_root, false, false).await?;
 
         debug!(
             "Found workspace root: `{}`",
@@ -1424,10 +1413,7 @@ impl VirtualProject {
                 .clone();
 
             let python_version_file =
-                match PythonVersionFile::discover(&project_path, false, false).await? {
-                    Some(file) => file,
-                    None => PythonVersionFile::new(project_path.join(PYTHON_VERSION_FILENAME)),
-                };
+                PythonVersionFile::discover(&project_path, false, false).await?;
 
             check_nested_workspaces(&project_path, options);
 

@@ -1,9 +1,11 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
 use anyhow::Result;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::assert::PathAssert;
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use common::{uv_snapshot, TestContext};
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
 use uv_python::{
     platform::{Arch, Os},
     PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
@@ -123,7 +125,7 @@ fn python_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned `.python-version` to `cpython@3.12`
+    `.python-version` is already pinned at `cpython@3.12`
 
     ----- stderr -----
     "###);
@@ -232,7 +234,7 @@ fn python_pin_no_python() {
 }
 
 #[test]
-fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
+fn python_pin_compatible_with_requires_python() -> Result<()> {
     let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11"]);
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -279,7 +281,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned `.python-version` to `cpython@3.10`
+    `.python-version` is already pinned at `cpython@3.10`
 
     ----- stderr -----
     "###);
@@ -392,7 +394,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
 }
 
 #[test]
-fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
+fn warning_pinned_python_version_not_installed() -> Result<()> {
     let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11"]);
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -428,6 +430,81 @@ fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
         warning: Failed to resolve pinned Python version `3.12`: No interpreter found for Python 3.12 in system path
         "###);
     }
+
+    Ok(())
+}
+
+/// `uv python pin` should write to the `.python-version` file of the workspace.
+#[test]
+fn pin_workspace() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").current_dir(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `[TEMP_DIR]/.python-version` to `3.12`
+
+    ----- stderr -----
+    "###);
+
+    child
+        .child(PYTHON_VERSION_FILENAME)
+        .assert(predicate::path::missing());
+    child
+        .child(PYTHON_VERSIONS_FILENAME)
+        .assert(predicate::path::missing());
+
+    let python_version = fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME))?;
+    assert_snapshot!(python_version, @r#"3.12"#);
+
+    uv_snapshot!(context.filters(), context.python_pin().current_dir(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+/// `uv python pin` should update the exiting `.python-versions` instead of creating a new `.python-version` file.
+#[test]
+fn pin_different_files() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+    let python_versions_file = context.temp_dir.child(PYTHON_VERSIONS_FILENAME);
+    python_versions_file.write_str("3.11")?;
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `.python-versions` from `3.11` -> `3.12`
+
+    ----- stderr -----
+    "###);
+
+    let python_version = fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSIONS_FILENAME))?;
+    assert_snapshot!(python_version, @r#"3.12"#);
+    context
+        .temp_dir
+        .child(PYTHON_VERSION_FILENAME)
+        .assert(predicate::path::missing());
 
     Ok(())
 }
@@ -527,7 +604,7 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned `.python-version` to `[PYTHON-3.11]`
+    `.python-version` is already pinned at `[PYTHON-3.11]`
 
     ----- stderr -----
     "###);
@@ -567,7 +644,7 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned `.python-version` to `[PYTHON-3.12]`
+    `.python-version` is already pinned at `[PYTHON-3.12]`
 
     ----- stderr -----
     "###);
@@ -592,7 +669,7 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned `.python-version` to `[PYTHON-3.12]`
+    `.python-version` is already pinned at `[PYTHON-3.12]`
 
     ----- stderr -----
     "###);
