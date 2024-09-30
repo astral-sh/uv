@@ -245,7 +245,6 @@ mod test {
         8 | tqdm = true
           |        ^^^^
         invalid type: boolean `true`, expected an array or map
-
         "###);
     }
 
@@ -263,8 +262,12 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: Failed to parse entry for: `tqdm`
-          Caused by: Can only specify one of: `rev`, `tag`, or `branch`
+        error: TOML parse error at line 8, column 8
+          |
+        8 | tqdm = { git = "https://github.com/tqdm/tqdm", rev = "baaaaaab", tag = "v1.0.0" }
+          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        expected at most one of `rev`, `tag`, or `branch`
+
         "###);
     }
 
@@ -281,14 +284,12 @@ mod test {
             tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
         "#};
 
-        // TODO(konsti): This should tell you the set of valid fields
         assert_snapshot!(format_err(input).await, @r###"
         error: TOML parse error at line 8, column 8
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum Source
-
+        unknown field `ref`, expected one of `git`, `subdirectory`, `rev`, `tag`, `branch`, `url`, `path`, `editable`, `index`, `workspace`, `marker`
         "###);
     }
 
@@ -305,14 +306,12 @@ mod test {
             tqdm = { path = "tqdm", index = "torch" }
         "#};
 
-        // TODO(konsti): This should tell you the set of valid fields
         assert_snapshot!(format_err(input).await, @r###"
         error: TOML parse error at line 8, column 8
           |
         8 | tqdm = { path = "tqdm", index = "torch" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum Source
-
+        cannot specify both `path` and `index`
         "###);
     }
 
@@ -349,7 +348,6 @@ mod test {
           |                ^
         invalid string
         expected `"`, `'`
-
         "###);
     }
 
@@ -371,8 +369,10 @@ mod test {
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum Source
+        invalid value: string "§invalid#+#*Ä", expected relative URL without a base
 
+
+        in `url`
         "###);
     }
 

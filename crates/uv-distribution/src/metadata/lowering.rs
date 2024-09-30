@@ -209,10 +209,6 @@ impl LoweredRequirement {
                             };
                             (source, marker)
                         }
-                        Source::CatchAll { .. } => {
-                            // Emit a dedicated error message, which is an improvement over Serde's default error.
-                            return Err(LoweringError::InvalidEntry);
-                        }
                     };
 
                     marker.and(requirement.marker.clone());
@@ -325,11 +321,6 @@ impl LoweredRequirement {
                         Source::Workspace { .. } => {
                             return Err(LoweringError::WorkspaceMember);
                         }
-                        Source::CatchAll { .. } => {
-                            // Emit a dedicated error message, which is an improvement over Serde's default
-                            // error.
-                            return Err(LoweringError::InvalidEntry);
-                        }
                     };
 
                     marker.and(requirement.marker.clone());
@@ -364,8 +355,6 @@ pub enum LoweringError {
     UndeclaredWorkspacePackage,
     #[error("Can only specify one of: `rev`, `tag`, or `branch`")]
     MoreThanOneGitRef,
-    #[error("Unable to combine options in `tool.uv.sources`")]
-    InvalidEntry,
     #[error("Workspace members are not allowed in non-workspace contexts")]
     WorkspaceMember,
     #[error(transparent)]
