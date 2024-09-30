@@ -231,7 +231,7 @@ example-packaged-app
 But the module defines a CLI function:
 
 ```python title="__init__.py"
-def hello() -> None:
+def main() -> None:
     print("Hello from example-packaged-app!")
 ```
 
@@ -247,7 +247,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-hello = "example_packaged_app:hello"
+example-packaged-app = "example_packaged_app:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -257,7 +257,7 @@ build-backend = "hatchling.build"
 Which can be executed with `uv run`:
 
 ```console
-$ uv run hello
+$ uv run example-packaged-app
 Hello from example-packaged-app!
 ```
 
