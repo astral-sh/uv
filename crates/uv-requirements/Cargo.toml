@@ -21,6 +21,7 @@ pypi-types = { workspace = true }
 requirements-txt = { workspace = true, features = ["http"] }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
+uv-console = { workspace = true }
 uv-distribution = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
@@ -33,7 +34,6 @@ uv-workspace = { workspace = true }
 anyhow = { workspace = true }
 configparser = { workspace = true }
 console = { workspace = true }
-ctrlc = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 rustc-hash = { workspace = true }
