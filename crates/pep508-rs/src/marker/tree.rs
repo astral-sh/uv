@@ -1630,20 +1630,6 @@ impl Serialize for MarkerTreeContents {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for MarkerTreeContents {
-    fn deserialize<D>(deserializer: D) -> Result<MarkerTreeContents, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        let marker = MarkerTree::from_str(&s).map_err(de::Error::custom)?;
-        let marker = marker
-            .contents()
-            .ok_or_else(|| de::Error::custom("expected at least one marker expression"))?;
-        Ok(marker)
-    }
-}
-
 impl Display for MarkerTreeContents {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // Normalize all `false` expressions to the same trivially false expression.
@@ -1681,9 +1667,9 @@ impl Display for MarkerTreeContents {
 }
 
 #[cfg(feature = "schemars")]
-impl schemars::JsonSchema for MarkerTreeContents {
+impl schemars::JsonSchema for MarkerTree {
     fn schema_name() -> String {
-        "MarkerTreeContents".to_string()
+        "MarkerTree".to_string()
     }
 
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {

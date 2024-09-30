@@ -625,7 +625,7 @@
         }
       ]
     },
-    "MarkerTreeContents": {
+    "MarkerTree": {
       "description": "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`",
       "type": "string"
     },
@@ -1245,14 +1245,7 @@
               "format": "uri"
             },
             "marker": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/MarkerTreeContents"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/definitions/MarkerTree"
             },
             "rev": {
               "type": [
@@ -1288,14 +1281,7 @@
           ],
           "properties": {
             "marker": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/MarkerTreeContents"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/definitions/MarkerTree"
             },
             "subdirectory": {
               "description": "For source distributions, the path to the directory with the `pyproject.toml`, if it's not in the archive root.",
@@ -1330,14 +1316,7 @@
               ]
             },
             "marker": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/MarkerTreeContents"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/definitions/MarkerTree"
             },
             "path": {
               "$ref": "#/definitions/String"
@@ -1356,14 +1335,7 @@
               "type": "string"
             },
             "marker": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/MarkerTreeContents"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/definitions/MarkerTree"
             }
           },
           "additionalProperties": false
@@ -1376,14 +1348,7 @@
           ],
           "properties": {
             "marker": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/MarkerTreeContents"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/definitions/MarkerTree"
             },
             "workspace": {
               "description": "When set to `false`, the package will be fetched from the remote index, rather than included as a workspace package.",
@@ -1416,14 +1381,7 @@
               "type": "string"
             },
             "marker": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/MarkerTreeContents"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/definitions/MarkerTree"
             },
             "path": {
               "$ref": "#/definitions/String"

@@ -34,7 +34,10 @@ impl LoweredRequirement {
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
         workspace: &'data Workspace,
-    ) -> impl Iterator<Item = Result<LoweredRequirement, LoweringError>> + 'data {
+    ) -> Result<
+        impl Iterator<Item = Result<LoweredRequirement, LoweringError>> + 'data,
+        LoweringError,
+    > {
         let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), Origin::Project)
         } else if let Some(source) = workspace.sources().get(&requirement.name) {
@@ -55,9 +58,7 @@ impl LoweredRequirement {
                 // `framework[machine_learning]` depends on `framework[cuda]`.
                 || &requirement.name == project_name;
         if !workspace_package_declared {
-            return Either::Left(std::iter::once(Err(
-                LoweringError::UndeclaredWorkspacePackage,
-            )));
+            return Err(LoweringError::UndeclaredWorkspacePackage);
         }
 
         let Some(source) = source else {
@@ -72,7 +73,9 @@ impl LoweredRequirement {
                     requirement.name
                 );
             }
-            return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
+            return Ok(Either::Left(std::iter::once(Ok(Self(Requirement::from(
+                requirement,
+            ))))));
         };
 
         // Determine whether the markers cover the full space for the requirement. If not, fill the
@@ -94,7 +97,7 @@ impl LoweredRequirement {
             })
         };
 
-        Either::Right(
+        Ok(Either::Right(
             source
                 .into_iter()
                 .map(move |source| {
@@ -117,7 +120,6 @@ impl LoweredRequirement {
                                 tag,
                                 branch,
                             )?;
-                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
                             (source, marker)
                         }
                         Source::Url {
@@ -129,7 +131,6 @@ impl LoweredRequirement {
                                 return Err(LoweringError::ConflictingUrls);
                             }
                             let source = url_source(url, subdirectory.map(PathBuf::from))?;
-                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
                             (source, marker)
                         }
                         Source::Path {
@@ -147,12 +148,10 @@ impl LoweredRequirement {
                                 workspace.install_path(),
                                 editable.unwrap_or(false),
                             )?;
-                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
                             (source, marker)
                         }
                         Source::Registry { index, marker } => {
                             let source = registry_source(&requirement, index)?;
-                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
                             (source, marker)
                         }
                         Source::Workspace {
@@ -211,7 +210,6 @@ impl LoweredRequirement {
                                     r#virtual: true,
                                 }
                             };
-                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
                             (source, marker)
                         }
                         Source::CatchAll { .. } => {
@@ -235,7 +233,7 @@ impl LoweredRequirement {
                     Ok(requirement) => !requirement.0.marker.is_false(),
                     Err(_) => true,
                 }),
-        )
+        ))
     }
 
     /// Lower a [`pep508_rs::Requirement`] in a non-workspace setting (for example, in a PEP 723
@@ -293,7 +291,6 @@ impl LoweredRequirement {
                                 tag,
                                 branch,
                             )?;
-                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
                             (source, marker)
                         }
                         Source::Url {
@@ -305,7 +302,6 @@ impl LoweredRequirement {
                                 return Err(LoweringError::ConflictingUrls);
                             }
                             let source = url_source(url, subdirectory.map(PathBuf::from))?;
-                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
                             (source, marker)
                         }
                         Source::Path {
@@ -323,12 +319,10 @@ impl LoweredRequirement {
                                 dir,
                                 editable.unwrap_or(false),
                             )?;
-                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
                             (source, marker)
                         }
                         Source::Registry { index, marker } => {
                             let source = registry_source(&requirement, index)?;
-                            let marker = marker.map(MarkerTree::from).unwrap_or_default();
                             (source, marker)
                         }
                         Source::Workspace { .. } => {

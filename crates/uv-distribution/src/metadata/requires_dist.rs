@@ -93,6 +93,8 @@ impl RequiresDist {
                             sources,
                             project_workspace.workspace(),
                         )
+                        .into_iter()
+                        .flatten()
                         .map(move |requirement| match requirement {
                             Ok(requirement) => Ok(requirement.into_inner()),
                             Err(err) => {
@@ -125,6 +127,8 @@ impl RequiresDist {
                         sources,
                         project_workspace.workspace(),
                     )
+                    .into_iter()
+                    .flatten()
                     .map(move |requirement| match requirement {
                         Ok(requirement) => Ok(requirement.into_inner()),
                         Err(err) => {

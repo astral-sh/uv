@@ -202,10 +202,7 @@ pub(crate) async fn run(
                         script_dir,
                         script_sources,
                     )
-                    .map(move |requirement| match requirement {
-                        Ok(requirement) => Ok(requirement.into_inner()),
-                        Err(err) => Err(err),
-                    })
+                    .map_ok(uv_distribution::LoweredRequirement::into_inner)
                 })
                 .collect::<Result<_, _>>()?;
             let spec = RequirementsSpecification::from_requirements(requirements);
