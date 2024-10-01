@@ -70,7 +70,7 @@ standards-compliant `project.dependencies` table.
 During development, a project may rely on a package that isn't available on PyPI. The following
 additional sources are supported by uv:
 
-- Index: A package from an explicit package index.
+- Index: A package resolved from a specific package index.
 - Git: A Git repository.
 - URL: A remote wheel or source distribution.
 - Path: A local wheel, source distribution, or project directory.

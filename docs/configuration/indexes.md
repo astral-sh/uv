@@ -2,7 +2,7 @@
 
 By default, uv uses the [Python Package Index (PyPI)](https://pypi.org) for dependency resolution
 and package installation. However, uv can be configured to use other package indexes, including
-private indexes, via the `[[tool.uv.index]]` configuration option (and `--index`, its analogous
+private indexes, via the `[[tool.uv.index]]` configuration option (and `--index`, the analogous
 command-line option).
 
 ## Defining an index
@@ -12,9 +12,9 @@ To include an additional index when resolving dependencies, add a `[[tool.uv.ind
 
 ```toml
 [[tool.uv.index]]
-# Optional, explicit name for the index.
+# Optional name for the index.
 name = "pytorch"
-# Required URL for the index. Expects a repository compliant with PEP 503 (the simple repository API).
+# Required URL for the index.
 url = "https://download.pytorch.org/whl/cpu"
 ```
 
@@ -52,8 +52,8 @@ url = "https://download.pytorch.org/whl/cpu"
 ```
 
 An index can be marked as `explicit = true` to prevent packages from being installed from that index
-unless explicitly pinned to it. For example, to ensure that `torch` is _only_ installed from the
-`pytorch` index, add the following to your `pyproject.toml`:
+unless explicitly pinned to it. For example, to ensure that `torch` is installed from the `pytorch`
+index, but all other packages are installed from PyPI, add the following to your `pyproject.toml`:
 
 ```toml
 [tool.uv.sources]

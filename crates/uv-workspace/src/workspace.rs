@@ -1,7 +1,5 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
-mod tests;
-
 use either::Either;
 use glob::{glob, GlobError, PatternError};
 use rustc_hash::FxHashSet;
@@ -1524,3 +1522,7 @@ impl<'env> From<&'env VirtualProject> for InstallTarget<'env> {
         }
     }
 }
+
+#[cfg(test)]
+#[cfg(unix)] // Avoid path escaping for the unit tests
+mod tests;

@@ -3675,7 +3675,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Deserialize an insecure host.
+/// Prioritize indexes defined across multiple configuration sources.
 #[test]
 #[cfg_attr(
     windows,
@@ -3714,7 +3714,7 @@ fn index_priority() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -3887,7 +3887,7 @@ fn index_priority() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -4066,7 +4066,7 @@ fn index_priority() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -4240,7 +4240,7 @@ fn index_priority() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -4421,7 +4421,7 @@ fn index_priority() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -4595,7 +4595,7 @@ fn index_priority() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }

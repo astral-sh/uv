@@ -26,7 +26,7 @@ pub struct Index {
     pub url: IndexUrl,
     /// Mark the index as explicit.
     ///
-    /// Explicit indexes will _only_ be used when explicitly enabled via a `[tool.uv.sources]`
+    /// Explicit indexes will _only_ be used when explicitly requested via a `[tool.uv.sources]`
     /// definition, as in:
     ///
     /// ```toml

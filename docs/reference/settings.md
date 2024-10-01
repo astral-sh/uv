@@ -83,7 +83,8 @@ Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep
 Indexes are considered in the order in which they're defined, such that the first-defined
 index has the highest priority. Further, the indexes provided by this setting are given
 higher priority than any indexes specified via [`index_url`](#index-url) or
-[`extra_index_url`](#extra-index-url).
+[`extra_index_url`](#extra-index-url). uv will only consider the first index that contains
+a given package, unless an alternative [index strategy](#index-strategy) is specified.
 
 If an index is marked as `explicit = true`, it will be used exclusively for those
 dependencies that select it explicitly via `[tool.uv.sources]`, as in:
@@ -98,9 +99,9 @@ explicit = true
 torch = { index = "pytorch" }
 ```
 
-If an index is marked as `default = true`, it will be moved to the front of the list of
-the list of indexes, such that it is given the highest priority when resolving packages.
-Additionally, marking an index as default will disable the PyPI default index.
+If an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is
+given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
+PyPI default index.
 
 **Default value**: `"[]"`
 
@@ -646,7 +647,10 @@ Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep
 (the simple repository API), or a local directory laid out in the same format.
 
 Indexes are considered in the order in which they're defined, such that the first-defined
-index has the highest priority.
+index has the highest priority. Further, the indexes provided by this setting are given
+higher priority than any indexes specified via [`index_url`](#index-url) or
+[`extra_index_url`](#extra-index-url). uv will only consider the first index that contains
+a given package, unless an alternative [index strategy](#index-strategy) is specified.
 
 If an index is marked as `explicit = true`, it will be used exclusively for those
 dependencies that select it explicitly via `[tool.uv.sources]`, as in:
@@ -661,9 +665,9 @@ explicit = true
 torch = { index = "pytorch" }
 ```
 
-Marking an index as `default = true` will disable the PyPI default index and move the
-index to the end of the prioritized list, such that it is used when a package is not found
-on any other index.
+If an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is
+given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
+PyPI default index.
 
 **Default value**: `"[]"`
 
