@@ -3,7 +3,6 @@
 use std::process::Command;
 
 use anyhow::Result;
-use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{
     assert::PathAssert,
     fixture::{FileTouch, FileWriteStr, PathChild},
@@ -3008,4 +3007,3 @@ fn tool_install_at_latest_upgrade() {
         "###);
     });
 }
-
