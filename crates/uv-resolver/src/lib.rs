@@ -2,7 +2,7 @@ pub use dependency_mode::DependencyMode;
 pub use error::{NoSolutionError, NoSolutionHeader, ResolveError};
 pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
-pub use flat_index::FlatIndex;
+pub use flat_index::{FlatDistributions, FlatIndex};
 pub use lock::{
     Lock, LockError, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
 };
