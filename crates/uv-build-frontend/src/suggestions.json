@@ -1,0 +1,4 @@
+[
+  ["sklearn", "scikit-learn"],
+  ["dotenv", "python-dotenv"]
+]
