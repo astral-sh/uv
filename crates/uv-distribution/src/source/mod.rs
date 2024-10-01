@@ -1497,6 +1497,40 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         ))
     }
 
+    /// Resolve a source to a specific revision.
+    pub(crate) async fn resolve_revision(
+        &self,
+        source: &BuildableSource<'_>,
+        client: &ManagedClient<'_>,
+    ) -> Result<(), Error> {
+        match source {
+            BuildableSource::Dist(SourceDist::Git(source)) => {
+                self.build_context
+                    .git()
+                    .fetch(
+                        &source.git,
+                        client.unmanaged.uncached_client(&source.url).clone(),
+                        self.build_context.cache().bucket(CacheBucket::Git),
+                        self.reporter.clone().map(Facade::from),
+                    )
+                    .await?;
+            }
+            BuildableSource::Url(SourceUrl::Git(source)) => {
+                self.build_context
+                    .git()
+                    .fetch(
+                        source.git,
+                        client.unmanaged.uncached_client(source.url).clone(),
+                        self.build_context.cache().bucket(CacheBucket::Git),
+                        self.reporter.clone().map(Facade::from),
+                    )
+                    .await?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     /// Heal a [`Revision`] for a local archive.
     async fn heal_archive_revision(
         &self,
