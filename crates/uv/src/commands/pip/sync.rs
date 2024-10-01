@@ -1,6 +1,5 @@
 use std::fmt::Write;
 
-use anstream::eprint;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
@@ -32,7 +31,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
-use crate::commands::{ExitStatus, SharedState};
+use crate::commands::{diagnostics, ExitStatus, SharedState};
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
@@ -345,8 +344,15 @@ pub(crate) async fn pip_sync(
     {
         Ok(resolution) => Resolution::from(resolution),
         Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            let report = miette::Report::msg(format!("{err}")).context(err.header());
-            eprint!("{report:?}");
+            diagnostics::no_solution(&err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(operations::Error::Resolve(uv_resolver::ResolveError::FetchAndBuild(dist, err))) => {
+            diagnostics::fetch_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err))) => {
+            diagnostics::build(dist, err);
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),

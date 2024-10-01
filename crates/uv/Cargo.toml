@@ -57,7 +57,6 @@ axoupdater = { workspace = true, features = [
     "tokio",
 ], optional = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
-console = { workspace = true }
 ctrlc = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }

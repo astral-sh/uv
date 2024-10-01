@@ -65,6 +65,7 @@ pub(crate) mod build_backend;
 mod cache_clean;
 mod cache_dir;
 mod cache_prune;
+mod diagnostics;
 mod help;
 pub(crate) mod pip;
 mod project;

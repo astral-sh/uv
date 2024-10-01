@@ -36,7 +36,9 @@ use crate::commands::pip::operations;
 use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::Target;
-use crate::commands::{project::environment::CachedEnvironment, tool::common::matching_packages};
+use crate::commands::{
+    diagnostics, project::environment::CachedEnvironment, tool::common::matching_packages,
+};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -125,9 +127,7 @@ pub(crate) async fn run(
         Err(ProjectError::Operation(operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report =
-                miette::Report::msg(format!("{err}")).context(err.header().with_context("tool"));
-            eprint!("{report:?}");
+            diagnostics::no_solution_context(&err, "tool");
             return Ok(ExitStatus::Failure);
         }
         Err(ProjectError::NamedRequirements(err)) => {

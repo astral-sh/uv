@@ -1,36 +1,18 @@
 use crate::PythonRunnerOutput;
 use itertools::Itertools;
-use owo_colors::OwoColorize;
 use pep440_rs::Version;
 use pep508_rs::PackageName;
 use regex::Regex;
-use rustc_hash::FxHashMap;
 use std::env;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::PathBuf;
 use std::process::ExitStatus;
-use std::str::FromStr;
 use std::sync::LazyLock;
 use thiserror::Error;
 use tracing::error;
 use uv_configuration::BuildOutput;
 use uv_fs::Simplified;
-
-/// Static map of common package name typos or misconfigurations to their correct package names.
-static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
-    let suggestions: Vec<(String, String)> =
-        serde_json::from_str(include_str!("suggestions.json")).unwrap();
-    suggestions
-        .iter()
-        .map(|(k, v)| {
-            (
-                PackageName::from_str(k).unwrap(),
-                PackageName::from_str(v).unwrap(),
-            )
-        })
-        .collect()
-});
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE_GCC: LazyLock<Regex> = LazyLock::new(|| {
@@ -95,12 +77,13 @@ pub enum Error {
         stderr: String,
     },
     /// Nudge the user towards installing the missing dev library
-    #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---\n\n{hint}{colon} {missing_header_cause}", hint = "hint".cyan().bold(), colon = ":".bold())]
+    #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     MissingHeaderOutput {
         message: String,
         exit_code: ExitStatus,
         stdout: String,
         stderr: String,
+        #[source]
         missing_header_cause: MissingHeaderCause,
     },
     #[error("{message} with {exit_code}")]
@@ -108,10 +91,11 @@ pub enum Error {
         message: String,
         exit_code: ExitStatus,
     },
-    #[error("{message} with {exit_code}\n\n{hint}{colon} {missing_header_cause}", hint = "hint".cyan().bold(), colon = ":".bold())]
+    #[error("{message} with {exit_code}")]
     MissingHeader {
         message: String,
         exit_code: ExitStatus,
+        #[source]
         missing_header_cause: MissingHeaderCause,
     },
     #[error("Failed to build PATH for build script")]
@@ -124,7 +108,6 @@ enum MissingLibrary {
     Linker(String),
     BuildDependency(String),
     DeprecatedModule(String, Version),
-    SuggestedPackage(String, String),
 }
 
 #[derive(Debug, Error)]
@@ -213,15 +196,6 @@ impl Display for MissingHeaderCause {
                     )
                 }
             }
-            MissingLibrary::SuggestedPackage(package, suggestion) => {
-                write!(
-                    f,
-                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                    package.cyan(),
-                    suggestion.cyan(),
-                    suggestion.cyan(),
-                )
-            }
         }
     }
 }
@@ -236,42 +210,32 @@ impl Error {
         version: Option<&Version>,
         version_id: Option<&str>,
     ) -> Self {
-        // Check if we failed to install a known package.
-        let missing_library = if let Some((name, suggestion)) =
-            name.and_then(|name| SUGGESTIONS.get(name).map(|suggestion| (name, suggestion)))
-        {
-            Some(MissingLibrary::SuggestedPackage(
-                name.to_string(),
-                suggestion.to_string(),
-            ))
-        } else {
-            // Limit search to the last 10 lines, which typically contains the relevant error.
-            output.stderr.iter().rev().take(10).find_map(|line| {
-                if let Some((_, [header])) = MISSING_HEADER_RE_GCC
-                    .captures(line.trim())
-                    .or(MISSING_HEADER_RE_CLANG.captures(line.trim()))
-                    .or(MISSING_HEADER_RE_MSVC.captures(line.trim()))
-                    .map(|c| c.extract())
-                {
-                    Some(MissingLibrary::Header(header.to_string()))
-                } else if let Some((_, [library])) =
-                    LD_NOT_FOUND_RE.captures(line.trim()).map(|c| c.extract())
-                {
-                    Some(MissingLibrary::Linker(library.to_string()))
-                } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
-                    Some(MissingLibrary::BuildDependency("wheel".to_string()))
-                } else if TORCH_NOT_FOUND_RE.is_match(line.trim()) {
-                    Some(MissingLibrary::BuildDependency("torch".to_string()))
-                } else if DISTUTILS_NOT_FOUND_RE.is_match(line.trim()) {
-                    Some(MissingLibrary::DeprecatedModule(
-                        "distutils".to_string(),
-                        Version::new([3, 12]),
-                    ))
-                } else {
-                    None
-                }
-            })
-        };
+        // In the cases I've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff.
+        let missing_library = output.stderr.iter().rev().take(10).find_map(|line| {
+            if let Some((_, [header])) = MISSING_HEADER_RE_GCC
+                .captures(line.trim())
+                .or(MISSING_HEADER_RE_CLANG.captures(line.trim()))
+                .or(MISSING_HEADER_RE_MSVC.captures(line.trim()))
+                .map(|c| c.extract())
+            {
+                Some(MissingLibrary::Header(header.to_string()))
+            } else if let Some((_, [library])) =
+                LD_NOT_FOUND_RE.captures(line.trim()).map(|c| c.extract())
+            {
+                Some(MissingLibrary::Linker(library.to_string()))
+            } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
+                Some(MissingLibrary::BuildDependency("wheel".to_string()))
+            } else if TORCH_NOT_FOUND_RE.is_match(line.trim()) {
+                Some(MissingLibrary::BuildDependency("torch".to_string()))
+            } else if DISTUTILS_NOT_FOUND_RE.is_match(line.trim()) {
+                Some(MissingLibrary::DeprecatedModule(
+                    "distutils".to_string(),
+                    Version::new([3, 12]),
+                ))
+            } else {
+                None
+            }
+        });
 
         if let Some(missing_library) = missing_library {
             return match level {

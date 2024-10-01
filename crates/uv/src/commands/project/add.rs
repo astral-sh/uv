@@ -43,7 +43,7 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
 use crate::commands::project::{script_python_requirement, ProjectError};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{pip, project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 
@@ -573,26 +573,39 @@ pub(crate) async fn add(
     .await
     {
         Ok(()) => Ok(ExitStatus::Success),
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            let header = err.header();
-            let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.") });
-            anstream::eprint!("{report:?}");
-
-            // Revert the changes to the `pyproject.toml`, if necessary.
-            if modified {
-                fs_err::write(root.join("pyproject.toml"), &existing)?;
-            }
-
-            Ok(ExitStatus::Failure)
-        }
         Err(err) => {
             // Revert the changes to the `pyproject.toml`, if necessary.
             if modified {
                 fs_err::write(root.join("pyproject.toml"), &existing)?;
             }
-            Err(err.into())
+
+            match err {
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::NoSolution(err),
+                )) => {
+                    diagnostics::no_solution_hint(err, format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()));
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::FetchAndBuild(dist, err),
+                )) => {
+                    diagnostics::fetch_and_build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::Build(dist, err),
+                )) => {
+                    diagnostics::build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                err => {
+                    // Revert the changes to the `pyproject.toml`, if necessary.
+                    if modified {
+                        fs_err::write(root.join("pyproject.toml"), &existing)?;
+                    }
+                    Err(err.into())
+                }
+            }
         }
     }
 }
@@ -912,21 +925,4 @@ struct DependencyEdit<'a> {
     requirement: Requirement,
     source: Option<Source>,
     edit: ArrayEdit,
-}
-
-/// Render a [`uv_resolver::NoSolutionError`] with a help message.
-#[derive(Debug, miette::Diagnostic, thiserror::Error)]
-#[error("{header}")]
-#[diagnostic()]
-struct WithHelp {
-    /// The header to render in the error message.
-    header: uv_resolver::NoSolutionHeader,
-
-    /// The underlying error.
-    #[source]
-    cause: uv_resolver::NoSolutionError,
-
-    /// The help message to display.
-    #[help]
-    help: Option<&'static str>,
 }
