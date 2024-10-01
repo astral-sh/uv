@@ -180,9 +180,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Parse the external command, if necessary.
     let mut maybe_tempfile: Option<tempfile::NamedTempFile> = None;
     let run_command = if let Commands::Project(command) = &mut *cli.command {
-        if let ProjectCommand::Run(uv_cli::RunArgs { command, .. }) = &mut **command {
+        if let ProjectCommand::Run(uv_cli::RunArgs {
+            command, module, ..
+        }) = &mut **command
+        {
             maybe_tempfile = resolve_script_target(command).await?;
-            Some(RunCommand::try_from(&*command)?)
+            Some(RunCommand::from_args(command, *module)?)
         } else {
             None
         }
@@ -742,9 +745,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &project_dir,
                 args.src,
                 args.package,
+                args.all,
                 args.out_dir,
                 args.sdist,
                 args.wheel,
+                args.build_logs,
                 build_constraints,
                 args.hash_checking,
                 args.python,

@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use distribution_types::{Dist, IndexLocations};
+use distribution_types::Dist;
 use platform_tags::Tags;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
@@ -60,9 +60,6 @@ pub trait ResolverProvider {
         &'io self,
         dist: &'io Dist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
-
-    /// Returns the [`IndexLocations`] used by this resolver.
-    fn index_locations(&self) -> &IndexLocations;
 
     /// Set the [`uv_distribution::Reporter`] to use for this installer.
     #[must_use]
@@ -204,10 +201,6 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                 err => Err(err),
             },
         }
-    }
-
-    fn index_locations(&self) -> &IndexLocations {
-        self.fetcher.index_locations()
     }
 
     /// Set the [`uv_distribution::Reporter`] to use for this installer.

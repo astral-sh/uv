@@ -195,14 +195,8 @@ impl From<Dist> for ResolvedDist {
     }
 }
 
-impl From<InstalledDist> for ResolvedDist {
-    fn from(value: InstalledDist) -> Self {
-        ResolvedDist::Installed(value)
-    }
-}
-
 impl Display for ResolvedDist {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Installed(dist) => dist.fmt(f),
             Self::Installable(dist) => dist.fmt(f),

@@ -11777,14 +11777,14 @@ fn incompatible_build_constraint() -> Result<()> {
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `requests==1.2.0`
-      Caused by: Failed to install requirements from `setup.py` build (resolve)
-      Caused by: No solution found when resolving: setuptools>=40.8.0
-      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###
     );
 

@@ -36,7 +36,7 @@ use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
-use crate::commands::{pip, ExitStatus};
+use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
@@ -122,10 +122,22 @@ pub(crate) async fn lock(
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report = miette::Report::msg(format!("{err}")).context(err.header());
-            eprint!("{report:?}");
+            diagnostics::no_solution(&err);
             Ok(ExitStatus::Failure)
         }
+        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+            uv_resolver::ResolveError::FetchAndBuild(dist, err),
+        ))) => {
+            diagnostics::fetch_and_build(dist, err);
+            Ok(ExitStatus::Failure)
+        }
+        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+            uv_resolver::ResolveError::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
+            Ok(ExitStatus::Failure)
+        }
+
         Err(err) => Err(err.into()),
     }
 }
@@ -293,15 +305,15 @@ async fn do_lock(
                     let lhs = lhs
                         .contents()
                         .map(|contents| contents.to_string())
-                        .unwrap_or("true".to_string());
+                        .unwrap_or_else(|| "true".to_string());
                     let rhs = rhs
                         .contents()
                         .map(|contents| contents.to_string())
-                        .unwrap_or("true".to_string());
+                        .unwrap_or_else(|| "true".to_string());
                     let hint = hint
                         .contents()
                         .map(|contents| contents.to_string())
-                        .unwrap_or("true".to_string());
+                        .unwrap_or_else(|| "true".to_string());
 
                     return Err(ProjectError::OverlappingMarkers(lhs, rhs, hint));
                 }
@@ -537,6 +549,7 @@ async fn do_lock(
                     .collect(),
                 dev,
                 source_trees,
+                // The root is always null in workspaces, it "depends on" the projects
                 None,
                 Some(workspace.packages().keys().cloned().collect()),
                 &extras,

@@ -19,7 +19,7 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace}
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::do_safe_lock;
 use crate::commands::project::{FoundInterpreter, ProjectError};
-use crate::commands::{pip, ExitStatus, OutputWriter};
+use crate::commands::{diagnostics, pip, ExitStatus, OutputWriter};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -107,8 +107,19 @@ pub(crate) async fn export(
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report = miette::Report::msg(format!("{err}")).context(err.header());
-            anstream::eprint!("{report:?}");
+            diagnostics::no_solution(&err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+            uv_resolver::ResolveError::FetchAndBuild(dist, err),
+        ))) => {
+            diagnostics::fetch_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+            uv_resolver::ResolveError::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),

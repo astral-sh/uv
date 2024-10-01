@@ -391,7 +391,6 @@ pub(crate) async fn install(
     index_urls: &IndexLocations,
     config_settings: &ConfigSettings,
     hasher: &HashStrategy,
-    markers: &ResolverMarkerEnvironment,
     tags: &Tags,
     client: &RegistryClient,
     in_flight: &InFlight,
@@ -405,12 +404,9 @@ pub(crate) async fn install(
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
 
-    // Extract the requirements from the resolution.
-    let requirements = resolution.requirements().collect::<Vec<_>>();
-
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
-    let plan = Planner::new(&requirements)
+    let plan = Planner::new(resolution)
         .build(
             site_packages,
             reinstall,
@@ -420,7 +416,6 @@ pub(crate) async fn install(
             config_settings,
             cache,
             venv,
-            markers,
             tags,
         )
         .context("Failed to determine installation plan")?;
@@ -448,17 +443,6 @@ pub(crate) async fn install(
         logger.on_audit(resolution.len(), start, printer)?;
         return Ok(Changelog::default());
     }
-
-    // Map any registry-based requirements back to those returned by the resolver.
-    let remote = remote
-        .iter()
-        .map(|dist| {
-            resolution
-                .get_remote(&dist.name)
-                .cloned()
-                .expect("Resolution should contain all packages")
-        })
-        .collect::<Vec<_>>();
 
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
@@ -581,17 +565,6 @@ fn report_dry_run(
         writeln!(printer.stderr(), "Would make no changes")?;
         return Ok(());
     }
-
-    // Map any registry-based requirements back to those returned by the resolver.
-    let remote = remote
-        .iter()
-        .map(|dist| {
-            resolution
-                .get_remote(&dist.name)
-                .cloned()
-                .expect("Resolution should contain all packages")
-        })
-        .collect::<Vec<_>>();
 
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {

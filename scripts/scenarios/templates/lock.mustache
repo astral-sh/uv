@@ -61,7 +61,7 @@ fn {{module_name}}() -> Result<()> {
     );
 
     {{#expected.satisfiable}}
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock")();
     insta::with_settings!({
         filters => filters,
     }, {

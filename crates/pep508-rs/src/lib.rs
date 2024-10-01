@@ -16,23 +16,12 @@
 
 #![warn(missing_docs)]
 
-#[cfg(feature = "pyo3")]
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-#[cfg(feature = "pyo3")]
-use std::hash::{Hash, Hasher};
-#[cfg(feature = "pyo3")]
-use std::ops::Deref;
 use std::path::Path;
 use std::str::FromStr;
 
-#[cfg(feature = "pyo3")]
-use pyo3::{
-    create_exception, exceptions::PyNotImplementedError, pyclass, pyclass::CompareOp, pymethods,
-    pymodule, types::PyModule, IntoPy, PyObject, PyResult, Python,
-};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
@@ -46,8 +35,6 @@ pub use marker::{
     StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 pub use origin::RequirementOrigin;
-#[cfg(feature = "pyo3")]
-use pep440_rs::PyVersion;
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 #[cfg(feature = "non-pep508-extensions")]
 pub use unnamed::{UnnamedRequirement, UnnamedRequirementUrl};
@@ -125,14 +112,6 @@ impl<T: Pep508Url> Display for Pep508Error<T> {
 
 /// We need this to allow anyhow's `.context()` and `AsDynError`.
 impl<E: Error + Debug, T: Pep508Url<Err = E>> std::error::Error for Pep508Error<T> {}
-
-#[cfg(feature = "pyo3")]
-create_exception!(
-    pep508,
-    PyPep508Error,
-    pyo3::exceptions::PyValueError,
-    "A PEP 508 parser error with span information"
-);
 
 /// A PEP 508 dependency specifier.
 #[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
@@ -220,155 +199,6 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
 }
 
 type MarkerWarning = (MarkerWarningKind, String);
-
-#[cfg(feature = "pyo3")]
-#[pyclass(module = "pep508", name = "Requirement")]
-#[derive(Hash, Debug, Clone, Eq, PartialEq)]
-/// A PEP 508 dependency specifier.
-pub struct PyRequirement(Requirement);
-
-#[cfg(feature = "pyo3")]
-impl Deref for PyRequirement {
-    type Target = Requirement;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl PyRequirement {
-    /// The distribution name such as `requests` in
-    /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
-    #[getter]
-    pub fn name(&self) -> String {
-        self.name.to_string()
-    }
-
-    /// The list of extras such as `security`, `tests` in
-    /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
-    #[getter]
-    pub fn extras(&self) -> Vec<String> {
-        self.extras.iter().map(ToString::to_string).collect()
-    }
-
-    /// The marker expression such as  `python_version > "3.8"` in
-    /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
-    #[getter]
-    pub fn marker(&self) -> Option<String> {
-        self.marker.try_to_string()
-    }
-
-    /// Parses a PEP 440 string
-    #[new]
-    pub fn py_new(requirement: &str) -> PyResult<Self> {
-        Ok(Self(
-            Requirement::from_str(requirement)
-                .map_err(|err| PyPep508Error::new_err(err.to_string()))?,
-        ))
-    }
-
-    #[getter]
-    fn version_or_url(&self, py: Python<'_>) -> PyObject {
-        match &self.version_or_url {
-            None => py.None(),
-            Some(VersionOrUrl::VersionSpecifier(version_specifier)) => version_specifier
-                .iter()
-                .map(|x| x.clone().into_py(py))
-                .collect::<Vec<PyObject>>()
-                .into_py(py),
-            Some(VersionOrUrl::Url(url)) => url.to_string().into_py(py),
-        }
-    }
-
-    fn __str__(&self) -> String {
-        self.to_string()
-    }
-
-    fn __repr__(&self) -> String {
-        self.to_string()
-    }
-
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
-        let err = PyNotImplementedError::new_err("Requirement only supports equality comparisons");
-        match op {
-            CompareOp::Lt => Err(err),
-            CompareOp::Le => Err(err),
-            CompareOp::Eq => Ok(self == other),
-            CompareOp::Ne => Ok(self != other),
-            CompareOp::Gt => Err(err),
-            CompareOp::Ge => Err(err),
-        }
-    }
-
-    fn __hash__(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
-        hasher.finish()
-    }
-
-    /// Returns whether the markers apply for the given environment
-    #[allow(clippy::needless_pass_by_value)]
-    #[pyo3(name = "evaluate_markers")]
-    pub fn py_evaluate_markers(
-        &self,
-        env: &MarkerEnvironment,
-        extras: Vec<String>,
-    ) -> PyResult<bool> {
-        let extras = extras
-            .into_iter()
-            .map(|extra| ExtraName::from_str(&extra))
-            .collect::<Result<Vec<_>, InvalidNameError>>()
-            .map_err(|err| PyPep508Error::new_err(err.to_string()))?;
-
-        Ok(self.evaluate_markers(env, &extras))
-    }
-
-    /// Returns whether the requirement would be satisfied, independent of environment markers, i.e.
-    /// if there is potentially an environment that could activate this requirement.
-    ///
-    /// Note that unlike [Self::evaluate_markers] this does not perform any checks for bogus
-    /// expressions but will simply return true. As caller you should separately perform a check
-    /// with an environment and forward all warnings.
-    #[allow(clippy::needless_pass_by_value)]
-    #[pyo3(name = "evaluate_extras_and_python_version")]
-    pub fn py_evaluate_extras_and_python_version(
-        &self,
-        extras: HashSet<String>,
-        python_versions: Vec<PyVersion>,
-    ) -> PyResult<bool> {
-        let extras = extras
-            .into_iter()
-            .map(|extra| ExtraName::from_str(&extra))
-            .collect::<Result<HashSet<_>, InvalidNameError>>()
-            .map_err(|err| PyPep508Error::new_err(err.to_string()))?;
-
-        let python_versions = python_versions
-            .into_iter()
-            .map(|py_version| py_version.0)
-            .collect::<Vec<_>>();
-
-        Ok(self.evaluate_extras_and_python_version(&extras, &python_versions))
-    }
-
-    /// Returns whether the markers apply for the given environment
-    #[allow(clippy::needless_pass_by_value)]
-    #[pyo3(name = "evaluate_markers_and_report")]
-    pub fn py_evaluate_markers_and_report(
-        &self,
-        env: &MarkerEnvironment,
-        extras: Vec<String>,
-    ) -> PyResult<(bool, Vec<MarkerWarning>)> {
-        let extras = extras
-            .into_iter()
-            .map(|extra| ExtraName::from_str(&extra))
-            .collect::<Result<Vec<_>, InvalidNameError>>()
-            .map_err(|err| PyPep508Error::new_err(err.to_string()))?;
-
-        Ok(self.evaluate_markers_and_report(env, &extras))
-    }
-}
 
 impl<T: Pep508Url> Requirement<T> {
     /// Returns whether the markers apply for the given environment
@@ -834,11 +664,19 @@ fn parse_extras_cursor<T: Pep508Url>(
 /// Parse a raw string for a URL requirement, which could be either a URL or a local path, and which
 /// could contain unexpanded environment variables.
 ///
+/// When parsing, we eat characters until we see any of the following:
+/// - A newline.
+/// - A semicolon (marker) or hash (comment), _preceded_ by a space. We parse the URL until the last
+///   non-whitespace character (inclusive).
+/// - A semicolon (marker) or hash (comment) _followed_ by a space. We treat this as an error, since
+///   the end of the URL is ambiguous.
+///
 /// For example:
 /// - `https://pypi.org/project/requests/...`
 /// - `file:///home/ferris/project/scripts/...`
 /// - `file:../editable/`
 /// - `../editable/`
+/// - `../path to editable/`
 /// - `https://download.pytorch.org/whl/torch_stable.html`
 fn parse_url<T: Pep508Url>(
     cursor: &mut Cursor,
@@ -847,7 +685,40 @@ fn parse_url<T: Pep508Url>(
     // wsp*
     cursor.eat_whitespace();
     // <URI_reference>
-    let (start, len) = cursor.take_while(|char| !char.is_whitespace());
+    let (start, len) = {
+        let start = cursor.pos();
+        let mut len = 0;
+        while let Some((_, c)) = cursor.next() {
+            // If we see a line break, we're done.
+            if matches!(c, '\r' | '\n') {
+                break;
+            }
+
+            // If we see top-level whitespace, check if it's followed by a semicolon or hash. If so,
+            // end the URL at the last non-whitespace character.
+            if c.is_whitespace() {
+                let mut cursor = cursor.clone();
+                cursor.eat_whitespace();
+                if matches!(cursor.peek_char(), None | Some(';' | '#')) {
+                    break;
+                }
+            }
+
+            len += c.len_utf8();
+
+            // If we see a top-level semicolon or hash followed by whitespace, we're done.
+            match c {
+                ';' if cursor.peek_char().is_some_and(char::is_whitespace) => {
+                    break;
+                }
+                '#' if cursor.peek_char().is_some_and(char::is_whitespace) => {
+                    break;
+                }
+                _ => {}
+            }
+        }
+        (start, len)
+    };
     let url = cursor.slice(start, len);
     if url.is_empty() {
         return Err(Pep508Error {
@@ -1087,16 +958,21 @@ fn parse_pep508_requirement<T: Pep508Url>(
     // wsp*
     cursor.eat_whitespace();
     if let Some((pos, char)) = cursor.next() {
-        if let Some(VersionOrUrl::Url(url)) = requirement_kind {
-            if marker.is_none() && url.to_string().ends_with(';') {
-                return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(
-                        "Missing space before ';', the end of the URL is ambiguous".to_string(),
-                    ),
-                    start: requirement_end - ';'.len_utf8(),
-                    len: ';'.len_utf8(),
-                    input: cursor.to_string(),
-                });
+        if marker.is_none() {
+            if let Some(VersionOrUrl::Url(url)) = requirement_kind {
+                let url = url.to_string();
+                for c in [';', '#'] {
+                    if url.ends_with(c) {
+                        return Err(Pep508Error {
+                            message: Pep508ErrorSource::String(format!(
+                                "Missing space before '{c}', the end of the URL is ambiguous"
+                            )),
+                            start: requirement_end - c.len_utf8(),
+                            len: c.len_utf8(),
+                            input: cursor.to_string(),
+                        });
+                    }
+                }
             }
         }
         let message = if marker.is_none() {
@@ -1119,32 +995,6 @@ fn parse_pep508_requirement<T: Pep508Url>(
         marker: marker.unwrap_or_default(),
         origin: None,
     })
-}
-
-/// A library for [dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
-/// as originally specified in [PEP 508](https://peps.python.org/pep-0508/)
-///
-/// This has `Version` and `VersionSpecifier` included. That is because
-/// `pep440_rs.Version("1.2.3") != pep508_rs.Requirement("numpy==1.2.3").version_or_url` as the
-/// `Version`s come from two different binaries and can therefore never be equal.
-#[cfg(feature = "pyo3")]
-#[pymodule]
-#[pyo3(name = "pep508_rs")]
-pub fn python_module(py: Python<'_>, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
-    // Allowed to fail if we embed this module in another
-
-    #[allow(unused_must_use)]
-    {
-        pyo3_log::try_init();
-    }
-
-    m.add_class::<PyVersion>()?;
-    m.add_class::<VersionSpecifier>()?;
-
-    m.add_class::<PyRequirement>()?;
-    m.add_class::<MarkerEnvironment>()?;
-    m.add("Pep508Error", py.get_type_bound::<PyPep508Error>())?;
-    Ok(())
 }
 
 /// Half of these tests are copied from <https://github.com/pypa/packaging/pull/624>

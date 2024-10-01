@@ -96,6 +96,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     preferences: Preferences,
     git: GitResolver,
     capabilities: IndexCapabilities,
+    locations: IndexLocations,
     exclusions: Exclusions,
     urls: Urls,
     locals: Locals,
@@ -171,6 +172,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             index,
             build_context.git(),
             build_context.capabilities(),
+            build_context.index_locations(),
             provider,
             installed_packages,
         )
@@ -190,6 +192,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         index: &InMemoryIndex,
         git: &GitResolver,
         capabilities: &IndexCapabilities,
+        locations: &IndexLocations,
         provider: Provider,
         installed_packages: InstalledPackages,
     ) -> Result<Self, ResolveError> {
@@ -210,6 +213,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
+            locations: locations.clone(),
             markers,
             python_requirement: python_requirement.clone(),
             installed_packages,
@@ -250,12 +254,11 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
 
         // Spawn the PubGrub solver on a dedicated thread.
         let solver = state.clone();
-        let index_locations = provider.index_locations().clone();
         let (tx, rx) = oneshot::channel();
         thread::Builder::new()
             .name("uv-resolver".into())
             .spawn(move || {
-                let result = solver.solve(index_locations, request_sink);
+                let result = solver.solve(request_sink);
 
                 // This may fail if the main thread returned early due to an error.
                 let _ = tx.send(result);
@@ -276,8 +279,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     #[instrument(skip_all)]
     fn solve(
         self: Arc<Self>,
-        // No solution error context.
-        index_locations: IndexLocations,
         request_sink: Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
         debug!(
@@ -330,7 +331,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         state.fork_urls,
                         state.markers,
                         &visited,
-                        &index_locations,
+                        &self.locations,
                     ));
                 }
 
@@ -1216,9 +1217,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         false,
                         "Dependencies were requested for a package that is not available"
                     );
-                    return Err(ResolveError::Failure(format!(
-                        "The package is unavailable: {name}"
-                    )));
+                    return Err(ResolveError::PackageUnavailable(name.clone()));
                 }
 
                 // Wait for the metadata to be available.

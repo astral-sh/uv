@@ -32,10 +32,8 @@
 //! * ordering contradicts matching: We have e.g. `1.0+local > 1.0` when sorting,
 //!   but `==1.0` matches `1.0+local`. While the ordering of versions itself is a total order
 //!   the version matching needs to catch all sorts of special cases
-#![deny(missing_docs)]
+#![warn(missing_docs)]
 
-#[cfg(feature = "pyo3")]
-pub use version::PyVersion;
 pub use {
     version::{
         LocalSegment, Operator, OperatorParseError, Prerelease, PrereleaseKind, Version,
@@ -49,18 +47,3 @@ pub use {
 
 mod version;
 mod version_specifier;
-
-/// Python bindings shipped as `pep440_rs`
-#[cfg(feature = "pyo3")]
-#[pyo3::pymodule]
-#[pyo3(name = "_pep440_rs")]
-pub fn python_module(
-    _py: pyo3::Python,
-    module: &pyo3::Bound<'_, pyo3::types::PyModule>,
-) -> pyo3::PyResult<()> {
-    module.add_class::<PyVersion>()?;
-    module.add_class::<Operator>()?;
-    module.add_class::<VersionSpecifier>()?;
-    module.add_class::<VersionSpecifiers>()?;
-    Ok(())
-}

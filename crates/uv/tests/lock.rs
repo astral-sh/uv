@@ -44,7 +44,7 @@ fn lock_wheel_registry() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -170,7 +170,7 @@ fn lock_sdist_registry() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -259,7 +259,7 @@ fn lock_sdist_git() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -353,7 +353,7 @@ fn lock_sdist_git() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -413,7 +413,7 @@ fn lock_sdist_git() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -473,7 +473,7 @@ fn lock_sdist_git() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -538,7 +538,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -626,7 +626,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -693,7 +693,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -750,7 +750,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -807,7 +807,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -875,7 +875,7 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -973,7 +973,7 @@ fn lock_wheel_url() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1120,7 +1120,7 @@ fn lock_sdist_url() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1257,7 +1257,7 @@ fn lock_project_extra() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1524,7 +1524,7 @@ fn lock_dependency_extra() -> Result<()> {
     Resolved 10 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2011,7 +2011,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     warning: The package `flask==3.0.2` does not have an extra named `foo`
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2196,7 +2196,7 @@ fn lock_upgrade_log() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2281,7 +2281,7 @@ fn lock_upgrade_log() -> Result<()> {
     Added typing-extensions v4.10.0
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2372,7 +2372,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2461,7 +2461,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     Updated markupsafe v1.1.1, v2.0.0 -> v2.1.5
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2538,7 +2538,7 @@ fn lock_preference() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2601,7 +2601,7 @@ fn lock_preference() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2647,7 +2647,7 @@ fn lock_preference() -> Result<()> {
     Updated iniconfig v1.1.1 -> v2.0.0
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2682,6 +2682,98 @@ fn lock_preference() -> Result<()> {
         "###
         );
     });
+
+    Ok(())
+}
+
+/// If the user includes `git+` in a `tool.uv.sources` entry, we shouldn't fail.
+#[test]
+#[cfg(feature = "git")]
+fn lock_git_plus_prefix() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Lock against `main`.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-public-pypackage"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        uv-public-pypackage = { git = "git+https://github.com/astral-test/uv-public-pypackage" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage" }]
+
+        [[package]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile, excluding development dependencies.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    "###);
 
     Ok(())
 }
@@ -2771,7 +2863,7 @@ fn lock_git_sha() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // The lockfile should resolve to `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`, the latest commit
     // on `main`.
@@ -4135,7 +4227,7 @@ fn lock_dev() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4253,7 +4345,7 @@ fn lock_conditional_unconditional() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4334,7 +4426,7 @@ fn lock_multiple_markers() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4454,7 +4546,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         Resolved 3 packages in [TIME]
         "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4537,7 +4629,7 @@ fn lock_cycles() -> Result<()> {
     Resolved 11 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4745,7 +4837,7 @@ fn lock_new_extras() -> Result<()> {
         Resolved 6 packages in [TIME]
         "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4874,7 +4966,7 @@ fn lock_new_extras() -> Result<()> {
         Added pysocks v1.7.1
         "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -5125,7 +5217,7 @@ fn lock_resolution_mode() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -5205,7 +5297,7 @@ fn lock_resolution_mode() -> Result<()> {
     Updated anyio v4.3.0 -> v3.0.0
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -5380,7 +5472,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
     Resolved 7 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -5871,7 +5963,7 @@ fn lock_redact_https() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // The lockfile shout omit the credentials.
     insta::with_settings!({
@@ -6068,7 +6160,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => filters.clone(),
@@ -6165,7 +6257,7 @@ fn lock_redact_git_sources() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => filters.clone(),
@@ -6255,7 +6347,7 @@ fn lock_relative_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6371,7 +6463,7 @@ fn lock_no_sources() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6459,7 +6551,7 @@ fn lock_no_sources() -> Result<()> {
     Added sniffio v1.3.1
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6631,7 +6723,7 @@ fn lock_migrate() -> Result<()> {
     Added sniffio v1.3.1
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6733,7 +6825,7 @@ fn lock_upgrade_package() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6832,7 +6924,7 @@ fn lock_upgrade_package() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6915,7 +7007,7 @@ fn lock_upgrade_package() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -7005,7 +7097,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .env_remove("UV_EXCLUDE_NEWER")
         .assert()
         .success();
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     assert!(lock.contains("resolution-markers"));
 
     // Remove the bound and lock with `--upgrade`.
@@ -7018,7 +7110,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .arg("--upgrade")
         .assert()
         .success();
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     assert!(!lock.contains("resolution-markers"));
     Ok(())
 }
@@ -7325,7 +7417,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -7420,7 +7512,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -7473,7 +7565,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + packaging==23.2
      + project==0.1.0 (from file://[TEMP_DIR]/)
@@ -7549,7 +7641,7 @@ fn lock_local_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     let index = Url::from_directory_path(&root).unwrap().to_string();
     let filters = [(index.as_str(), "file://[TMP]")]
@@ -7646,7 +7738,7 @@ fn lock_sources_url() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -7786,7 +7878,7 @@ fn lock_sources_archive() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // insta::with_settings!({
     //     filters => context.filters(),
@@ -7936,7 +8028,7 @@ fn lock_sources_source_tree() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8076,7 +8168,7 @@ fn lock_editable() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8159,7 +8251,7 @@ fn lock_editable() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8718,7 +8810,7 @@ fn lock_mismatched_versions() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8842,7 +8934,7 @@ fn lock_change_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8888,7 +8980,7 @@ fn lock_change_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8989,7 +9081,7 @@ fn lock_remove_member() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9110,7 +9202,7 @@ fn lock_remove_member() -> Result<()> {
     Removed sniffio v1.3.1
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9171,7 +9263,7 @@ fn lock_add_member() -> Result<()> {
     Resolved 1 package in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9285,7 +9377,7 @@ fn lock_add_member() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9392,7 +9484,7 @@ fn lock_redundant_add_member() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9500,7 +9592,7 @@ fn lock_redundant_add_member() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9595,7 +9687,7 @@ fn lock_new_constraints() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9705,7 +9797,7 @@ fn lock_new_constraints() -> Result<()> {
     Updated anyio v4.3.0 -> v4.2.0
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9813,7 +9905,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9921,7 +10013,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     Removed sniffio v1.3.1
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9971,7 +10063,7 @@ fn lock_rename_project() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10055,7 +10147,7 @@ fn lock_rename_project() -> Result<()> {
     Added renamed v0.1.0
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10174,7 +10266,7 @@ fn lock_missing_metadata() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10265,7 +10357,7 @@ fn lock_reorder() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10524,7 +10616,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10634,7 +10726,7 @@ fn lock_constrained_environment() -> Result<()> {
     Resolved 7 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // Because we're _not_ locking for Windows, `colorama` should not be included.
     insta::with_settings!({
@@ -10819,7 +10911,7 @@ fn lock_constrained_environment() -> Result<()> {
     Added colorama v0.4.6
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // Because we're locking for Windows, `colorama` should be included.
     insta::with_settings!({
@@ -10927,6 +11019,170 @@ fn lock_constrained_environment() -> Result<()> {
     Ok(())
 }
 
+/// Lock with a user-provided constraint on the space of supported environments, using a legacy
+/// virtual workspace root.
+#[test]
+fn lock_constrained_environment_legacy() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv]
+        environments = "platform_system != 'Windows'"
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["black"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    // Because we're _not_ locking for Windows, `colorama` should not be included.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_system != 'Windows'",
+        ]
+        supported-markers = [
+            "platform_system != 'Windows'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+        ]
+
+        [[package]]
+        name = "black"
+        version = "24.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "click", marker = "platform_system != 'Windows'" },
+            { name = "mypy-extensions", marker = "platform_system != 'Windows'" },
+            { name = "packaging", marker = "platform_system != 'Windows'" },
+            { name = "pathspec", marker = "platform_system != 'Windows'" },
+            { name = "platformdirs", marker = "platform_system != 'Windows'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f", size = 1600822 },
+            { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11", size = 1429987 },
+            { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4", size = 1755319 },
+            { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", hash = "sha256:41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93", size = 201493 },
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { virtual = "child" }
+        dependencies = [
+            { name = "black", marker = "platform_system != 'Windows'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "black" }]
+
+        [[package]]
+        name = "click"
+        version = "8.1.7"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
+        ]
+
+        [[package]]
+        name = "mypy-extensions"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782", size = 4433 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d", size = 4695 },
+        ]
+
+        [[package]]
+        name = "packaging"
+        version = "24.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488 },
+        ]
+
+        [[package]]
+        name = "pathspec"
+        version = "0.12.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191 },
+        ]
+
+        [[package]]
+        name = "platformdirs"
+        version = "4.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", hash = "sha256:ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768", size = 20055 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717 },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "###);
+
+    // Re-run with `--offline`. We shouldn't need a network connection to validate an
+    // already-correct lockfile with immutable metadata.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
 /// User-provided constraints must be disjoint.
 #[test]
 fn lock_overlapping_environment() -> Result<()> {
@@ -10993,7 +11249,7 @@ fn lock_non_project_fork() -> Result<()> {
     Resolved 6 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11183,7 +11439,7 @@ fn lock_non_project_conditional() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11290,7 +11546,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11408,7 +11664,7 @@ fn lock_trailing_slash() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11540,7 +11796,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
     Resolved 11 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11757,7 +12013,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
     Resolved 11 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11984,7 +12240,7 @@ fn lock_implicit_virtual_path() -> Result<()> {
     Resolved 6 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -12170,7 +12426,7 @@ fn lock_split_python_environment() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -12284,7 +12540,7 @@ fn lock_python_upper_bound() -> Result<()> {
     Resolved 18 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -12658,7 +12914,7 @@ fn lock_dependency_metadata() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -12871,7 +13127,7 @@ fn lock_strip_fragment() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -13126,7 +13382,7 @@ fn lock_change_requires_python() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -13235,7 +13491,7 @@ fn lock_change_requires_python() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -13320,6 +13576,471 @@ fn lock_change_requires_python() -> Result<()> {
         "###
         );
     });
+
+    Ok(())
+}
+
+#[test]
+fn lock_multiple_sources() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", marker = "sys_platform != 'win32'" },
+            { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", marker = "sys_platform == 'win32'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform != 'win32'",
+            "sys_platform == 'win32'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz" }
+        resolution-markers = [
+            "sys_platform == 'win32'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" }
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
+        resolution-markers = [
+            "sys_platform != 'win32'",
+        ]
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz" }, marker = "sys_platform == 'win32'" },
+            { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "sys_platform != 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "iniconfig", marker = "sys_platform != 'win32'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
+            { name = "iniconfig", marker = "sys_platform == 'win32'", url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_multiple_sources_conflict() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", marker = "sys_platform == 'win32' and python_version == '3.12'" },
+            { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", marker = "sys_platform == 'win32'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 9, column 21
+      |
+    9 |         iniconfig = [
+      |                     ^
+    Source markers must be disjoint, but the following markers overlap: `python_full_version == '3.12.*' and sys_platform == 'win32'` and `sys_platform == 'win32'`.
+
+    hint: replace `sys_platform == 'win32'` with `python_full_version != '3.12.*' and sys_platform == 'win32'`.
+
+    "###);
+
+    Ok(())
+}
+
+/// Multiple `index` entries is not yet supported.
+#[test]
+fn lock_multiple_sources_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { index = "pytorch", marker = "sys_platform != 'win32'" },
+            { index = "internal", marker = "sys_platform == 'win32'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 9, column 21
+      |
+    9 |         iniconfig = [
+      |                     ^
+    Sources can only include a single index source
+
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_multiple_sources_non_total() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", marker = "sys_platform == 'darwin'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform != 'darwin'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform != 'darwin'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
+            { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "sys_platform == 'darwin'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "iniconfig", marker = "sys_platform != 'darwin'" },
+            { name = "iniconfig", marker = "sys_platform == 'darwin'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_multiple_sources_respect_marker() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig ; platform_system == 'Windows'"]
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", marker = "sys_platform == 'darwin'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_system == 'Windows' and sys_platform == 'darwin'",
+            "platform_system == 'Windows' and sys_platform != 'darwin'",
+            "platform_system != 'Windows'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "platform_system == 'Windows' and sys_platform != 'darwin'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
+        resolution-markers = [
+            "platform_system == 'Windows' and sys_platform == 'darwin'",
+        ]
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_system == 'Windows' and sys_platform != 'darwin'" },
+            { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "platform_system == 'Windows' and sys_platform == 'darwin'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "iniconfig", marker = "platform_system == 'Windows' and sys_platform != 'darwin'" },
+            { name = "iniconfig", marker = "platform_system == 'Windows' and sys_platform == 'darwin'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_multiple_sources_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.optional-dependencies]
+        cpu = []
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", marker = "extra == 'cpu'" },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        cpu = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "iniconfig", marker = "extra == 'cpu'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
+            { name = "iniconfig", marker = "extra != 'cpu'" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     Ok(())
 }

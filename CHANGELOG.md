@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.17
+
+### Enhancements
+
+- Add `uv build --all` to build all packages in a workspace ([#7724](https://github.com/astral-sh/uv/pull/7724))
+- Add support for `uv init --script` ([#7565](https://github.com/astral-sh/uv/pull/7565))
+- Add support for upgrading build environment for installed tools (`uv tool upgrade --python`) ([#7605](https://github.com/astral-sh/uv/pull/7605))
+- Initialize a Git repository in `uv init` ([#5476](https://github.com/astral-sh/uv/pull/5476))
+- Respect `--quiet` flag in `uv build` ([#7674](https://github.com/astral-sh/uv/pull/7674))
+- Add context message before listing available tools in `uvx` ([#7641](https://github.com/astral-sh/uv/pull/7641))
+
+### Bug fixes
+
+- Don't create Python bytecode files during interpreter discovery ([#7707](https://github.com/astral-sh/uv/pull/7707))
+- Escape glob patterns in workspace member discovery ([#7709](https://github.com/astral-sh/uv/pull/7709))
+- Avoid prefetching source distributions with unbounded lower-bound ranges ([#7683](https://github.com/astral-sh/uv/pull/7683))
+
+### Documentation
+
+- Add `uv build` and `uv publish` to features overview ([#7716](https://github.com/astral-sh/uv/pull/7716))
+- Add documentation on cache versioning ([#7693](https://github.com/astral-sh/uv/pull/7693))
+- Spell out the names of the Docker images for easier copy-paste ([#7706](https://github.com/astral-sh/uv/pull/7706))
+- Document uv-with-Jupyter workflows ([#7625](https://github.com/astral-sh/uv/pull/7625))
+- Note that `uv lock --upgrade-package` retains locked versions ([#7694](https://github.com/astral-sh/uv/pull/7694))
+
 ## 0.4.16
 
 ### Enhancements

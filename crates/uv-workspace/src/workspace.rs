@@ -14,7 +14,7 @@ use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::pyproject::{
-    Project, PyProjectToml, PyprojectTomlError, Source, ToolUvSources, ToolUvWorkspace,
+    Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources, ToolUvWorkspace,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -78,7 +78,7 @@ pub struct Workspace {
     /// The sources table from the workspace `pyproject.toml`.
     ///
     /// This table is overridden by the project sources.
-    sources: BTreeMap<PackageName, Source>,
+    sources: BTreeMap<PackageName, Sources>,
     /// The `pyproject.toml` of the workspace root.
     pyproject_toml: PyProjectToml,
 }
@@ -273,17 +273,7 @@ impl Workspace {
                 .as_ref()
                 .map(|optional_dependencies| {
                     // It's a `BTreeMap` so the keys are sorted.
-                    optional_dependencies
-                        .iter()
-                        .filter_map(|(name, dependencies)| {
-                            if dependencies.is_empty() {
-                                None
-                            } else {
-                                Some(name)
-                            }
-                        })
-                        .cloned()
-                        .collect::<Vec<_>>()
+                    optional_dependencies.keys().cloned().collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
 
@@ -353,16 +343,8 @@ impl Workspace {
 
     /// Returns the set of overrides for the workspace.
     pub fn overrides(&self) -> Vec<Requirement> {
-        let Some(workspace_package) = self
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.install_path())
-        else {
-            return vec![];
-        };
-
-        let Some(overrides) = workspace_package
-            .pyproject_toml()
+        let Some(overrides) = self
+            .pyproject_toml
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
@@ -385,13 +367,7 @@ impl Workspace {
 
     /// Returns the set of supported environments for the workspace.
     pub fn environments(&self) -> Option<&SupportedEnvironments> {
-        let workspace_package = self
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.install_path())?;
-
-        workspace_package
-            .pyproject_toml()
+        self.pyproject_toml
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
@@ -400,16 +376,8 @@ impl Workspace {
 
     /// Returns the set of constraints for the workspace.
     pub fn constraints(&self) -> Vec<Requirement> {
-        let Some(workspace_package) = self
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.install_path())
-        else {
-            return vec![];
-        };
-
-        let Some(constraints) = workspace_package
-            .pyproject_toml()
+        let Some(constraints) = self
+            .pyproject_toml
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
@@ -527,7 +495,7 @@ impl Workspace {
     }
 
     /// The sources table from the workspace `pyproject.toml`.
-    pub fn sources(&self) -> &BTreeMap<PackageName, Source> {
+    pub fn sources(&self) -> &BTreeMap<PackageName, Sources> {
         &self.sources
     }
 
@@ -541,7 +509,7 @@ impl Workspace {
                         .as_ref()
                         .and_then(|uv| uv.sources.as_ref())
                         .map(ToolUvSources::inner)
-                        .map(|sources| sources.values())
+                        .map(|sources| sources.values().flat_map(Sources::iter))
                 })
             })
             .flatten()
@@ -637,11 +605,12 @@ impl Workspace {
 
         // Add all other workspace members.
         for member_glob in workspace_definition.clone().members.unwrap_or_default() {
-            let absolute_glob = workspace_root
-                .simplified()
-                .join(member_glob.as_str())
-                .to_string_lossy()
-                .to_string();
+            let absolute_glob = PathBuf::from(glob::Pattern::escape(
+                workspace_root.simplified().to_string_lossy().as_ref(),
+            ))
+            .join(member_glob.as_str())
+            .to_string_lossy()
+            .to_string();
             for member_root in glob(&absolute_glob)
                 .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
             {
@@ -1284,11 +1253,12 @@ fn is_excluded_from_workspace(
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
     for exclude_glob in workspace.exclude.iter().flatten() {
-        let absolute_glob = workspace_root
-            .simplified()
-            .join(exclude_glob.as_str())
-            .to_string_lossy()
-            .to_string();
+        let absolute_glob = PathBuf::from(glob::Pattern::escape(
+            workspace_root.simplified().to_string_lossy().as_ref(),
+        ))
+        .join(exclude_glob.as_str())
+        .to_string_lossy()
+        .to_string();
         for excluded_root in glob(&absolute_glob)
             .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
         {
@@ -1309,11 +1279,12 @@ fn is_included_in_workspace(
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
     for member_glob in workspace.members.iter().flatten() {
-        let absolute_glob = workspace_root
-            .simplified()
-            .join(member_glob.as_str())
-            .to_string_lossy()
-            .to_string();
+        let absolute_glob = PathBuf::from(glob::Pattern::escape(
+            workspace_root.simplified().to_string_lossy().as_ref(),
+        ))
+        .join(member_glob.as_str())
+        .to_string_lossy()
+        .to_string();
         for member_root in glob(&absolute_glob)
             .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
         {
@@ -1762,9 +1733,11 @@ mod tests {
                   }
                 },
                 "sources": {
-                  "bird-feeder": {
-                    "workspace": true
-                  }
+                  "bird-feeder": [
+                    {
+                      "workspace": true
+                    }
+                  ]
                 },
                 "pyproject_toml": {
                   "project": {
@@ -1780,9 +1753,11 @@ mod tests {
                   "tool": {
                     "uv": {
                       "sources": {
-                        "bird-feeder": {
-                          "workspace": true
-                        }
+                        "bird-feeder": [
+                          {
+                            "workspace": true
+                          }
+                        ]
                       },
                       "workspace": {
                         "members": [

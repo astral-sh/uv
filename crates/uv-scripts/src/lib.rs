@@ -12,7 +12,7 @@ use pep440_rs::VersionSpecifiers;
 use pep508_rs::PackageName;
 use pypi_types::VerbatimParsedUrl;
 use uv_settings::{GlobalOptions, ResolverInstallerOptions};
-use uv_workspace::pyproject::Source;
+use uv_workspace::pyproject::Sources;
 
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
 
@@ -193,7 +193,7 @@ pub struct ToolUv {
     pub globals: GlobalOptions,
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
-    pub sources: Option<BTreeMap<PackageName, Source>>,
+    pub sources: Option<BTreeMap<PackageName, Sources>>,
 }
 
 #[derive(Debug, Error)]

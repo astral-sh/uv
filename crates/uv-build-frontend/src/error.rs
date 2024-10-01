@@ -63,13 +63,15 @@ pub enum Error {
     InvalidPyprojectTomlSchema(#[from] toml_edit::de::Error),
     #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
     EditableSetupPy,
+    #[error("Failed to resolve requirements from {0}")]
+    RequirementsResolve(&'static str, #[source] anyhow::Error),
     #[error("Failed to install requirements from {0}")]
     RequirementsInstall(&'static str, #[source] anyhow::Error),
     #[error("Failed to create temporary virtualenv")]
     Virtualenv(#[from] uv_virtualenv::Error),
     #[error("Failed to run `{0}`")]
     CommandFailed(PathBuf, #[source] io::Error),
-    #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
+    #[error("{message} ({exit_code})\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     BuildBackendOutput {
         message: String,
         exit_code: ExitStatus,
@@ -77,7 +79,7 @@ pub enum Error {
         stderr: String,
     },
     /// Nudge the user towards installing the missing dev library
-    #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
+    #[error("{message} ({exit_code})\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     MissingHeaderOutput {
         message: String,
         exit_code: ExitStatus,
@@ -86,12 +88,12 @@ pub enum Error {
         #[source]
         missing_header_cause: MissingHeaderCause,
     },
-    #[error("{message} with {exit_code}")]
+    #[error("{message} ({exit_code})")]
     BuildBackend {
         message: String,
         exit_code: ExitStatus,
     },
-    #[error("{message} with {exit_code}")]
+    #[error("{message} ({exit_code})")]
     MissingHeader {
         message: String,
         exit_code: ExitStatus,
@@ -327,7 +329,7 @@ mod test {
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
         insta::assert_snapshot!(formatted, @r###"
-        Failed building wheel through setup.py with exit code: 0
+        Failed building wheel through setup.py (exit code: 0)
         --- stdout:
         running bdist_wheel
         running build
@@ -382,7 +384,7 @@ mod test {
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
         insta::assert_snapshot!(formatted, @r###"
-        Failed building wheel through setup.py with exit code: 0
+        Failed building wheel through setup.py (exit code: 0)
         --- stdout:
 
         --- stderr:
@@ -430,7 +432,7 @@ mod test {
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
         insta::assert_snapshot!(formatted, @r###"
-        Failed building wheel through setup.py with exit code: 0
+        Failed building wheel through setup.py (exit code: 0)
         --- stdout:
 
         --- stderr:
@@ -476,7 +478,7 @@ mod test {
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
         insta::assert_snapshot!(formatted, @r###"
-        Failed building wheel through setup.py with exit code: 0
+        Failed building wheel through setup.py (exit code: 0)
         --- stdout:
 
         --- stderr:

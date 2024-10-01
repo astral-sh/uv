@@ -7,7 +7,8 @@
 //! Then lowers them into a dependency specification.
 
 use glob::Pattern;
-use serde::{de::IntoDeserializer, Deserialize, Serialize};
+use owo_colors::OwoColorize;
+use serde::{de::IntoDeserializer, Deserialize, Deserializer, Serialize};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -16,6 +17,7 @@ use thiserror::Error;
 use url::Url;
 
 use pep440_rs::{Version, VersionSpecifiers};
+use pep508_rs::MarkerTree;
 use pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 use uv_fs::{relative_to, PortablePathBuf};
 use uv_git::GitReference;
@@ -294,17 +296,17 @@ pub struct ToolUv {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ToolUvSources(BTreeMap<PackageName, Source>);
+pub struct ToolUvSources(BTreeMap<PackageName, Sources>);
 
 impl ToolUvSources {
     /// Returns the underlying `BTreeMap` of package names to sources.
-    pub fn inner(&self) -> &BTreeMap<PackageName, Source> {
+    pub fn inner(&self) -> &BTreeMap<PackageName, Sources> {
         &self.0
     }
 
     /// Convert the [`ToolUvSources`] into its inner `BTreeMap`.
     #[must_use]
-    pub fn into_inner(self) -> BTreeMap<PackageName, Source> {
+    pub fn into_inner(self) -> BTreeMap<PackageName, Sources> {
         self.0
     }
 }
@@ -329,7 +331,7 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
                 M: serde::de::MapAccess<'de>,
             {
                 let mut sources = BTreeMap::new();
-                while let Some((key, value)) = access.next_entry::<PackageName, Source>()? {
+                while let Some((key, value)) = access.next_entry::<PackageName, Sources>()? {
                     match sources.entry(key) {
                         std::collections::btree_map::Entry::Occupied(entry) => {
                             return Err(serde::de::Error::custom(format!(
@@ -407,8 +409,118 @@ impl Deref for SerdePattern {
     }
 }
 
-/// A `tool.uv.sources` value.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case", try_from = "SourcesWire")]
+pub struct Sources(#[cfg_attr(feature = "schemars", schemars(with = "SourcesWire"))] Vec<Source>);
+
+impl Sources {
+    /// Return an [`Iterator`] over the sources.
+    ///
+    /// If the iterator contains multiple entries, they will always use disjoint markers.
+    ///
+    /// The iterator will contain at most one registry source.
+    pub fn iter(&self) -> impl Iterator<Item = &Source> {
+        self.0.iter()
+    }
+
+    /// Returns `true` if the sources list is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Returns the number of sources in the list.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl IntoIterator for Sources {
+    type Item = Source;
+    type IntoIter = std::vec::IntoIter<Source>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
+#[allow(clippy::large_enum_variant)]
+enum SourcesWire {
+    One(Source),
+    Many(Vec<Source>),
+}
+
+impl<'de> serde::de::Deserialize<'de> for SourcesWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        serde_untagged::UntaggedEnumVisitor::new()
+            .map(|map| map.deserialize().map(SourcesWire::One))
+            .seq(|seq| seq.deserialize().map(SourcesWire::Many))
+            .deserialize(deserializer)
+    }
+}
+
+impl TryFrom<SourcesWire> for Sources {
+    type Error = SourceError;
+
+    fn try_from(wire: SourcesWire) -> Result<Self, Self::Error> {
+        match wire {
+            SourcesWire::One(source) => Ok(Self(vec![source])),
+            SourcesWire::Many(sources) => {
+                // Ensure that the markers are disjoint.
+                for (lhs, rhs) in sources
+                    .iter()
+                    .map(Source::marker)
+                    .zip(sources.iter().skip(1).map(Source::marker))
+                {
+                    if !lhs.is_disjoint(&rhs) {
+                        let mut hint = lhs.negate();
+                        hint.and(rhs.clone());
+
+                        let lhs = lhs
+                            .contents()
+                            .map(|contents| contents.to_string())
+                            .unwrap_or_else(|| "true".to_string());
+                        let rhs = rhs
+                            .contents()
+                            .map(|contents| contents.to_string())
+                            .unwrap_or_else(|| "true".to_string());
+                        let hint = hint
+                            .contents()
+                            .map(|contents| contents.to_string())
+                            .unwrap_or_else(|| "true".to_string());
+
+                        return Err(SourceError::OverlappingMarkers(lhs, rhs, hint));
+                    }
+                }
+
+                // Ensure that there is at least one source.
+                if sources.is_empty() {
+                    return Err(SourceError::EmptySources);
+                }
+
+                // Ensure that there is at most one registry source.
+                if sources
+                    .iter()
+                    .filter(|source| matches!(source, Source::Registry { .. }))
+                    .nth(1)
+                    .is_some()
+                {
+                    return Err(SourceError::MultipleIndexes);
+                }
+
+                Ok(Self(sources))
+            }
+        }
+    }
+}
+
+/// A `tool.uv.sources` value.
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", untagged, deny_unknown_fields)]
 pub enum Source {
@@ -427,6 +539,12 @@ pub enum Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        #[serde(
+            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+            serialize_with = "pep508_rs::marker::ser::serialize",
+            default
+        )]
+        marker: MarkerTree,
     },
     /// A remote `http://` or `https://` URL, either a wheel (`.whl`) or a source distribution
     /// (`.zip`, `.tar.gz`).
@@ -440,6 +558,12 @@ pub enum Source {
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
         subdirectory: Option<PortablePathBuf>,
+        #[serde(
+            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+            serialize_with = "pep508_rs::marker::ser::serialize",
+            default
+        )]
+        marker: MarkerTree,
     },
     /// The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or
     /// `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
@@ -448,30 +572,331 @@ pub enum Source {
         path: PortablePathBuf,
         /// `false` by default.
         editable: Option<bool>,
+        #[serde(
+            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+            serialize_with = "pep508_rs::marker::ser::serialize",
+            default
+        )]
+        marker: MarkerTree,
     },
     /// A dependency pinned to a specific index, e.g., `torch` after setting `torch` to `https://download.pytorch.org/whl/cu118`.
     Registry {
         // TODO(konstin): The string is more-or-less a placeholder
         index: String,
+        #[serde(
+            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+            serialize_with = "pep508_rs::marker::ser::serialize",
+            default
+        )]
+        marker: MarkerTree,
     },
     /// A dependency on another package in the workspace.
     Workspace {
         /// When set to `false`, the package will be fetched from the remote index, rather than
         /// included as a workspace package.
         workspace: bool,
+        #[serde(
+            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+            serialize_with = "pep508_rs::marker::ser::serialize",
+            default
+        )]
+        marker: MarkerTree,
     },
-    /// A catch-all variant used to emit precise error messages when deserializing.
-    CatchAll {
-        git: String,
-        subdirectory: Option<PortablePathBuf>,
-        rev: Option<String>,
-        tag: Option<String>,
-        branch: Option<String>,
-        url: String,
-        path: PortablePathBuf,
-        index: String,
-        workspace: bool,
-    },
+}
+
+/// A custom deserialization implementation for [`Source`]. This is roughly equivalent to
+/// `#[serde(untagged)]`, but provides more detailed error messages.
+impl<'de> Deserialize<'de> for Source {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize, Debug, Clone)]
+        #[serde(rename_all = "kebab-case", deny_unknown_fields)]
+        struct CatchAll {
+            git: Option<Url>,
+            subdirectory: Option<PortablePathBuf>,
+            rev: Option<String>,
+            tag: Option<String>,
+            branch: Option<String>,
+            url: Option<Url>,
+            path: Option<PortablePathBuf>,
+            editable: Option<bool>,
+            index: Option<String>,
+            workspace: Option<bool>,
+            #[serde(
+                skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+                serialize_with = "pep508_rs::marker::ser::serialize",
+                default
+            )]
+            marker: MarkerTree,
+        }
+
+        // Attempt to deserialize as `CatchAll`.
+        let CatchAll {
+            git,
+            subdirectory,
+            rev,
+            tag,
+            branch,
+            url,
+            path,
+            editable,
+            index,
+            workspace,
+            marker,
+        } = CatchAll::deserialize(deserializer)?;
+
+        // If the `git` field is set, we're dealing with a Git source.
+        if let Some(git) = git {
+            if index.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `git` and `index`",
+                ));
+            }
+            if workspace.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `git` and `workspace`",
+                ));
+            }
+            if path.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `git` and `path`",
+                ));
+            }
+            if url.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `git` and `url`",
+                ));
+            }
+            if editable.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `git` and `editable`",
+                ));
+            }
+
+            // At most one of `rev`, `tag`, or `branch` may be set.
+            match (rev.as_ref(), tag.as_ref(), branch.as_ref()) {
+                (None, None, None) => {}
+                (Some(_), None, None) => {}
+                (None, Some(_), None) => {}
+                (None, None, Some(_)) => {}
+                _ => {
+                    return Err(serde::de::Error::custom(
+                        "expected at most one of `rev`, `tag`, or `branch`",
+                    ))
+                }
+            };
+
+            // If the user prefixed the URL with `git+`, strip it.
+            let git = if let Some(git) = git.as_str().strip_prefix("git+") {
+                Url::parse(git).map_err(serde::de::Error::custom)?
+            } else {
+                git
+            };
+
+            return Ok(Self::Git {
+                git,
+                subdirectory,
+                rev,
+                tag,
+                branch,
+                marker,
+            });
+        }
+
+        // If the `url` field is set, we're dealing with a URL source.
+        if let Some(url) = url {
+            if index.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `index`",
+                ));
+            }
+            if workspace.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `workspace`",
+                ));
+            }
+            if path.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `path`",
+                ));
+            }
+            if git.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `git`",
+                ));
+            }
+            if rev.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `rev`",
+                ));
+            }
+            if tag.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `tag`",
+                ));
+            }
+            if branch.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `branch`",
+                ));
+            }
+            if editable.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `editable`",
+                ));
+            }
+
+            return Ok(Self::Url {
+                url,
+                subdirectory,
+                marker,
+            });
+        }
+
+        // If the `path` field is set, we're dealing with a path source.
+        if let Some(path) = path {
+            if index.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `index`",
+                ));
+            }
+            if workspace.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `workspace`",
+                ));
+            }
+            if git.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `git`",
+                ));
+            }
+            if url.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `url`",
+                ));
+            }
+            if rev.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `rev`",
+                ));
+            }
+            if tag.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `tag`",
+                ));
+            }
+            if branch.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `branch`",
+                ));
+            }
+
+            return Ok(Self::Path {
+                path,
+                editable,
+                marker,
+            });
+        }
+
+        // If the `index` field is set, we're dealing with a registry source.
+        if let Some(index) = index {
+            if workspace.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `workspace`",
+                ));
+            }
+            if git.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `git`",
+                ));
+            }
+            if url.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `url`",
+                ));
+            }
+            if path.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `path`",
+                ));
+            }
+            if rev.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `rev`",
+                ));
+            }
+            if tag.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `tag`",
+                ));
+            }
+            if branch.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `branch`",
+                ));
+            }
+            if editable.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `editable`",
+                ));
+            }
+
+            return Ok(Self::Registry { index, marker });
+        }
+
+        // If the `workspace` field is set, we're dealing with a workspace source.
+        if let Some(workspace) = workspace {
+            if index.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `index`",
+                ));
+            }
+            if git.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `git`",
+                ));
+            }
+            if url.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `url`",
+                ));
+            }
+            if path.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `path`",
+                ));
+            }
+            if rev.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `rev`",
+                ));
+            }
+            if tag.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `tag`",
+                ));
+            }
+            if branch.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `branch`",
+                ));
+            }
+            if editable.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `editable`",
+                ));
+            }
+
+            return Ok(Self::Workspace { workspace, marker });
+        }
+
+        // If none of the fields are set, we're dealing with an error.
+        Err(serde::de::Error::custom(
+            "expected one of `git`, `url`, `path`, `index`, or `workspace`",
+        ))
+    }
 }
 
 #[derive(Error, Debug)]
@@ -494,6 +919,12 @@ pub enum SourceError {
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
     NonUtf8Path(PathBuf),
+    #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
+    OverlappingMarkers(String, String, String),
+    #[error("Must provide at least one source")]
+    EmptySources,
+    #[error("Sources can only include a single index source")]
+    MultipleIndexes,
 }
 
 impl Source {
@@ -524,7 +955,10 @@ impl Source {
         if workspace {
             return match source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
-                    Ok(Some(Source::Workspace { workspace: true }))
+                    Ok(Some(Source::Workspace {
+                        workspace: true,
+                        marker: MarkerTree::TRUE,
+                    }))
                 }
                 RequirementSource::Url { .. } => {
                     Err(SourceError::WorkspacePackageUrl(name.to_string()))
@@ -548,12 +982,14 @@ impl Source {
                         .or_else(|_| std::path::absolute(&install_path))
                         .map_err(SourceError::Absolute)?,
                 ),
+                marker: MarkerTree::TRUE,
             },
             RequirementSource::Url {
                 subdirectory, url, ..
             } => Source::Url {
                 url: url.to_url(),
                 subdirectory: subdirectory.map(PortablePathBuf::from),
+                marker: MarkerTree::TRUE,
             },
             RequirementSource::Git {
                 repository,
@@ -578,6 +1014,7 @@ impl Source {
                         branch,
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
+                        marker: MarkerTree::TRUE,
                     }
                 } else {
                     Source::Git {
@@ -586,12 +1023,24 @@ impl Source {
                         branch,
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
+                        marker: MarkerTree::TRUE,
                     }
                 }
             }
         };
 
         Ok(Some(source))
+    }
+
+    /// Return the [`MarkerTree`] for the source.
+    pub fn marker(&self) -> MarkerTree {
+        match self {
+            Source::Git { marker, .. } => marker.clone(),
+            Source::Url { marker, .. } => marker.clone(),
+            Source::Path { marker, .. } => marker.clone(),
+            Source::Registry { marker, .. } => marker.clone(),
+            Source::Workspace { marker, .. } => marker.clone(),
+        }
     }
 }
 

@@ -81,7 +81,7 @@ fn locked() -> Result<()> {
     // Lock the initial requirements.
     context.lock().assert().success();
 
-    let existing = fs_err::read_to_string(context.temp_dir.child("uv.lock"))?;
+    let existing = context.read("uv.lock");
 
     // Update the requirements.
     pyproject_toml.write_str(
@@ -109,7 +109,7 @@ fn locked() -> Result<()> {
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
 
-    let updated = fs_err::read_to_string(context.temp_dir.child("uv.lock"))?;
+    let updated = context.read("uv.lock");
 
     // And the lockfile should be unchanged.
     assert_eq!(existing, updated);
@@ -577,7 +577,7 @@ fn sync_build_isolation_package() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
-      Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
+      Caused by: Build backend failed to build wheel through `build_wheel()` (exit status: 1)
     --- stdout:
 
     --- stderr:
@@ -669,7 +669,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
-      Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
+      Caused by: Build backend failed to build wheel through `build_wheel()` (exit status: 1)
     --- stdout:
 
     --- stderr:
@@ -689,7 +689,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
-      Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
+      Caused by: Build backend failed to build wheel through `build_wheel()` (exit status: 1)
     --- stdout:
 
     --- stderr:
@@ -855,7 +855,7 @@ fn sync_relative_wheel() -> Result<()> {
      + relative-wheel==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!(
         {
@@ -1043,12 +1043,12 @@ fn read_metadata_statically_over_the_cache() -> Result<()> {
     )?;
 
     context.sync().assert().success();
-    let lock1 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock1 = context.read("uv.lock");
     // Assert we're reading static metadata.
     assert!(lock1.contains(">=4,<5"));
     assert!(!lock1.contains("<5,>=4"));
     context.sync().assert().success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock2 = context.read("uv.lock");
     // Assert stability.
     assert_eq!(lock1, lock2);
 
@@ -1381,7 +1381,7 @@ fn convert_to_virtual() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1440,7 +1440,7 @@ fn convert_to_virtual() -> Result<()> {
      - project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1508,7 +1508,7 @@ fn convert_to_package() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1572,7 +1572,7 @@ fn convert_to_package() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2155,8 +2155,7 @@ fn sync_environment_prompt() -> Result<()> {
     "###);
 
     // The `pyvenv.cfg` should contain the prompt matching the project name
-    let pyvenv_cfg =
-        fs_err::read_to_string(context.temp_dir.join(".venv").join("pyvenv.cfg")).unwrap();
+    let pyvenv_cfg = context.read(".venv/pyvenv.cfg");
 
     assert!(pyvenv_cfg.contains("prompt = my-project"));
 

@@ -227,11 +227,9 @@ dependencies = ["flask==1.0.x"]
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("./path_dep")?;
 
-    let filters = [("exit status", "exit code")]
-        .into_iter()
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-
     uv_snapshot!(filters, context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @r###"
@@ -241,7 +239,7 @@ dependencies = ["flask==1.0.x"]
 
     ----- stderr -----
     error: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
-      Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit code: 1
+      Caused by: Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
     --- stdout:
     configuration error: `project.dependencies[0]` must be pep508
     DESCRIPTION:
@@ -2010,6 +2008,66 @@ fn install_only_binary_all_and_no_binary_all() {
     context.assert_command("import anyio").failure();
 }
 
+/// Binary dependencies in the cache should be reused when the user provides `--no-build`.
+#[test]
+fn install_no_binary_cache() {
+    let context = TestContext::new("3.12");
+
+    // Install a binary distribution.
+    uv_snapshot!(
+        context.pip_install().arg("idna"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+
+    // Re-create the virtual environment.
+    context.venv().assert().success();
+
+    // Re-install. The distribution should be installed from the cache.
+    uv_snapshot!(
+        context.pip_install().arg("idna"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+
+    // Re-create the virtual environment.
+    context.venv().assert().success();
+
+    // Install with `--no-binary`. The distribution should be built from source, despite a binary
+    // distribution being available in the cache.
+    uv_snapshot!(
+        context.pip_install().arg("idna").arg("--no-binary").arg(":all:"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+}
+
 /// Respect `--only-binary` flags in `requirements.txt`
 #[test]
 fn only_binary_requirements_txt() {
@@ -2120,6 +2178,63 @@ fn only_binary_editable_setup_py() {
      + idna==3.6
      + setup-py-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/setup_py_editable)
      + sniffio==1.3.1
+    "###
+    );
+}
+
+#[test]
+fn cache_priority() {
+    let context = TestContext::new("3.12");
+
+    // Install a specific `idna` version.
+    uv_snapshot!(
+        context.pip_install().arg("idna==3.6"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+
+    // Install a lower `idna` version.
+    uv_snapshot!(
+        context.pip_install().arg("idna==3.0"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - idna==3.6
+     + idna==3.0
+    "###
+    );
+
+    // Re-create the virtual environment.
+    context.venv().assert().success();
+
+    // Install `idna` without a version specifier.
+    uv_snapshot!(
+        context.pip_install().arg("idna"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
     "###
     );
 }
@@ -3703,7 +3818,7 @@ fn no_build_isolation() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
     --- stdout:
 
     --- stderr:
@@ -3773,7 +3888,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
     --- stdout:
 
     --- stderr:
@@ -6637,14 +6752,14 @@ fn incompatible_build_constraint() -> Result<()> {
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `requests==1.2.0`
-      Caused by: Failed to install requirements from `setup.py` build (resolve)
-      Caused by: No solution found when resolving: setuptools>=40.8.0
-      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -6718,7 +6833,7 @@ fn install_build_isolation_package() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
     --- stdout:
 
     --- stderr:
@@ -6960,6 +7075,46 @@ fn missing_top_level() {
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      ~ suds-community==0.8.5
+    "###
+    );
+}
+
+/// Show a dedicated error when the user attempts to install `sklearn`.
+#[test]
+fn sklearn() {
+    let context = TestContext::new("3.12");
+
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.pip_install().arg("sklearn"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `sklearn==0.0.post12`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+          --- stdout:
+
+          --- stderr:
+          The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
+          rather than 'sklearn' for pip commands. 
+
+          Here is how to fix this error in the main use cases:
+          - use 'pip install scikit-learn' rather than 'pip install sklearn'
+          - replace 'sklearn' by 'scikit-learn' in your pip requirements files
+            (requirements.txt, setup.py, setup.cfg, Pipfile, etc ...)
+          - if the 'sklearn' package is used by one of your dependencies,
+            it would be great if you take some time to track which package uses
+            'sklearn' instead of 'scikit-learn' and report it to their issue tracker
+          - as a last resort, set the environment variable
+            SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True to avoid this error
+
+          More information is available at
+          https://github.com/scikit-learn/sklearn-pypi-package
+          ---
+      help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
     "###
     );
 }

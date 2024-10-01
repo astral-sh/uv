@@ -1,15 +1,22 @@
 use std::borrow::Cow;
-use std::fmt::Write;
+use std::fmt::Write as _;
+use std::io;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use distribution_filename::SourceDistExtension;
+use distribution_types::{DependencyMetadata, IndexLocations};
+use install_wheel_rs::linker::LinkMode;
 use owo_colors::OwoColorize;
 
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{BuildKind, BuildOutput, Concurrency, Constraints, HashCheckingMode};
+use uv_configuration::{
+    BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, SourceStrategy, TrustedHost,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -18,9 +25,9 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::RequirementsSource;
-use uv_resolver::{FlatIndex, RequiresPython};
+use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
-use uv_workspace::{DiscoveryOptions, Workspace};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
 
 use crate::commands::pip::operations;
 use crate::commands::project::find_requires_python;
@@ -35,9 +42,11 @@ pub(crate) async fn build(
     project_dir: &Path,
     src: Option<PathBuf>,
     package: Option<PackageName>,
+    all: bool,
     output_dir: Option<PathBuf>,
     sdist: bool,
     wheel: bool,
+    build_logs: bool,
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
@@ -51,13 +60,15 @@ pub(crate) async fn build(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let assets = build_impl(
+    let build_result = build_impl(
         project_dir,
         src.as_deref(),
         package.as_ref(),
+        all,
         output_dir.as_deref(),
         sdist,
         wheel,
+        build_logs,
         &build_constraints,
         hash_checking,
         python.as_deref(),
@@ -73,32 +84,19 @@ pub(crate) async fn build(
     )
     .await?;
 
-    match assets {
-        BuiltDistributions::Wheel(wheel) => {
-            writeln!(
-                printer.stderr(),
-                "Successfully built {}",
-                wheel.user_display().bold().cyan()
-            )?;
-        }
-        BuiltDistributions::Sdist(sdist) => {
-            writeln!(
-                printer.stderr(),
-                "Successfully built {}",
-                sdist.user_display().bold().cyan()
-            )?;
-        }
-        BuiltDistributions::Both(sdist, wheel) => {
-            writeln!(
-                printer.stderr(),
-                "Successfully built {} and {}",
-                sdist.user_display().bold().cyan(),
-                wheel.user_display().bold().cyan()
-            )?;
-        }
+    match build_result {
+        BuildResult::Failure => Ok(ExitStatus::Error),
+        BuildResult::Success => Ok(ExitStatus::Success),
     }
+}
 
-    Ok(ExitStatus::Success)
+/// Represents the overall result of a build process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BuildResult {
+    /// Indicates that at least one of the builds failed.
+    Failure,
+    /// Indicates that all builds succeeded.
+    Success,
 }
 
 #[allow(clippy::fn_params_excessive_bools)]
@@ -106,9 +104,11 @@ async fn build_impl(
     project_dir: &Path,
     src: Option<&Path>,
     package: Option<&PackageName>,
+    all: bool,
     output_dir: Option<&Path>,
     sdist: bool,
     wheel: bool,
+    build_logs: bool,
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
@@ -121,7 +121,7 @@ async fn build_impl(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<BuiltDistributions> {
+) -> Result<BuildResult> {
     // Extract the resolver settings.
     let ResolverSettingsRef {
         index_locations,
@@ -170,21 +170,19 @@ async fn build_impl(
     // Attempt to discover the workspace; on failure, save the error for later.
     let workspace = Workspace::discover(src.directory(), &DiscoveryOptions::default()).await;
 
-    // If a `--package` was provided, adjust the source directory.
-    let src = if let Some(package) = package {
+    // If a `--package` or `--all` was provided, adjust the source directory.
+    let packages = if let Some(package) = package {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
-                "Cannot specify a `--package` when building from a file"
+                "Cannot specify `--package` when building from a file"
             ));
         }
 
         let workspace = match workspace {
             Ok(ref workspace) => workspace,
             Err(err) => {
-                return Err(
-                    anyhow::anyhow!("`--package` was provided, but no workspace was found")
-                        .context(err),
-                )
+                return Err(anyhow::Error::from(err)
+                    .context("`--package` was provided, but no workspace was found"));
             }
         };
 
@@ -192,20 +190,174 @@ async fn build_impl(
             .packages()
             .get(package)
             .ok_or_else(|| anyhow::anyhow!("Package `{}` not found in workspace", package))?
-            .root()
-            .clone();
+            .root();
 
-        Source::Directory(Cow::Owned(project))
+        vec![AnnotatedSource::from(Source::Directory(Cow::Borrowed(
+            project,
+        )))]
+    } else if all {
+        if matches!(src, Source::File(_)) {
+            return Err(anyhow::anyhow!(
+                "Cannot specify `--all` when building from a file"
+            ));
+        }
+
+        let workspace = match workspace {
+            Ok(ref workspace) => workspace,
+            Err(err) => {
+                return Err(anyhow::Error::from(err)
+                    .context("`--all` was provided, but no workspace was found"));
+            }
+        };
+
+        let packages: Vec<_> = workspace
+            .packages()
+            .values()
+            .filter(|package| package.pyproject_toml().is_package())
+            .map(|package| AnnotatedSource {
+                source: Source::Directory(Cow::Borrowed(package.root())),
+                package: Some(package.project().name.clone()),
+            })
+            .collect();
+
+        if packages.is_empty() {
+            return Err(anyhow::anyhow!("No packages found in workspace"));
+        }
+
+        packages
     } else {
-        src
+        vec![AnnotatedSource::from(src)]
     };
 
+    let results: Vec<_> = futures::future::join_all(packages.into_iter().map(|source| {
+        let future = build_package(
+            source.clone(),
+            output_dir,
+            python_request,
+            no_config,
+            workspace.as_ref(),
+            python_preference,
+            python_downloads,
+            cache,
+            printer,
+            index_locations,
+            &client_builder,
+            hash_checking,
+            build_logs,
+            build_constraints,
+            no_build_isolation,
+            no_build_isolation_package,
+            native_tls,
+            connectivity,
+            index_strategy,
+            keyring_provider,
+            allow_insecure_host,
+            exclude_newer,
+            sources,
+            concurrency,
+            build_options,
+            sdist,
+            wheel,
+            dependency_metadata,
+            link_mode,
+            config_setting,
+        );
+        async {
+            let result = future.await;
+            (source, result)
+        }
+    }))
+    .await;
+
+    for (source, result) in &results {
+        match result {
+            Ok(assets) => match assets {
+                BuiltDistributions::Wheel(wheel) => {
+                    writeln!(
+                        printer.stderr(),
+                        "Successfully built {}",
+                        wheel.user_display().bold().cyan()
+                    )?;
+                }
+                BuiltDistributions::Sdist(sdist) => {
+                    writeln!(
+                        printer.stderr(),
+                        "Successfully built {}",
+                        sdist.user_display().bold().cyan()
+                    )?;
+                }
+                BuiltDistributions::Both(sdist, wheel) => {
+                    writeln!(
+                        printer.stderr(),
+                        "Successfully built {} and {}",
+                        sdist.user_display().bold().cyan(),
+                        wheel.user_display().bold().cyan()
+                    )?;
+                }
+            },
+            Err(err) => {
+                let mut causes = err.chain();
+
+                let message = format!("{}: {}", "error".red().bold(), causes.next().unwrap());
+                writeln!(printer.stderr(), "{}", source.annotate(&message))?;
+
+                for err in causes {
+                    writeln!(printer.stderr(), "  {}: {}", "Caused by".red().bold(), err)?;
+                }
+            }
+        }
+    }
+
+    if results.iter().any(|(_, result)| result.is_err()) {
+        Ok(BuildResult::Failure)
+    } else {
+        Ok(BuildResult::Success)
+    }
+}
+
+#[allow(clippy::fn_params_excessive_bools)]
+async fn build_package(
+    source: AnnotatedSource<'_>,
+    output_dir: Option<&Path>,
+    python_request: Option<&str>,
+    no_config: bool,
+    workspace: Result<&Workspace, &WorkspaceError>,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    cache: &Cache,
+    printer: Printer,
+    index_locations: &IndexLocations,
+    client_builder: &BaseClientBuilder<'_>,
+    hash_checking: Option<HashCheckingMode>,
+    build_logs: bool,
+    build_constraints: &[RequirementsSource],
+    no_build_isolation: bool,
+    no_build_isolation_package: &[PackageName],
+    native_tls: bool,
+    connectivity: Connectivity,
+    index_strategy: IndexStrategy,
+    keyring_provider: KeyringProviderType,
+    allow_insecure_host: &[TrustedHost],
+    exclude_newer: Option<ExcludeNewer>,
+    sources: SourceStrategy,
+    concurrency: Concurrency,
+    build_options: &BuildOptions,
+    sdist: bool,
+    wheel: bool,
+    dependency_metadata: &DependencyMetadata,
+    link_mode: LinkMode,
+    config_setting: &ConfigSettings,
+) -> Result<BuiltDistributions> {
     let output_dir = if let Some(output_dir) = output_dir {
         Cow::Owned(std::path::absolute(output_dir)?)
     } else {
-        match src {
-            Source::Directory(ref src) => Cow::Owned(src.join("dist")),
-            Source::File(ref src) => Cow::Borrowed(src.parent().unwrap()),
+        if let Ok(workspace) = workspace {
+            Cow::Owned(workspace.install_path().join("dist"))
+        } else {
+            match &source.source {
+                Source::Directory(src) => Cow::Owned(src.join("dist")),
+                Source::File(src) => Cow::Borrowed(src.parent().unwrap()),
+            }
         }
     };
 
@@ -214,14 +366,14 @@ async fn build_impl(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(src.directory(), no_config, false)
+        interpreter_request = PythonVersionFile::discover(source.directory(), no_config, false)
             .await?
             .and_then(PythonVersionFile::into_version);
     }
 
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
-        if let Ok(ref workspace) = workspace {
+        if let Ok(workspace) = workspace {
             interpreter_request = find_requires_python(workspace)?
                 .as_ref()
                 .map(RequiresPython::specifiers)
@@ -237,7 +389,7 @@ async fn build_impl(
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,
-        &client_builder,
+        client_builder,
         cache,
         Some(&PythonDownloadReporter::single(printer)),
     )
@@ -250,8 +402,7 @@ async fn build_impl(
     }
 
     // Read build constraints.
-    let build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
+    let build_constraints = operations::read_constraints(build_constraints, client_builder).await?;
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -334,8 +485,19 @@ async fn build_impl(
     // Create the output directory.
     fs_err::tokio::create_dir_all(&output_dir).await?;
 
+    // Add a .gitignore.
+    match fs_err::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output_dir.join(".gitignore"))
+    {
+        Ok(mut file) => file.write_all(b"*")?,
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+        Err(err) => return Err(err.into()),
+    }
+
     // Determine the build plan.
-    let plan = match &src {
+    let plan = match &source.source {
         Source::File(_) => {
             // We're building from a file, which must be a source distribution.
             match (sdist, wheel) {
@@ -365,11 +527,17 @@ async fn build_impl(
 
     // Prepare some common arguments for the build.
     let subdirectory = None;
-    let version_id = src.path().file_name().and_then(|name| name.to_str());
+    let version_id = source.path().file_name().and_then(|name| name.to_str());
     let dist = None;
 
     let build_output = match printer {
-        Printer::Default | Printer::NoProgress | Printer::Verbose => BuildOutput::Stderr,
+        Printer::Default | Printer::NoProgress | Printer::Verbose => {
+            if build_logs {
+                BuildOutput::Stderr
+            } else {
+                BuildOutput::Quiet
+            }
+        }
         Printer::Quiet => BuildOutput::Quiet,
     };
 
@@ -378,13 +546,13 @@ async fn build_impl(
             writeln!(
                 printer.stderr(),
                 "{}",
-                "Building source distribution...".bold()
+                source.annotate("Building source distribution...").bold()
             )?;
 
             // Build the sdist.
             let builder = build_dispatch
                 .setup_build(
-                    src.path(),
+                    source.path(),
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
@@ -413,7 +581,9 @@ async fn build_impl(
             writeln!(
                 printer.stderr(),
                 "{}",
-                "Building wheel from source distribution...".bold()
+                source
+                    .annotate("Building wheel from source distribution...")
+                    .bold()
             )?;
 
             // Build a wheel from the source distribution.
@@ -435,12 +605,12 @@ async fn build_impl(
             writeln!(
                 printer.stderr(),
                 "{}",
-                "Building source distribution...".bold()
+                source.annotate("Building source distribution...").bold()
             )?;
 
             let builder = build_dispatch
                 .setup_build(
-                    src.path(),
+                    source.path(),
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
@@ -453,11 +623,15 @@ async fn build_impl(
             BuiltDistributions::Sdist(output_dir.join(sdist))
         }
         BuildPlan::Wheel => {
-            writeln!(printer.stderr(), "{}", "Building wheel...".bold())?;
+            writeln!(
+                printer.stderr(),
+                "{}",
+                source.annotate("Building wheel...").bold()
+            )?;
 
             let builder = build_dispatch
                 .setup_build(
-                    src.path(),
+                    source.path(),
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
@@ -473,11 +647,11 @@ async fn build_impl(
             writeln!(
                 printer.stderr(),
                 "{}",
-                "Building source distribution...".bold()
+                source.annotate("Building source distribution...").bold()
             )?;
             let builder = build_dispatch
                 .setup_build(
-                    src.path(),
+                    source.path(),
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
@@ -487,10 +661,14 @@ async fn build_impl(
                 .await?;
             let sdist = builder.build(&output_dir).await?;
 
-            writeln!(printer.stderr(), "{}", "Building wheel...".bold())?;
+            writeln!(
+                printer.stderr(),
+                "{}",
+                source.annotate("Building wheel...").bold()
+            )?;
             let builder = build_dispatch
                 .setup_build(
-                    src.path(),
+                    source.path(),
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
@@ -506,13 +684,15 @@ async fn build_impl(
             writeln!(
                 printer.stderr(),
                 "{}",
-                "Building wheel from source distribution...".bold()
+                source
+                    .annotate("Building wheel from source distribution...")
+                    .bold()
             )?;
 
             // Extract the source distribution into a temporary directory.
-            let reader = fs_err::tokio::File::open(src.path()).await?;
-            let ext = SourceDistExtension::from_path(src.path()).map_err(|err| {
-                anyhow::anyhow!("`{}` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: {err}.", src.path().user_display())
+            let reader = fs_err::tokio::File::open(source.path()).await?;
+            let ext = SourceDistExtension::from_path(source.path()).map_err(|err| {
+                anyhow::anyhow!("`{}` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: {err}.", source.path().user_display())
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
             uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
@@ -542,6 +722,41 @@ async fn build_impl(
     };
 
     Ok(assets)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AnnotatedSource<'a> {
+    /// The underlying [`Source`] to build.
+    source: Source<'a>,
+    /// The package name, if known.
+    package: Option<PackageName>,
+}
+
+impl AnnotatedSource<'_> {
+    fn path(&self) -> &Path {
+        self.source.path()
+    }
+
+    fn directory(&self) -> &Path {
+        self.source.directory()
+    }
+
+    fn annotate<'a>(&self, s: &'a str) -> Cow<'a, str> {
+        if let Some(package) = &self.package {
+            Cow::Owned(format!("[{}] {s}", package.cyan()))
+        } else {
+            Cow::Borrowed(s)
+        }
+    }
+}
+
+impl<'a> From<Source<'a>> for AnnotatedSource<'a> {
+    fn from(source: Source<'a>) -> Self {
+        Self {
+            source,
+            package: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,8 +1,3 @@
-#[cfg(feature = "pyo3")]
-use pyo3::{
-    basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, FromPyObject, IntoPy, PyAny,
-    PyObject, PyResult, Python,
-};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::sync::LazyLock;
 use std::{
@@ -28,7 +23,6 @@ use std::{
     rkyv::Serialize,
 )]
 #[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
-#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Operator {
     /// `== 1.2.3`
     Equal,
@@ -175,20 +169,6 @@ impl std::fmt::Display for Operator {
         };
 
         write!(f, "{operator}")
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Operator {
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn __str__(&self) -> String {
-        self.to_string()
-    }
-
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn __repr__(&self) -> String {
-        self.to_string()
     }
 }
 
@@ -1357,7 +1337,6 @@ impl FromStr for VersionPattern {
     rkyv::Serialize,
 )]
 #[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
-#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Prerelease {
     /// The kind of pre-release.
     pub kind: PrereleaseKind,
@@ -1382,7 +1361,6 @@ pub struct Prerelease {
     rkyv::Serialize,
 )]
 #[rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
-#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum PrereleaseKind {
     /// alpha pre-release
     Alpha,
@@ -2280,132 +2258,6 @@ impl From<VersionParseError> for VersionPatternParseError {
     }
 }
 
-/// Workaround for <https://github.com/PyO3/pyo3/pull/2786>
-#[cfg(feature = "pyo3")]
-#[derive(Clone, Debug)]
-#[pyclass(name = "Version")]
-pub struct PyVersion(pub Version);
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl PyVersion {
-    /// The [versioning epoch](https://peps.python.org/pep-0440/#version-epochs). Normally just 0,
-    /// but you can increment it if you switched the versioning scheme.
-    #[getter]
-    pub fn epoch(&self) -> u64 {
-        self.0.epoch()
-    }
-    /// The normal number part of the version
-    /// (["final release"](https://peps.python.org/pep-0440/#final-releases)),
-    /// such a `1.2.3` in `4!1.2.3-a8.post9.dev1`
-    ///
-    /// Note that we drop the * placeholder by moving it to `Operator`
-    #[getter]
-    pub fn release(&self) -> Vec<u64> {
-        self.0.release().to_vec()
-    }
-    /// The [pre-release](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
-    /// plus a number
-    ///
-    /// Note that whether this is Some influences the version
-    /// range matching since normally we exclude all pre-release versions
-    #[getter]
-    pub fn pre(&self) -> Option<Prerelease> {
-        self.0.pre()
-    }
-    /// The [Post release version](https://peps.python.org/pep-0440/#post-releases),
-    /// higher post version are preferred over lower post or none-post versions
-    #[getter]
-    pub fn post(&self) -> Option<u64> {
-        self.0.post()
-    }
-    /// The [developmental release](https://peps.python.org/pep-0440/#developmental-releases),
-    /// if any
-    #[getter]
-    pub fn dev(&self) -> Option<u64> {
-        self.0.dev()
-    }
-    /// The first item of release or 0 if unavailable.
-    #[getter]
-    #[allow(clippy::get_first)]
-    pub fn major(&self) -> u64 {
-        self.0.release().get(0).copied().unwrap_or_default()
-    }
-    /// The second item of release or 0 if unavailable.
-    #[getter]
-    pub fn minor(&self) -> u64 {
-        self.0.release().get(1).copied().unwrap_or_default()
-    }
-    /// The third item of release or 0 if unavailable.
-    #[getter]
-    pub fn micro(&self) -> u64 {
-        self.0.release().get(2).copied().unwrap_or_default()
-    }
-
-    /// Parses a PEP 440 version string
-    #[cfg(feature = "pyo3")]
-    #[new]
-    pub fn parse(version: &str) -> PyResult<Self> {
-        Ok(Self(
-            Version::from_str(version).map_err(|e| PyValueError::new_err(e.to_string()))?,
-        ))
-    }
-
-    // Maps the error type
-    /// Parse a PEP 440 version optionally ending with `.*`
-    #[cfg(feature = "pyo3")]
-    #[staticmethod]
-    pub fn parse_star(version_specifier: &str) -> PyResult<(Self, bool)> {
-        version_specifier
-            .parse::<VersionPattern>()
-            .map_err(|e| PyValueError::new_err(e.to_string()))
-            .map(|VersionPattern { version, wildcard }| (Self(version), wildcard))
-    }
-
-    /// Returns the normalized representation
-    #[cfg(feature = "pyo3")]
-    pub fn __str__(&self) -> String {
-        self.0.to_string()
-    }
-
-    /// Returns the normalized representation
-    #[cfg(feature = "pyo3")]
-    pub fn __repr__(&self) -> String {
-        format!(r#"<Version("{}")>"#, self.0)
-    }
-
-    /// Returns the normalized representation
-    #[cfg(feature = "pyo3")]
-    pub fn __hash__(&self) -> u64 {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        self.0.hash(&mut hasher);
-        hasher.finish()
-    }
-
-    #[cfg(feature = "pyo3")]
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
-        op.matches(self.0.cmp(&other.0))
-    }
-
-    fn any_prerelease(&self) -> bool {
-        self.0.any_prerelease()
-    }
-}
-
-#[cfg(feature = "pyo3")]
-impl IntoPy<PyObject> for Version {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        PyVersion(self).into_py(py)
-    }
-}
-
-#[cfg(feature = "pyo3")]
-impl<'source> FromPyObject<'source> for Version {
-    fn extract(ob: &'source PyAny) -> PyResult<Self> {
-        Ok(ob.extract::<PyVersion>()?.0)
-    }
-}
-
 /// Compare the release parts of two versions, e.g. `4.3.1` > `4.2`, `1.1.0` ==
 /// `1.1` and `1.16` < `1.19`
 pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
@@ -2548,9 +2400,6 @@ pub static MIN_VERSION: LazyLock<Version> =
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
-
-    #[cfg(feature = "pyo3")]
-    use pyo3::pyfunction;
 
     use crate::VersionSpecifier;
 
@@ -3861,12 +3710,6 @@ mod tests {
             }
             .into())
         );
-    }
-
-    #[cfg(feature = "pyo3")]
-    #[pyfunction]
-    fn _convert_in_and_out(version: Version) -> Version {
-        version
     }
 
     /// Wraps a `Version` and provides a more "bloated" debug but standard

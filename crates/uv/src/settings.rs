@@ -245,6 +245,7 @@ impl RunSettings {
             no_all_extras,
             dev,
             no_dev,
+            module: _,
             only_dev,
             no_editable,
             command: _,
@@ -1671,9 +1672,11 @@ impl PipCheckSettings {
 pub(crate) struct BuildSettings {
     pub(crate) src: Option<PathBuf>,
     pub(crate) package: Option<PackageName>,
+    pub(crate) all: bool,
     pub(crate) out_dir: Option<PathBuf>,
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
+    pub(crate) build_logs: bool,
     pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
@@ -1688,6 +1691,7 @@ impl BuildSettings {
             src,
             out_dir,
             package,
+            all,
             sdist,
             wheel,
             build_constraint,
@@ -1695,6 +1699,8 @@ impl BuildSettings {
             no_require_hashes,
             verify_hashes,
             no_verify_hashes,
+            build_logs,
+            no_build_logs,
             python,
             build,
             refresh,
@@ -1704,9 +1710,11 @@ impl BuildSettings {
         Self {
             src,
             package,
+            all,
             out_dir,
             sdist,
             wheel,
+            build_logs: flag(build_logs, no_build_logs).unwrap_or(true),
             build_constraint: build_constraint
                 .into_iter()
                 .filter_map(Maybe::into_option)

@@ -3802,18 +3802,18 @@ fn require_hashes_source_url() -> Result<()> {
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      Caused by: Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      ╰─▶ Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
 
-    Expected:
-      sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-    Computed:
-      sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
+          Computed:
+            sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
     "###
     );
 
@@ -3833,18 +3833,18 @@ fn require_hashes_source_url_mismatch() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      Caused by: Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      ╰─▶ Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
 
-    Expected:
-      sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-    Computed:
-      sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
+          Computed:
+            sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
     "###
     );
 
@@ -3992,12 +3992,12 @@ fn require_hashes_git() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
-      Caused by: Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
+      × Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
+      ╰─▶ Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
     "###
     );
 
@@ -4022,12 +4022,12 @@ fn require_hashes_source_tree() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build `black @ file://[WORKSPACE]/scripts/packages/black_editable`
-      Caused by: Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/scripts/packages/black_editable`
+      × Failed to build `black @ file://[WORKSPACE]/scripts/packages/black_editable`
+      ╰─▶ Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/scripts/packages/black_editable`
     "###
     );
 
@@ -4229,18 +4229,18 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
-      Caused by: Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
+      × Failed to build `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
 
-    Expected:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
+          Computed:
+            sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
     "###
     );
 
@@ -5499,8 +5499,8 @@ fn incompatible_build_constraint() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: requests==1.2.0
-      Caused by: Failed to install requirements from `setup.py` build (resolve)
-      Caused by: No solution found when resolving: setuptools>=40.8.0
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
       Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###
     );

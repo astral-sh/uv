@@ -823,16 +823,12 @@ fn parse_email_message_file(
         .0;
 
     for header in headers {
-        let mut name = header.get_key();
+        let name = header.get_key(); // Will not be trimmed because if it contains space, mailparse will skip the header
         let mut value = header.get_value();
 
-        // Trim the name and value only if needed, avoiding unnecessary allocations with .trim().to_string().
-        let trimmed_name = name.trim();
-        if name == trimmed_name {
-            name = trimmed_name.to_string();
-        }
+        // Trim the value only if needed
         let trimmed_value = value.trim();
-        if value == trimmed_value {
+        if value != trimmed_value {
             value = trimmed_value.to_string();
         }
 
@@ -869,6 +865,37 @@ mod test {
         "};
 
         parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();
+    }
+
+    #[test]
+    fn test_parse_email_message_file_with_trimmed_value() {
+        let text = indoc! {"
+            Wheel-Version: 1.0
+            Generator: bdist_wheel (0.37.1)
+            Root-Is-Purelib: false
+            Tag:        cp38-cp38-manylinux_2_17_x86_64    
+        "};
+
+        let wheel = parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();
+        let tags = &wheel["Tag"];
+        let tag = tags
+            .first()
+            .expect("Expected one tag inside the WHEEL file");
+        assert_eq!(tag, "cp38-cp38-manylinux_2_17_x86_64");
+    }
+
+    #[test]
+    fn test_parse_email_message_file_is_skipping_keys_with_space() {
+        let text = indoc! {"
+            Wheel-Version: 1.0
+            Generator: bdist_wheel (0.37.1)
+            Root-Is-Purelib: false
+              Tag  : cp38-cp38-manylinux_2_17_x86_64
+        "};
+
+        let wheel = parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();
+        assert!(!wheel.contains_key("Tag"));
+        assert_eq!(3, wheel.keys().len());
     }
 
     #[test]

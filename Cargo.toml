@@ -38,6 +38,7 @@ uv-cache-info = { path = "crates/uv-cache-info" }
 uv-cli = { path = "crates/uv-cli" }
 uv-client = { path = "crates/uv-client" }
 uv-configuration = { path = "crates/uv-configuration" }
+uv-console = { path = "crates/uv-console" }
 uv-dispatch = { path = "crates/uv-dispatch" }
 uv-distribution = { path = "crates/uv-distribution" }
 uv-extract = { path = "crates/uv-extract" }
@@ -122,8 +123,6 @@ petgraph = { version = "0.6.5" }
 platform-info = { version = "2.0.3" }
 proc-macro2 = { version = "1.0.86" }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "388685a8711092971930986644cfed152d1a1f6c" }
-pyo3 = { version = "0.21.2" }
-pyo3-log = { version = "0.10.0" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
@@ -140,6 +139,7 @@ same-file = { version = "1.0.6" }
 schemars = { version = "0.8.21", features = ["url"] }
 seahash = { version = "4.1.0" }
 serde = { version = "1.0.210", features = ["derive"] }
+serde-untagged = { version = "0.1.6" }
 serde_json = { version = "1.0.128" }
 sha2 = { version = "0.10.8" }
 smallvec = { version = "1.13.2" }
