@@ -205,7 +205,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
     "###
     );
 
-    assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
+    assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
@@ -400,7 +400,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     "###
     );
 
-    assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
+    assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
@@ -561,7 +561,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     );
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
-    assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
+    assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
@@ -646,7 +646,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     );
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
-    assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
+    assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
@@ -773,7 +773,7 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     "###
     );
 
-    assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
+    assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
     requires-python = ">=3.11, <3.13"
 

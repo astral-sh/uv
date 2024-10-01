@@ -890,7 +890,7 @@ fn run_locked() -> Result<()> {
     // Lock the initial requirements.
     context.lock().assert().success();
 
-    let existing = fs_err::read_to_string(context.temp_dir.child("uv.lock"))?;
+    let existing = context.read("uv.lock");
 
     // Update the requirements.
     pyproject_toml.write_str(
@@ -918,7 +918,7 @@ fn run_locked() -> Result<()> {
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
 
-    let updated = fs_err::read_to_string(context.temp_dir.child("uv.lock"))?;
+    let updated = context.read("uv.lock");
 
     // And the lockfile should be unchanged.
     assert_eq!(existing, updated);

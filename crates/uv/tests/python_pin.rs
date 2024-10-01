@@ -35,8 +35,7 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     assert_snapshot!(python_version, @r#"any"#);
 
     // Without arguments, we read the current pin
@@ -50,8 +49,7 @@ fn python_pin() {
     "###);
 
     // We should not mutate the file
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     assert_snapshot!(python_version, @r#"any"#);
 
     // Request Python 3.12
@@ -64,8 +62,7 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     assert_snapshot!(python_version, @r###"
     3.12
     "###);
@@ -80,8 +77,7 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     assert_snapshot!(python_version, @r###"
     3.11
     "###);
@@ -96,8 +92,7 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     assert_snapshot!(python_version, @r###"
     cpython
     "###);
@@ -112,8 +107,7 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     assert_snapshot!(python_version, @r###"
     cpython@3.12
     "###);
@@ -128,8 +122,7 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     assert_snapshot!(python_version, @r###"
     cpython@3.12
     "###);
@@ -144,8 +137,7 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     assert_snapshot!(python_version, @r###"
     cpython-3.12-any-any-any
     "###);
@@ -160,8 +152,7 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -184,8 +175,7 @@ fn python_pin() {
         warning: No interpreter found for PyPy in system path
         "###);
 
-        let python_version =
-            fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+        let python_version = context.read(PYTHON_VERSION_FILENAME);
         assert_snapshot!(python_version, @r###"
         pypy
         "###);
@@ -205,8 +195,7 @@ fn python_pin() {
         warning: No interpreter found for Python 3.7 in system path
         "###);
 
-        let python_version =
-            fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+        let python_version = context.read(PYTHON_VERSION_FILENAME);
         assert_snapshot!(python_version, @r###"
     3.7
     "###);
@@ -315,8 +304,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -472,8 +460,7 @@ fn python_pin_resolve() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -492,8 +479,7 @@ fn python_pin_resolve() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -512,8 +498,7 @@ fn python_pin_resolve() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -532,8 +517,7 @@ fn python_pin_resolve() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -552,8 +536,7 @@ fn python_pin_resolve() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -572,8 +555,7 @@ fn python_pin_resolve() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -597,8 +579,7 @@ fn python_pin_resolve() {
     ----- stderr -----
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -619,8 +600,7 @@ fn python_pin_resolve() {
     error: No interpreter found for PyPy in system path
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -641,8 +621,7 @@ fn python_pin_resolve() {
     error: No interpreter found for Python 3.7 in system path
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {

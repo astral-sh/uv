@@ -44,7 +44,7 @@ fn nested_dependencies() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -144,7 +144,7 @@ fn frozen() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     // Update the project dependencies.
@@ -252,7 +252,7 @@ fn platform_dependencies() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -343,7 +343,7 @@ fn repeated_dependencies() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -417,7 +417,7 @@ fn repeated_version() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -458,7 +458,7 @@ fn dev_dependencies() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -501,7 +501,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -552,7 +552,7 @@ fn optional_dependencies() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -611,7 +611,7 @@ fn optional_dependencies_inverted() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
