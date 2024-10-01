@@ -40,11 +40,17 @@ pub(crate) async fn pin(
         }
     };
 
-    let version_file = PythonVersionFile::discover(project_dir, false, false).await;
+    let version_file = match &virtual_project {
+        Some(VirtualProject::Project(project)) => {
+            project.workspace().python_version_file().cloned()
+        }
+        Some(VirtualProject::NonProject(workspace)) => workspace.python_version_file().cloned(),
+        None => PythonVersionFile::discover(project_dir, false, true).await?,
+    };
 
     let Some(request) = request else {
         // Display the current pinned Python version
-        if let Some(file) = version_file? {
+        if let Some(file) = version_file {
             for pin in file.versions() {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
                 if let Some(virtual_project) = &virtual_project {
@@ -124,33 +130,48 @@ pub(crate) async fn pin(
         request
     };
 
-    let existing = version_file.ok().flatten();
     // TODO(zanieb): Allow updating the discovered version file with an `--update` flag.
-    let new = PythonVersionFile::new(project_dir.join(PYTHON_VERSION_FILENAME))
-        .with_versions(vec![request]);
+    if let Some(existing) = version_file {
+        if existing.contains(&request) {
+            writeln!(
+                printer.stdout(),
+                "`{}` is already pinned at `{}`",
+                existing.path().user_display().cyan(),
+                request.to_canonical_string().green(),
+            )?;
+            return Ok(ExitStatus::Success);
+        }
 
-    new.write().await?;
-
-    if let Some(existing) = existing
-        .as_ref()
-        .and_then(PythonVersionFile::version)
-        .filter(|version| *version != new.version().unwrap())
-    {
+        let new = existing.clone().with_versions(vec![request]);
+        new.write().await?;
         writeln!(
             printer.stdout(),
             "Updated `{}` from `{}` -> `{}`",
-            new.path().user_display().cyan(),
-            existing.to_canonical_string().green(),
+            existing.path().user_display().cyan(),
+            existing.version().unwrap().to_canonical_string().green(),
             new.version().unwrap().to_canonical_string().green()
         )?;
     } else {
+        let new_path = match &virtual_project {
+            Some(VirtualProject::Project(project)) => project
+                .workspace()
+                .install_path()
+                .join(PYTHON_VERSION_FILENAME),
+            Some(VirtualProject::NonProject(workspace)) => {
+                workspace.install_path().join(PYTHON_VERSION_FILENAME)
+            }
+            None => project_dir.join(PYTHON_VERSION_FILENAME),
+        };
+
+        let new = &PythonVersionFile::new(new_path).with_versions(vec![request]);
+        new.write().await?;
         writeln!(
             printer.stdout(),
             "Pinned `{}` to `{}`",
             new.path().user_display().cyan(),
             new.version().unwrap().to_canonical_string().green()
         )?;
-    }
+    };
 
     Ok(ExitStatus::Success)
 }

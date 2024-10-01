@@ -11,6 +11,7 @@ use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
 use pypi_types::{Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_python::PythonVersionFile;
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::pyproject::{
@@ -81,6 +82,9 @@ pub struct Workspace {
     sources: BTreeMap<PackageName, Sources>,
     /// The `pyproject.toml` of the workspace root.
     pyproject_toml: PyProjectToml,
+    /// The `.python-version` or `.python-versions` file of the workspace.
+    #[cfg_attr(test, serde(skip))]
+    python_version_file: Option<PythonVersionFile>,
 }
 
 impl Workspace {
@@ -172,6 +176,9 @@ impl Workspace {
                 )
             };
 
+        let python_version_file =
+            PythonVersionFile::discover(&workspace_root, false, false).await?;
+
         debug!(
             "Found workspace root: `{}`",
             workspace_root.simplified_display()
@@ -194,6 +201,7 @@ impl Workspace {
             workspace_root.clone(),
             workspace_definition,
             workspace_pyproject_toml,
+            python_version_file,
             current_project,
             options,
         )
@@ -520,6 +528,11 @@ impl Workspace {
         &self.pyproject_toml
     }
 
+    /// The `.python-version` or `.python-versions` file in the workspace.
+    pub fn python_version_file(&self) -> Option<&PythonVersionFile> {
+        self.python_version_file.as_ref()
+    }
+
     /// Returns `true` if the path is excluded by the workspace.
     pub fn excludes(&self, project_path: &Path) -> Result<bool, WorkspaceError> {
         if let Some(workspace) = self
@@ -555,6 +568,7 @@ impl Workspace {
         workspace_root: PathBuf,
         workspace_definition: ToolUvWorkspace,
         workspace_pyproject_toml: PyProjectToml,
+        workspace_python_version_file: Option<PythonVersionFile>,
         current_project: Option<WorkspaceMember>,
         options: &DiscoveryOptions<'_>,
     ) -> Result<Workspace, WorkspaceError> {
@@ -735,6 +749,7 @@ impl Workspace {
             packages: workspace_members,
             sources: workspace_sources,
             pyproject_toml: workspace_pyproject_toml,
+            python_version_file: workspace_python_version_file,
         })
     }
 }
@@ -1024,6 +1039,9 @@ impl ProjectWorkspace {
             // above it, so the project is an implicit workspace root identical to the project root.
             debug!("No workspace root found, using project root");
 
+            let python_version_file =
+                PythonVersionFile::discover(&project_path, false, false).await?;
+
             let current_project_as_members =
                 BTreeMap::from_iter([(project.name.clone(), current_project)]);
             return Ok(Self {
@@ -1036,9 +1054,13 @@ impl ProjectWorkspace {
                     // workspace sources.
                     sources: BTreeMap::default(),
                     pyproject_toml: project_pyproject_toml.clone(),
+                    python_version_file,
                 },
             });
         };
+
+        let python_version_file =
+            PythonVersionFile::discover(&workspace_root, false, false).await?;
 
         debug!(
             "Found workspace root: `{}`",
@@ -1049,6 +1071,7 @@ impl ProjectWorkspace {
             workspace_root,
             workspace_definition,
             workspace_pyproject_toml,
+            python_version_file,
             Some(current_project),
             options,
         )
@@ -1367,12 +1390,16 @@ impl VirtualProject {
                 .map_err(WorkspaceError::Normalize)?
                 .clone();
 
+            let python_version_file =
+                PythonVersionFile::discover(&project_path, false, false).await?;
+
             check_nested_workspaces(&project_path, options);
 
             let workspace = Workspace::collect_members(
                 project_path,
                 workspace.clone(),
                 pyproject_toml,
+                python_version_file,
                 None,
                 options,
             )
