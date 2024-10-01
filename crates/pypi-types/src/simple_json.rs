@@ -1,9 +1,8 @@
 use std::str::FromStr;
 
 use jiff::Timestamp;
-use serde::{Deserialize, Deserializer, Serialize};
-
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::lenient_requirement::LenientVersionSpecifiers;
 
@@ -71,11 +70,22 @@ where
     ))
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone)]
 pub enum CoreMetadata {
     Bool(bool),
     Hashes(Hashes),
+}
+
+impl<'de> Deserialize<'de> for CoreMetadata {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        serde_untagged::UntaggedEnumVisitor::new()
+            .bool(|bool| Ok(CoreMetadata::Bool(bool)))
+            .map(|map| map.deserialize().map(CoreMetadata::Hashes))
+            .deserialize(deserializer)
+    }
 }
 
 impl CoreMetadata {
@@ -87,24 +97,23 @@ impl CoreMetadata {
     }
 }
 
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    rkyv::Archive,
-    rkyv::Deserialize,
-    rkyv::Serialize,
-)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
 pub enum Yanked {
     Bool(bool),
     Reason(String),
+}
+
+impl<'de> Deserialize<'de> for Yanked {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        serde_untagged::UntaggedEnumVisitor::new()
+            .bool(|bool| Ok(Yanked::Bool(bool)))
+            .string(|string| Ok(Yanked::Reason(string.to_owned())))
+            .deserialize(deserializer)
+    }
 }
 
 impl Yanked {
@@ -303,8 +312,7 @@ impl FromStr for Hashes {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 pub enum HashAlgorithm {
     Md5,
     Sha256,
@@ -352,8 +360,7 @@ impl std::fmt::Display for HashAlgorithm {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 pub struct HashDigest {
     pub algorithm: HashAlgorithm,
     pub digest: Box<str>,

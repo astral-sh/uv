@@ -4,7 +4,7 @@ use std::path::Path;
 use thiserror::Error;
 
 use pep440_rs::{Version, VersionSpecifiers};
-use pypi_types::{HashDigest, Metadata23};
+use pypi_types::{HashDigest, ResolutionMetadata};
 use uv_configuration::SourceStrategy;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_workspace::WorkspaceError;
@@ -22,6 +22,8 @@ pub enum MetadataError {
     Workspace(#[from] WorkspaceError),
     #[error("Failed to parse entry for: `{0}`")]
     LoweringError(PackageName, #[source] LoweringError),
+    #[error(transparent)]
+    Lower(#[from] LoweringError),
 }
 
 #[derive(Debug, Clone)]
@@ -39,7 +41,7 @@ pub struct Metadata {
 impl Metadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_metadata23(metadata: Metadata23) -> Self {
+    pub fn from_metadata23(metadata: ResolutionMetadata) -> Self {
         Self {
             name: metadata.name,
             version: metadata.version,
@@ -57,7 +59,7 @@ impl Metadata {
     /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
     /// dependencies.
     pub async fn from_workspace(
-        metadata: Metadata23,
+        metadata: ResolutionMetadata,
         install_path: &Path,
         sources: SourceStrategy,
     ) -> Result<Self, MetadataError> {
@@ -102,7 +104,7 @@ pub struct ArchiveMetadata {
 impl ArchiveMetadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_metadata23(metadata: Metadata23) -> Self {
+    pub fn from_metadata23(metadata: ResolutionMetadata) -> Self {
         Self {
             metadata: Metadata::from_metadata23(metadata),
             hashes: vec![],

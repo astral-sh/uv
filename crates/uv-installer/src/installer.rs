@@ -149,6 +149,11 @@ fn install(
                 .map(pypi_types::DirectUrl::try_from)
                 .transpose()?
                 .as_ref(),
+            if wheel.cache_info().is_empty() {
+                None
+            } else {
+                Some(wheel.cache_info())
+            },
             installer_name.as_deref(),
             link_mode,
             &locks,

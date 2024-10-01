@@ -7,7 +7,7 @@ use std::path::Path;
 
 /// Remove a file or directory and all its contents, returning a [`Removal`] with
 /// the number of files and directories removed, along with a total byte count.
-pub(crate) fn rm_rf(path: impl AsRef<Path>) -> io::Result<Removal> {
+pub fn rm_rf(path: impl AsRef<Path>) -> io::Result<Removal> {
     let mut removal = Removal::default();
     removal.rm_rf(path.as_ref())?;
     Ok(removal)

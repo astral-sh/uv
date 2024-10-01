@@ -48,7 +48,7 @@ Functionality for parsing and inferring Python platform tags as per
 
 Command-line interface for the uv package manager.
 
-## [uv-build](./uv-build)
+## [uv-build-frontend](./uv-build-frontend)
 
 A [PEP 517](https://www.python.org/dev/peps/pep-0517/)-compatible build frontend for uv.
 

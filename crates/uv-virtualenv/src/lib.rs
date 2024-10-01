@@ -46,6 +46,7 @@ impl Prompt {
 }
 
 /// Create a virtualenv.
+#[allow(clippy::fn_params_excessive_bools)]
 pub fn create_venv(
     location: &Path,
     interpreter: Interpreter,
@@ -53,6 +54,7 @@ pub fn create_venv(
     system_site_packages: bool,
     allow_existing: bool,
     relocatable: bool,
+    seed: bool,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
     let virtualenv = virtualenv::create(
@@ -62,6 +64,7 @@ pub fn create_venv(
         system_site_packages,
         allow_existing,
         relocatable,
+        seed,
     )?;
 
     // Create the corresponding `PythonEnvironment`.

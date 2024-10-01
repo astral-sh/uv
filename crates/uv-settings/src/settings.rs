@@ -1,14 +1,15 @@
 use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
 
-use serde::{Deserialize, Serialize};
-
-use distribution_types::{FlatIndexLocation, IndexUrl};
+use distribution_types::{FlatIndexLocation, IndexUrl, StaticMetadata};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
+use serde::{Deserialize, Serialize};
+use url::Url;
+use uv_cache_info::CacheKey;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
-    TrustedHost,
+    TrustedHost, TrustedPublishing,
 };
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
@@ -32,15 +33,58 @@ pub(crate) struct Tools {
 /// A `[tool.uv]` section.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(from = "OptionsWire", rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Options {
     #[serde(flatten)]
     pub globals: GlobalOptions,
+
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
+
+    #[serde(flatten)]
+    pub publish: PublishOptions,
+
     #[option_group]
     pub pip: Option<PipOptions>,
+
+    /// The keys to consider when caching builds for the project.
+    ///
+    /// Cache keys enable you to specify the files or directories that should trigger a rebuild when
+    /// modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`,
+    /// or `setup.cfg` files in the project directory are modified, i.e.:
+    ///
+    /// ```toml
+    /// cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]
+    /// ```
+    ///
+    /// As an example: if a project uses dynamic metadata to read its dependencies from a
+    /// `requirements.txt` file, you can specify `cache-keys = [{ file = "requirements.txt" }, { file = "pyproject.toml" }]`
+    /// to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in
+    /// addition to watching the `pyproject.toml`).
+    ///
+    /// Globs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html)
+    /// crate. For example, to invalidate the cache whenever a `.toml` file in the project directory
+    /// or any of its subdirectories is modified, you can specify `cache-keys = [{ file = "**/*.toml" }]`.
+    /// Note that the use of globs can be expensive, as uv may need to walk the filesystem to
+    /// determine whether any files have changed.
+    ///
+    /// Cache keys can also include version control information. For example, if a project uses
+    /// `setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }, { file = "pyproject.toml" }]`
+    /// to include the current Git commit hash in the cache key (in addition to the
+    /// `pyproject.toml`).
+    ///
+    /// Cache keys only affect the project defined by the `pyproject.toml` in which they're
+    /// specified (as opposed to, e.g., affecting all members in a workspace), and all paths and
+    /// globs are interpreted as relative to the project directory.
+    #[option(
+        default = r#"[{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]"#,
+        value_type = "list[dict]",
+        example = r#"
+            cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = true }]
+        "#
+    )]
+    cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
@@ -52,28 +96,6 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
-
-    // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`.
-    #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    workspace: serde::de::IgnoredAny,
-
-    #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    sources: serde::de::IgnoredAny,
-
-    #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    dev_dependencies: serde::de::IgnoredAny,
-
-    #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    managed: serde::de::IgnoredAny,
-
-    #[serde(default, skip_serializing)]
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    r#package: serde::de::IgnoredAny,
 }
 
 impl Options {
@@ -248,6 +270,7 @@ pub struct ResolverOptions {
     pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
+    pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
@@ -318,7 +341,7 @@ pub struct ResolverInstallerOptions {
     /// indexes.
     ///
     /// If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
-    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    /// source distributions (e.g., `.tar.gz` or `.zip`) at the top level.
     ///
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.
@@ -400,6 +423,29 @@ pub struct ResolverInstallerOptions {
         possible_values = true
     )]
     pub prerelease: Option<PrereleaseMode>,
+    /// Pre-defined static metadata for dependencies of the project (direct or transitive). When
+    /// provided, enables the resolver to use the specified metadata instead of querying the
+    /// registry or building the relevant package from source.
+    ///
+    /// Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
+    /// standard, though only the following fields are respected:
+    ///
+    /// - `name`: The name of the package.
+    /// - (Optional) `version`: The version of the package. If omitted, the metadata will be applied
+    ///   to all versions of the package.
+    /// - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
+    /// - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
+    /// - (Optional) `provides-extras`: The extras provided by the package.
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[dict]",
+        example = r#"
+            dependency-metadata = [
+                { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+            ]
+        "#
+    )]
+    pub dependency_metadata: Option<Vec<StaticMetadata>>,
     /// Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend,
     /// specified as `KEY=VALUE` pairs.
     #[option(
@@ -705,7 +751,7 @@ pub struct PipOptions {
     /// indexes.
     ///
     /// If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
-    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    /// source distributions (e.g., `.tar.gz` or `.zip`) at the top level.
     ///
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.
@@ -909,6 +955,29 @@ pub struct PipOptions {
         possible_values = true
     )]
     pub prerelease: Option<PrereleaseMode>,
+    /// Pre-defined static metadata for dependencies of the project (direct or transitive). When
+    /// provided, enables the resolver to use the specified metadata instead of querying the
+    /// registry or building the relevant package from source.
+    ///
+    /// Metadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)
+    /// standard, though only the following fields are respected:
+    ///
+    /// - `name`: The name of the package.
+    /// - (Optional) `version`: The version of the package. If omitted, the metadata will be applied
+    ///   to all versions of the package.
+    /// - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
+    /// - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
+    /// - (Optional) `provides-extras`: The extras provided by the package.
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[dict]",
+        example = r#"
+            dependency-metadata = [
+                { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
+            ]
+        "#
+    )]
+    pub dependency_metadata: Option<Vec<StaticMetadata>>,
     /// Write the requirements generated by `uv pip compile` to the given `requirements.txt` file.
     ///
     /// If the file already exists, the existing versions will be preferred when resolving
@@ -1012,7 +1081,7 @@ pub struct PipOptions {
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// `aarch64-apple-darwin`.
     #[option(
         default = "None",
         value_type = "str",
@@ -1250,6 +1319,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode,
@@ -1311,6 +1381,7 @@ pub struct ToolOptions {
     pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
+    pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
@@ -1336,6 +1407,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
@@ -1363,6 +1435,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
@@ -1380,4 +1453,212 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             no_binary_package: value.no_binary_package,
         }
     }
+}
+
+/// Like [`Options]`, but with any `#[serde(flatten)]` fields inlined. This leads to far, far
+/// better error messages when deserializing.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct OptionsWire {
+    // #[serde(flatten)]
+    // globals: GlobalOptions,
+    native_tls: Option<bool>,
+    offline: Option<bool>,
+    no_cache: Option<bool>,
+    cache_dir: Option<PathBuf>,
+    preview: Option<bool>,
+    python_preference: Option<PythonPreference>,
+    python_downloads: Option<PythonDownloads>,
+    concurrent_downloads: Option<NonZeroUsize>,
+    concurrent_builds: Option<NonZeroUsize>,
+    concurrent_installs: Option<NonZeroUsize>,
+
+    // #[serde(flatten)]
+    // top_level: ResolverInstallerOptions,
+    index_url: Option<IndexUrl>,
+    extra_index_url: Option<Vec<IndexUrl>>,
+    no_index: Option<bool>,
+    find_links: Option<Vec<FlatIndexLocation>>,
+    index_strategy: Option<IndexStrategy>,
+    keyring_provider: Option<KeyringProviderType>,
+    allow_insecure_host: Option<Vec<TrustedHost>>,
+    resolution: Option<ResolutionMode>,
+    prerelease: Option<PrereleaseMode>,
+    dependency_metadata: Option<Vec<StaticMetadata>>,
+    config_settings: Option<ConfigSettings>,
+    no_build_isolation: Option<bool>,
+    no_build_isolation_package: Option<Vec<PackageName>>,
+    exclude_newer: Option<ExcludeNewer>,
+    link_mode: Option<LinkMode>,
+    compile_bytecode: Option<bool>,
+    no_sources: Option<bool>,
+    upgrade: Option<bool>,
+    upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    reinstall: Option<bool>,
+    reinstall_package: Option<Vec<PackageName>>,
+    no_build: Option<bool>,
+    no_build_package: Option<Vec<PackageName>>,
+    no_binary: Option<bool>,
+    no_binary_package: Option<Vec<PackageName>>,
+    publish_url: Option<Url>,
+    trusted_publishing: Option<TrustedPublishing>,
+
+    pip: Option<PipOptions>,
+    cache_keys: Option<Vec<CacheKey>>,
+
+    // NOTE(charlie): These fields are shared with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
+    override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    environments: Option<SupportedEnvironments>,
+
+    // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`.
+    #[allow(dead_code)]
+    workspace: Option<serde::de::IgnoredAny>,
+    #[allow(dead_code)]
+    sources: Option<serde::de::IgnoredAny>,
+    #[allow(dead_code)]
+    dev_dependencies: Option<serde::de::IgnoredAny>,
+    #[allow(dead_code)]
+    managed: Option<serde::de::IgnoredAny>,
+    #[allow(dead_code)]
+    r#package: Option<serde::de::IgnoredAny>,
+}
+
+impl From<OptionsWire> for Options {
+    fn from(value: OptionsWire) -> Self {
+        let OptionsWire {
+            native_tls,
+            offline,
+            no_cache,
+            cache_dir,
+            preview,
+            python_preference,
+            python_downloads,
+            concurrent_downloads,
+            concurrent_builds,
+            concurrent_installs,
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+            index_strategy,
+            keyring_provider,
+            allow_insecure_host,
+            resolution,
+            prerelease,
+            dependency_metadata,
+            config_settings,
+            no_build_isolation,
+            no_build_isolation_package,
+            exclude_newer,
+            link_mode,
+            compile_bytecode,
+            no_sources,
+            upgrade,
+            upgrade_package,
+            reinstall,
+            reinstall_package,
+            no_build,
+            no_build_package,
+            no_binary,
+            no_binary_package,
+            pip,
+            cache_keys,
+            override_dependencies,
+            constraint_dependencies,
+            environments,
+            publish_url,
+            trusted_publishing,
+            workspace: _,
+            sources: _,
+            dev_dependencies: _,
+            managed: _,
+            package: _,
+        } = value;
+
+        Self {
+            globals: GlobalOptions {
+                native_tls,
+                offline,
+                no_cache,
+                cache_dir,
+                preview,
+                python_preference,
+                python_downloads,
+                concurrent_downloads,
+                concurrent_builds,
+                concurrent_installs,
+            },
+            top_level: ResolverInstallerOptions {
+                index_url,
+                extra_index_url,
+                no_index,
+                find_links,
+                index_strategy,
+                keyring_provider,
+                allow_insecure_host,
+                resolution,
+                prerelease,
+                dependency_metadata,
+                config_settings,
+                no_build_isolation,
+                no_build_isolation_package,
+                exclude_newer,
+                link_mode,
+                compile_bytecode,
+                no_sources,
+                upgrade,
+                upgrade_package,
+                reinstall,
+                reinstall_package,
+                no_build,
+                no_build_package,
+                no_binary,
+                no_binary_package,
+            },
+            publish: PublishOptions {
+                publish_url,
+                trusted_publishing,
+            },
+            pip,
+            cache_keys,
+            override_dependencies,
+            constraint_dependencies,
+            environments,
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata,
+)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct PublishOptions {
+    /// The URL for publishing packages to the Python package index (by default:
+    /// <https://upload.pypi.org/legacy/>).
+    #[option(
+        default = "\"https://upload.pypi.org/legacy/\"",
+        value_type = "str",
+        example = r#"
+            publish-url = "https://test.pypi.org/legacy/"
+        "#
+    )]
+    pub publish_url: Option<Url>,
+
+    /// Configure trusted publishing via GitHub Actions.
+    ///
+    /// By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
+    /// if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
+    /// from a fork).
+    #[option(
+        default = "automatic",
+        value_type = "str",
+        example = r#"
+            trusted-publishing = "always"
+        "#
+    )]
+    pub trusted_publishing: Option<TrustedPublishing>,
 }

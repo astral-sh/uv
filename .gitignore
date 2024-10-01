@@ -32,3 +32,6 @@ profile.json
 
 # MkDocs
 /site
+
+# macOS
+**/.DS_Store

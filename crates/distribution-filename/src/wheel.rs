@@ -12,8 +12,7 @@ use uv_normalize::{InvalidNameError, PackageName};
 use crate::{BuildTag, BuildTagError};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,

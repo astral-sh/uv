@@ -2,7 +2,7 @@ site_name: uv
 theme:
   name: material
   logo: assets/logo-letter.svg
-  favicon: assets/favicon.svg
+  favicon: assets/favicon.ico
   features:
     - navigation.instant
     - navigation.instant.prefetch
@@ -42,11 +42,12 @@ site_dir: site/uv
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - toc:
-      permalink: "#"
   - pymdownx.snippets:
   - pymdownx.magiclink:
   - attr_list:
+  - toc:
+      anchorlink: true
+      anchorlink_class: "toclink"
   - md_in_html:
   - pymdownx.inlinehilite:
   - pymdownx.superfences:
@@ -60,7 +61,6 @@ markdown_extensions:
       alternate_style: true
 plugins:
   - search
-  - typeset
 extra_css:
   - stylesheets/extra.css
 extra_javascript:
@@ -109,6 +109,7 @@ nav:
   - Integration guides:
       - guides/integration/index.md
       - Docker: guides/integration/docker.md
+      - Jupyter: guides/integration/jupyter.md
       - GitHub Actions: guides/integration/github.md
       - GitLab CI/CD: guides/integration/gitlab.md
       - Pre-commit: guides/integration/pre-commit.md

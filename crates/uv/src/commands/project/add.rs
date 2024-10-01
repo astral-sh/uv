@@ -1,51 +1,56 @@
+use anyhow::{bail, Context, Result};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
-
-use anyhow::{bail, Context, Result};
-use owo_colors::OwoColorize;
-use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
 use cache_key::RepositoryUrl;
-use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
-use pypi_types::redact_git_credentials;
+use distribution_types::UnresolvedRequirement;
+use pep508_rs::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
+use pypi_types::{redact_git_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, InstallOptions, SourceStrategy};
+use uv_configuration::{
+    Concurrency, Constraints, DevMode, EditableMode, ExtrasSpecification, InstallOptions,
+    SourceStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_fs::{Simplified, CWD};
-use uv_git::GIT_STORE;
+use uv_fs::Simplified;
+use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
-use uv_resolver::{FlatIndex, RequiresPython};
+use uv_resolver::FlatIndex;
 use uv_scripts::Pep723Script;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError};
 use uv_workspace::pyproject_mut::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
-use crate::commands::project::ProjectError;
+use crate::commands::project::{script_python_requirement, ProjectError};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{pip, project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
+    project_dir: &Path,
     locked: bool,
     frozen: bool,
     no_sync: bool,
@@ -123,41 +128,24 @@ pub(crate) async fn add(
         let script = if let Some(script) = Pep723Script::read(&script).await? {
             script
         } else {
-            let python_request = if let Some(request) = python.as_deref() {
-                // (1) Explicit request from user
-                PythonRequest::parse(request)
-            } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
-                .await?
-                .and_then(PythonVersionFile::into_version)
-            {
-                // (2) Request from `.python-version`
-                request
-            } else {
-                // (3) Assume any Python version
-                PythonRequest::Any
-            };
-
-            let interpreter = PythonInstallation::find_or_download(
-                Some(python_request),
-                EnvironmentPreference::Any,
+            let requires_python = script_python_requirement(
+                python.as_deref(),
+                project_dir,
+                false,
                 python_preference,
                 python_downloads,
                 &client_builder,
                 cache,
-                Some(&reporter),
+                &reporter,
             )
-            .await?
-            .into_interpreter();
-
-            let requires_python =
-                RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-            Pep723Script::create(&script, requires_python.specifiers()).await?
+            .await?;
+            Pep723Script::init(&script, requires_python.specifiers()).await?
         };
 
         let python_request = if let Some(request) = python.as_deref() {
             // (1) Explicit request from user
             Some(PythonRequest::parse(request))
-        } else if let Some(request) = PythonVersionFile::discover(&*CWD, false, false)
+        } else if let Some(request) = PythonVersionFile::discover(project_dir, false, false)
             .await?
             .and_then(PythonVersionFile::into_version)
         {
@@ -170,12 +158,12 @@ pub(crate) async fn add(
                 .requires_python
                 .clone()
                 .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python))
+                    PythonRequest::Version(VersionRequest::Range(requires_python, false))
                 })
         };
 
         let interpreter = PythonInstallation::find_or_download(
-            python_request,
+            python_request.as_ref(),
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,
@@ -191,13 +179,13 @@ pub(crate) async fn add(
         // Find the project in the workspace.
         let project = if let Some(package) = package {
             VirtualProject::Project(
-                Workspace::discover(&CWD, &DiscoveryOptions::default())
+                Workspace::discover(project_dir, &DiscoveryOptions::default())
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
         };
 
         // For non-project workspace roots, allow dev dependencies, but nothing else.
@@ -241,10 +229,11 @@ pub(crate) async fn add(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let python_version = None;
-    let python_platform = None;
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
     let hasher = HashStrategy::default();
-    let build_constraints = [];
+    let python_platform = None;
+    let python_version = None;
     let sources = SourceStrategy::Enabled;
 
     // Determine the environment for the resolution.
@@ -257,7 +246,7 @@ pub(crate) async fn add(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::from(client_builder)
+    let client = RegistryClientBuilder::try_from(client_builder)?
         .index_urls(settings.index_locations.index_urls())
         .index_strategy(settings.index_strategy)
         .markers(&markers)
@@ -290,33 +279,84 @@ pub(crate) async fn add(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         target.interpreter(),
         &settings.index_locations,
         &flat_index,
+        &settings.dependency_metadata,
         &state.index,
         &state.git,
+        &state.capabilities,
         &state.in_flight,
         settings.index_strategy,
         &settings.config_setting,
         build_isolation,
         settings.link_mode,
         &settings.build_options,
+        &build_hasher,
         settings.exclude_newer,
         sources,
         concurrency,
     );
 
     // Resolve any unnamed requirements.
-    let requirements = NamedRequirementsResolver::new(
-        requirements,
-        &hasher,
-        &state.index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve()
-    .await?;
+    let requirements = {
+        // Partition the requirements into named and unnamed requirements.
+        let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
+            .into_iter()
+            .map(|spec| {
+                augment_requirement(
+                    spec.requirement,
+                    rev.as_deref(),
+                    tag.as_deref(),
+                    branch.as_deref(),
+                )
+            })
+            .partition_map(|requirement| match requirement {
+                UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
+                UnresolvedRequirement::Unnamed(requirement) => {
+                    itertools::Either::Right(requirement)
+                }
+            });
+
+        // Resolve any unnamed requirements.
+        if !unnamed.is_empty() {
+            requirements.extend(
+                NamedRequirementsResolver::new(
+                    unnamed,
+                    &hasher,
+                    &state.index,
+                    DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+                )
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?,
+            );
+        }
+
+        requirements
+    };
+
+    // If any of the requirements are self-dependencies, bail.
+    if matches!(
+        dependency_type,
+        DependencyType::Production | DependencyType::Dev
+    ) {
+        if let Target::Project(project, _) = &target {
+            if let Some(project_name) = project.project_name() {
+                for requirement in &requirements {
+                    if requirement.name == *project_name {
+                        bail!(
+                            "Requirement name `{}` matches project name `{}`, but self-dependencies are not permitted. If your project name (`{}`) is shadowing that of a third-party dependency, consider renaming the project.",
+                            requirement.name.cyan(),
+                            project_name.cyan(),
+                            project_name.cyan(),
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     // Add the requirements to the `pyproject.toml` or script.
     let mut toml = match &target {
@@ -328,7 +368,7 @@ pub(crate) async fn add(
             DependencyTarget::PyProjectToml,
         ),
     }?;
-    let mut edits = Vec::with_capacity(requirements.len());
+    let mut edits = Vec::<DependencyEdit>::with_capacity(requirements.len());
     for mut requirement in requirements {
         // Add the specified extras.
         requirement.extras.extend(extras.iter().cloned());
@@ -339,15 +379,19 @@ pub(crate) async fn add(
             Target::Script(_, _) | Target::Project(_, _) if raw_sources => {
                 (pep508_rs::Requirement::from(requirement), None)
             }
-            Target::Script(ref script, _) => resolve_requirement(
-                requirement,
-                false,
-                editable,
-                rev.clone(),
-                tag.clone(),
-                branch.clone(),
-                &script.path,
-            )?,
+            Target::Script(ref script, _) => {
+                let script_path = std::path::absolute(&script.path)?;
+                let script_dir = script_path.parent().expect("script path has no parent");
+                resolve_requirement(
+                    requirement,
+                    false,
+                    editable,
+                    rev.clone(),
+                    tag.clone(),
+                    branch.clone(),
+                    script_dir,
+                )?
+            }
             Target::Project(ref project, _) => {
                 let workspace = project
                     .workspace()
@@ -377,6 +421,7 @@ pub(crate) async fn add(
                 rev,
                 tag,
                 branch,
+                marker,
             }) => {
                 let credentials = Credentials::from_url(&git);
                 if let Some(credentials) = credentials {
@@ -392,6 +437,7 @@ pub(crate) async fn add(
                     rev,
                     tag,
                     branch,
+                    marker,
                 })
             }
             _ => source,
@@ -406,7 +452,26 @@ pub(crate) async fn add(
             }
         };
 
-        // Keep track of the exact location of the edit.
+        // If the edit was inserted before the end of the list, update the existing edits.
+        if let ArrayEdit::Add(index) = &edit {
+            for edit in &mut edits {
+                if *edit.dependency_type == dependency_type {
+                    match &mut edit.edit {
+                        ArrayEdit::Add(existing) => {
+                            if *existing >= *index {
+                                *existing += 1;
+                            }
+                        }
+                        ArrayEdit::Update(existing) => {
+                            if *existing >= *index {
+                                *existing += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         edits.push(DependencyEdit {
             dependency_type: &dependency_type,
             requirement,
@@ -459,22 +524,46 @@ pub(crate) async fn add(
         return Ok(ExitStatus::Success);
     }
 
-    let existing = project.pyproject_toml();
+    // Store the content prior to any modifications.
+    let existing = project.pyproject_toml().as_ref().to_vec();
+    let root = project.root().to_path_buf();
 
     // Update the `pypackage.toml` in-memory.
-    let mut project = project
-        .clone()
-        .with_pyproject_toml(toml::from_str(&content)?)
-        .context("Failed to update `pyproject.toml`")?;
+    let project = project
+        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
+        .ok_or(ProjectError::TomlUpdate)?;
 
-    // Lock and sync the environment, if necessary.
-    let mut lock = match project::lock::do_safe_lock(
+    // Set the Ctrl-C handler to revert changes on exit.
+    let _ = ctrlc::set_handler({
+        let root = root.clone();
+        let existing = existing.clone();
+        move || {
+            // Revert the changes to the `pyproject.toml`, if necessary.
+            if modified {
+                let _ = fs_err::write(root.join("pyproject.toml"), &existing);
+            }
+
+            #[allow(clippy::exit, clippy::cast_possible_wrap)]
+            std::process::exit(if cfg!(windows) {
+                0xC000_013A_u32 as i32
+            } else {
+                130
+            });
+        }
+    });
+
+    match lock_and_sync(
+        project,
+        &mut toml,
+        &edits,
+        &venv,
+        state,
         locked,
         frozen,
-        project.workspace(),
-        venv.interpreter(),
-        settings.as_ref().into(),
-        Box::new(DefaultResolveLogger),
+        no_sync,
+        &dependency_type,
+        raw_sources,
+        settings.as_ref(),
         connectivity,
         concurrency,
         native_tls,
@@ -483,23 +572,79 @@ pub(crate) async fn add(
     )
     .await
     {
-        Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            let header = err.header();
-            let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If this is intentional, run `uv add --frozen` to skip the lock and sync steps.") });
-            anstream::eprint!("{report:?}");
-
+        Ok(()) => Ok(ExitStatus::Success),
+        Err(err) => {
             // Revert the changes to the `pyproject.toml`, if necessary.
             if modified {
-                fs_err::write(project.root().join("pyproject.toml"), existing)?;
+                fs_err::write(root.join("pyproject.toml"), &existing)?;
             }
 
-            return Ok(ExitStatus::Failure);
+            match err {
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::NoSolution(err),
+                )) => {
+                    diagnostics::no_solution_hint(err, format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()));
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::FetchAndBuild(dist, err),
+                )) => {
+                    diagnostics::fetch_and_build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::Build(dist, err),
+                )) => {
+                    diagnostics::build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                err => {
+                    // Revert the changes to the `pyproject.toml`, if necessary.
+                    if modified {
+                        fs_err::write(root.join("pyproject.toml"), &existing)?;
+                    }
+                    Err(err.into())
+                }
+            }
         }
-        Err(err) => return Err(err.into()),
-    };
+    }
+}
+
+/// Re-lock and re-sync the project after a series of edits.
+#[allow(clippy::fn_params_excessive_bools)]
+async fn lock_and_sync(
+    mut project: VirtualProject,
+    toml: &mut PyProjectTomlMut,
+    edits: &[DependencyEdit<'_>],
+    venv: &PythonEnvironment,
+    state: SharedState,
+    locked: bool,
+    frozen: bool,
+    no_sync: bool,
+    dependency_type: &DependencyType,
+    raw_sources: bool,
+    settings: ResolverInstallerSettingsRef<'_>,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<(), ProjectError> {
+    let mut lock = project::lock::do_safe_lock(
+        locked,
+        frozen,
+        project.workspace(),
+        venv.interpreter(),
+        settings.into(),
+        Box::new(DefaultResolveLogger),
+        connectivity,
+        concurrency,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await?
+    .into_lock();
 
     // Avoid modifying the user request further if `--raw-sources` is set.
     if !raw_sources {
@@ -523,7 +668,7 @@ pub(crate) async fn add(
 
         // If any of the requirements were added without version specifiers, add a lower bound.
         let mut modified = false;
-        for edit in &edits {
+        for edit in edits {
             // Only set a minimum version for newly-added dependencies (as opposed to updates).
             let ArrayEdit::Add(index) = &edit.edit else {
                 continue;
@@ -579,18 +724,17 @@ pub(crate) async fn add(
 
             // Update the `pypackage.toml` in-memory.
             project = project
-                .clone()
-                .with_pyproject_toml(toml::from_str(&content)?)
-                .context("Failed to update `pyproject.toml`")?;
+                .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
+                .ok_or(ProjectError::TomlUpdate)?;
 
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
-            lock = match project::lock::do_safe_lock(
+            lock = project::lock::do_safe_lock(
                 locked,
                 frozen,
                 project.workspace(),
                 venv.interpreter(),
-                settings.as_ref().into(),
+                settings.into(),
                 Box::new(SummaryResolveLogger),
                 connectivity,
                 concurrency,
@@ -598,64 +742,44 @@ pub(crate) async fn add(
                 cache,
                 printer,
             )
-            .await
-            {
-                Ok(result) => result.into_lock(),
-                Err(ProjectError::Operation(pip::operations::Error::Resolve(
-                    uv_resolver::ResolveError::NoSolution(err),
-                ))) => {
-                    let header = err.header();
-                    let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If this is intentional, run `uv add --frozen` to skip the lock and sync steps.") });
-                    anstream::eprint!("{report:?}");
-
-                    // Revert the changes to the `pyproject.toml`, if necessary.
-                    if modified {
-                        fs_err::write(project.root().join("pyproject.toml"), existing)?;
-                    }
-
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(err) => return Err(err.into()),
-            };
+            .await?
+            .into_lock();
         }
     }
 
     if no_sync {
-        return Ok(ExitStatus::Success);
+        return Ok(());
     }
 
     // Sync the environment.
     let (extras, dev) = match dependency_type {
         DependencyType::Production => {
             let extras = ExtrasSpecification::None;
-            let dev = false;
+            let dev = DevMode::Exclude;
             (extras, dev)
         }
         DependencyType::Dev => {
             let extras = ExtrasSpecification::None;
-            let dev = true;
+            let dev = DevMode::Include;
             (extras, dev)
         }
         DependencyType::Optional(ref group_name) => {
             let extras = ExtrasSpecification::Some(vec![group_name.clone()]);
-            let dev = false;
+            let dev = DevMode::Exclude;
             (extras, dev)
         }
     };
 
-    // Initialize any shared state.
-    let state = SharedState::default();
-    let install_options = InstallOptions::default();
-
-    if let Err(err) = project::sync::do_sync(
-        &project,
-        &venv,
+    project::sync::do_sync(
+        InstallTarget::from(&project),
+        venv,
         &lock,
         &extras,
         dev,
-        install_options,
+        EditableMode::Editable,
+        InstallOptions::default(),
         Modifications::Sufficient,
-        settings.as_ref().into(),
+        settings.into(),
         &state,
         Box::new(DefaultInstallLogger),
         connectivity,
@@ -664,16 +788,77 @@ pub(crate) async fn add(
         cache,
         printer,
     )
-    .await
-    {
-        // Revert the changes to the `pyproject.toml`, if necessary.
-        if modified {
-            fs_err::write(project.root().join("pyproject.toml"), existing)?;
-        }
-        return Err(err.into());
-    }
+    .await?;
 
-    Ok(ExitStatus::Success)
+    Ok(())
+}
+
+/// Augment a user-provided requirement by attaching any specification data that was provided
+/// separately from the requirement itself (e.g., `--branch main`).
+fn augment_requirement(
+    requirement: UnresolvedRequirement,
+    rev: Option<&str>,
+    tag: Option<&str>,
+    branch: Option<&str>,
+) -> UnresolvedRequirement {
+    match requirement {
+        UnresolvedRequirement::Named(requirement) => {
+            UnresolvedRequirement::Named(pypi_types::Requirement {
+                source: match requirement.source {
+                    RequirementSource::Git {
+                        repository,
+                        reference,
+                        precise,
+                        subdirectory,
+                        url,
+                    } => {
+                        let reference = if let Some(rev) = rev {
+                            GitReference::from_rev(rev.to_string())
+                        } else if let Some(tag) = tag {
+                            GitReference::Tag(tag.to_string())
+                        } else if let Some(branch) = branch {
+                            GitReference::Branch(branch.to_string())
+                        } else {
+                            reference
+                        };
+                        RequirementSource::Git {
+                            repository,
+                            reference,
+                            precise,
+                            subdirectory,
+                            url,
+                        }
+                    }
+                    _ => requirement.source,
+                },
+                ..requirement
+            })
+        }
+        UnresolvedRequirement::Unnamed(requirement) => {
+            UnresolvedRequirement::Unnamed(UnnamedRequirement {
+                url: match requirement.url.parsed_url {
+                    ParsedUrl::Git(mut git) => {
+                        let reference = if let Some(rev) = rev {
+                            Some(GitReference::from_rev(rev.to_string()))
+                        } else if let Some(tag) = tag {
+                            Some(GitReference::Tag(tag.to_string()))
+                        } else {
+                            branch.map(|branch| GitReference::Branch(branch.to_string()))
+                        };
+                        if let Some(reference) = reference {
+                            git.url = git.url.with_reference(reference);
+                        }
+                        VerbatimParsedUrl {
+                            parsed_url: ParsedUrl::Git(git),
+                            verbatim: requirement.url.verbatim,
+                        }
+                    }
+                    _ => requirement.url,
+                },
+                ..requirement
+            })
+        }
+    }
 }
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.
@@ -740,21 +925,4 @@ struct DependencyEdit<'a> {
     requirement: Requirement,
     source: Option<Source>,
     edit: ArrayEdit,
-}
-
-/// Render a [`uv_resolver::NoSolutionError`] with a help message.
-#[derive(Debug, miette::Diagnostic, thiserror::Error)]
-#[error("{header}")]
-#[diagnostic()]
-struct WithHelp {
-    /// The header to render in the error message.
-    header: uv_resolver::NoSolutionHeader,
-
-    /// The underlying error.
-    #[source]
-    cause: uv_resolver::NoSolutionError,
-
-    /// The help message to display.
-    #[help]
-    help: Option<&'static str>,
 }

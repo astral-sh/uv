@@ -1,7 +1,5 @@
 """Patches that are applied at runtime to the virtual environment."""
 
-from __future__ import annotations
-
 import os
 import sys
 

@@ -7,7 +7,7 @@ in the nearest parent directory.
 
 !!! note
 
-    For `tool` commands, which operate the user level, local configuration
+    For `tool` commands, which operate at the user level, local configuration
     files will be ignored. Instead, uv will exclusively read from user-level configuration
     (e.g., `~/.config/uv/uv.toml`).
 
@@ -32,6 +32,12 @@ uv will also search for `uv.toml` files, which follow an identical structure, bu
 ```toml title="uv.toml"
 index-url = "https://test.pypi.org/simple"
 ```
+
+!!! note
+
+    `uv.toml` files take precedence over `pyproject.toml` files, so if both `uv.toml` and
+    `pyproject.toml` files are present in a directory, configuration will be read from `uv.toml`, and
+    `[tool.uv]` section in the accompanying `pyproject.toml` will be ignored.
 
 uv will also discover user-level configuration at `~/.config/uv/uv.toml` (or
 `$XDG_CONFIG_HOME/uv/uv.toml`) on macOS and Linux, or `%APPDATA%\uv\uv.toml` on Windows. User-level

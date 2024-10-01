@@ -7,7 +7,26 @@ Ok(
         version: 1,
         fork_markers: [],
         supported_environments: [],
-        requires_python: None,
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
         options: ResolverOptions {
             resolution_mode: Highest,
             prerelease_mode: IfNecessaryOrExplicit,
@@ -66,6 +85,7 @@ Ok(
             requirements: {},
             constraints: {},
             overrides: {},
+            dependency_metadata: {},
         },
     },
 )

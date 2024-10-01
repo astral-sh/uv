@@ -31,7 +31,8 @@ uv pip install -r requirements.txt --refresh-package packse
 echo "Fetching packse scenarios..."
 packse fetch --dest "$script_root/scenarios/.downloads" --force
 
-python "$script_root/scenarios/generate.py" "$script_root/scenarios/.downloads" "$@"
+unset VIRTUAL_ENV # Avoid warning due to venv mismatch
+.venv/bin/python "$script_root/scenarios/generate.py" "$script_root/scenarios/.downloads" "$@"
 
 # Cleanup
 rm -r "$script_root/scenarios/.downloads"

@@ -23,6 +23,7 @@ uv will create the following files:
 
 ```text
 .
+├── .python-version
 ├── README.md
 ├── hello.py
 └── pyproject.toml
@@ -50,6 +51,7 @@ A complete listing would look like:
 │   ├── bin
 │   ├── lib
 │   └── pyvenv.cfg
+├── .python-version
 ├── README.md
 ├── hello.py
 ├── pyproject.toml
@@ -80,6 +82,11 @@ description or license. You can edit this file manually, or use commands like `u
 
 You'll also use this file to specify uv [configuration options](../configuration/files.md) in a
 [`[tool.uv]`](../reference/settings.md) section.
+
+### `.python-version`
+
+The `.python-version` file contains the project's default Python version. This file tells uv which
+Python version to use when creating the project's virtual environment.
 
 ### `.venv`
 
@@ -125,6 +132,15 @@ To remove a package, you can use `uv remove`:
 ```console
 $ uv remove requests
 ```
+
+To upgrade a package, run `uv lock` with the `--upgrade-package` flag:
+
+```console
+$ uv lock --upgrade-package requests
+```
+
+The `--upgrade-package` flag will attempt to update the specified package to the latest compatible
+version, while keeping the rest of the lockfile intact.
 
 See the documentation on [managing dependencies](../concepts/projects.md#managing-dependencies) for
 more details.
@@ -174,6 +190,24 @@ $ python example.py
 
 See the documentation on [running commands](../concepts/projects.md#running-commands) and
 [running scripts](../concepts/projects.md#running-scripts) in projects for more details.
+
+## Building distributions
+
+`uv build` can be used to build source distributions and binary distributions (wheel) for your
+project.
+
+By default, `uv build` will build the project in the current directory, and place the built
+artifacts in a `dist/` subdirectory:
+
+```console
+$ uv build
+$ ls dist/
+hello-world-0.1.0-py3-none-any.whl
+hello-world-0.1.0.tar.gz
+```
+
+See the documentation on [building projects](../concepts/projects.md#building-projects) for more
+details.
 
 ## Next steps
 

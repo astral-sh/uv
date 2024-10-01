@@ -9,7 +9,7 @@ RequirementsTxtFileError {
             message: String(
                 "Missing space before ';', the end of the URL is ambiguous",
             ),
-            start: 11,
+            start: 10,
             len: 1,
             input: "./editable; python_version >= \"3.9\" and os_name == \"posix\"",
         },

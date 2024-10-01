@@ -1,12 +1,11 @@
-use std::fmt::Write;
-
 use anyhow::Result;
+use std::fmt::Write;
+use std::path::Path;
 
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, TargetTriple};
-use uv_fs::CWD;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
 use uv_workspace::{DiscoveryOptions, Workspace};
@@ -21,6 +20,7 @@ use crate::settings::ResolverSettings;
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
+    project_dir: &Path,
     locked: bool,
     frozen: bool,
     universal: bool,
@@ -42,7 +42,7 @@ pub(crate) async fn tree(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Find the project requirements.
-    let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
+    let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(

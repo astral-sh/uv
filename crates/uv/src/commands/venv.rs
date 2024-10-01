@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::vec;
 
@@ -9,18 +9,18 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use distribution_types::IndexLocations;
+use distribution_types::{DependencyMetadata, IndexLocations};
 use install_wheel_rs::linker::LinkMode;
 use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary,
-    NoBuild, SourceStrategy, TrustedHost,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
+    NoBinary, NoBuild, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
-use uv_fs::{Simplified, CWD};
+use uv_fs::Simplified;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionRequest,
@@ -41,13 +41,15 @@ use crate::printer::Printer;
 /// Create a virtual environment.
 #[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
 pub(crate) async fn venv(
-    path: &Path,
+    project_dir: &Path,
+    path: Option<PathBuf>,
     python_request: Option<&str>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
+    dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     prompt: uv_virtualenv::Prompt,
@@ -59,16 +61,19 @@ pub(crate) async fn venv(
     concurrency: Concurrency,
     native_tls: bool,
     no_config: bool,
+    no_project: bool,
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
 ) -> Result<ExitStatus> {
     match venv_impl(
+        project_dir,
         path,
         python_request,
         link_mode,
         index_locations,
         index_strategy,
+        dependency_metadata,
         keyring_provider,
         allow_insecure_host,
         prompt,
@@ -82,6 +87,7 @@ pub(crate) async fn venv(
         concurrency,
         native_tls,
         no_config,
+        no_project,
         cache,
         printer,
         relocatable,
@@ -118,11 +124,13 @@ enum VenvError {
 /// Create a virtual environment.
 #[allow(clippy::fn_params_excessive_bools)]
 async fn venv_impl(
-    path: &Path,
+    project_dir: &Path,
+    path: Option<PathBuf>,
     python_request: Option<&str>,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
+    dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     prompt: uv_virtualenv::Prompt,
@@ -136,10 +144,40 @@ async fn venv_impl(
     concurrency: Concurrency,
     native_tls: bool,
     no_config: bool,
+    no_project: bool,
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
 ) -> miette::Result<ExitStatus> {
+    let project = if no_project {
+        None
+    } else {
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
+            Ok(project) => Some(project),
+            Err(WorkspaceError::MissingProject(_)) => None,
+            Err(WorkspaceError::MissingPyprojectToml) => None,
+            Err(WorkspaceError::NonWorkspace(_)) => None,
+            Err(err) => {
+                warn_user_once!("{err}");
+                None
+            }
+        }
+    };
+
+    // Determine the default path; either the virtual environment for the project or `.venv`
+    let path = path.unwrap_or(
+        project
+            .as_ref()
+            .and_then(|project| {
+                // Only use the project environment path if we're invoked from the root
+                // This isn't strictly necessary and we may want to change it later, but this
+                // avoids a breaking change when adding project environment support to `uv venv`.
+                (project.workspace().install_path() == project_dir)
+                    .then(|| project.workspace().venv())
+            })
+            .unwrap_or(PathBuf::from(".venv")),
+    );
+
     let client_builder = BaseClientBuilder::default()
         .connectivity(connectivity)
         .native_tls(native_tls);
@@ -151,7 +189,7 @@ async fn venv_impl(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(&*CWD, no_config, false)
+        interpreter_request = PythonVersionFile::discover(project_dir, no_config, false)
             .await
             .into_diagnostic()?
             .and_then(PythonVersionFile::into_version);
@@ -159,31 +197,20 @@ async fn venv_impl(
 
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
-        let project = match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
-            Ok(project) => Some(project),
-            Err(WorkspaceError::MissingProject(_)) => None,
-            Err(WorkspaceError::MissingPyprojectToml) => None,
-            Err(WorkspaceError::NonWorkspace(_)) => None,
-            Err(err) => {
-                warn_user_once!("{err}");
-                None
-            }
-        };
-
         if let Some(project) = project {
             interpreter_request = find_requires_python(project.workspace())
                 .into_diagnostic()?
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone()))
+                    PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
                 });
         }
     }
 
     // Locate the Python interpreter to use in the environment
     let python = PythonInstallation::find_or_download(
-        interpreter_request,
+        interpreter_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
@@ -195,6 +222,7 @@ async fn venv_impl(
     .into_diagnostic()?;
 
     let managed = python.source().is_managed();
+    let implementation = python.implementation();
     let interpreter = python.into_interpreter();
 
     // Add all authenticated sources to the cache.
@@ -205,14 +233,16 @@ async fn venv_impl(
     if managed {
         writeln!(
             printer.stderr(),
-            "Using Python {}",
+            "Using {} {}",
+            implementation.pretty(),
             interpreter.python_version().cyan()
         )
         .into_diagnostic()?;
     } else {
         writeln!(
             printer.stderr(),
-            "Using Python {} interpreter at: {}",
+            "Using {} {} interpreter at: {}",
+            implementation.pretty(),
             interpreter.python_version(),
             interpreter.sys_executable().user_display().cyan()
         )
@@ -221,7 +251,7 @@ async fn venv_impl(
 
     writeln!(
         printer.stderr(),
-        "Creating virtualenv {}at: {}",
+        "Creating virtual environment {}at: {}",
         if seed { "with seed packages " } else { "" },
         path.user_display().cyan()
     )
@@ -229,12 +259,13 @@ async fn venv_impl(
 
     // Create the virtual environment.
     let venv = uv_virtualenv::create_venv(
-        path,
+        &path,
         interpreter,
         prompt,
         system_site_packages,
         allow_existing,
         relocatable,
+        seed,
     )
     .map_err(VenvError::Creation)?;
 
@@ -249,7 +280,8 @@ async fn venv_impl(
         }
 
         // Instantiate a client.
-        let client = RegistryClientBuilder::from(client_builder)
+        let client = RegistryClientBuilder::try_from(client_builder)
+            .into_diagnostic()?
             .cache(cache.clone())
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
@@ -279,7 +311,8 @@ async fn venv_impl(
         let state = SharedState::default();
 
         // For seed packages, assume a bunch of default settings are sufficient.
-        let build_constraints = [];
+        let build_constraints = Constraints::default();
+        let build_hasher = HashStrategy::default();
         let config_settings = ConfigSettings::default();
         let sources = SourceStrategy::Disabled;
 
@@ -290,18 +323,21 @@ async fn venv_impl(
         let build_dispatch = BuildDispatch::new(
             &client,
             cache,
-            &build_constraints,
+            build_constraints,
             interpreter,
             index_locations,
             &flat_index,
+            &dependency_metadata,
             &state.index,
             &state.git,
+            &state.capabilities,
             &state.in_flight,
             index_strategy,
             &config_settings,
             BuildIsolation::Isolated,
             link_mode,
             &build_options,
+            &build_hasher,
             exclude_newer,
             sources,
             concurrency,

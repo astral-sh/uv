@@ -65,10 +65,28 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No virtual environment found
+    error: No virtual environment found; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
     "###);
 
     assert!(predicates::path::missing().eval(&context.venv));
+
+    Ok(())
+}
+
+#[test]
+fn missing_system() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("anyio")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").arg("--system"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No system Python installation found
+    "###);
 
     Ok(())
 }
@@ -1396,7 +1414,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 13 files for source-distribution ([SIZE])
+    Removed 19 files for source-distribution ([SIZE])
     "###
     );
 
@@ -1591,7 +1609,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 14 files for source-distribution ([SIZE])
+    Removed 20 files for source-distribution ([SIZE])
     "###
     );
 
@@ -1687,7 +1705,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 13 files for source-distribution ([SIZE])
+    Removed 19 files for source-distribution ([SIZE])
     "###
     );
 
@@ -1788,7 +1806,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 2 files for tomli ([SIZE])
+    Removed 11 files for tomli ([SIZE])
     "###
     );
 
@@ -1876,7 +1894,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 3 files for tqdm ([SIZE])
+    Removed 43 files for tqdm ([SIZE])
     "###
     );
 
@@ -2597,13 +2615,15 @@ fn incompatible_wheel() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `foo @ file://[TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl`
-      Caused by: Failed to unzip wheel: foo-1.2.3-not-compatible-wheel.whl
-      Caused by: unable to locate the end of central directory record
+      × No solution found when resolving dependencies:
+      ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
+
+          hint: The structure of foo was invalid:
+            Failed to read from zip file
     "###
     );
 
@@ -3197,7 +3217,7 @@ requires-python = ">=3.8"
     "###
     );
 
-    // Re-installing should be a no-op.
+    // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in"), @r###"
     success: true
@@ -3294,7 +3314,7 @@ version = "0.0.0"
 dependencies = [
   "anyio==4.0.0"
 ]
-requires-python = "<=3.5"
+requires-python = ">=3.13"
 "#,
     )?;
 
@@ -3310,7 +3330,7 @@ requires-python = "<=3.5"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.5 and example==0.0.0 depends on Python<=3.5, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
@@ -3365,7 +3385,7 @@ version = "0.0.0"
 dependencies = [
   "anyio==4.0.0"
 ]
-requires-python = "<=3.5"
+requires-python = ">=3.13"
 "#,
     )?;
 
@@ -3381,7 +3401,7 @@ requires-python = "<=3.5"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.5 and example==0.0.0 depends on Python<=3.5, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
@@ -3446,7 +3466,7 @@ fn require_hashes_missing_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: anyio==4.0.0
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: anyio==4.0.0
     "###
     );
 
@@ -3487,7 +3507,7 @@ fn require_hashes_missing_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "###
     );
 
@@ -3528,7 +3548,7 @@ fn require_hashes_invalid_operator() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio>4.0.0
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio>4.0.0
     "###
     );
 
@@ -3782,18 +3802,18 @@ fn require_hashes_source_url() -> Result<()> {
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      Caused by: Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      ╰─▶ Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
 
-    Expected:
-      sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-    Computed:
-      sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
+          Computed:
+            sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
     "###
     );
 
@@ -3813,18 +3833,18 @@ fn require_hashes_source_url_mismatch() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      Caused by: Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      ╰─▶ Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
 
-    Expected:
-      sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-    Computed:
-      sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
+          Computed:
+            sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
     "###
     );
 
@@ -3972,12 +3992,12 @@ fn require_hashes_git() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
-      Caused by: Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
+      × Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
+      ╰─▶ Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
     "###
     );
 
@@ -4002,12 +4022,12 @@ fn require_hashes_source_tree() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build `black @ file://[WORKSPACE]/scripts/packages/black_editable`
-      Caused by: Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/scripts/packages/black_editable`
+      × Failed to build `black @ file://[WORKSPACE]/scripts/packages/black_editable`
+      ╰─▶ Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/scripts/packages/black_editable`
     "###
     );
 
@@ -4209,18 +4229,18 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
-      Caused by: Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
+      × Failed to build `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
 
-    Expected:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
+          Computed:
+            sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
     "###
     );
 
@@ -4277,7 +4297,7 @@ fn require_hashes_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
     "###
     );
 
@@ -4301,7 +4321,7 @@ fn require_hashes_repeated_dependency() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "###
     );
 
@@ -4318,7 +4338,7 @@ fn require_hashes_repeated_dependency() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "###
     );
 
@@ -4783,7 +4803,9 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `example-a-961b4c22==1.0.0`
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -4991,7 +5013,9 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `example-a-961b4c22==1.0.0`
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -5052,7 +5076,7 @@ fn require_hashes_url_other_fragment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar
     "###
     );
 
@@ -5472,9 +5496,11 @@ fn incompatible_build_constraint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `requests==1.2.0`
-      Caused by: Failed to install requirements from setup.py build (resolve)
-      Caused by: No solution found when resolving: setuptools>=40.8.0
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: requests==1.2.0
+      Caused by: Failed to install requirements from `setup.py` build (resolve)
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
       Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###
     );
@@ -5503,6 +5529,79 @@ fn compatible_build_constraint() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn sync_seed() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==1.2")?;
+
+    // Add `pip` to the environment.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("pip"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pip==24.0
+    "###
+    );
+
+    // Syncing should remove the seed packages.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - pip==24.0
+     + requests==1.2.0
+    "###
+    );
+
+    // Re-create the environment with seed packages.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--seed"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Creating virtual environment with seed packages at: .venv
+     + pip==24.0
+     + setuptools==69.2.0
+     + wheel==0.43.0
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    // Syncing should retain the seed packages.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
     "###

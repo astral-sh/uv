@@ -76,7 +76,7 @@ executables that are linked to virtual environments will be skipped. Although we
 using virtual environments for dependency management, `--system` is appropriate in continuous
 integration and containerized environments.
 
-The `--system` flag is also used to opt in to mutating system environments. For example, the the
+The `--system` flag is also used to opt in to mutating system environments. For example, the
 `--python` argument can be used to request a Python version (e.g., `--python 3.12`), and uv will
 search for an interpreter that meets the request. If uv finds a system interpreter (e.g.,
 `/usr/lib/python3.12`), then the `--system` flag is required to allow modification of this

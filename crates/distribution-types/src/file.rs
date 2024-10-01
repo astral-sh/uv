@@ -21,11 +21,8 @@ pub enum FileConversionError {
 }
 
 /// Internal analog to [`pypi_types::File`].
-#[derive(
-    Debug, Clone, Hash, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[derive(Debug, Clone, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
 pub struct File {
     pub dist_info_metadata: bool,
     pub filename: String,
@@ -69,11 +66,8 @@ impl File {
 }
 
 /// While a registry file is generally a remote URL, it can also be a file if it comes from a directory flat indexes.
-#[derive(
-    Debug, Clone, Hash, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[derive(Debug, Clone, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
 pub enum FileLocation {
     /// URL relative to the base URL.
     RelativeUrl(String, String),
@@ -150,8 +144,7 @@ impl Display for FileLocation {
     rkyv::Serialize,
 )]
 #[serde(transparent)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 pub struct UrlString(String);
 
 impl UrlString {

@@ -3,24 +3,23 @@ use std::io::{BufReader, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::{env, io};
 
+use crate::record::RecordEntry;
+use crate::script::Script;
+use crate::{Error, Layout};
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use mailparse::parse_headers;
+use pypi_types::DirectUrl;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 use tracing::{instrument, warn};
+use uv_cache_info::CacheInfo;
+use uv_fs::{relative_to, Simplified};
+use uv_normalize::PackageName;
 use walkdir::WalkDir;
 use zip::write::FileOptions;
 use zip::ZipWriter;
-
-use pypi_types::DirectUrl;
-use uv_fs::{relative_to, Simplified};
-use uv_normalize::PackageName;
-
-use crate::record::RecordEntry;
-use crate::script::Script;
-use crate::{Error, Layout};
 
 const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 
@@ -728,6 +727,7 @@ pub(crate) fn extra_dist_info(
     dist_info_prefix: &str,
     requested: bool,
     direct_url: Option<&DirectUrl>,
+    cache_info: Option<&CacheInfo>,
     installer: Option<&str>,
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
@@ -740,6 +740,14 @@ pub(crate) fn extra_dist_info(
             site_packages,
             &dist_info_dir.join("direct_url.json"),
             serde_json::to_string(direct_url)?.as_bytes(),
+            record,
+        )?;
+    }
+    if let Some(cache_info) = cache_info {
+        write_file_recorded(
+            site_packages,
+            &dist_info_dir.join("uv_cache.json"),
+            serde_json::to_string(cache_info)?.as_bytes(),
             record,
         )?;
     }
@@ -815,16 +823,12 @@ fn parse_email_message_file(
         .0;
 
     for header in headers {
-        let mut name = header.get_key();
+        let name = header.get_key(); // Will not be trimmed because if it contains space, mailparse will skip the header
         let mut value = header.get_value();
 
-        // Trim the name and value only if needed, avoiding unnecessary allocations with .trim().to_string().
-        let trimmed_name = name.trim();
-        if name == trimmed_name {
-            name = trimmed_name.to_string();
-        }
+        // Trim the value only if needed
         let trimmed_value = value.trim();
-        if value == trimmed_value {
+        if value != trimmed_value {
             value = trimmed_value.to_string();
         }
 
@@ -861,6 +865,37 @@ mod test {
         "};
 
         parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();
+    }
+
+    #[test]
+    fn test_parse_email_message_file_with_trimmed_value() {
+        let text = indoc! {"
+            Wheel-Version: 1.0
+            Generator: bdist_wheel (0.37.1)
+            Root-Is-Purelib: false
+            Tag:        cp38-cp38-manylinux_2_17_x86_64    
+        "};
+
+        let wheel = parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();
+        let tags = &wheel["Tag"];
+        let tag = tags
+            .first()
+            .expect("Expected one tag inside the WHEEL file");
+        assert_eq!(tag, "cp38-cp38-manylinux_2_17_x86_64");
+    }
+
+    #[test]
+    fn test_parse_email_message_file_is_skipping_keys_with_space() {
+        let text = indoc! {"
+            Wheel-Version: 1.0
+            Generator: bdist_wheel (0.37.1)
+            Root-Is-Purelib: false
+              Tag  : cp38-cp38-manylinux_2_17_x86_64
+        "};
+
+        let wheel = parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();
+        assert!(!wheel.contains_key("Tag"));
+        assert_eq!(3, wheel.keys().len());
     }
 
     #[test]

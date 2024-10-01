@@ -1,8 +1,6 @@
-use std::sync::LazyLock;
-
 use url::Url;
 
-use crate::credentials::GitStore;
+pub use crate::credentials::{store_credentials_from_url, GIT_STORE};
 pub use crate::git::GitReference;
 pub use crate::resolver::{
     GitResolver, GitResolverError, RepositoryReference, ResolvedRepositoryReference,
@@ -15,11 +13,6 @@ mod git;
 mod resolver;
 mod sha;
 mod source;
-
-/// Global authentication cache for a uv invocation.
-///
-/// This is used to share Git credentials within a single process.
-pub static GIT_STORE: LazyLock<GitStore> = LazyLock::new(GitStore::default);
 
 /// A URL reference to a Git repository.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Hash, Ord)]
@@ -57,6 +50,13 @@ impl GitUrl {
     #[must_use]
     pub fn with_precise(mut self, precise: GitSha) -> Self {
         self.precise = Some(precise);
+        self
+    }
+
+    /// Set the [`GitReference`] to use for this Git URL.
+    #[must_use]
+    pub fn with_reference(mut self, reference: GitReference) -> Self {
+        self.reference = reference;
         self
     }
 

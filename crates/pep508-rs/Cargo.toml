@@ -26,8 +26,6 @@ indexmap = { workspace = true }
 pubgrub = { workspace = true }
 rustc-hash = { workspace = true }
 pep440_rs = { workspace = true }
-pyo3 = { workspace = true, optional = true, features = ["abi3", "extension-module"] }
-pyo3-log = { workspace = true, optional = true }
 regex = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive", "rc"] }
@@ -42,13 +40,12 @@ uv-normalize = { workspace = true }
 uv-pubgrub = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.36.1" }
-log = { version = "0.4.21" }
-serde_json = { version = "1.0.114" }
+insta = { version = "1.40.0" }
+log = { version = "0.4.22" }
+serde_json = { version = "1.0.128" }
 testing_logger = { version = "0.1.1" }
 
 [features]
-pyo3 = ["dep:pyo3", "pep440_rs/pyo3", "pyo3-log", "tracing", "tracing/log"]
 tracing = ["dep:tracing", "pep440_rs/tracing"]
 schemars = ["dep:schemars"]
 # PEP 508 allows only URLs such as `foo @ https://example.org/foo` or `foo @ file:///home/ferris/foo`, and

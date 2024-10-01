@@ -5,6 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
+use std::path::Path;
 
 use crate::common::{decode_token, packse_index_url};
 use common::{uv_snapshot, TestContext};
@@ -25,11 +26,11 @@ fn add_registry() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -44,7 +45,7 @@ fn add_registry() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -60,13 +61,13 @@ fn add_registry() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -152,7 +153,7 @@ fn add_git() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -180,7 +181,7 @@ fn add_git() -> Result<()> {
     "###);
 
     // Adding with an ambiguous Git reference should treat it as a revision.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -194,7 +195,7 @@ fn add_git() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -207,7 +208,7 @@ fn add_git() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -224,7 +225,7 @@ fn add_git() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -233,7 +234,7 @@ fn add_git() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -330,11 +331,11 @@ fn add_git_private_source() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -347,7 +348,7 @@ fn add_git_private_source() -> Result<()> {
      + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -363,7 +364,7 @@ fn add_git_private_source() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -372,7 +373,7 @@ fn add_git_private_source() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -434,11 +435,11 @@ fn add_git_private_raw() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]).arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")).arg("--raw-sources"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -451,7 +452,7 @@ fn add_git_private_raw() -> Result<()> {
      + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     let filters: Vec<_> = [(token.as_str(), "***")]
         .into_iter()
@@ -472,13 +473,13 @@ fn add_git_private_raw() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -537,7 +538,7 @@ fn add_git_error() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -562,7 +563,7 @@ fn add_git_error() -> Result<()> {
     "###);
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("flask").arg("--tag").arg("0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("flask").arg("--tag").arg("0.0.1"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -572,13 +573,47 @@ fn add_git_error() -> Result<()> {
     "###);
 
     // Provide a tag with a non-Git source.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `flask` did not resolve to a Git repository, but a Git reference (`--branch 0.0.1`) was provided.
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "git")]
+fn add_git_branch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--branch").arg("test-branch"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
     Ok(())
@@ -599,7 +634,7 @@ fn add_git_raw() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -627,7 +662,7 @@ fn add_git_raw() -> Result<()> {
     "###);
 
     // Use an ambiguous tag reference, which would otherwise not resolve.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]).arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1").arg("--raw-sources"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -641,7 +676,7 @@ fn add_git_raw() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -658,13 +693,13 @@ fn add_git_raw() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -759,7 +794,7 @@ fn add_git_implicit() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -787,7 +822,7 @@ fn add_git_implicit() -> Result<()> {
     "###);
 
     // Omit the `git+` prefix.
-    uv_snapshot!(context.filters(), context.add(&["uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -819,12 +854,12 @@ fn add_raw_error() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -855,11 +890,11 @@ fn add_unnamed() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["git+https://github.com/astral-test/uv-public-pypackage"]).arg("--tag=0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -872,7 +907,7 @@ fn add_unnamed() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -888,7 +923,7 @@ fn add_unnamed() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -897,7 +932,7 @@ fn add_unnamed() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -956,11 +991,11 @@ fn add_remove_dev() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -975,7 +1010,7 @@ fn add_remove_dev() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -989,7 +1024,7 @@ fn add_remove_dev() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -1001,7 +1036,7 @@ fn add_remove_dev() -> Result<()> {
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1074,7 +1109,7 @@ fn add_remove_dev() -> Result<()> {
     "###);
 
     // This should fail without --dev.
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1085,7 +1120,7 @@ fn add_remove_dev() -> Result<()> {
     "###);
 
     // Remove the dependency.
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1101,7 +1136,7 @@ fn add_remove_dev() -> Result<()> {
      - sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1115,7 +1150,7 @@ fn add_remove_dev() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -1124,7 +1159,7 @@ fn add_remove_dev() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1172,11 +1207,11 @@ fn add_remove_optional() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--optional=io"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--optional=io"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1191,7 +1226,7 @@ fn add_remove_optional() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1210,14 +1245,14 @@ fn add_remove_optional() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1292,7 +1327,7 @@ fn add_remove_optional() -> Result<()> {
     "###);
 
     // This should fail without --optional.
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1303,7 +1338,7 @@ fn add_remove_optional() -> Result<()> {
     "###);
 
     // Remove the dependency.
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--optional=io"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional=io"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1316,7 +1351,7 @@ fn add_remove_optional() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1333,13 +1368,13 @@ fn add_remove_optional() -> Result<()> {
         io = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1389,21 +1424,24 @@ fn add_remove_inline_optional() -> Result<()> {
         ] }
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["typing-extensions"]).arg("--optional=types"), @r###"
-    success: false
-    exit_code: 2
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--optional=types"), @r###"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Dependencies in `pyproject.toml` are malformed
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + typing-extensions==4.10.0
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1418,17 +1456,17 @@ fn add_remove_inline_optional() -> Result<()> {
         optional-dependencies = { io = [
             "anyio==3.7.0",
         ], types = [
-            "typing-extensions",
+            "typing-extensions>=4.10.0",
         ] }
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove(&["typing-extensions"]).arg("--optional=types"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions").arg("--optional=types"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1436,14 +1474,16 @@ fn add_remove_inline_optional() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
+     - typing-extensions==4.10.0
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1460,7 +1500,7 @@ fn add_remove_inline_optional() -> Result<()> {
         ], types = [] }
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -1489,7 +1529,7 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -1502,14 +1542,14 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding a workspace package with a mismatched source should error.
-    let mut add_cmd =
-        context.add(&["child2 @ git+https://github.com/astral-test/uv-public-pypackage"]);
+    let mut add_cmd = context.add();
     add_cmd
+        .arg("child2 @ git+https://github.com/astral-test/uv-public-pypackage")
         .arg("--package")
         .arg("child1")
         .current_dir(&context.temp_dir);
@@ -1525,8 +1565,9 @@ fn add_remove_workspace() -> Result<()> {
 
     // Workspace packages should be detected automatically.
     let child1 = context.temp_dir.join("child1");
-    let mut add_cmd = context.add(&["child2"]);
+    let mut add_cmd = context.add();
     add_cmd
+        .arg("child2")
         .arg("--package")
         .arg("child1")
         .current_dir(&context.temp_dir);
@@ -1560,7 +1601,7 @@ fn add_remove_workspace() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -1570,7 +1611,7 @@ fn add_remove_workspace() -> Result<()> {
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1619,7 +1660,7 @@ fn add_remove_workspace() -> Result<()> {
     "###);
 
     // Remove the dependency.
-    uv_snapshot!(context.filters(), context.remove(&["child2"]).current_dir(&child1), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("child2").current_dir(&child1), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1647,7 +1688,7 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -1655,7 +1696,7 @@ fn add_remove_workspace() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1707,6 +1748,12 @@ fn add_workspace_editable() -> Result<()> {
 
     let workspace = context.temp_dir.child("pyproject.toml");
     workspace.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
         [tool.uv.workspace]
         members = ["child1", "child2"]
     "#})?;
@@ -1720,7 +1767,7 @@ fn add_workspace_editable() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -1733,13 +1780,13 @@ fn add_workspace_editable() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     let child1 = context.temp_dir.join("child1");
-    let mut add_cmd = context.add(&["child2"]);
-    add_cmd.arg("--editable").current_dir(&child1);
+    let mut add_cmd = context.add();
+    add_cmd.arg("child2").arg("--editable").current_dir(&child1);
 
     uv_snapshot!(context.filters(), add_cmd, @r###"
     success: true
@@ -1747,7 +1794,7 @@ fn add_workspace_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + child1==0.1.0 (from file://[TEMP_DIR]/child1)
@@ -1770,7 +1817,7 @@ fn add_workspace_editable() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -1780,7 +1827,7 @@ fn add_workspace_editable() -> Result<()> {
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1797,6 +1844,7 @@ fn add_workspace_editable() -> Result<()> {
         members = [
             "child1",
             "child2",
+            "parent",
         ]
 
         [[package]]
@@ -1814,6 +1862,11 @@ fn add_workspace_editable() -> Result<()> {
         name = "child2"
         version = "0.1.0"
         source = { editable = "child2" }
+
+        [[package]]
+        name = "parent"
+        version = "0.1.0"
+        source = { virtual = "." }
         "###
         );
     });
@@ -1826,6 +1879,124 @@ fn add_workspace_editable() -> Result<()> {
 
     ----- stderr -----
     Audited 2 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// Add a workspace dependency via its path.
+#[test]
+fn add_workspace_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let workspace = context.temp_dir.child("pyproject.toml");
+    workspace.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+
+    let pyproject_toml = context.temp_dir.child("child/pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("./child"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+        ]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "###
+        );
+    });
+
+    // `uv add` implies a full lock and sync, including development dependencies.
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+            "parent",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "child" }
+
+        [[package]]
+        name = "parent"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child", editable = "child" }]
+        "###
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
     "###);
 
     Ok(())
@@ -1845,11 +2016,11 @@ fn add_path() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    let child = workspace.child("child");
+    let child = workspace.child("packages").child("child");
     child.child("pyproject.toml").write_str(indoc! {r#"
         [project]
         name = "child"
@@ -1858,22 +2029,22 @@ fn add_path() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["./child"]).current_dir(workspace.path()), @r###"
+    uv_snapshot!(context.filters(), context.add().arg(Path::new("packages").join("child")).current_dir(workspace.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/workspace/child)
+     + child==0.1.0 (from file://[TEMP_DIR]/workspace/packages/child)
      + parent==0.1.0 (from file://[TEMP_DIR]/workspace)
     "###);
 
@@ -1893,11 +2064,11 @@ fn add_path() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
-        child = { path = "child" }
+        child = { path = "packages/child" }
         "###
         );
     });
@@ -1919,7 +2090,7 @@ fn add_path() -> Result<()> {
         [[package]]
         name = "child"
         version = "0.1.0"
-        source = { directory = "child" }
+        source = { directory = "packages/child" }
 
         [[package]]
         name = "parent"
@@ -1930,7 +2101,7 @@ fn add_path() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "child", directory = "child" }]
+        requires-dist = [{ name = "child", directory = "packages/child" }]
         "###
         );
     });
@@ -1963,7 +2134,7 @@ fn update() -> Result<()> {
         dependencies = ["requests==2.31.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -1993,7 +2164,7 @@ fn update() -> Result<()> {
     "###);
 
     // Enable an extra (note the version specifier should be preserved).
-    uv_snapshot!(context.filters(), context.add(&["requests[security]"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests[security]"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2006,7 +2177,7 @@ fn update() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2022,14 +2193,14 @@ fn update() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
     // Enable extras using the CLI flag and add a marker.
-    uv_snapshot!(context.filters(), context.add(&["requests; python_version > '3.7'"]).args(["--extra=use_chardet_on_py3", "--extra=socks"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests; python_version > '3.7'").args(["--extra=use_chardet_on_py3", "--extra=socks"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2044,7 +2215,7 @@ fn update() -> Result<()> {
      + pysocks==1.7.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2061,7 +2232,7 @@ fn update() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2069,7 +2240,7 @@ fn update() -> Result<()> {
 
     // Change the source by specifying a version (note the extras, markers, and version should be
     // preserved).
-    uv_snapshot!(context.filters(), context.add(&["requests @ git+https://github.com/psf/requests"]).arg("--tag=v2.32.3"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.3"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2084,7 +2255,7 @@ fn update() -> Result<()> {
      + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2101,7 +2272,7 @@ fn update() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -2110,7 +2281,7 @@ fn update() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2255,7 +2426,7 @@ fn add_update_marker() -> Result<()> {
         dependencies = ["requests>=2.30; python_version >= '3.11'"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -2284,7 +2455,7 @@ fn add_update_marker() -> Result<()> {
     "###);
 
     // Restrict the `requests` version for Python <3.11
-    uv_snapshot!(context.filters(), context.add(&["requests>=2.0,<2.29; python_version < '3.11'"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.0,<2.29; python_version < '3.11'"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2297,7 +2468,7 @@ fn add_update_marker() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     // Should add a new line for the dependency since the marker does not match an existing one
     insta::with_settings!({
@@ -2315,14 +2486,14 @@ fn add_update_marker() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
     // Change the restricted `requests` version for Python <3.11
-    uv_snapshot!(context.filters(), context.add(&["requests>=2.0,<2.20; python_version < '3.11'"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.0,<2.20; python_version < '3.11'"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2335,7 +2506,7 @@ fn add_update_marker() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     // Should mutate the existing dependency since the marker matches
     insta::with_settings!({
@@ -2353,14 +2524,14 @@ fn add_update_marker() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
     // Restrict the `requests` version on Windows and Python >3.11
-    uv_snapshot!(context.filters(), context.add(&["requests>=2.31 ; sys_platform == 'win32' and python_version > '3.11'"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.31 ; sys_platform == 'win32' and python_version > '3.11'"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2377,7 +2548,7 @@ fn add_update_marker() -> Result<()> {
      + urllib3==1.23
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     // Should add a new line for the dependency since the marker does not match an existing one
     insta::with_settings!({
@@ -2396,14 +2567,14 @@ fn add_update_marker() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
     // Restrict the `requests` version on Windows
-    uv_snapshot!(context.filters(), context.add(&["requests>=2.10 ; sys_platform == 'win32'"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests>=2.10 ; sys_platform == 'win32'"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2416,7 +2587,7 @@ fn add_update_marker() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     // Should add a new line for the dependency since the marker does not exactly match an existing
     // one — although it is a subset of the existing marker.
@@ -2437,14 +2608,14 @@ fn add_update_marker() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
     // Remove `requests`
-    uv_snapshot!(context.filters(), context.remove(&["requests"]), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("requests"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2462,7 +2633,7 @@ fn add_update_marker() -> Result<()> {
      - urllib3==1.23
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     // Should remove all variants of `requests`
     insta::with_settings!({
@@ -2477,7 +2648,7 @@ fn add_update_marker() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2502,12 +2673,12 @@ fn update_source_replace_url() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     // Change the source. The existing URL should be removed.
-    uv_snapshot!(context.filters(), context.add(&["requests @ git+https://github.com/psf/requests"]).arg("--tag=v2.32.3"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.3"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2524,7 +2695,7 @@ fn update_source_replace_url() -> Result<()> {
      + urllib3==2.2.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2540,7 +2711,7 @@ fn update_source_replace_url() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -2566,7 +2737,7 @@ fn add_inexact() -> Result<()> {
         dependencies = ["anyio == 3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -2602,11 +2773,11 @@ fn add_inexact() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["iniconfig==2.0.0"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2620,7 +2791,7 @@ fn add_inexact() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2636,13 +2807,13 @@ fn add_inexact() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2718,7 +2889,7 @@ fn remove_registry() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -2745,7 +2916,7 @@ fn remove_registry() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2761,7 +2932,7 @@ fn remove_registry() -> Result<()> {
      - sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2775,13 +2946,13 @@ fn remove_registry() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2828,11 +2999,11 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["requests==2.31.0"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2851,7 +3022,7 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
      + urllib3==2.2.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2868,7 +3039,7 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2889,11 +3060,11 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["requests==2.31.0"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2912,7 +3083,7 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
      + urllib3==2.2.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2929,7 +3100,7 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -2951,11 +3122,11 @@ fn add_frozen() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2963,7 +3134,7 @@ fn add_frozen() -> Result<()> {
     ----- stderr -----
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2979,7 +3150,7 @@ fn add_frozen() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3004,11 +3175,11 @@ fn add_no_sync() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--no-sync"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--no-sync"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3017,7 +3188,7 @@ fn add_no_sync() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3033,7 +3204,7 @@ fn add_no_sync() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3050,7 +3221,7 @@ fn add_reject_multiple_git_ref_flags() {
 
     // --tag and --branch
     uv_snapshot!(context
-        .add(&[])
+        .add()
         .arg("foo")
         .arg("--tag")
         .arg("0.0.1")
@@ -3071,7 +3242,7 @@ fn add_reject_multiple_git_ref_flags() {
 
     // --tag and --rev
     uv_snapshot!(context
-        .add(&[])
+        .add()
         .arg("foo")
         .arg("--tag")
         .arg("0.0.1")
@@ -3092,7 +3263,7 @@ fn add_reject_multiple_git_ref_flags() {
 
     // --tag and --tag
     uv_snapshot!(context
-        .add(&[])
+        .add()
         .arg("foo")
         .arg("--tag")
         .arg("0.0.1")
@@ -3126,11 +3297,11 @@ fn add_error() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["xyz"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("xyz"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3138,10 +3309,10 @@ fn add_error() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
-      help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "###);
 
-    uv_snapshot!(context.filters(), context.add(&["xyz"]).arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3169,12 +3340,12 @@ fn add_lower_bound() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3189,7 +3360,7 @@ fn add_lower_bound() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3205,7 +3376,7 @@ fn add_lower_bound() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3228,13 +3399,13 @@ fn add_lower_bound_existing() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `anyio` should _not_ set a lower-bound, since it's already present (even if
     // unconstrained).
-    uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3249,7 +3420,7 @@ fn add_lower_bound_existing() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3265,7 +3436,7 @@ fn add_lower_bound_existing() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3288,12 +3459,12 @@ fn add_lower_bound_raw() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `anyio` should _not_ set a lower-bound when using `--raw-sources`.
-    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw-sources"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3308,7 +3479,7 @@ fn add_lower_bound_raw() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3324,7 +3495,7 @@ fn add_lower_bound_raw() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3347,12 +3518,12 @@ fn add_lower_bound_dev() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3367,7 +3538,7 @@ fn add_lower_bound_dev() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3381,7 +3552,7 @@ fn add_lower_bound_dev() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
@@ -3409,12 +3580,12 @@ fn add_lower_bound_optional() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `anyio` should include a lower-bound.
-    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--optional=io"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--optional=io"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3429,7 +3600,7 @@ fn add_lower_bound_optional() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3448,13 +3619,13 @@ fn add_lower_bound_optional() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3531,12 +3702,12 @@ fn add_lower_bound_local() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
     // Adding `torch` should include a lower-bound, but no local segment.
-    uv_snapshot!(context.filters(), context.add(&["local-simple-a"]).arg("--extra-index-url").arg(packse_index_url()).env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("local-simple-a").arg("--extra-index-url").arg(packse_index_url()).env_remove("UV_EXCLUDE_NEWER"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3549,7 +3720,7 @@ fn add_lower_bound_local() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3565,13 +3736,13 @@ fn add_lower_bound_local() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3620,7 +3791,7 @@ fn add_non_project() -> Result<()> {
 
     // Adding `iniconfig` should fail, since virtual workspace roots don't support production
     // dependencies.
-    uv_snapshot!(context.filters(), context.add(&["iniconfig"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3631,7 +3802,7 @@ fn add_non_project() -> Result<()> {
 
     // Adding `iniconfig` as optional should fail, since virtual workspace roots don't support
     // optional dependencies.
-    uv_snapshot!(context.filters(), context.add(&["iniconfig"]).arg("--optional").arg("async"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--optional").arg("async"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3641,7 +3812,7 @@ fn add_non_project() -> Result<()> {
     "###);
 
     // Adding `iniconfig` as a dev dependency should succeed.
-    uv_snapshot!(context.filters(), context.add(&["iniconfig"]).arg("--dev"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3654,7 +3825,7 @@ fn add_non_project() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3671,7 +3842,7 @@ fn add_non_project() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3716,11 +3887,11 @@ fn add_repeat() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3735,7 +3906,7 @@ fn add_repeat() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3751,13 +3922,13 @@ fn add_repeat() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
     });
 
-    uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3767,7 +3938,7 @@ fn add_repeat() -> Result<()> {
     Audited 4 packages in [TIME]
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3783,7 +3954,7 @@ fn add_repeat() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -3806,7 +3977,7 @@ fn add_requirements_file() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -3814,7 +3985,7 @@ fn add_requirements_file() -> Result<()> {
     requirements_txt
         .write_str("Flask==2.3.2\nanyio @ git+https://github.com/agronholm/anyio.git@4.4.0")?;
 
-    uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("requirements.txt"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3836,7 +4007,7 @@ fn add_requirements_file() -> Result<()> {
      + werkzeug==3.0.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3853,7 +4024,7 @@ fn add_requirements_file() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
@@ -3863,7 +4034,7 @@ fn add_requirements_file() -> Result<()> {
     });
 
     // Passing a `setup.py` should fail.
-    uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("setup.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("setup.py"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3873,7 +4044,7 @@ fn add_requirements_file() -> Result<()> {
     "###);
 
     // Passing nothing should fail.
-    uv_snapshot!(context.filters(), context.add(&[]), @r###"
+    uv_snapshot!(context.filters(), context.add(), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3913,7 +4084,7 @@ fn add_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3922,7 +4093,7 @@ fn add_script() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3950,6 +4121,60 @@ fn add_script() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn add_script_relative_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        print("Hello, world!")
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("./project").arg("--editable").arg("--script").arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated `script.py`
+    "###);
+
+    let script_content = context.read("script.py");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r###"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "project",
+        # ]
+        #
+        # [tool.uv.sources]
+        # project = { path = "project", editable = true }
+        # ///
+        print("Hello, world!")
+        "###
+        );
+    });
+    Ok(())
+}
+
 /// Add to a script without an existing metadata table.
 #[test]
 fn add_script_without_metadata_table() -> Result<()> {
@@ -3965,7 +4190,7 @@ fn add_script_without_metadata_table() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3974,7 +4199,7 @@ fn add_script_without_metadata_table() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4016,7 +4241,7 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4025,7 +4250,7 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4072,7 +4297,7 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4081,7 +4306,7 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4124,7 +4349,7 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4133,7 +4358,7 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4184,7 +4409,7 @@ fn remove_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4193,7 +4418,7 @@ fn remove_script() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4242,7 +4467,7 @@ fn remove_last_dep_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove(&["rich"]).arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("rich").arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4251,7 +4476,7 @@ fn remove_last_dep_script() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4295,7 +4520,8 @@ fn add_git_to_script() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context
-        .add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"])
+        .add()
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .arg("--tag=0.0.1")
         .arg("--script")
         .arg("script.py"), @r###"
@@ -4307,7 +4533,7 @@ fn add_git_to_script() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4351,7 +4577,7 @@ fn fail_to_add_revert_project() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
 
@@ -4359,7 +4585,7 @@ fn fail_to_add_revert_project() -> Result<()> {
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.add(&["pytorch==1.0.2"]), @r###"
+    uv_snapshot!(filters, context.add().arg("pytorch==1.0.2"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4388,7 +4614,7 @@ fn fail_to_add_revert_project() -> Result<()> {
     ---
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4402,7 +4628,7 @@ fn fail_to_add_revert_project() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42", "wheel"]
+        requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "###
         );
@@ -4411,8 +4637,8 @@ fn fail_to_add_revert_project() -> Result<()> {
     Ok(())
 }
 
-/// Ensure that the added dependencies are sorted
-/// if the dependency list was already sorted prior to adding the new one.
+/// Ensure that the added dependencies are sorted if the dependency list was already sorted prior
+/// to the operation.
 #[test]
 fn sorted_dependencies() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -4426,22 +4652,34 @@ fn sorted_dependencies() -> Result<()> {
     requires-python = ">=3.12"
     dependencies = [
         "CacheControl[filecache]>=0.14,<0.15",
-        "mwparserfromhell",
-        "pywikibot",
-        "sentry-sdk",
-        "yarl",
+        "iniconfig",
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["pydantic"]).arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "anyio"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 13 packages in [TIME]
+    Prepared 12 packages in [TIME]
+    Installed 12 packages in [TIME]
+     + anyio==4.3.0
+     + cachecontrol==0.14.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + filelock==3.13.1
+     + idna==3.6
+     + iniconfig==2.0.0
+     + msgpack==1.0.8
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4455,11 +4693,9 @@ fn sorted_dependencies() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "CacheControl[filecache]>=0.14,<0.15",
-            "mwparserfromhell",
-            "pydantic",
-            "pywikibot",
-            "sentry-sdk",
-            "yarl",
+            "anyio>=4.3.0",
+            "iniconfig",
+            "typing-extensions>=4.10.0",
         ]
         "###
         );
@@ -4489,7 +4725,7 @@ fn custom_dependencies() -> Result<()> {
     ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["pydantic"]).arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("pydantic").arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4497,7 +4733,7 @@ fn custom_dependencies() -> Result<()> {
     ----- stderr -----
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4520,5 +4756,202 @@ fn custom_dependencies() -> Result<()> {
         "###
         );
     });
+    Ok(())
+}
+
+/// Regression test for: <https://github.com/astral-sh/uv/issues/7259>
+#[test]
+fn update_offset() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "iniconfig"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig",
+            "typing-extensions>=4.10.0",
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Check hint for <https://github.com/astral-sh/uv/issues/7329>
+/// if there is a broken cyclic dependency on a local package.
+#[test]
+fn add_shadowed_name() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "dagster"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Pinned constrained, check for a direct dependency loop.
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.6.13"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "###);
+
+    // Constraint with several available versions, check for an indirect dependency loop.
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of dagster-webserver are available:
+              dagster-webserver<=1.6.13
+              dagster-webserver>1.7.0
+          and dagster-webserver==1.6.11 depends on your project, we can conclude that all of:
+              dagster-webserver>=1.6.11,<1.6.12
+              dagster-webserver>1.6.13,<1.7.0
+          depend on your project.
+          And because dagster-webserver==1.6.12 depends on your project, we can conclude that all of:
+              dagster-webserver>=1.6.11,<1.6.13
+              dagster-webserver>1.6.13,<1.7.0
+          depend on your project.
+          And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11,<1.7.0, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "###);
+
+    Ok(())
+}
+
+/// Accidentally add a dependency on the project itself.
+#[test]
+fn add_self() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requirement name `anyio` matches project name `anyio`, but self-dependencies are not permitted. If your project name (`anyio`) is shadowing that of a third-party dependency, consider renaming the project.
+    "###);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        types = ["typing-extensions>=4"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    // However, recursive extras are fine.
+    uv_snapshot!(context.filters(), context.add().arg("anyio[types]").arg("--optional").arg("all"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==0.1.0 (from file://[TEMP_DIR]/)
+     + typing-extensions==4.10.0
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        types = ["typing-extensions>=4"]
+        all = [
+            "anyio[types]",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        anyio = { workspace = true }
+        "###
+        );
+    });
+
     Ok(())
 }

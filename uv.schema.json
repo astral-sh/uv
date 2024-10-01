@@ -21,6 +21,16 @@
         "null"
       ]
     },
+    "cache-keys": {
+      "description": "The keys to consider when caching builds for the project.\n\nCache keys enable you to specify the files or directories that should trigger a rebuild when modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`, or `setup.cfg` files in the project directory are modified, i.e.:\n\n```toml cache-keys = [{ file = \"pyproject.toml\" }, { file = \"setup.py\" }, { file = \"setup.cfg\" }] ```\n\nAs an example: if a project uses dynamic metadata to read its dependencies from a `requirements.txt` file, you can specify `cache-keys = [{ file = \"requirements.txt\" }, { file = \"pyproject.toml\" }]` to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in addition to watching the `pyproject.toml`).\n\nGlobs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html) crate. For example, to invalidate the cache whenever a `.toml` file in the project directory or any of its subdirectories is modified, you can specify `cache-keys = [{ file = \"**/*.toml\" }]`. Note that the use of globs can be expensive, as uv may need to walk the filesystem to determine whether any files have changed.\n\nCache keys can also include version control information. For example, if a project uses `setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }, { file = \"pyproject.toml\" }]` to include the current Git commit hash in the cache key (in addition to the `pyproject.toml`).\n\nCache keys only affect the project defined by the `pyproject.toml` in which they're specified (as opposed to, e.g., affecting all members in a workspace), and all paths and globs are interpreted as relative to the project directory.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/CacheKey"
+      }
+    },
     "compile-bytecode": {
       "description": "Compile Python files to bytecode after installation.\n\nBy default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`); instead, compilation is performed lazily the first time a module is imported. For use-cases in which start time is critical, such as CLI applications and Docker containers, this option can be enabled to trade longer installation times for faster start times.\n\nWhen enabled, uv will process the entire site-packages directory (including packages that are not being modified by the current operation) for consistency. Like pip, it will also ignore errors.",
       "type": [
@@ -76,6 +86,16 @@
         "type": "string"
       }
     },
+    "dependency-metadata": {
+      "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When provided, enables the resolver to use the specified metadata instead of querying the registry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) standard, though only the following fields are respected:\n\n- `name`: The name of the package. - (Optional) `version`: The version of the package. If omitted, the metadata will be applied to all versions of the package. - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`). - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`). - (Optional) `provides-extras`: The extras provided by the package.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/StaticMetadata"
+      }
+    },
     "dev-dependencies": {
       "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
       "type": [
@@ -118,7 +138,7 @@
       }
     },
     "find-links": {
-      "description": "Locations to search for candidate distributions, in addition to those found in the registry indexes.\n\nIf a path, the target must be a directory that contains packages as wheel files (`.whl`) or source distributions (`.tar.gz` or `.zip`) at the top level.\n\nIf a URL, the page must contain a flat list of links to package files adhering to the formats described above.",
+      "description": "Locations to search for candidate distributions, in addition to those found in the registry indexes.\n\nIf a path, the target must be a directory that contains packages as wheel files (`.whl`) or source distributions (e.g., `.tar.gz` or `.zip`) at the top level.\n\nIf a URL, the page must contain a flat list of links to package files adhering to the formats described above.",
       "type": [
         "array",
         "null"
@@ -309,6 +329,14 @@
         "null"
       ]
     },
+    "publish-url": {
+      "description": "The URL for publishing packages to the Python package index (by default: <https://upload.pypi.org/legacy/>).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uri"
+    },
     "python-downloads": {
       "description": "Whether to allow Python downloads.",
       "anyOf": [
@@ -361,13 +389,25 @@
     },
     "sources": {
       "description": "The sources to use (e.g., workspace members, Git repositories, local paths) when resolving dependencies.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "additionalProperties": {
-        "$ref": "#/definitions/Source"
-      }
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ToolUvSources"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "trusted-publishing": {
+      "description": "Configure trusted publishing via GitHub Actions.\n\nBy default, uv checks for trusted publishing when running in GitHub Actions, but ignores it if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request from a fork).",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TrustedPublishing"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "upgrade": {
       "description": "Allow package upgrades, ignoring pinned versions in any existing output file.",
@@ -415,6 +455,40 @@
           "enum": [
             "split"
           ]
+        }
+      ]
+    },
+    "CacheKey": {
+      "anyOf": [
+        {
+          "description": "Ex) `\"Cargo.lock\"` or `\"**/*.toml\"`",
+          "type": "string"
+        },
+        {
+          "description": "Ex) `{ file = \"Cargo.lock\" }` or `{ file = \"**/*.toml\" }`",
+          "type": "object",
+          "required": [
+            "file"
+          ],
+          "properties": {
+            "file": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Ex) `{ git = true }`",
+          "type": "object",
+          "required": [
+            "git"
+          ],
+          "properties": {
+            "git": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       ]
     },
@@ -551,6 +625,10 @@
         }
       ]
     },
+    "MarkerTree": {
+      "description": "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`",
+      "type": "string"
+    },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`. For example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
@@ -631,6 +709,16 @@
             "null"
           ]
         },
+        "dependency-metadata": {
+          "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When provided, enables the resolver to use the specified metadata instead of querying the registry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) standard, though only the following fields are respected:\n\n- `name`: The name of the package. - (Optional) `version`: The version of the package. If omitted, the metadata will be applied to all versions of the package. - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`). - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`). - (Optional) `provides-extras`: The extras provided by the package.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/StaticMetadata"
+          }
+        },
         "emit-build-options": {
           "description": "Include `--no-binary` and `--only-binary` entries in the output file generated by `uv pip compile`.",
           "type": [
@@ -698,7 +786,7 @@
           }
         },
         "find-links": {
-          "description": "Locations to search for candidate distributions, in addition to those found in the registry indexes.\n\nIf a path, the target must be a directory that contains packages as wheel files (`.whl`) or source distributions (`.tar.gz` or `.zip`) at the top level.\n\nIf a URL, the page must contain a flat list of links to package files adhering to the formats described above.",
+          "description": "Locations to search for candidate distributions, in addition to those found in the registry indexes.\n\nIf a path, the target must be a directory that contains packages as wheel files (`.whl`) or source distributions (e.g., `.tar.gz` or `.zip`) at the top level.\n\nIf a URL, the page must contain a flat list of links to package files adhering to the formats described above.",
           "type": [
             "array",
             "null"
@@ -894,7 +982,7 @@
           ]
         },
         "python-platform": {
-          "description": "The platform for which requirements should be resolved.\n\nRepresented as a \"target triple\", a string that describes the target platform in terms of its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or `aaarch64-apple-darwin`.",
+          "description": "The platform for which requirements should be resolved.\n\nRepresented as a \"target triple\", a string that describes the target platform in terms of its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or `aarch64-apple-darwin`.",
           "anyOf": [
             {
               "$ref": "#/definitions/TargetTriple"
@@ -1107,7 +1195,7 @@
       "pattern": "^3\\.\\d+(\\.\\d+)?$"
     },
     "Requirement": {
-      "description": "A PEP 508 dependency specifier",
+      "description": "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`",
       "type": "string"
     },
     "ResolutionMode": {
@@ -1156,6 +1244,9 @@
               "type": "string",
               "format": "uri"
             },
+            "marker": {
+              "$ref": "#/definitions/MarkerTree"
+            },
             "rev": {
               "type": [
                 "string",
@@ -1164,9 +1255,13 @@
             },
             "subdirectory": {
               "description": "The path to the directory with the `pyproject.toml`, if it's not in the archive root.",
-              "type": [
-                "string",
-                "null"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/String"
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "tag": {
@@ -1185,11 +1280,18 @@
             "url"
           ],
           "properties": {
+            "marker": {
+              "$ref": "#/definitions/MarkerTree"
+            },
             "subdirectory": {
               "description": "For source distributions, the path to the directory with the `pyproject.toml`, if it's not in the archive root.",
-              "type": [
-                "string",
-                "null"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/String"
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "url": {
@@ -1213,8 +1315,11 @@
                 "null"
               ]
             },
+            "marker": {
+              "$ref": "#/definitions/MarkerTree"
+            },
             "path": {
-              "type": "string"
+              "$ref": "#/definitions/String"
             }
           },
           "additionalProperties": false
@@ -1228,6 +1333,9 @@
           "properties": {
             "index": {
               "type": "string"
+            },
+            "marker": {
+              "$ref": "#/definitions/MarkerTree"
             }
           },
           "additionalProperties": false
@@ -1239,67 +1347,71 @@
             "workspace"
           ],
           "properties": {
+            "marker": {
+              "$ref": "#/definitions/MarkerTree"
+            },
             "workspace": {
               "description": "When set to `false`, the package will be fetched from the remote index, rather than included as a workspace package.",
               "type": "boolean"
             }
           },
           "additionalProperties": false
-        },
-        {
-          "description": "A catch-all variant used to emit precise error messages when deserializing.",
-          "type": "object",
-          "required": [
-            "git",
-            "index",
-            "path",
-            "url",
-            "workspace"
-          ],
-          "properties": {
-            "branch": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "git": {
-              "type": "string"
-            },
-            "index": {
-              "type": "string"
-            },
-            "path": {
-              "type": "string"
-            },
-            "rev": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "subdirectory": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "tag": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "url": {
-              "type": "string"
-            },
-            "workspace": {
-              "type": "boolean"
-            }
-          },
-          "additionalProperties": false
         }
       ]
+    },
+    "Sources": {
+      "$ref": "#/definitions/SourcesWire"
+    },
+    "SourcesWire": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Source"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Source"
+          }
+        }
+      ]
+    },
+    "StaticMetadata": {
+      "description": "A subset of the Python Package Metadata 2.3 standard as specified in <https://packaging.python.org/specifications/core-metadata/>.",
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/PackageName"
+        },
+        "provides-extras": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ExtraName"
+          }
+        },
+        "requires-dist": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Requirement"
+          }
+        },
+        "requires-python": {
+          "description": "PEP 508-style Python requirement, e.g., `>=3.10`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "description": "PEP 440-style package version, e.g., `1.2.3`",
+          "type": "string"
+        }
+      }
     },
     "String": {
       "type": "string"
@@ -1428,6 +1540,12 @@
         }
       ]
     },
+    "ToolUvSources": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/Sources"
+      }
+    },
     "ToolUvWorkspace": {
       "type": "object",
       "properties": {
@@ -1457,6 +1575,24 @@
     "TrustedHost": {
       "description": "A host or host-port pair.",
       "type": "string"
+    },
+    "TrustedPublishing": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "always",
+            "never"
+          ]
+        },
+        {
+          "description": "Try trusted publishing when we're already in GitHub Actions, continue if that fails.",
+          "type": "string",
+          "enum": [
+            "automatic"
+          ]
+        }
+      ]
     }
   }
 }

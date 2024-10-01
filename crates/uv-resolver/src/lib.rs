@@ -2,7 +2,7 @@ pub use dependency_mode::DependencyMode;
 pub use error::{NoSolutionError, NoSolutionHeader, ResolveError};
 pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
-pub use flat_index::FlatIndex;
+pub use flat_index::{FlatDistributions, FlatIndex};
 pub use lock::{
     Lock, LockError, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
 };
@@ -12,10 +12,10 @@ pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;
 pub use pubgrub::{PubGrubSpecifier, PubGrubSpecifierError};
 pub use python_requirement::PythonRequirement;
-pub use requires_python::{
-    RequiresPython, RequiresPythonBound, RequiresPythonError, RequiresPythonRange,
+pub use requires_python::{RequiresPython, RequiresPythonError, RequiresPythonRange};
+pub use resolution::{
+    AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph, ResolutionGraph,
 };
-pub use resolution::{AnnotationStyle, DisplayResolutionGraph, ResolutionGraph};
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
     BuildId, DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,

@@ -48,6 +48,14 @@ pub enum ArrayEdit {
     Add(usize),
 }
 
+impl ArrayEdit {
+    pub fn index(&self) -> usize {
+        match self {
+            Self::Update(i) | Self::Add(i) => *i,
+        }
+    }
+}
+
 /// Specifies whether dependencies are added to a script file or a `pyproject.toml` file.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DependencyTarget {
@@ -297,7 +305,7 @@ impl PyProjectTomlMut {
             .doc()?
             .entry("optional-dependencies")
             .or_insert(Item::Table(Table::new()))
-            .as_table_mut()
+            .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
         let group = optional_dependencies
@@ -686,17 +694,18 @@ fn reformat_array_multiline(deps: &mut Array) {
     for item in deps.iter_mut() {
         let decor = item.decor_mut();
         let mut prefix = String::new();
-        // calculating the indentation prefix as the indentation of the first dependency entry
+
+        // Calculate the indentation prefix based on the indentation of the first dependency entry.
         if indentation_prefix.is_none() {
             let decor_prefix = decor
                 .prefix()
                 .and_then(|s| s.as_str())
-                .map(|s| s.split('#').next().unwrap_or("").to_string())
-                .unwrap_or(String::new())
-                .trim_start_matches('\n')
+                .map(|s| s.split('#').next().unwrap_or(""))
+                .unwrap_or_default()
+                .trim_start_matches(['\r', '\n'].as_ref())
                 .to_string();
 
-            // if there is no indentation then apply a default one
+            // If there is no indentation, use four-space.
             indentation_prefix = Some(if decor_prefix.is_empty() {
                 "    ".to_string()
             } else {

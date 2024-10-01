@@ -49,13 +49,13 @@ $ echo "ruff" | uv pip compile -
 To lock with optional dependencies enabled, e.g., the "foo" extra:
 
 ```console
-$ uv pip install -r pyproject.toml --extra foo
+$ uv pip compile pyproject.toml --extra foo
 ```
 
 To lock with all optional dependencies enabled:
 
 ```console
-$ uv pip install -r pyproject.toml --all-extras
+$ uv pip compile pyproject.toml --all-extras
 ```
 
 Note extras are not supported with the `requirements.in` format.
@@ -135,7 +135,7 @@ While constraints are _additive_, in that they're combined with the requirements
 packages, overrides are _absolute_, in that they completely replace the requirements of the
 constituent packages.
 
-Overrides are most often used to remove upper bounds from a transtive dependency. For example, if
+Overrides are most often used to remove upper bounds from a transitive dependency. For example, if
 `a` requires `c>=1.0,<2.0` and `b` requires `c>=2.0` and the current project requires `a` and `b`
 then the dependencies cannot be resolved.
 

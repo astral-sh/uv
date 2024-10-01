@@ -1,37 +1,47 @@
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
+use crate::commands::pip::operations;
+use crate::commands::pip::operations::Modifications;
+use crate::commands::project::lock::do_safe_lock;
+use crate::commands::project::{ProjectError, SharedState};
+use crate::commands::{diagnostics, pip, project, ExitStatus};
+use crate::printer::Printer;
+use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 use anyhow::{Context, Result};
+use distribution_types::{DirectorySourceDist, Dist, ResolvedDist, SourceDist};
 use itertools::Itertools;
-
-use distribution_types::{Dist, ResolvedDist, SourceDist};
-use pep508_rs::MarkerTree;
-use uv_auth::store_credentials_from_url;
+use pep508_rs::{MarkerTree, Requirement, VersionOrUrl};
+use pypi_types::{
+    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
+};
+use std::borrow::Cow;
+use std::path::Path;
+use std::str::FromStr;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, HashCheckingMode, InstallOptions};
+use uv_configuration::{
+    Concurrency, Constraints, DevMode, DevSpecification, EditableMode, ExtrasSpecification,
+    HashCheckingMode, InstallOptions,
+};
 use uv_dispatch::BuildDispatch;
-use uv_fs::CWD;
 use uv_installer::SitePackages;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
-
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::Modifications;
-use crate::commands::project::lock::do_safe_lock;
-use crate::commands::project::{ProjectError, SharedState};
-use crate::commands::{pip, project, ExitStatus};
-use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
+use uv_warnings::warn_user;
+use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
+use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
 
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
+    project_dir: &Path,
     locked: bool,
     frozen: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: bool,
+    dev: DevMode,
+    editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
@@ -45,29 +55,44 @@ pub(crate) async fn sync(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Identify the project.
-    let project = if let Some(package) = package {
-        VirtualProject::Project(
-            Workspace::discover(&CWD, &DiscoveryOptions::default())
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
-        )
-    } else if frozen {
+    let project = if frozen {
         VirtualProject::discover(
-            &CWD,
+            project_dir,
             &DiscoveryOptions {
                 members: MemberDiscovery::None,
                 ..DiscoveryOptions::default()
             },
         )
         .await?
+    } else if let Some(package) = package.as_ref() {
+        VirtualProject::Project(
+            Workspace::discover(project_dir, &DiscoveryOptions::default())
+                .await?
+                .with_current_project(package.clone())
+                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+        )
     } else {
-        VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+        VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
+
+    // Identify the target.
+    let target = if let Some(package) = package.as_ref().filter(|_| frozen) {
+        InstallTarget::frozen_member(&project, package)
+    } else {
+        InstallTarget::from(&project)
+    };
+
+    // TODO(lucab): improve warning content
+    // <https://github.com/astral-sh/uv/issues/7428>
+    if project.workspace().pyproject_toml().has_scripts()
+        && !project.workspace().pyproject_toml().is_package()
+    {
+        warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
+    }
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
-        project.workspace(),
+        target.workspace(),
         python.as_deref().map(PythonRequest::parse),
         python_preference,
         python_downloads,
@@ -81,7 +106,7 @@ pub(crate) async fn sync(
     let lock = match do_safe_lock(
         locked,
         frozen,
-        project.workspace(),
+        target.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
         Box::new(DefaultResolveLogger),
@@ -94,11 +119,22 @@ pub(crate) async fn sync(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+        Err(ProjectError::Operation(operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report = miette::Report::msg(format!("{err}")).context(err.header());
-            anstream::eprint!("{report:?}");
+            diagnostics::no_solution(&err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Resolve(
+            uv_resolver::ResolveError::FetchAndBuild(dist, err),
+        ))) => {
+            diagnostics::fetch_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Resolve(
+            uv_resolver::ResolveError::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),
@@ -109,11 +145,12 @@ pub(crate) async fn sync(
 
     // Perform the sync operation.
     do_sync(
-        &project,
+        target,
         &venv,
         &lock,
         &extras,
         dev,
+        editable,
         install_options,
         modifications,
         settings.as_ref().into(),
@@ -133,11 +170,12 @@ pub(crate) async fn sync(
 /// Sync a lockfile with an environment.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_sync(
-    project: &VirtualProject,
+    target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: &ExtrasSpecification,
-    dev: bool,
+    dev: DevMode,
+    editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
@@ -155,6 +193,7 @@ pub(super) async fn do_sync(
         index_strategy,
         keyring_provider,
         allow_insecure_host,
+        dependency_metadata,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -167,13 +206,14 @@ pub(super) async fn do_sync(
     } = settings;
 
     // Validate that the Python version is supported by the lockfile.
-    if let Some(requires_python) = lock.requires_python() {
-        if !requires_python.contains(venv.interpreter().python_version()) {
-            return Err(ProjectError::LockedPythonIncompatibility(
-                venv.interpreter().python_version().clone(),
-                requires_python.clone(),
-            ));
-        }
+    if !lock
+        .requires_python()
+        .contains(venv.interpreter().python_version())
+    {
+        return Err(ProjectError::LockedPythonIncompatibility(
+            venv.interpreter().python_version().clone(),
+            lock.requires_python().clone(),
+        ));
     }
 
     // Determine the markers to use for resolution.
@@ -184,7 +224,12 @@ pub(super) async fn do_sync(
     if !environments.is_empty() {
         if !environments.iter().any(|env| env.evaluate(&markers, &[])) {
             return Err(ProjectError::LockedPlatformIncompatibility(
-                environments
+                // For error reporting, we use the "simplified"
+                // supported environments, because these correspond to
+                // what the end user actually wrote. The non-simplified
+                // environments, by contrast, are explicitly
+                // constrained by `requires-python`.
+                lock.simplified_supported_environments()
                     .iter()
                     .filter_map(MarkerTree::contents)
                     .map(|env| format!("`{env}`"))
@@ -194,29 +239,39 @@ pub(super) async fn do_sync(
     }
 
     // Include development dependencies, if requested.
-    let dev = if dev {
-        vec![DEV_DEPENDENCIES.clone()]
-    } else {
-        vec![]
+    let dev = match dev {
+        DevMode::Include => DevSpecification::Include(std::slice::from_ref(&DEV_DEPENDENCIES)),
+        DevMode::Exclude => DevSpecification::Exclude,
+        DevMode::Only => DevSpecification::Only(std::slice::from_ref(&DEV_DEPENDENCIES)),
     };
 
     // Determine the tags to use for resolution.
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(project, &markers, tags, extras, &dev)?;
+    let resolution = lock.to_resolution(
+        target,
+        &markers,
+        tags,
+        extras,
+        dev,
+        build_options,
+        &install_options,
+    )?;
 
     // Always skip virtual projects, which shouldn't be built or installed.
     let resolution = apply_no_virtual_project(resolution);
 
-    // Filter resolution based on install-specific options.
-    let resolution =
-        install_options.filter_resolution(resolution, project.project_name(), lock.members());
+    // If necessary, convert editable to non-editable distributions.
+    let resolution = apply_editable_mode(resolution, editable);
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
-        store_credentials_from_url(url);
+        uv_auth::store_credentials_from_url(url);
     }
+
+    // Populate credentials from the workspace.
+    store_credentials_from_workspace(target.workspace());
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -241,7 +296,8 @@ pub(super) async fn do_sync(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = [];
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
     let dry_run = false;
 
     // Extract the hashes from the lockfile.
@@ -258,18 +314,21 @@ pub(super) async fn do_sync(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         venv.interpreter(),
         index_locations,
         &flat_index,
+        dependency_metadata,
         &state.index,
         &state.git,
+        &state.capabilities,
         &state.in_flight,
         index_strategy,
         config_setting,
         build_isolation,
         link_mode,
         build_options,
+        &build_hasher,
         exclude_newer,
         sources,
         concurrency,
@@ -287,8 +346,8 @@ pub(super) async fn do_sync(
         link_mode,
         compile_bytecode,
         index_locations,
+        config_setting,
         &hasher,
-        &markers,
         tags,
         &client,
         &state.in_flight,
@@ -324,4 +383,120 @@ fn apply_no_virtual_project(
 
         !dist.r#virtual
     })
+}
+
+/// If necessary, convert any editable requirements to non-editable.
+fn apply_editable_mode(
+    resolution: distribution_types::Resolution,
+    editable: EditableMode,
+) -> distribution_types::Resolution {
+    match editable {
+        // No modifications are necessary for editable mode; retain any editable distributions.
+        EditableMode::Editable => resolution,
+
+        // Filter out any editable distributions.
+        EditableMode::NonEditable => resolution.map(|dist| {
+            let ResolvedDist::Installable(Dist::Source(SourceDist::Directory(
+                DirectorySourceDist {
+                    name,
+                    install_path,
+                    editable: true,
+                    r#virtual: false,
+                    url,
+                },
+            ))) = dist
+            else {
+                return dist;
+            };
+
+            ResolvedDist::Installable(Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                install_path,
+                editable: false,
+                r#virtual: false,
+                url,
+            })))
+        }),
+    }
+}
+
+/// Extract any credentials that are defined on the workspace dependencies themselves. While we
+/// don't store plaintext credentials in the `uv.lock`, we do respect credentials that are defined
+/// in the `pyproject.toml`.
+///
+/// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
+/// `project.dependencies`, and `project.optional-dependencies`.
+fn store_credentials_from_workspace(workspace: &Workspace) {
+    for member in workspace.packages().values() {
+        // Iterate over the `tool.uv.sources`.
+        for source in member
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .map(ToolUvSources::inner)
+            .iter()
+            .flat_map(|sources| sources.values().flat_map(Sources::iter))
+        {
+            match source {
+                Source::Git { git, .. } => {
+                    uv_git::store_credentials_from_url(git);
+                }
+                Source::Url { url, .. } => {
+                    uv_auth::store_credentials_from_url(url);
+                }
+                _ => {}
+            }
+        }
+
+        // Iterate over all dependencies.
+        let dependencies = member
+            .pyproject_toml()
+            .project
+            .as_ref()
+            .and_then(|project| project.dependencies.as_ref())
+            .into_iter()
+            .flatten();
+        let optional_dependencies = member
+            .pyproject_toml()
+            .project
+            .as_ref()
+            .and_then(|project| project.optional_dependencies.as_ref())
+            .into_iter()
+            .flat_map(|optional| optional.values())
+            .flatten();
+        let dev_dependencies = member
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.dev_dependencies.as_ref())
+            .into_iter()
+            .flatten();
+
+        for requirement in dependencies
+            .chain(optional_dependencies)
+            .filter_map(|requires_dist| {
+                LenientRequirement::<VerbatimParsedUrl>::from_str(requires_dist)
+                    .map(Requirement::from)
+                    .map(Cow::Owned)
+                    .ok()
+            })
+            .chain(dev_dependencies.map(Cow::Borrowed))
+        {
+            let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
+                continue;
+            };
+            match &url.parsed_url {
+                ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
+                    uv_git::store_credentials_from_url(url.repository());
+                }
+                ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
+                    uv_auth::store_credentials_from_url(url);
+                }
+                _ => {}
+            }
+        }
+    }
 }

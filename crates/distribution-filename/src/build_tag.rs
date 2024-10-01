@@ -32,8 +32,7 @@ pub enum BuildTagError {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 pub struct BuildTag(u64, Option<Arc<str>>);
 
 impl FromStr for BuildTag {

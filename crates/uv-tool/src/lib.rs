@@ -204,7 +204,7 @@ impl InstalledTools {
         match PythonEnvironment::from_root(&environment_path, cache) {
             Ok(venv) => {
                 debug!(
-                    "Using existing environment for tool `{name}`: {}",
+                    "Found existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
                 Ok(Some(venv))
@@ -213,10 +213,20 @@ impl InstalledTools {
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(
                 interpreter_path,
             ))) => {
-                warn!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
-                    interpreter_path.user_display()
-                );
+                if interpreter_path.is_symlink() {
+                    let target_path = fs_err::read_link(&interpreter_path)?;
+                    warn!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                        interpreter_path.user_display(),
+                        target_path.user_display()
+                    );
+                } else {
+                    warn!(
+                        "Ignoring existing virtual environment with missing Python interpreter: {}",
+                        interpreter_path.user_display()
+                    );
+                }
+
                 Ok(None)
             }
             Err(err) => Err(err.into()),
@@ -255,6 +265,7 @@ impl InstalledTools {
             &environment_path,
             interpreter,
             uv_virtualenv::Prompt::None,
+            false,
             false,
             false,
             false,

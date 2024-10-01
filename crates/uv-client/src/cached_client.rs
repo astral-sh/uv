@@ -34,7 +34,7 @@ pub trait Cacheable: Sized {
     /// This associated type permits customizing what the "output" type of
     /// deserialization is. It can be identical to `Self`.
     ///
-    /// Typical use of this is for wrapper types used to proviate blanket trait
+    /// Typical use of this is for wrapper types used to provide blanket trait
     /// impls without hitting overlapping impl problems.
     type Target;
 
@@ -75,9 +75,13 @@ impl<T: Serialize + DeserializeOwned> Cacheable for SerdeCacheable<T> {
 /// All `OwnedArchive` values are cacheable.
 impl<A> Cacheable for OwnedArchive<A>
 where
-    A: rkyv::Archive + rkyv::Serialize<crate::rkyvutil::Serializer<4096>>,
-    A::Archived: for<'a> rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'a>>
-        + rkyv::Deserialize<A, rkyv::de::deserializers::SharedDeserializeMap>,
+    // A: rkyv::Archive + rkyv::Serialize<crate::rkyvutil::Serializer<4096>>,
+    // A::Archived: for<'a> rkyv::bytecheck::CheckBytes<rkyv::validation::validators::DefaultValidator<'a>>
+    // + rkyv::Deserialize<A, rkyv::de::deserializers::SharedDeserializeMap>,
+    A: rkyv::Archive + for<'a> rkyv::Serialize<crate::rkyvutil::Serializer<'a>>,
+    A::Archived: rkyv::Portable
+        + rkyv::Deserialize<A, crate::rkyvutil::Deserializer>
+        + for<'a> rkyv::bytecheck::CheckBytes<crate::rkyvutil::Validator<'a>>,
 {
     type Target = Self;
 

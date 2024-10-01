@@ -1,21 +1,9 @@
-#[cfg(feature = "pyo3")]
-use std::hash::{Hash, Hasher};
-
 use std::cmp::Ordering;
 use std::ops::Bound;
 use std::str::FromStr;
 
-#[cfg(feature = "pyo3")]
-use pyo3::{
-    exceptions::{PyIndexError, PyNotImplementedError, PyValueError},
-    pyclass,
-    pyclass::CompareOp,
-    pymethods, Py, PyRef, PyRefMut, PyResult,
-};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-#[cfg(feature = "pyo3")]
-use crate::version::PyVersion;
 use crate::{
     version, Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError,
 };
@@ -47,9 +35,7 @@ use crate::{
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
-#[cfg_attr(feature = "pyo3", pyclass(sequence))]
+#[rkyv(derive(Debug))]
 pub struct VersionSpecifiers(Vec<VersionSpecifier>);
 
 impl std::ops::Deref for VersionSpecifiers {
@@ -123,74 +109,6 @@ impl std::fmt::Display for VersionSpecifiers {
 impl Default for VersionSpecifiers {
     fn default() -> Self {
         Self::empty()
-    }
-}
-
-/// https://pyo3.rs/v0.18.2/class/protocols.html#iterable-objects
-#[cfg(feature = "pyo3")]
-#[pyclass]
-struct VersionSpecifiersIter {
-    inner: std::vec::IntoIter<VersionSpecifier>,
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl VersionSpecifiersIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
-    }
-
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<VersionSpecifier> {
-        slf.inner.next()
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl VersionSpecifiers {
-    /// PEP 440 parsing
-    #[new]
-    pub fn __new__(version_specifiers: &str) -> PyResult<Self> {
-        Self::from_str(version_specifiers).map_err(|err| PyValueError::new_err(err.to_string()))
-    }
-
-    /// PEP 440 serialization
-    pub fn __str__(&self) -> String {
-        self.to_string()
-    }
-
-    /// PEP 440 serialization
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-
-    /// Get the nth VersionSpecifier
-    pub fn __getitem__(&self, idx: usize) -> PyResult<VersionSpecifier> {
-        self.0.get(idx).cloned().ok_or_else(|| {
-            PyIndexError::new_err(format!(
-                "list index {} our of range for len {}",
-                idx,
-                self.0.len()
-            ))
-        })
-    }
-
-    #[allow(clippy::needless_pass_by_value)]
-    fn __iter__(slf: PyRef<'_, Self>) -> PyResult<Py<VersionSpecifiersIter>> {
-        let iter = VersionSpecifiersIter {
-            inner: slf.0.clone().into_iter(),
-        };
-        Py::new(slf.py(), iter)
-    }
-
-    /// Get the number of VersionSpecifier
-    pub fn __len__(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Whether the version matches all the specifiers
-    pub fn __contains__(&self, version: &PyVersion) -> bool {
-        self.contains(&version.0)
     }
 }
 
@@ -293,63 +211,12 @@ impl std::error::Error for VersionSpecifiersParseError {}
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[rkyv(derive(Debug))]
 pub struct VersionSpecifier {
     /// ~=|==|!=|<=|>=|<|>|===, plus whether the version ended with a star
     pub(crate) operator: Operator,
     /// The whole version part behind the operator
     pub(crate) version: Version,
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl VersionSpecifier {
-    // Since we don't bring FromStr to python
-    /// Parse a PEP 440 version
-    #[new]
-    pub fn parse(version_specifier: &str) -> PyResult<Self> {
-        Self::from_str(version_specifier).map_err(|e| PyValueError::new_err(e.to_string()))
-    }
-
-    /// See [VersionSpecifier::contains]
-    #[pyo3(name = "contains")]
-    pub fn py_contains(&self, version: &PyVersion) -> bool {
-        self.contains(&version.0)
-    }
-
-    /// Whether the version fulfills the specifier
-    pub fn __contains__(&self, version: &PyVersion) -> bool {
-        self.contains(&version.0)
-    }
-
-    /// Returns the normalized representation
-    pub fn __str__(&self) -> String {
-        self.to_string()
-    }
-
-    /// Returns the normalized representation
-    pub fn __repr__(&self) -> String {
-        format!(r#"<VersionSpecifier("{self}")>"#)
-    }
-
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
-        if matches!(op, CompareOp::Eq) {
-            Ok(self == other)
-        } else {
-            Err(PyNotImplementedError::new_err(
-                "Can only compare VersionSpecifier by equality",
-            ))
-        }
-    }
-
-    /// Returns the normalized representation
-    pub fn __hash__(&self) -> u64 {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        self.hash(&mut hasher);
-        hasher.finish()
-    }
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>

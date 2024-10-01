@@ -1,5 +1,5 @@
+use serde::{Deserialize, Deserializer};
 use std::str::FromStr;
-
 use url::Url;
 
 /// A trusted host, which could be a host or a host-port pair.
@@ -33,28 +33,28 @@ impl TrustedHost {
     }
 }
 
-#[derive(serde::Deserialize)]
-#[serde(untagged)]
-enum TrustHostWire {
-    String(String),
-    Struct {
-        scheme: Option<String>,
-        host: String,
-        port: Option<u16>,
-    },
-}
-
-impl<'de> serde::de::Deserialize<'de> for TrustedHost {
-    fn deserialize<D>(deserializer: D) -> Result<TrustedHost, D::Error>
+impl<'de> Deserialize<'de> for TrustedHost {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::de::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
-        let helper = TrustHostWire::deserialize(deserializer)?;
-
-        match helper {
-            TrustHostWire::String(s) => TrustedHost::from_str(&s).map_err(serde::de::Error::custom),
-            TrustHostWire::Struct { scheme, host, port } => Ok(TrustedHost { scheme, host, port }),
+        #[derive(Deserialize)]
+        struct Inner {
+            scheme: Option<String>,
+            host: String,
+            port: Option<u16>,
         }
+
+        serde_untagged::UntaggedEnumVisitor::new()
+            .string(|string| TrustedHost::from_str(string).map_err(serde::de::Error::custom))
+            .map(|map| {
+                map.deserialize::<Inner>().map(|inner| TrustedHost {
+                    scheme: inner.scheme,
+                    host: inner.host,
+                    port: inner.port,
+                })
+            })
+            .deserialize(deserializer)
     }
 }
 

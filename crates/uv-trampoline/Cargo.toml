@@ -55,6 +55,5 @@ assert_cmd = { version = "2.0.14" }
 assert_fs = { version = "1.1.1" }
 fs-err = { version = "2.11.0" }
 thiserror = { version = "1.0.56" }
-uv-fs = { path = "../uv-fs" }
 which = { version = "6.0.0" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }

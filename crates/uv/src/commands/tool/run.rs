@@ -14,7 +14,8 @@ use distribution_types::{Name, UnresolvedRequirementSpecification};
 use pep440_rs::{VersionSpecifier, VersionSpecifiers};
 use pep508_rs::MarkerTree;
 use pypi_types::{Requirement, RequirementSource};
-use uv_cache::{Cache, Refresh, Timestamp};
+use uv_cache::{Cache, Refresh};
+use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Concurrency;
@@ -32,11 +33,11 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations;
-use crate::commands::project::{resolve_names, ProjectError};
+use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::Target;
 use crate::commands::{
-    project::environment::CachedEnvironment, tool::common::matching_packages, tool_list,
+    diagnostics, project::environment::CachedEnvironment, tool::common::matching_packages,
 };
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -78,9 +79,11 @@ pub(crate) async fn run(
     cache: Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    // treat empty command as `uv tool list`
     let Some(command) = command else {
-        return tool_list(false, &cache, printer).await;
+        // When a command isn't provided, we'll show a brief help including available tools
+        show_help(invocation_source, &cache, printer).await?;
+        // Exit as Clap would after displaying help
+        return Ok(ExitStatus::Error);
     };
 
     let (target, args) = command.split();
@@ -124,9 +127,12 @@ pub(crate) async fn run(
         Err(ProjectError::Operation(operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report =
-                miette::Report::msg(format!("{err}")).context(err.header().with_context("tool"));
-            eprint!("{report:?}");
+            diagnostics::no_solution_context(&err, "tool");
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::NamedRequirements(err)) => {
+            let err = miette::Report::msg(format!("{err}")).context("Invalid `--with` requirement");
+            eprint!("{err:?}");
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),
@@ -221,10 +227,20 @@ pub(crate) async fn run(
     let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command
-    // TODO(zanieb): Do we want to exit with the code of the child process? Probably.
-    if status.success() {
-        Ok(ExitStatus::Success)
+    if let Some(code) = status.code() {
+        debug!("Command exited with code: {code}");
+        if let Ok(code) = u8::try_from(code) {
+            Ok(ExitStatus::External(code))
+        } else {
+            #[allow(clippy::exit)]
+            std::process::exit(code);
+        }
     } else {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            debug!("Command exited with signal: {:?}", status.signal());
+        }
         Ok(ExitStatus::Failure)
     }
 }
@@ -244,6 +260,71 @@ fn get_entrypoints(
         installed_dist.name(),
         installed_dist.version(),
     )?)
+}
+
+/// Display a list of tools that provide the executable.
+///
+/// If there is no package providing the executable, we will display a message to how to install a package.
+async fn show_help(
+    invocation_source: ToolRunCommand,
+    cache: &Cache,
+    printer: Printer,
+) -> anyhow::Result<()> {
+    let help = format!(
+        "See `{}` for more information.",
+        format!("{invocation_source} --help").bold()
+    );
+
+    writeln!(
+        printer.stdout(),
+        "Provide a command to run with `{}`.\n",
+        format!("{invocation_source} <command>").bold()
+    )?;
+
+    let installed_tools = InstalledTools::from_settings()?;
+    let _lock = match installed_tools.lock().await {
+        Ok(lock) => lock,
+        Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            writeln!(printer.stdout(), "{help}")?;
+            return Ok(());
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    let tools = installed_tools
+        .tools()?
+        .into_iter()
+        // Skip invalid tools
+        .filter_map(|(name, tool)| {
+            tool.ok().and_then(|_| {
+                installed_tools
+                    .version(&name, cache)
+                    .ok()
+                    .map(|version| (name, version))
+            })
+        })
+        .sorted_by(|(name1, ..), (name2, ..)| name1.cmp(name2))
+        .collect::<Vec<_>>();
+
+    // No tools installed or they're all malformed
+    if tools.is_empty() {
+        writeln!(printer.stdout(), "{help}")?;
+        return Ok(());
+    }
+
+    // Display the tools
+    writeln!(printer.stdout(), "The following tools are installed:\n")?;
+    for (name, version) in tools {
+        writeln!(
+            printer.stdout(),
+            "- {} v{version}",
+            format!("{name}").bold()
+        )?;
+    }
+
+    writeln!(printer.stdout(), "\n{help}")?;
+
+    Ok(())
 }
 
 /// Display a warning if an executable is not provided by package.
@@ -324,7 +405,7 @@ async fn get_or_create_environment(
 
     // Discover an interpreter.
     let interpreter = PythonInstallation::find_or_download(
-        python_request.clone(),
+        python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
@@ -352,7 +433,7 @@ async fn get_or_create_environment(
             origin: None,
         },
         // Ex) `ruff@0.6.0`
-        Target::Version(name, version) => Requirement {
+        Target::Version(name, version) | Target::FromVersion(_, name, version) => Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
             marker: MarkerTree::default(),
@@ -365,7 +446,7 @@ async fn get_or_create_environment(
             origin: None,
         },
         // Ex) `ruff@latest`
-        Target::Latest(name) => Requirement {
+        Target::Latest(name) | Target::FromLatest(_, name) => Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
             marker: MarkerTree::default(),
@@ -376,7 +457,7 @@ async fn get_or_create_environment(
             origin: None,
         },
         // Ex) `ruff>=0.6.0`
-        Target::UserDefined(_, from) => resolve_names(
+        Target::From(_, from) => resolve_names(
             vec![RequirementsSpecification::parse_package(from)?],
             &interpreter,
             settings,
@@ -472,7 +553,7 @@ async fn get_or_create_environment(
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
     let environment = CachedEnvironment::get_or_create(
-        spec,
+        EnvironmentSpecification::from(spec),
         interpreter,
         settings,
         &state,

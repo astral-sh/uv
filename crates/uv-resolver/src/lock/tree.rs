@@ -27,7 +27,7 @@ pub struct TreeDisplay<'env> {
     /// Prune the given packages from the display of the dependency tree.
     prune: Vec<PackageName>,
     /// Display only the specified packages.
-    package: Vec<PackageName>,
+    packages: Vec<PackageName>,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
 }
@@ -39,7 +39,7 @@ impl<'env> TreeDisplay<'env> {
         markers: Option<&'env ResolverMarkerEnvironment>,
         depth: usize,
         prune: Vec<PackageName>,
-        package: Vec<PackageName>,
+        packages: Vec<PackageName>,
         no_dedupe: bool,
         invert: bool,
     ) -> Self {
@@ -51,18 +51,30 @@ impl<'env> TreeDisplay<'env> {
         let mut optional_dependencies: FxHashMap<_, FxHashMap<_, Vec<_>>> = FxHashMap::default();
         let mut dev_dependencies: FxHashMap<_, FxHashMap<_, Vec<_>>> = FxHashMap::default();
 
-        for packages in &lock.packages {
-            for dependency in &packages.dependencies {
+        for package in &lock.packages {
+            for dependency in &package.dependencies {
+                // Skip dependencies that don't apply to the current environment.
+                if let Some(environment_markers) = markers {
+                    if !dependency
+                        .complexified_marker
+                        .evaluate(environment_markers, &[])
+                    {
+                        non_roots.insert(dependency.package_id.clone());
+                        continue;
+                    }
+                }
+
                 let parent = if invert {
                     &dependency.package_id
                 } else {
-                    &packages.id
+                    &package.id
                 };
                 let child = if invert {
                     Cow::Owned(Dependency {
-                        package_id: packages.id.clone(),
+                        package_id: package.id.clone(),
                         extra: dependency.extra.clone(),
-                        marker: dependency.marker.clone(),
+                        simplified_marker: dependency.simplified_marker.clone(),
+                        complexified_marker: dependency.complexified_marker.clone(),
                     })
                 } else {
                     Cow::Borrowed(dependency)
@@ -70,41 +82,39 @@ impl<'env> TreeDisplay<'env> {
 
                 non_roots.insert(child.package_id.clone());
 
-                // Skip dependencies that don't apply to the current environment.
-                if let Some(environment_markers) = markers {
-                    if !dependency.marker.evaluate(environment_markers, &[]) {
-                        continue;
-                    }
-                }
-
                 dependencies.entry(parent).or_default().push(child);
             }
 
-            for (extra, dependencies) in &packages.optional_dependencies {
+            for (extra, dependencies) in &package.optional_dependencies {
                 for dependency in dependencies {
+                    // Skip dependencies that don't apply to the current environment.
+                    if let Some(environment_markers) = markers {
+                        if !dependency
+                            .complexified_marker
+                            .evaluate(environment_markers, &[])
+                        {
+                            non_roots.insert(dependency.package_id.clone());
+                            continue;
+                        }
+                    }
+
                     let parent = if invert {
                         &dependency.package_id
                     } else {
-                        &packages.id
+                        &package.id
                     };
                     let child = if invert {
                         Cow::Owned(Dependency {
-                            package_id: packages.id.clone(),
+                            package_id: package.id.clone(),
                             extra: dependency.extra.clone(),
-                            marker: dependency.marker.clone(),
+                            simplified_marker: dependency.simplified_marker.clone(),
+                            complexified_marker: dependency.complexified_marker.clone(),
                         })
                     } else {
                         Cow::Borrowed(dependency)
                     };
 
                     non_roots.insert(child.package_id.clone());
-
-                    // Skip dependencies that don't apply to the current environment.
-                    if let Some(environment_markers) = markers {
-                        if !dependency.marker.evaluate(environment_markers, &[]) {
-                            continue;
-                        }
-                    }
 
                     optional_dependencies
                         .entry(parent)
@@ -115,31 +125,36 @@ impl<'env> TreeDisplay<'env> {
                 }
             }
 
-            for (group, dependencies) in &packages.dev_dependencies {
+            for (group, dependencies) in &package.dev_dependencies {
                 for dependency in dependencies {
+                    // Skip dependencies that don't apply to the current environment.
+                    if let Some(environment_markers) = markers {
+                        if !dependency
+                            .complexified_marker
+                            .evaluate(environment_markers, &[])
+                        {
+                            non_roots.insert(dependency.package_id.clone());
+                            continue;
+                        }
+                    }
+
                     let parent = if invert {
                         &dependency.package_id
                     } else {
-                        &packages.id
+                        &package.id
                     };
                     let child = if invert {
                         Cow::Owned(Dependency {
-                            package_id: packages.id.clone(),
+                            package_id: package.id.clone(),
                             extra: dependency.extra.clone(),
-                            marker: dependency.marker.clone(),
+                            simplified_marker: dependency.simplified_marker.clone(),
+                            complexified_marker: dependency.complexified_marker.clone(),
                         })
                     } else {
                         Cow::Borrowed(dependency)
                     };
 
                     non_roots.insert(child.package_id.clone());
-
-                    // Skip dependencies that don't apply to the current environment.
-                    if let Some(environment_markers) = markers {
-                        if !dependency.marker.evaluate(environment_markers, &[]) {
-                            continue;
-                        }
-                    }
 
                     dev_dependencies
                         .entry(parent)
@@ -166,7 +181,7 @@ impl<'env> TreeDisplay<'env> {
             dev_dependencies,
             depth,
             prune,
-            package,
+            packages,
             no_dedupe,
         }
     }
@@ -297,7 +312,7 @@ impl<'env> TreeDisplay<'env> {
         let mut path = Vec::new();
         let mut lines = Vec::new();
 
-        if self.package.is_empty() {
+        if self.packages.is_empty() {
             for id in &self.roots {
                 path.clear();
                 lines.extend(self.visit(Node::Root(id), &mut visited, &mut path));
@@ -305,7 +320,7 @@ impl<'env> TreeDisplay<'env> {
         } else {
             let by_package: FxHashMap<_, _> = self.roots.iter().map(|id| (&id.name, id)).collect();
             let mut first = true;
-            for package in &self.package {
+            for package in &self.packages {
                 if std::mem::take(&mut first) {
                     lines.push(String::new());
                 }
