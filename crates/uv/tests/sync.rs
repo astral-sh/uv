@@ -577,7 +577,7 @@ fn sync_build_isolation_package() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
-      Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
+      Caused by: Build backend failed to build wheel through `build_wheel()` (exit status: 1)
     --- stdout:
 
     --- stderr:
@@ -669,7 +669,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
-      Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
+      Caused by: Build backend failed to build wheel through `build_wheel()` (exit status: 1)
     --- stdout:
 
     --- stderr:
@@ -689,7 +689,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
-      Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
+      Caused by: Build backend failed to build wheel through `build_wheel()` (exit status: 1)
     --- stdout:
 
     --- stderr:

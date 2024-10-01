@@ -888,7 +888,7 @@ fn fail() -> Result<()> {
       File "<string>", line 2
         from setuptools import setup
     IndentationError: unexpected indent
-    error: Build backend failed to determine extra requires with `build_sdist()` with exit status: 1
+    error: Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
     "###);
 
     Ok(())
@@ -1328,7 +1328,7 @@ fn build_all_with_failure() -> Result<()> {
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
     Successfully built dist/member_a-0.1.0.tar.gz and dist/member_a-0.1.0-py3-none-any.whl
-    [PKG] error: Build backend failed to determine extra requires with `build_sdist()` with exit status: 1
+    [PKG] error: Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
     Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
     "###);
 
@@ -1397,7 +1397,7 @@ fn build_constraints() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    error: Failed to install requirements from `build-system.requires` (resolve)
+    error: Failed to resolve requirements from `build-system.requires`
       Caused by: No solution found when resolving: `setuptools>=42`
       Caused by: Because you require setuptools>=42 and setuptools==0.1.0, we can conclude that your requirements are unsatisfiable.
     "###);
@@ -1551,7 +1551,7 @@ fn sha() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    error: Failed to install requirements from `build-system.requires` (install)
+    error: Failed to install requirements from `build-system.requires`
       Caused by: Failed to prepare distributions
       Caused by: Failed to fetch wheel: setuptools==68.2.2
       Caused by: Hash mismatch for `setuptools==68.2.2`
@@ -1585,7 +1585,7 @@ fn sha() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    error: Failed to install requirements from `build-system.requires` (resolve)
+    error: Failed to resolve requirements from `build-system.requires`
       Caused by: No solution found when resolving: `setuptools>=42`
       Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `setuptools`
     "###);
