@@ -363,7 +363,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         if let Some(metadata) = self
             .build_context
             .dependency_metadata()
-            .get(dist.name(), dist.version())
+            .get(dist.name(), Some(dist.version()))
         {
             return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
         }
@@ -425,14 +425,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<ArchiveMetadata, Error> {
         // If the metadata was provided by the user directly, prefer it.
         if let Some(dist) = source.as_dist() {
-            if let Some(version) = dist.version() {
-                if let Some(metadata) = self
-                    .build_context
-                    .dependency_metadata()
-                    .get(dist.name(), version)
-                {
-                    return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
-                }
+            if let Some(metadata) = self
+                .build_context
+                .dependency_metadata()
+                .get(dist.name(), dist.version())
+            {
+                return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
             }
         }
 

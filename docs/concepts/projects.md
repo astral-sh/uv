@@ -797,3 +797,9 @@ You could run the following sequence of commands to sync `flash-attn`:
 $ uv sync --extra build
 $ uv sync --extra build --extra compile
 ```
+
+!!! note
+
+    The `version` field in `tool.uv.dependency-metadata` is optional for registry-based
+    dependencies (when omitted, uv will assume the metadata applies to all versions of the package),
+    but _required_ for direct URL dependencies.

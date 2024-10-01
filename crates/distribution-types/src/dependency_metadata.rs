@@ -3,6 +3,7 @@ use pep508_rs::Requirement;
 use pypi_types::{ResolutionMetadata, VerbatimParsedUrl};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 use uv_normalize::{ExtraName, PackageName};
 
 /// Pre-defined [`StaticMetadata`] entries, indexed by [`PackageName`] and [`Version`].
@@ -20,22 +21,56 @@ impl DependencyMetadata {
     }
 
     /// Retrieve a [`StaticMetadata`] entry by [`PackageName`] and [`Version`].
-    pub fn get(&self, package: &PackageName, version: &Version) -> Option<ResolutionMetadata> {
+    pub fn get(
+        &self,
+        package: &PackageName,
+        version: Option<&Version>,
+    ) -> Option<ResolutionMetadata> {
         let versions = self.0.get(package)?;
 
-        // Search for an exact, then a global match.
-        let metadata = versions
-            .iter()
-            .find(|v| v.version.as_ref() == Some(version))
-            .or_else(|| versions.iter().find(|v| v.version.is_none()))?;
-
-        Some(ResolutionMetadata {
-            name: metadata.name.clone(),
-            version: version.clone(),
-            requires_dist: metadata.requires_dist.clone(),
-            requires_python: metadata.requires_python.clone(),
-            provides_extras: metadata.provides_extras.clone(),
-        })
+        if let Some(version) = version {
+            // If a specific version was requested, search for an exact match, then a global match.
+            let metadata = versions
+                .iter()
+                .find(|v| v.version.as_ref() == Some(version))
+                .inspect(|_| {
+                    debug!("Found dependency metadata entry for `{package}=={version}`",);
+                })
+                .or_else(|| versions.iter().find(|v| v.version.is_none()))
+                .inspect(|_| {
+                    debug!("Found global metadata entry for `{package}`",);
+                });
+            let Some(metadata) = metadata else {
+                debug!("No dependency metadata entry found for `{package}=={version}`");
+                return None;
+            };
+            Some(ResolutionMetadata {
+                name: metadata.name.clone(),
+                version: version.clone(),
+                requires_dist: metadata.requires_dist.clone(),
+                requires_python: metadata.requires_python.clone(),
+                provides_extras: metadata.provides_extras.clone(),
+            })
+        } else {
+            // If no version was requested (i.e., it's a direct URL dependency), allow a single
+            // versioned match.
+            let [metadata] = versions.as_slice() else {
+                debug!("Multiple dependency metadata entries found for `{package}`");
+                return None;
+            };
+            let Some(version) = metadata.version.clone() else {
+                debug!("No version found in dependency metadata entry for `{package}`");
+                return None;
+            };
+            debug!("Found dependency metadata entry for `{package}` (assuming: `{version}`)");
+            Some(ResolutionMetadata {
+                name: metadata.name.clone(),
+                version,
+                requires_dist: metadata.requires_dist.clone(),
+                requires_python: metadata.requires_python.clone(),
+                provides_extras: metadata.provides_extras.clone(),
+            })
+        }
     }
 
     /// Retrieve all [`StaticMetadata`] entries.

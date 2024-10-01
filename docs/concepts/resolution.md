@@ -313,6 +313,12 @@ package's metadata is incorrect or incomplete, or when a package is not availabl
 index. While dependency overrides allow overriding the allowed versions of a package globally,
 metadata overrides allow overriding the declared metadata of a _specific package_.
 
+!!! note
+
+    The `version` field in `tool.uv.dependency-metadata` is optional for registry-based
+    dependencies (when omitted, uv will assume the metadata applies to all versions of the package),
+    but _required_ for direct URL dependencies.
+
 Entries in the `tool.uv.dependency-metadata` table follow the
 [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) specification,
 though only `name`, `version`, `requires-dist`, `requires-python`, and `provides-extra` are read by
