@@ -15,7 +15,7 @@ use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient
 use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -33,7 +33,7 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::Workspace;
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -41,6 +41,8 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, SharedState};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettingsRef};
+
+use super::python::pin::pep440_version_from_request;
 
 pub(crate) mod add;
 pub(crate) mod environment;
@@ -1360,5 +1362,136 @@ fn warn_on_requirements_txt_setting(
 
     if !no_build.is_none() && settings.build_options.no_build() != no_build {
         warn_user_once!("Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-build` command-line argument, or set `no-build` in a `uv.toml` or `pyproject.toml` file.");
+    }
+}
+
+/// Determine the [`PythonRequest`] to use in a command, if any.
+pub(crate) async fn python_request_from_args(
+    user_request: Option<&str>,
+    no_project: bool,
+    no_config: bool,
+    project_dir: Option<&Path>,
+    project: Option<VirtualProject>,
+) -> Result<Option<PythonRequest>, ProjectError> {
+    // (1) Explicit request from user
+    let mut request = user_request.map(PythonRequest::parse);
+
+    let project = if no_project {
+        None
+    } else {
+        // If given a project, use it. Otherwise, discover the project.
+        if let Some(project) = project {
+            Some(project)
+        } else {
+            match VirtualProject::discover(
+                project_dir.unwrap_or(&*CWD),
+                &DiscoveryOptions::default(),
+            )
+            .await
+            {
+                Ok(project) => Some(project),
+                Err(WorkspaceError::MissingProject(_)) => None,
+                Err(WorkspaceError::MissingPyprojectToml) => None,
+                Err(WorkspaceError::NonWorkspace(_)) => None,
+                Err(err) => {
+                    warn_user_once!("{err}");
+                    None
+                }
+            }
+        }
+    };
+
+    let requires_python = if let Some(project) = project.as_ref() {
+        find_requires_python(project.workspace())?
+    } else {
+        None
+    };
+
+    // (2) Request from a `.python-version` file
+    if request.is_none() {
+        let version_file = PythonVersionFile::discover(
+            project
+                .as_ref()
+                .map(|project| project.workspace().install_path())
+                .unwrap_or(&*CWD),
+            no_config,
+            false,
+        )
+        .await?;
+
+        if should_use_version_file(
+            version_file.as_ref(),
+            requires_python.as_ref(),
+            project.as_ref(),
+        ) {
+            request = version_file.and_then(PythonVersionFile::into_version);
+        }
+    }
+
+    // (3) The `requires-python` defined in `pyproject.toml`
+    if request.is_none() && !no_project {
+        request = requires_python
+            .as_ref()
+            .map(RequiresPython::specifiers)
+            .map(|specifiers| {
+                PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
+            });
+    }
+
+    Ok(request)
+}
+
+/// Determine if a version file should be used, w.r.t, a Python requirement.
+///
+/// If the version file is incompatible,
+fn should_use_version_file(
+    version_file: Option<&PythonVersionFile>,
+    requires_python: Option<&RequiresPython>,
+    project: Option<&VirtualProject>,
+) -> bool {
+    // If there's no file, it's moot
+    let Some(version_file) = version_file else {
+        return false;
+    };
+
+    // If there's no request in the file, there's nothing to do
+    let Some(request) = version_file.version() else {
+        return false;
+    };
+
+    // If there's no project Python requirement, it's compatible
+    let Some(requires_python) = &requires_python else {
+        return true;
+    };
+
+    // If the request can't be parsed as a version, we can't check compatibility
+    let Some(version) = pep440_version_from_request(request) else {
+        return true;
+    };
+
+    // If it's compatible with the requirement, we can definitely use it
+    if requires_python.specifiers().contains(&version) {
+        return true;
+    };
+
+    let path = version_file.path();
+
+    // If there's no known project, we're not sure where the Python requirement came from and it's
+    // not safe to use the pin
+    let Some(project) = project else {
+        debug!("Ignoring pinned Python version ({version}) at `{}`, it does not meet the Python requirement of `{requires_python}`.", path.user_display().cyan());
+        return false;
+    };
+
+    // Otherwise, whether or not we should use it depends if it's declared inside or outside of the
+    // project.
+    if path.starts_with(project.root()) {
+        // It's the pin is declared _inside_ the project, just warn... but use the version
+        warn_user_once!("The pinned Python version ({version}) in `{}` does not meet the project's Python requirement of `{requires_python}`.", path.user_display().cyan());
+        true
+    } else {
+        // Otherwise, we can just ignore the pin — it's outside the project
+        debug!("Ignoring pinned Python version ({version}) at `{}`, it does not meet the project's Python requirement of `{requires_python}`.", path.user_display().cyan());
+        false
     }
 }

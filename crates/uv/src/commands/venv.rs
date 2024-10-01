@@ -21,11 +21,8 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVersionFile, VersionRequest,
-};
-use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
+use uv_python::{EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference};
+use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_shell::Shell;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
@@ -33,10 +30,11 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::Changelog;
-use crate::commands::project::find_requires_python;
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
+
+use super::project::python_request_from_args;
 
 /// Create a virtual environment.
 #[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
@@ -184,33 +182,19 @@ async fn venv_impl(
 
     let reporter = PythonDownloadReporter::single(printer);
 
-    // (1) Explicit request from user
-    let mut interpreter_request = python_request.map(PythonRequest::parse);
-
-    // (2) Request from `.python-version`
-    if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(project_dir, no_config, false)
-            .await
-            .into_diagnostic()?
-            .and_then(PythonVersionFile::into_version);
-    }
-
-    // (3) `Requires-Python` in `pyproject.toml`
-    if interpreter_request.is_none() {
-        if let Some(project) = project {
-            interpreter_request = find_requires_python(project.workspace())
-                .into_diagnostic()?
-                .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
-                });
-        }
-    }
+    let python_request = python_request_from_args(
+        python_request,
+        no_project,
+        no_config,
+        Some(project_dir),
+        project,
+    )
+    .await
+    .into_diagnostic()?;
 
     // Locate the Python interpreter to use in the environment
     let python = PythonInstallation::find_or_download(
-        interpreter_request.as_ref(),
+        python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,

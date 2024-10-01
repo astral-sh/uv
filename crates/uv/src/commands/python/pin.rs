@@ -155,7 +155,7 @@ pub(crate) async fn pin(
     Ok(ExitStatus::Success)
 }
 
-fn pep440_version_from_request(request: &PythonRequest) -> Option<pep440_rs::Version> {
+pub(crate) fn pep440_version_from_request(request: &PythonRequest) -> Option<pep440_rs::Version> {
     let version_request = match request {
         PythonRequest::Version(ref version)
         | PythonRequest::ImplementationVersion(_, ref version) => version,

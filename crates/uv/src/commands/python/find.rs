@@ -4,15 +4,9 @@ use std::path::Path;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
-use uv_python::{
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionRequest,
-};
-use uv_resolver::RequiresPython;
-use uv_warnings::warn_user_once;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
+use uv_python::{EnvironmentPreference, PythonInstallation, PythonPreference};
 
-use crate::commands::{project::find_requires_python, ExitStatus};
+use crate::commands::{project::python_request_from_args, ExitStatus};
 
 /// Find a Python interpreter.
 pub(crate) async fn find(
@@ -30,39 +24,14 @@ pub(crate) async fn find(
         EnvironmentPreference::Any
     };
 
-    // (1) Explicit request from user
-    let mut request = request.map(|request| PythonRequest::parse(&request));
-
-    // (2) Request from `.python-version`
-    if request.is_none() {
-        request = PythonVersionFile::discover(project_dir, no_config, false)
-            .await?
-            .and_then(PythonVersionFile::into_version);
-    }
-
-    // (3) `Requires-Python` in `pyproject.toml`
-    if request.is_none() && !no_project {
-        let project =
-            match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
-                Ok(project) => Some(project),
-                Err(WorkspaceError::MissingProject(_)) => None,
-                Err(WorkspaceError::MissingPyprojectToml) => None,
-                Err(WorkspaceError::NonWorkspace(_)) => None,
-                Err(err) => {
-                    warn_user_once!("{err}");
-                    None
-                }
-            };
-
-        if let Some(project) = project {
-            request = find_requires_python(project.workspace())?
-                .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
-                });
-        }
-    }
+    let request = python_request_from_args(
+        request.as_deref(),
+        no_project,
+        no_config,
+        Some(project_dir),
+        None,
+    )
+    .await?;
 
     let python = PythonInstallation::find(
         &request.unwrap_or_default(),

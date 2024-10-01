@@ -623,8 +623,8 @@ fn run_with() -> Result<()> {
 
     // Requesting an unsatisfied requirement should install it.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
@@ -637,6 +637,10 @@ fn run_with() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import sniffio
+    ModuleNotFoundError: No module named 'sniffio'
     "###);
 
     // Requesting a satisfied requirement should use the base environment.
@@ -755,8 +759,8 @@ fn run_with_editable() -> Result<()> {
 
     // Requesting an editable requirement should install it in a layer.
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/black_editable").arg("main.py"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
@@ -771,12 +775,16 @@ fn run_with_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[TEMP_DIR]/src/black_editable)
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import sniffio
+    ModuleNotFoundError: No module named 'sniffio'
     "###);
 
     // Requesting an editable requirement should install it in a layer, even if it satisfied
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
@@ -786,6 +794,10 @@ fn run_with_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import sniffio
+    ModuleNotFoundError: No module named 'sniffio'
     "###);
 
     // Requesting the project itself should use the base environment.
@@ -1154,8 +1166,8 @@ fn run_requirements_txt() -> Result<()> {
     requirements_txt.write_str("iniconfig")?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
@@ -1170,6 +1182,10 @@ fn run_requirements_txt() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import sniffio
+    ModuleNotFoundError: No module named 'sniffio'
     "###);
 
     // Requesting a satisfied requirement should use the base environment.
@@ -1276,8 +1292,8 @@ fn run_requirements_txt_arguments() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
@@ -1291,6 +1307,10 @@ fn run_requirements_txt_arguments() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + idna==3.6
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import typing_extensions
+    ModuleNotFoundError: No module named 'typing_extensions'
     "###);
 
     Ok(())
@@ -1330,10 +1350,9 @@ fn run_editable() -> Result<()> {
 
     // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
-    Hello, world!
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -1344,6 +1363,10 @@ fn run_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import foo
+    ModuleNotFoundError: No module named 'foo'
     "###);
 
     Ok(())
@@ -1539,22 +1562,30 @@ fn run_without_output() -> Result<()> {
 
     // On the first run, we only show the summary line for each environment.
     uv_snapshot!(context.filters(), context.run().env_remove("UV_SHOW_RESOLUTION").arg("--with").arg("iniconfig").arg("main.py"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Installed 4 packages in [TIME]
     Installed 1 package in [TIME]
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import sniffio
+    ModuleNotFoundError: No module named 'sniffio'
     "###);
 
     // Subsequent runs are quiet.
     uv_snapshot!(context.filters(), context.run().env_remove("UV_SHOW_RESOLUTION").arg("--with").arg("iniconfig").arg("main.py"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import sniffio
+    ModuleNotFoundError: No module named 'sniffio'
     "###);
 
     Ok(())
