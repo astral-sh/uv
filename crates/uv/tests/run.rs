@@ -2201,7 +2201,7 @@ fn run_script_explicit() -> Result<()> {
 }
 
 #[test]
-fn run_script_explicit_no_file() -> Result<()> {
+fn run_script_explicit_no_file() {
     let context = TestContext::new("3.12");
     context
         .run()
@@ -2210,8 +2210,6 @@ fn run_script_explicit_no_file() -> Result<()> {
         .assert()
         .stderr(contains("can't open file"))
         .stderr(contains("[Errno 2] No such file or directory"));
-
-    Ok(())
 }
 
 #[test]
