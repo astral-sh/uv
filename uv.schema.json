@@ -1356,66 +1356,6 @@
             }
           },
           "additionalProperties": false
-        },
-        {
-          "description": "A catch-all variant used to emit precise error messages when deserializing.",
-          "type": "object",
-          "required": [
-            "git",
-            "index",
-            "path",
-            "url",
-            "workspace"
-          ],
-          "properties": {
-            "branch": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "git": {
-              "type": "string"
-            },
-            "index": {
-              "type": "string"
-            },
-            "marker": {
-              "$ref": "#/definitions/MarkerTree"
-            },
-            "path": {
-              "$ref": "#/definitions/String"
-            },
-            "rev": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "subdirectory": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/String"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "tag": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "url": {
-              "type": "string"
-            },
-            "workspace": {
-              "type": "boolean"
-            }
-          },
-          "additionalProperties": false
         }
       ]
     },

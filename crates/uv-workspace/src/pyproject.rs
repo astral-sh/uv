@@ -8,7 +8,7 @@
 
 use glob::Pattern;
 use owo_colors::OwoColorize;
-use serde::{de::IntoDeserializer, Deserialize, Serialize};
+use serde::{de::IntoDeserializer, Deserialize, Deserializer, Serialize};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -455,7 +455,7 @@ enum SourcesWire {
 impl<'de> serde::de::Deserialize<'de> for SourcesWire {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::de::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         serde_untagged::UntaggedEnumVisitor::new()
             .map(|map| map.deserialize().map(SourcesWire::One))
@@ -520,7 +520,7 @@ impl TryFrom<SourcesWire> for Sources {
 }
 
 /// A `tool.uv.sources` value.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", untagged, deny_unknown_fields)]
 pub enum Source {
@@ -602,24 +602,293 @@ pub enum Source {
         )]
         marker: MarkerTree,
     },
-    /// A catch-all variant used to emit precise error messages when deserializing.
-    CatchAll {
-        git: String,
-        subdirectory: Option<PortablePathBuf>,
-        rev: Option<String>,
-        tag: Option<String>,
-        branch: Option<String>,
-        url: String,
-        path: PortablePathBuf,
-        index: String,
-        workspace: bool,
-        #[serde(
-            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
-            serialize_with = "pep508_rs::marker::ser::serialize",
-            default
-        )]
-        marker: MarkerTree,
-    },
+}
+
+/// A custom deserialization implementation for [`Source`]. This is roughly equivalent to
+/// `#[serde(untagged)]`, but provides more detailed error messages.
+impl<'de> Deserialize<'de> for Source {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize, Debug, Clone)]
+        #[serde(rename_all = "kebab-case", deny_unknown_fields)]
+        struct CatchAll {
+            git: Option<Url>,
+            subdirectory: Option<PortablePathBuf>,
+            rev: Option<String>,
+            tag: Option<String>,
+            branch: Option<String>,
+            url: Option<Url>,
+            path: Option<PortablePathBuf>,
+            editable: Option<bool>,
+            index: Option<String>,
+            workspace: Option<bool>,
+            #[serde(
+                skip_serializing_if = "pep508_rs::marker::ser::is_empty",
+                serialize_with = "pep508_rs::marker::ser::serialize",
+                default
+            )]
+            marker: MarkerTree,
+        }
+
+        // Attempt to deserialize as `CatchAll`.
+        let CatchAll {
+            git,
+            subdirectory,
+            rev,
+            tag,
+            branch,
+            url,
+            path,
+            editable,
+            index,
+            workspace,
+            marker,
+        } = CatchAll::deserialize(deserializer)?;
+
+        // If the `git` field is set, we're dealing with a Git source.
+        if let Some(git) = git {
+            if index.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `git` and `index`",
+                ));
+            }
+            if workspace.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `git` and `workspace`",
+                ));
+            }
+            if path.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `git` and `path`",
+                ));
+            }
+            if url.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `git` and `url`",
+                ));
+            }
+            if editable.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `git` and `editable`",
+                ));
+            }
+
+            match (rev.as_ref(), tag.as_ref(), branch.as_ref()) {
+                (None, None, None) => {}
+                (Some(_), None, None) => {}
+                (None, Some(_), None) => {}
+                (None, None, Some(_)) => {}
+                _ => {
+                    return Err(serde::de::Error::custom(
+                        "expected at most one of `rev`, `tag`, or `branch`",
+                    ))
+                }
+            };
+
+            return Ok(Self::Git {
+                git,
+                subdirectory,
+                rev,
+                tag,
+                branch,
+                marker,
+            });
+        }
+
+        // If the `url` field is set, we're dealing with a URL source.
+        if let Some(url) = url {
+            if index.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `index`",
+                ));
+            }
+            if workspace.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `workspace`",
+                ));
+            }
+            if path.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `path`",
+                ));
+            }
+            if git.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `git`",
+                ));
+            }
+            if rev.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `rev`",
+                ));
+            }
+            if tag.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `tag`",
+                ));
+            }
+            if branch.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `branch`",
+                ));
+            }
+            if editable.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `editable`",
+                ));
+            }
+
+            return Ok(Self::Url {
+                url,
+                subdirectory,
+                marker,
+            });
+        }
+
+        // If the `path` field is set, we're dealing with a path source.
+        if let Some(path) = path {
+            if index.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `index`",
+                ));
+            }
+            if workspace.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `workspace`",
+                ));
+            }
+            if git.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `git`",
+                ));
+            }
+            if url.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `url`",
+                ));
+            }
+            if rev.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `rev`",
+                ));
+            }
+            if tag.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `tag`",
+                ));
+            }
+            if branch.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `path` and `branch`",
+                ));
+            }
+
+            return Ok(Self::Path {
+                path,
+                editable,
+                marker,
+            });
+        }
+
+        // If the `index` field is set, we're dealing with a registry source.
+        if let Some(index) = index {
+            if workspace.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `workspace`",
+                ));
+            }
+            if git.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `git`",
+                ));
+            }
+            if url.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `url`",
+                ));
+            }
+            if path.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `path`",
+                ));
+            }
+            if rev.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `rev`",
+                ));
+            }
+            if tag.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `tag`",
+                ));
+            }
+            if branch.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `branch`",
+                ));
+            }
+            if editable.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `editable`",
+                ));
+            }
+
+            return Ok(Self::Registry { index, marker });
+        }
+
+        // If the `workspace` field is set, we're dealing with a workspace source.
+        if let Some(workspace) = workspace {
+            if index.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `index`",
+                ));
+            }
+            if git.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `git`",
+                ));
+            }
+            if url.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `url`",
+                ));
+            }
+            if path.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `path`",
+                ));
+            }
+            if rev.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `rev`",
+                ));
+            }
+            if tag.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `tag`",
+                ));
+            }
+            if branch.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `branch`",
+                ));
+            }
+            if editable.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `editable`",
+                ));
+            }
+
+            return Ok(Self::Workspace { workspace, marker });
+        }
+
+        // If none of the fields are set, we're dealing with an error.
+        Err(serde::de::Error::custom(
+            "expected one of `git`, `url`, `path`, `index`, or `workspace`",
+        ))
+    }
 }
 
 #[derive(Error, Debug)]
@@ -763,7 +1032,6 @@ impl Source {
             Source::Path { marker, .. } => marker.clone(),
             Source::Registry { marker, .. } => marker.clone(),
             Source::Workspace { marker, .. } => marker.clone(),
-            Source::CatchAll { marker, .. } => marker.clone(),
         }
     }
 }
