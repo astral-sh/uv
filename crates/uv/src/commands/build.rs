@@ -1,5 +1,7 @@
 use std::borrow::Cow;
-use std::fmt::Write;
+use std::fmt::Write as _;
+use std::io;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -482,6 +484,17 @@ async fn build_package(
 
     // Create the output directory.
     fs_err::tokio::create_dir_all(&output_dir).await?;
+
+    // Add a .gitignore.
+    match fs_err::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output_dir.join(".gitignore"))
+    {
+        Ok(mut file) => file.write_all(b"*")?,
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+        Err(err) => return Err(err.into()),
+    }
 
     // Determine the build plan.
     let plan = match &source.source {
