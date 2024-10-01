@@ -385,47 +385,49 @@ pub(crate) async fn install(
 
         let resolution = match resolution {
             Ok(resolution) => resolution,
-            Err(
-                err @ ProjectError::Operation(pip::operations::Error::Resolve(
-                    uv_resolver::ResolveError::NoSolution(_),
-                )),
-            ) => {
-                if python_request.is_some() {
-                    return Err(err.into());
+            Err(err) => match err {
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::NoSolution(ref no_solution_err),
+                )) => {
+                    let (None, Some(version)) =
+                        (python_request, no_solution_err.required_python_version())
+                    else {
+                        return Err(err.into());
+                    };
+
+                    let interpreter = PythonInstallation::find_or_download(
+                        Some(&PythonRequest::parse(version.to_string().as_str())),
+                        EnvironmentPreference::OnlySystem,
+                        python_preference,
+                        python_downloads,
+                        &client_builder,
+                        &cache,
+                        Some(&reporter),
+                    )
+                    .await?
+                    .into_interpreter();
+
+                    let new_spec = RequirementsSpecification {
+                        requirements: spec_requirements,
+                        ..RequirementsSpecification::default()
+                    };
+
+                    resolve_environment(
+                        EnvironmentSpecification::from(new_spec),
+                        &interpreter,
+                        settings.as_ref().into(),
+                        &state,
+                        Box::new(DefaultResolveLogger),
+                        connectivity,
+                        concurrency,
+                        native_tls,
+                        &cache,
+                        printer,
+                    )
+                    .await?
                 }
-
-                let interpreter = PythonInstallation::find_or_download(
-                    Some(&PythonRequest::parse("3.12")),
-                    EnvironmentPreference::OnlySystem,
-                    python_preference,
-                    python_downloads,
-                    &client_builder,
-                    &cache,
-                    Some(&reporter),
-                )
-                .await?
-                .into_interpreter();
-
-                let new_spec = RequirementsSpecification {
-                    requirements: spec_requirements,
-                    ..RequirementsSpecification::default()
-                };
-
-                resolve_environment(
-                    EnvironmentSpecification::from(new_spec),
-                    &interpreter,
-                    settings.as_ref().into(),
-                    &state,
-                    Box::new(DefaultResolveLogger),
-                    connectivity,
-                    concurrency,
-                    native_tls,
-                    &cache,
-                    printer,
-                )
-                .await?
-            }
-            Err(e) => return Err(e.into()),
+                _ => return Err(err.into()),
+            },
         };
 
         let environment = installed_tools.create_environment(&from.name, interpreter)?;

@@ -1,8 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
+use std::ops::{Bound, Deref};
 use std::sync::Arc;
 
 use indexmap::IndexSet;
+use itertools::Itertools;
 use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Range, Reporter};
 use rustc_hash::FxHashMap;
 
@@ -196,6 +198,55 @@ impl NoSolutionError {
     /// Initialize a [`NoSolutionHeader`] for this error.
     pub fn header(&self) -> NoSolutionHeader {
         NoSolutionHeader::new(self.markers.clone())
+    }
+
+    pub fn required_python_version(&self) -> Option<Version> {
+        let mut required_pythons = NoSolutionError::find_required_python_versions(&self.error);
+        required_pythons.sort();
+        // Return the largest required Python version
+        required_pythons.last().cloned()
+    }
+
+    /// Traverses a derivation tree to find required Python instances
+    fn find_required_python_versions(derivation_tree: &ErrorTree) -> Vec<Version> {
+        fn find(derivation_tree: &ErrorTree) -> Vec<Version> {
+            match derivation_tree {
+                DerivationTree::Derived(derived) => {
+                    let mut result = find(derived.cause1.as_ref());
+                    result.extend(find(derived.cause2.as_ref()));
+                    result
+                }
+                DerivationTree::External(External::FromDependencyOf(
+                    pkg_1,
+                    ver_1,
+                    pkg_2,
+                    ver_2,
+                )) => match (pkg_1.deref(), pkg_2.deref()) {
+                    (PubGrubPackageInner::Python(_), _) => {
+                        if let Some((Bound::Included(version), _)) =
+                            ver_1.iter().collect_vec().first()
+                        {
+                            vec![version.clone()]
+                        } else {
+                            Vec::new()
+                        }
+                    }
+                    (_, PubGrubPackageInner::Python(_)) => {
+                        if let Some((Bound::Included(version), _)) =
+                            ver_2.iter().collect_vec().first()
+                        {
+                            vec![version.clone()]
+                        } else {
+                            Vec::new()
+                        }
+                    }
+                    (_, _) => Vec::new(),
+                },
+                DerivationTree::External(_) => Vec::new(),
+            }
+        }
+
+        find(derivation_tree)
     }
 }
 
