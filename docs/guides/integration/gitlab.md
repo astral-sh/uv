@@ -1,13 +1,15 @@
 # Using uv in GitLab CI/CD
 
-uv offers images with shells, you can choose your preferred tag from the
-[ghcr.io](https://github.com/astral-sh/uv/pkgs/container/uv)
+## Using the uv image
+
+Astral provides [Docker images](docker.md#available-images) with uv preinstalled.
+Select a varaint that is suitable for your workflow.
 
 ```yaml title="gitlab-ci.yml
 variables:
   UV_VERSION: 0.4
   PYTHON_VERSION: 3.12
-  BASE_LAYER: alpine
+  BASE_LAYER: bookworm-slim
 
 stages:
   - analysis
@@ -23,8 +25,7 @@ UV:
 
 ## Caching
 
-You can speed up your pipeline by re-using cache files between runs. You can read more on
-[GitLab's caching here](https://docs.gitlab.com/ee/ci/caching/)
+Persisting the uv cache between workflow runs can improve performance.
 
 ```yaml
 UV Install:
@@ -41,18 +42,17 @@ UV Install:
     run: uv cache prune --ci
 ```
 
-The `uv cache prune --ci` command is used to reduce the size of the cache and is optimized for CI.
-Its effect on performance is dependent on the packages being installed.
+See the [GitLab caching documentation](https://docs.gitlab.com/ee/ci/caching/) for more details on
+configuring caching.
 
-!!! tip
-
-    If using `uv pip`, use `requirements.txt` instead of `uv.lock` in the cache key.
+Using `uv cache prune --ci` at the end of the job is recommended to reduce cache size. See the [uv
+cache documentation](../../concepts/cache.md#caching-in-continuous-integration) for more details.
 
 ## Using `uv pip`
 
 If using the `uv pip` interface instead of the uv project interface, uv requires a virtual
 environment by default. To allow installing packages into the system environment, use the `--system`
-flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable.
+flag on all uv invocations or set the `UV_SYSTEM_PYTHON` variable.
 
 The `UV_SYSTEM_PYTHON` variable can be defined in at different scopes. You can read more about
 how [variables and their precedence works in GitLab here](https://docs.gitlab.com/ee/ci/variables/)
@@ -67,3 +67,6 @@ variables:
 ```
 
 To opt-out again, the `--no-system` flag can be used in any uv invocation.
+
+When [persisting the cache](#caching), you may want to use `requirement.txt` or `pyproject.toml` as
+your cache key files instead of `uv.lock`.
