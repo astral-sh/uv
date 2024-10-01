@@ -990,7 +990,11 @@ impl std::fmt::Display for RunCommand {
 }
 
 impl RunCommand {
-    pub(crate) fn from_args(command: &ExternalCommand, module: bool) -> anyhow::Result<Self> {
+    pub(crate) fn from_args(
+        command: &ExternalCommand,
+        module: bool,
+        script: bool,
+    ) -> anyhow::Result<Self> {
         let (target, args) = command.split();
         let Some(target) = target else {
             return Ok(Self::Empty);
@@ -998,6 +1002,8 @@ impl RunCommand {
 
         if module {
             return Ok(Self::PythonModule(target.clone(), args.to_vec()));
+        } else if script {
+            return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
         }
 
         let target_path = PathBuf::from(target);

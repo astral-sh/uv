@@ -2472,7 +2472,7 @@ pub struct RunArgs {
     /// Run a Python module.
     ///
     /// Equivalent to `python -m <module>`.
-    #[arg(short, long)]
+    #[arg(short, long, conflicts_with = "script")]
     pub module: bool,
 
     /// Omit non-development dependencies.
@@ -2558,7 +2558,7 @@ pub struct RunArgs {
     ///
     /// Using `--script` will attempt to parse the path as a PEP 723 script,
     /// irrespective of its extension.
-    #[arg(long)]
+    #[arg(long, short, conflicts_with = "module")]
     pub script: bool,
 
     #[command(flatten)]
