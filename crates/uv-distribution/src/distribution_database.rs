@@ -16,8 +16,7 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, IndexLocations, Name,
-    SourceDist,
+    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, Name, SourceDist,
 };
 use platform_tags::Tags;
 use pypi_types::HashDigest;
@@ -43,8 +42,8 @@ use crate::{Error, LocalWheel, Reporter, RequiresDist};
 /// building the source distribution. For wheel files, either the wheel is downloaded or a source
 /// distribution is downloaded, built and the new wheel gets returned.
 ///
-/// All kinds of wheel sources (index, url, path) and source distribution source (index, url, path,
-/// git) are supported.
+/// All kinds of wheel sources (index, URL, path) and source distribution source (index, URL, path,
+/// Git) are supported.
 ///
 /// This struct also has the task of acquiring locks around source dist builds in general and git
 /// operation especially, as well as respecting concurrency limits.
@@ -880,11 +879,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 reqwest::header::HeaderValue::from_static("identity"),
             )
             .build()
-    }
-
-    /// Return the [`IndexLocations`] used by this resolver.
-    pub fn index_locations(&self) -> &IndexLocations {
-        self.build_context.index_locations()
     }
 
     /// Return the [`ManagedClient`] used by this resolver.
