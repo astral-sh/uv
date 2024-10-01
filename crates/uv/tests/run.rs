@@ -5,7 +5,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::indoc;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use uv_python::PYTHON_VERSION_FILENAME;
 
@@ -2202,7 +2202,7 @@ fn run_url_like_with_local_file_priority() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let url = "https://example.com/path/to/main.py";
-    let local_path: PathBuf = ["https:", "", "example.com", "path", "to", "main.py"]
+    let local_path: std::path::PathBuf = ["https:", "", "example.com", "path", "to", "main.py"]
         .iter()
         .collect();
 
