@@ -68,5 +68,5 @@ variables:
 
 To opt-out again, the `--no-system` flag can be used in any uv invocation.
 
-When [persisting the cache](#caching), you may want to use `requirement.txt` or `pyproject.toml` as
+When persisting the cache, you may want to use `requirement.txt` or `pyproject.toml` as
 your cache key files instead of `uv.lock`.
