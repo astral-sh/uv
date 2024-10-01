@@ -44,7 +44,7 @@ fn lock_wheel_registry() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -170,7 +170,7 @@ fn lock_sdist_registry() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -259,7 +259,7 @@ fn lock_sdist_git() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -353,7 +353,7 @@ fn lock_sdist_git() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -413,7 +413,7 @@ fn lock_sdist_git() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -473,7 +473,7 @@ fn lock_sdist_git() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -538,7 +538,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -626,7 +626,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -693,7 +693,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -750,7 +750,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -807,7 +807,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -875,7 +875,7 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -973,7 +973,7 @@ fn lock_wheel_url() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1120,7 +1120,7 @@ fn lock_sdist_url() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1257,7 +1257,7 @@ fn lock_project_extra() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1524,7 +1524,7 @@ fn lock_dependency_extra() -> Result<()> {
     Resolved 10 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2011,7 +2011,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     warning: The package `flask==3.0.2` does not have an extra named `foo`
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2196,7 +2196,7 @@ fn lock_upgrade_log() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2281,7 +2281,7 @@ fn lock_upgrade_log() -> Result<()> {
     Added typing-extensions v4.10.0
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2372,7 +2372,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2461,7 +2461,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     Updated markupsafe v1.1.1, v2.0.0 -> v2.1.5
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2538,7 +2538,7 @@ fn lock_preference() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2601,7 +2601,7 @@ fn lock_preference() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2647,7 +2647,7 @@ fn lock_preference() -> Result<()> {
     Updated iniconfig v1.1.1 -> v2.0.0
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2771,7 +2771,7 @@ fn lock_git_sha() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // The lockfile should resolve to `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`, the latest commit
     // on `main`.
@@ -4135,7 +4135,7 @@ fn lock_dev() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4253,7 +4253,7 @@ fn lock_conditional_unconditional() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4334,7 +4334,7 @@ fn lock_multiple_markers() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4454,7 +4454,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         Resolved 3 packages in [TIME]
         "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4537,7 +4537,7 @@ fn lock_cycles() -> Result<()> {
     Resolved 11 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4745,7 +4745,7 @@ fn lock_new_extras() -> Result<()> {
         Resolved 6 packages in [TIME]
         "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4874,7 +4874,7 @@ fn lock_new_extras() -> Result<()> {
         Added pysocks v1.7.1
         "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -5125,7 +5125,7 @@ fn lock_resolution_mode() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -5205,7 +5205,7 @@ fn lock_resolution_mode() -> Result<()> {
     Updated anyio v4.3.0 -> v3.0.0
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -5380,7 +5380,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
     Resolved 7 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -5871,7 +5871,7 @@ fn lock_redact_https() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // The lockfile shout omit the credentials.
     insta::with_settings!({
@@ -6068,7 +6068,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => filters.clone(),
@@ -6165,7 +6165,7 @@ fn lock_redact_git_sources() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => filters.clone(),
@@ -6255,7 +6255,7 @@ fn lock_relative_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6371,7 +6371,7 @@ fn lock_no_sources() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6459,7 +6459,7 @@ fn lock_no_sources() -> Result<()> {
     Added sniffio v1.3.1
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6631,7 +6631,7 @@ fn lock_migrate() -> Result<()> {
     Added sniffio v1.3.1
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6733,7 +6733,7 @@ fn lock_upgrade_package() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6832,7 +6832,7 @@ fn lock_upgrade_package() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -6915,7 +6915,7 @@ fn lock_upgrade_package() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -7005,7 +7005,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .env_remove("UV_EXCLUDE_NEWER")
         .assert()
         .success();
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     assert!(lock.contains("resolution-markers"));
 
     // Remove the bound and lock with `--upgrade`.
@@ -7018,7 +7018,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .arg("--upgrade")
         .assert()
         .success();
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     assert!(!lock.contains("resolution-markers"));
     Ok(())
 }
@@ -7325,7 +7325,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -7420,7 +7420,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -7549,7 +7549,7 @@ fn lock_local_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     let index = Url::from_directory_path(&root).unwrap().to_string();
     let filters = [(index.as_str(), "file://[TMP]")]
@@ -7646,7 +7646,7 @@ fn lock_sources_url() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -7786,7 +7786,7 @@ fn lock_sources_archive() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // insta::with_settings!({
     //     filters => context.filters(),
@@ -7936,7 +7936,7 @@ fn lock_sources_source_tree() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8076,7 +8076,7 @@ fn lock_editable() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8159,7 +8159,7 @@ fn lock_editable() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8718,7 +8718,7 @@ fn lock_mismatched_versions() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8842,7 +8842,7 @@ fn lock_change_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8888,7 +8888,7 @@ fn lock_change_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8989,7 +8989,7 @@ fn lock_remove_member() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9110,7 +9110,7 @@ fn lock_remove_member() -> Result<()> {
     Removed sniffio v1.3.1
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9171,7 +9171,7 @@ fn lock_add_member() -> Result<()> {
     Resolved 1 package in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9285,7 +9285,7 @@ fn lock_add_member() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9392,7 +9392,7 @@ fn lock_redundant_add_member() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9500,7 +9500,7 @@ fn lock_redundant_add_member() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9595,7 +9595,7 @@ fn lock_new_constraints() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9705,7 +9705,7 @@ fn lock_new_constraints() -> Result<()> {
     Updated anyio v4.3.0 -> v4.2.0
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9813,7 +9813,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9921,7 +9921,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     Removed sniffio v1.3.1
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9971,7 +9971,7 @@ fn lock_rename_project() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10055,7 +10055,7 @@ fn lock_rename_project() -> Result<()> {
     Added renamed v0.1.0
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10174,7 +10174,7 @@ fn lock_missing_metadata() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10265,7 +10265,7 @@ fn lock_reorder() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10524,7 +10524,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10634,7 +10634,7 @@ fn lock_constrained_environment() -> Result<()> {
     Resolved 7 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // Because we're _not_ locking for Windows, `colorama` should not be included.
     insta::with_settings!({
@@ -10819,7 +10819,7 @@ fn lock_constrained_environment() -> Result<()> {
     Added colorama v0.4.6
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // Because we're locking for Windows, `colorama` should be included.
     insta::with_settings!({
@@ -10964,7 +10964,7 @@ fn lock_constrained_environment_legacy() -> Result<()> {
     Resolved 7 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // Because we're _not_ locking for Windows, `colorama` should not be included.
     insta::with_settings!({
@@ -11157,7 +11157,7 @@ fn lock_non_project_fork() -> Result<()> {
     Resolved 6 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11347,7 +11347,7 @@ fn lock_non_project_conditional() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11454,7 +11454,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11572,7 +11572,7 @@ fn lock_trailing_slash() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11704,7 +11704,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
     Resolved 11 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11921,7 +11921,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
     Resolved 11 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -12148,7 +12148,7 @@ fn lock_implicit_virtual_path() -> Result<()> {
     Resolved 6 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -12334,7 +12334,7 @@ fn lock_split_python_environment() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -12448,7 +12448,7 @@ fn lock_python_upper_bound() -> Result<()> {
     Resolved 18 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -12822,7 +12822,7 @@ fn lock_dependency_metadata() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -13035,7 +13035,7 @@ fn lock_strip_fragment() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -13290,7 +13290,7 @@ fn lock_change_requires_python() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -13399,7 +13399,7 @@ fn lock_change_requires_python() -> Result<()> {
     Resolved 5 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -13518,7 +13518,7 @@ fn lock_multiple_sources() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -13696,7 +13696,7 @@ fn lock_multiple_sources_non_total() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -13796,7 +13796,7 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -13900,7 +13900,7 @@ fn lock_multiple_sources_extra() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),

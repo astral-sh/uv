@@ -9,7 +9,7 @@ use common::{diff_snapshot, uv_snapshot, TestContext};
 mod common;
 
 #[test]
-fn packse_add_remove_one_package() -> Result<()> {
+fn packse_add_remove_one_package() {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
@@ -22,7 +22,7 @@ fn packse_add_remove_one_package() -> Result<()> {
     Resolved 49 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -206,19 +206,17 @@ fn packse_add_remove_one_package() -> Result<()> {
     });
 
     // Back to where we started.
-    let new_lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let new_lock = context.read("uv.lock");
     let diff = diff_snapshot(&lock, &new_lock);
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @r###""###);
     });
-
-    Ok(())
 }
 
 #[test]
-fn packse_add_remove_existing_package_noop() -> Result<()> {
+fn packse_add_remove_existing_package_noop() {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
@@ -231,7 +229,7 @@ fn packse_add_remove_existing_package_noop() -> Result<()> {
     Resolved 49 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -248,14 +246,12 @@ fn packse_add_remove_existing_package_noop() -> Result<()> {
     }, {
         assert_snapshot!(diff, @"");
     });
-
-    Ok(())
 }
 
 /// This test adds a new direct dependency that was already a
 /// transitive dependency.
 #[test]
-fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
+fn packse_promote_transitive_to_direct_then_remove() {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
@@ -268,7 +264,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
     Resolved 49 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -392,15 +388,13 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
     });
 
     // Back to where we started.
-    let new_lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let new_lock = context.read("uv.lock");
     let diff = diff_snapshot(&lock, &new_lock);
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @r###""###);
     });
-
-    Ok(())
 }
 
 #[test]
@@ -427,7 +421,7 @@ fn jax_instability() -> Result<()> {
     Resolved 8 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -578,7 +572,7 @@ fn jax_instability() -> Result<()> {
     //
     // See: https://github.com/astral-sh/uv/issues/6063
     // See: https://github.com/astral-sh/uv/issues/6158
-    let new_lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let new_lock = context.read("uv.lock");
     let diff = diff_snapshot(&lock, &new_lock);
     insta::with_settings!({
         filters => context.filters(),

@@ -900,6 +900,12 @@ impl TestContext {
         let new_lock = fs_err::read_to_string(&lock_path).unwrap();
         diff_snapshot(&old_lock, &new_lock)
     }
+
+    /// Read a file in the temporary directory
+    pub fn read(&self, file: impl AsRef<Path>) -> String {
+        fs_err::read_to_string(self.temp_dir.join(&file))
+            .unwrap_or_else(|_| panic!("Missing file: `{}`", file.user_display()))
+    }
 }
 
 /// Creates a "unified" diff between the two line-oriented strings suitable

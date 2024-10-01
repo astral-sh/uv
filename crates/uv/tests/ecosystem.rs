@@ -127,7 +127,7 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
     );
     assert_snapshot!(format!("{name}-uv-lock-output"), snapshot);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {

@@ -14,7 +14,7 @@ mod common;
 
 /// See [`init_application`] and [`init_library`] for more coverage.
 #[test]
-fn init() -> Result<()> {
+fn init() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo"), @r###"
@@ -26,8 +26,8 @@ fn init() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("foo/pyproject.toml"))?;
-    let _ = fs_err::read_to_string(context.temp_dir.join("foo/README.md")).unwrap();
+    let pyproject = context.read("foo/pyproject.toml");
+    let _ = context.read("foo/README.md");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -56,8 +56,7 @@ fn init() -> Result<()> {
     Resolved 1 package in [TIME]
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join("foo").join(".python-version"))?;
+    let python_version = context.read("foo/.python-version");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -65,8 +64,6 @@ fn init() -> Result<()> {
             python_version, @"3.12"
         );
     });
-
-    Ok(())
 }
 
 /// Run `uv init --app` to create an application project
@@ -677,7 +674,7 @@ fn init_cache() -> Result<()> {
 }
 
 #[test]
-fn init_no_readme() -> Result<()> {
+fn init_no_readme() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-readme"), @r###"
@@ -689,7 +686,7 @@ fn init_no_readme() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("foo/pyproject.toml"))?;
+    let pyproject = context.read("foo/pyproject.toml");
     let _ = fs_err::read_to_string(context.temp_dir.join("foo/README.md")).unwrap_err();
 
     insta::with_settings!({
@@ -706,12 +703,10 @@ fn init_no_readme() -> Result<()> {
         "###
         );
     });
-
-    Ok(())
 }
 
 #[test]
-fn init_no_pin_python() -> Result<()> {
+fn init_no_pin_python() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-pin-python"), @r###"
@@ -723,7 +718,7 @@ fn init_no_pin_python() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("foo/pyproject.toml"))?;
+    let pyproject = context.read("foo/pyproject.toml");
     let _ = fs_err::read_to_string(context.temp_dir.join("foo/.python-version")).unwrap_err();
 
     insta::with_settings!({
@@ -741,7 +736,6 @@ fn init_no_pin_python() -> Result<()> {
         "###
         );
     });
-    Ok(())
 }
 
 #[test]
@@ -1002,7 +996,7 @@ fn init_workspace() -> Result<()> {
         );
     });
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1096,7 +1090,7 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         );
     });
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1191,7 +1185,7 @@ fn init_workspace_outside() -> Result<()> {
         );
     });
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1334,7 +1328,7 @@ fn init_isolated() -> Result<()> {
     Initialized project `foo`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1383,7 +1377,7 @@ fn init_no_workspace() -> Result<()> {
     "###);
 
     // Ensure that the workspace was not modified.
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1416,7 +1410,7 @@ fn init_no_workspace() -> Result<()> {
     Initialized project `bar`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1431,7 +1425,7 @@ fn init_no_workspace() -> Result<()> {
 
 /// Warn if the user provides `--no-workspace` outside of a workspace.
 #[test]
-fn init_no_workspace_warning() -> Result<()> {
+fn init_no_workspace_warning() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("--no-workspace").arg("--name").arg("project"), @r###"
@@ -1443,7 +1437,7 @@ fn init_no_workspace_warning() -> Result<()> {
     Initialized project `project`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1460,8 +1454,6 @@ fn init_no_workspace_warning() -> Result<()> {
         "###
         );
     });
-
-    Ok(())
 }
 
 #[test]
@@ -1567,7 +1559,7 @@ fn init_explicit_workspace() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1735,7 +1727,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("foo").join("pyproject.toml"))?;
+    let pyproject = context.read("foo/pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1759,7 +1751,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
         );
     });
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1803,7 +1795,7 @@ fn init_matches_members() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/packages/foo`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1845,7 +1837,7 @@ fn init_matches_exclude() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/packages/foo`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -2058,7 +2050,7 @@ fn init_unmanaged() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -2115,7 +2107,7 @@ fn init_failure() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("foo").join("pyproject.toml"))?;
+    let workspace = context.read("foo/pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
