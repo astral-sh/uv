@@ -4,7 +4,6 @@ use std::ops::Bound;
 use std::sync::Arc;
 
 use indexmap::IndexSet;
-use itertools::Itertools;
 use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Range, Reporter};
 use rustc_hash::FxHashMap;
 
@@ -218,24 +217,20 @@ impl NoSolutionError {
                     ver_2,
                 )) => match (&**pkg_1, &**pkg_2) {
                     (PubGrubPackageInner::Python(_), _) => {
-                        if let Some((Bound::Included(version), _)) =
-                            ver_1.iter().collect_vec().first()
-                        {
-                            *largest_version = match largest_version {
+                        if let Some((Bound::Included(version), _)) = ver_1.iter().next() {
+                            *largest_version = match largest_version.take() {
                                 Some(ref v) if version > v => Some(version.clone()),
+                                Some(v) => Some(v),
                                 None => Some(version.clone()),
-                                _ => largest_version.clone(),
                             };
                         }
                     }
                     (_, PubGrubPackageInner::Python(_)) => {
-                        if let Some((Bound::Included(version), _)) =
-                            ver_2.iter().collect_vec().first()
-                        {
-                            *largest_version = match largest_version {
+                        if let Some((Bound::Included(version), _)) = ver_2.iter().next() {
+                            *largest_version = match largest_version.take() {
                                 Some(ref v) if version > v => Some(version.clone()),
+                                Some(v) => Some(v),
                                 None => Some(version.clone()),
-                                _ => largest_version.clone(),
                             };
                         }
                     }

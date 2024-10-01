@@ -398,7 +398,7 @@ pub(crate) async fn install(
 
                     writeln!(
                          printer.stderr(),
-                        "Couldn't find acceptable Python version for {package}, downloading Python {version} and re-attempting install."
+                        "Couldn't find acceptable Python version for `{package}`, downloading Python {version} and re-attempting install."
                     )?;
 
                     let interpreter = PythonInstallation::find_or_download(
