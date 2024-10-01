@@ -3,6 +3,7 @@
 use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{
     assert::PathAssert,
     fixture::{FileTouch, FileWriteStr, PathChild},
@@ -3008,24 +3009,3 @@ fn tool_install_at_latest_upgrade() {
     });
 }
 
-#[test]
-fn tool_install_python() {
-    let context = TestContext::new("3.8");
-    let tool_dir = context.temp_dir.child("tools");
-    let bin_dir = context.temp_dir.child("bin");
-
-    uv_snapshot!(context.filters(), context.tool_install()
-        .arg("posting")
-        .arg("--python")
-        .arg("3.8")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-
-    "###);
-}

@@ -200,22 +200,17 @@ impl NoSolutionError {
         NoSolutionHeader::new(self.markers.clone())
     }
 
-    pub fn required_python_version(&self) -> Option<Version> {
-        let mut required_pythons = NoSolutionError::find_required_python_versions(&self.error);
-        required_pythons.sort();
-        // Return the largest required Python version
-        required_pythons.last().cloned()
-    }
-
-    /// Traverses a derivation tree to find required Python instances
-    fn find_required_python_versions(derivation_tree: &ErrorTree) -> Vec<Version> {
-        fn find(derivation_tree: &ErrorTree) -> Vec<Version> {
+    pub fn find_largest_required_python_version(&self) -> Option<Version> {
+        fn find(derivation_tree: &ErrorTree, largest_version: &mut Option<Version>) {
             match derivation_tree {
+                // For derived incompatibilities, recursively search each subtree to
+                // find the root cause
                 DerivationTree::Derived(derived) => {
-                    let mut result = find(derived.cause1.as_ref());
-                    result.extend(find(derived.cause2.as_ref()));
-                    result
+                    find(derived.cause1.as_ref(), largest_version);
+                    find(derived.cause2.as_ref(), largest_version);
                 }
+                // Base case — if a missing external dependency a Python package,
+                // update the largest one seen thus far
                 DerivationTree::External(External::FromDependencyOf(
                     pkg_1,
                     ver_1,
@@ -226,27 +221,33 @@ impl NoSolutionError {
                         if let Some((Bound::Included(version), _)) =
                             ver_1.iter().collect_vec().first()
                         {
-                            vec![version.clone()]
-                        } else {
-                            Vec::new()
+                            *largest_version = match largest_version {
+                                Some(ref v) if version > v => Some(version.clone()),
+                                None => Some(version.clone()),
+                                _ => largest_version.clone(),
+                            };
                         }
                     }
                     (_, PubGrubPackageInner::Python(_)) => {
                         if let Some((Bound::Included(version), _)) =
                             ver_2.iter().collect_vec().first()
                         {
-                            vec![version.clone()]
-                        } else {
-                            Vec::new()
+                            *largest_version = match largest_version {
+                                Some(ref v) if version > v => Some(version.clone()),
+                                None => Some(version.clone()),
+                                _ => largest_version.clone(),
+                            };
                         }
                     }
-                    (_, _) => Vec::new(),
+                    (_, _) => {}
                 },
-                DerivationTree::External(_) => Vec::new(),
+                DerivationTree::External(_) => {}
             }
         }
 
-        find(derivation_tree)
+        let mut largest_version: Option<Version> = None;
+        find(&self.error, &mut largest_version);
+        largest_version
     }
 }
 

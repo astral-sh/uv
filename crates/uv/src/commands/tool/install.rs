@@ -389,11 +389,17 @@ pub(crate) async fn install(
                 ProjectError::Operation(pip::operations::Error::Resolve(
                     uv_resolver::ResolveError::NoSolution(ref no_solution_err),
                 )) => {
-                    let (None, Some(version)) =
-                        (python_request, no_solution_err.required_python_version())
-                    else {
+                    let (None, Some(version)) = (
+                        python_request,
+                        no_solution_err.find_largest_required_python_version(),
+                    ) else {
                         return Err(err.into());
                     };
+
+                    let _ = writeln!(
+                        printer.stderr(),
+                        "Couldn't find acceptable Python version for {package}, downloading Python {version} and re-attempting install."
+                    )?;
 
                     let interpreter = PythonInstallation::find_or_download(
                         Some(&PythonRequest::parse(version.to_string().as_str())),
