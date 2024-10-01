@@ -210,6 +210,9 @@ pub fn files_for_publishing(
             let Some(filename) = dist.file_name().and_then(|filename| filename.to_str()) else {
                 continue;
             };
+            if filename == ".gitignore" {
+                continue;
+            }
             let filename = DistFilename::try_from_normalized_filename(filename)
                 .ok_or_else(|| PublishError::InvalidFilename(dist.clone()))?;
             files.push((dist, filename));
