@@ -1,19 +1,19 @@
 use anyhow::{bail, Result};
 use tracing::debug;
 
-use distribution_types::{
-    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Error, Hashed, IndexLocations, InstalledDist,
-    Name, Resolution, ResolvedDist, SourceDist,
-};
-use platform_tags::Tags;
-use pypi_types::Requirement;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_configuration::{BuildOptions, ConfigSettings, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
+use uv_distribution_types::{
+    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Error, Hashed, IndexLocations, InstalledDist,
+    Name, Resolution, ResolvedDist, SourceDist,
+};
 use uv_fs::Simplified;
+use uv_platform_tags::Tags;
+use uv_pypi_types::Requirement;
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
 

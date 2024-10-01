@@ -5,20 +5,22 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification};
-use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::MarkerTreeContents;
-use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
+use uv_distribution_types::{
+    Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
+};
 use uv_fs::Simplified;
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
+use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::MarkerTreeContents;
+use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
@@ -142,7 +144,7 @@ pub(crate) enum ProjectError {
     HashStrategy(#[from] uv_types::HashStrategyError),
 
     #[error(transparent)]
-    Tags(#[from] platform_tags::TagsError),
+    Tags(#[from] uv_platform_tags::TagsError),
 
     #[error(transparent)]
     FlatIndex(#[from] uv_client::FlatIndexError),

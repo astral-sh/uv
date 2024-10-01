@@ -8,7 +8,7 @@ description = "Common uv pubgrub types."
 workspace = true
 
 [dependencies]
-pep440_rs = { workspace = true }
+uv-pep440 = { workspace = true }
 
 itertools = { workspace = true }
 thiserror = { workspace = true }

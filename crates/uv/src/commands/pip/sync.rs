@@ -4,9 +4,7 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{DependencyMetadata, IndexLocations, Resolution};
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::PackageName;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -16,8 +14,10 @@ use uv_configuration::{
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
+use uv_distribution_types::{DependencyMetadata, IndexLocations, Resolution};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
+use uv_pep508::PackageName;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
 };

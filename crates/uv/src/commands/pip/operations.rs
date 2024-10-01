@@ -8,16 +8,7 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use tracing::debug;
 
-use distribution_types::{
-    CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification,
-    ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
-};
-use distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
-};
 use install_wheel_rs::linker::LinkMode;
-use platform_tags::Tags;
-use pypi_types::ResolverMarkerEnvironment;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
@@ -26,9 +17,18 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
+use uv_distribution_types::{
+    CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification,
+    ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
+};
+use uv_distribution_types::{
+    DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
+};
 use uv_fs::Simplified;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{GroupName, PackageName};
+use uv_platform_tags::Tags;
+use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_python::PythonEnvironment;
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,

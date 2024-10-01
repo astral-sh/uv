@@ -1,5 +1,5 @@
-use distribution_types::{CachedDist, DistributionId};
-use once_map::OnceMap;
+use uv_distribution_types::{CachedDist, DistributionId};
+use uv_once_map::OnceMap;
 
 #[derive(Default)]
 pub struct InFlight {

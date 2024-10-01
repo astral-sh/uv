@@ -4,7 +4,7 @@ use std::task::{Context, Poll};
 use sha2::Digest;
 use tokio::io::{AsyncReadExt, ReadBuf};
 
-use pypi_types::{HashAlgorithm, HashDigest};
+use uv_pypi_types::{HashAlgorithm, HashDigest};
 
 pub struct Sha256Reader<'a, R> {
     reader: R,

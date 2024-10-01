@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use pep508_rs::PackageName;
+use uv_pep508::PackageName;
 
 use crate::{PackageNameSpecifier, PackageNameSpecifiers};
 

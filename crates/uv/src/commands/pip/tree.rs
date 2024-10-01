@@ -6,13 +6,13 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::debug;
 
-use distribution_types::{Diagnostic, Name};
-use pypi_types::{RequirementSource, ResolverMarkerEnvironment};
 use uv_cache::Cache;
 use uv_distribution::Metadata;
+use uv_distribution_types::{Diagnostic, Name};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
+use uv_pypi_types::{RequirementSource, ResolverMarkerEnvironment};
 use uv_python::EnvironmentPreference;
 use uv_python::PythonEnvironment;
 use uv_python::PythonRequest;

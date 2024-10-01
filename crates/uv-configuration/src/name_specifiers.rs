@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use pep508_rs::PackageName;
+use uv_pep508::PackageName;
 
 /// A specifier used for (e.g.) pip's `--no-binary` flag.
 ///

@@ -9,9 +9,7 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use distribution_types::{DependencyMetadata, IndexLocations};
 use install_wheel_rs::linker::LinkMode;
-use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -20,7 +18,9 @@ use uv_configuration::{
     NoBinary, NoBuild, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution_types::{DependencyMetadata, IndexLocations};
 use uv_fs::Simplified;
+use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionRequest,
@@ -114,7 +114,7 @@ enum VenvError {
 
     #[error("Failed to extract interpreter tags")]
     #[diagnostic(code(uv::venv::tags))]
-    Tags(#[source] platform_tags::TagsError),
+    Tags(#[source] uv_platform_tags::TagsError),
 
     #[error("Failed to resolve `--find-links` entry")]
     #[diagnostic(code(uv::venv::flat_index))]
@@ -347,13 +347,13 @@ async fn venv_impl(
         let requirements = if interpreter.python_tuple() < (3, 12) {
             // Only include `setuptools` and `wheel` on Python <3.12
             vec![
-                Requirement::from(pep508_rs::Requirement::from_str("pip").unwrap()),
-                Requirement::from(pep508_rs::Requirement::from_str("setuptools").unwrap()),
-                Requirement::from(pep508_rs::Requirement::from_str("wheel").unwrap()),
+                Requirement::from(uv_pep508::Requirement::from_str("pip").unwrap()),
+                Requirement::from(uv_pep508::Requirement::from_str("setuptools").unwrap()),
+                Requirement::from(uv_pep508::Requirement::from_str("wheel").unwrap()),
             ]
         } else {
             vec![Requirement::from(
-                pep508_rs::Requirement::from_str("pip").unwrap(),
+                uv_pep508::Requirement::from_str("pip").unwrap(),
             )]
         };
 

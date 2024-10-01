@@ -7,16 +7,16 @@ use anyhow::{anyhow, Result};
 use clap::builder::styling::{AnsiColor, Effects, Style};
 use clap::builder::Styles;
 use clap::{Args, Parser, Subcommand};
-use distribution_types::{FlatIndexLocation, IndexUrl};
-use pep508_rs::Requirement;
-use pypi_types::VerbatimParsedUrl;
 use url::Url;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
     TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
+use uv_distribution_types::{FlatIndexLocation, IndexUrl};
 use uv_normalize::{ExtraName, PackageName};
+use uv_pep508::Requirement;
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 

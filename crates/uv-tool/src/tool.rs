@@ -6,8 +6,8 @@ use toml_edit::Table;
 use toml_edit::Value;
 use toml_edit::{Array, Item};
 
-use pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_fs::PortablePath;
+use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_settings::ToolOptions;
 
 /// A tool entry.
@@ -41,7 +41,7 @@ enum RequirementWire {
     Requirement(Requirement),
     /// A PEP 508-compatible requirement. We no longer write these, but there might be receipts out
     /// there that still use them.
-    Deprecated(pep508_rs::Requirement<VerbatimParsedUrl>),
+    Deprecated(uv_pep508::Requirement<VerbatimParsedUrl>),
 }
 
 impl From<Tool> for ToolWire {

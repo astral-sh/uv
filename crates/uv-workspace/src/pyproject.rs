@@ -16,13 +16,13 @@ use std::{collections::BTreeMap, mem};
 use thiserror::Error;
 use url::Url;
 
-use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::MarkerTree;
-use pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 use uv_fs::{relative_to, PortablePathBuf};
 use uv_git::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, PackageName};
+use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::MarkerTree;
+use uv_pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -201,7 +201,7 @@ pub struct ToolUv {
             dev-dependencies = ["ruff==0.5.0"]
         "#
     )]
-    pub dev_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
+    pub dev_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     /// A list of supported environments against which to resolve dependencies.
     ///
     /// By default, uv will resolve for all possible environments during a `uv lock` operation.
@@ -260,7 +260,7 @@ pub struct ToolUv {
             override-dependencies = ["werkzeug==2.3.0"]
         "#
     )]
-    pub override_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
+    pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     /// Constraints to apply when resolving the project's dependencies.
     ///
     /// Constraints are used to restrict the versions of dependencies that are selected during
@@ -290,7 +290,7 @@ pub struct ToolUv {
             constraint-dependencies = ["grpcio<1.65"]
         "#
     )]
-    pub constraint_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
+    pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -540,8 +540,8 @@ pub enum Source {
         tag: Option<String>,
         branch: Option<String>,
         #[serde(
-            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
-            serialize_with = "pep508_rs::marker::ser::serialize",
+            skip_serializing_if = "uv_pep508::marker::ser::is_empty",
+            serialize_with = "uv_pep508::marker::ser::serialize",
             default
         )]
         marker: MarkerTree,
@@ -559,8 +559,8 @@ pub enum Source {
         /// not in the archive root.
         subdirectory: Option<PortablePathBuf>,
         #[serde(
-            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
-            serialize_with = "pep508_rs::marker::ser::serialize",
+            skip_serializing_if = "uv_pep508::marker::ser::is_empty",
+            serialize_with = "uv_pep508::marker::ser::serialize",
             default
         )]
         marker: MarkerTree,
@@ -573,8 +573,8 @@ pub enum Source {
         /// `false` by default.
         editable: Option<bool>,
         #[serde(
-            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
-            serialize_with = "pep508_rs::marker::ser::serialize",
+            skip_serializing_if = "uv_pep508::marker::ser::is_empty",
+            serialize_with = "uv_pep508::marker::ser::serialize",
             default
         )]
         marker: MarkerTree,
@@ -584,8 +584,8 @@ pub enum Source {
         // TODO(konstin): The string is more-or-less a placeholder
         index: String,
         #[serde(
-            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
-            serialize_with = "pep508_rs::marker::ser::serialize",
+            skip_serializing_if = "uv_pep508::marker::ser::is_empty",
+            serialize_with = "uv_pep508::marker::ser::serialize",
             default
         )]
         marker: MarkerTree,
@@ -596,8 +596,8 @@ pub enum Source {
         /// included as a workspace package.
         workspace: bool,
         #[serde(
-            skip_serializing_if = "pep508_rs::marker::ser::is_empty",
-            serialize_with = "pep508_rs::marker::ser::serialize",
+            skip_serializing_if = "uv_pep508::marker::ser::is_empty",
+            serialize_with = "uv_pep508::marker::ser::serialize",
             default
         )]
         marker: MarkerTree,
@@ -625,8 +625,8 @@ impl<'de> Deserialize<'de> for Source {
             index: Option<String>,
             workspace: Option<bool>,
             #[serde(
-                skip_serializing_if = "pep508_rs::marker::ser::is_empty",
-                serialize_with = "pep508_rs::marker::ser::serialize",
+                skip_serializing_if = "uv_pep508::marker::ser::is_empty",
+                serialize_with = "uv_pep508::marker::ser::serialize",
                 default
             )]
             marker: MarkerTree,

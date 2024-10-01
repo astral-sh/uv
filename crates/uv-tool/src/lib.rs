@@ -2,8 +2,8 @@ use core::fmt;
 
 use fs_err as fs;
 
-use pep440_rs::Version;
-use pep508_rs::{InvalidNameError, PackageName};
+use uv_pep440::Version;
+use uv_pep508::{InvalidNameError, PackageName};
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};

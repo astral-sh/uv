@@ -1,0 +1,105 @@
+---
+source: crates/uv-requirements-txt/src/lib.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [
+        RequirementEntry {
+            requirement: Named(
+                Requirement {
+                    name: PackageName(
+                        "numpy",
+                    ),
+                    extras: [],
+                    version_or_url: None,
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/whitespace.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Named(
+                Requirement {
+                    name: PackageName(
+                        "pandas",
+                    ),
+                    extras: [
+                        ExtraName(
+                            "tabulate",
+                        ),
+                    ],
+                    version_or_url: Some(
+                        Url(
+                            VerbatimParsedUrl {
+                                parsed_url: Git(
+                                    ParsedGitUrl {
+                                        url: GitUrl {
+                                            repository: Url {
+                                                scheme: "https",
+                                                cannot_be_a_base: false,
+                                                username: "",
+                                                password: None,
+                                                host: Some(
+                                                    Domain(
+                                                        "github.com",
+                                                    ),
+                                                ),
+                                                port: None,
+                                                path: "/pandas-dev/pandas.git",
+                                                query: None,
+                                                fragment: None,
+                                            },
+                                            reference: DefaultBranch,
+                                            precise: None,
+                                        },
+                                        subdirectory: None,
+                                    },
+                                ),
+                                verbatim: VerbatimUrl {
+                                    url: Url {
+                                        scheme: "git+https",
+                                        cannot_be_a_base: false,
+                                        username: "",
+                                        password: None,
+                                        host: Some(
+                                            Domain(
+                                                "github.com",
+                                            ),
+                                        ),
+                                        port: None,
+                                        path: "/pandas-dev/pandas.git",
+                                        query: None,
+                                        fragment: None,
+                                    },
+                                    given: Some(
+                                        "git+https://github.com/pandas-dev/pandas.git",
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/whitespace.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+    ],
+    constraints: [],
+    editables: [],
+    index_url: None,
+    extra_index_urls: [],
+    find_links: [],
+    no_index: false,
+    no_binary: None,
+    only_binary: None,
+}

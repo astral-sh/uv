@@ -4,10 +4,7 @@ use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
 
-use distribution_types::{DependencyMetadata, IndexLocations};
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::{ExtraName, RequirementOrigin};
-use pypi_types::{Requirement, SupportedEnvironments};
 use url::Url;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::{
@@ -28,7 +25,10 @@ use uv_configuration::{
     NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost,
     TrustedPublishing, Upgrade, VersionControlSystem,
 };
+use uv_distribution_types::{DependencyMetadata, IndexLocations};
 use uv_normalize::PackageName;
+use uv_pep508::{ExtraName, RequirementOrigin};
+use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_settings::{

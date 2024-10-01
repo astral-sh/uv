@@ -2,11 +2,11 @@ use std::collections::hash_map::Entry;
 
 use rustc_hash::FxHashMap;
 
-use distribution_types::{CachedRegistryDist, Hashed, IndexLocations, IndexUrl};
-use platform_tags::Tags;
 use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_distribution_types::{CachedRegistryDist, Hashed, IndexLocations, IndexUrl};
 use uv_fs::{directories, files, symlinks};
 use uv_normalize::PackageName;
+use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
 use crate::index::cached_wheel::CachedWheel;

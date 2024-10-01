@@ -10,11 +10,11 @@ use hyper_util::rt::TokioIo;
 use insta::{assert_json_snapshot, assert_snapshot, with_settings};
 use tokio::net::TcpListener;
 
-use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
-use platform_tags::{Arch, Os, Platform};
 use uv_cache::Cache;
 use uv_client::LineHaul;
 use uv_client::RegistryClientBuilder;
+use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
+use uv_platform_tags::{Arch, Os, Platform};
 use uv_version::version;
 
 #[tokio::test]

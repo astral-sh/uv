@@ -3,9 +3,9 @@ use std::collections::BTreeSet;
 
 use either::Either;
 
-use pypi_types::Requirement;
 use uv_configuration::{Constraints, Overrides};
 use uv_normalize::{GroupName, PackageName};
+use uv_pypi_types::Requirement;
 use uv_types::RequestedRequirements;
 
 use crate::preferences::Preferences;

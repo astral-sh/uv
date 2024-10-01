@@ -1,0 +1,38 @@
+[package]
+name = "uv-pypi-types"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-distribution-filename = { workspace = true }
+uv-fs = { workspace = true, features = ["serde"] }
+uv-git = { workspace = true }
+uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+
+indexmap = { workspace = true, features = ["serde"] }
+itertools = { workspace = true }
+jiff = { workspace = true, features = ["serde"] }
+mailparse = { workspace = true }
+regex = { workspace = true }
+rkyv = { workspace = true }
+serde = { workspace = true }
+serde-untagged = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }

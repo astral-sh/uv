@@ -6,8 +6,8 @@ use rustc_hash::FxHashMap;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
-use distribution_types::{CompatibleDist, DistributionMetadata, IndexCapabilities};
-use pep440_rs::Version;
+use uv_distribution_types::{CompatibleDist, DistributionMetadata, IndexCapabilities};
+use uv_pep440::Version;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};

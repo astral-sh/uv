@@ -1,7 +1,5 @@
-use distribution_filename::{ExtensionError, SourceDistExtension};
 use futures::TryStreamExt;
 use owo_colors::OwoColorize;
-use pypi_types::{HashAlgorithm, HashDigest};
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -15,8 +13,10 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 use uv_client::WrappedReqwestError;
+use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, Simplified};
+use uv_pypi_types::{HashAlgorithm, HashDigest};
 
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,

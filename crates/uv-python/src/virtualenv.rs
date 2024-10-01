@@ -4,8 +4,8 @@ use std::{
 };
 
 use fs_err as fs;
-use pypi_types::Scheme;
 use thiserror::Error;
+use uv_pypi_types::Scheme;
 
 /// The layout of a virtual environment.
 #[derive(Debug)]

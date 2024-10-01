@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
-use distribution_filename::{SourceDistFilename, WheelFilename};
-use distribution_types::RemoteSource;
-use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifierBuildError};
-use pep508_rs::PackageName;
-use pypi_types::RequirementSource;
+use uv_distribution_filename::{SourceDistFilename, WheelFilename};
+use uv_distribution_types::RemoteSource;
+use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifierBuildError};
+use uv_pep508::PackageName;
+use uv_pypi_types::RequirementSource;
 
 use crate::resolver::ForkMap;
 use crate::{DependencyMode, Manifest, ResolverMarkers};
@@ -174,7 +174,7 @@ pub(crate) fn from_source(source: &RequirementSource) -> Option<Version> {
                     None
                 }
             })
-            .filter(pep440_rs::Version::is_local),
+            .filter(uv_pep440::Version::is_local),
         RequirementSource::Git { .. } => None,
         RequirementSource::Path {
             install_path: path, ..
@@ -192,7 +192,7 @@ pub(crate) fn from_source(source: &RequirementSource) -> Option<Version> {
                     None
                 }
             })
-            .filter(pep440_rs::Version::is_local),
+            .filter(uv_pep440::Version::is_local),
         RequirementSource::Directory { .. } => None,
     }
 }
@@ -204,10 +204,10 @@ mod tests {
     use anyhow::Result;
     use url::Url;
 
-    use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifiers};
-    use pep508_rs::VerbatimUrl;
-    use pypi_types::ParsedUrl;
-    use pypi_types::RequirementSource;
+    use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
+    use uv_pep508::VerbatimUrl;
+    use uv_pypi_types::ParsedUrl;
+    use uv_pypi_types::RequirementSource;
 
     use super::{from_source, Locals};
 

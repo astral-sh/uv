@@ -4,13 +4,13 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context, Result};
 use owo_colors::OwoColorize;
 
-use pep440_rs::Version;
-use pep508_rs::PackageName;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{VersionControlError, VersionControlSystem};
 use uv_fs::{Simplified, CWD};
+use uv_pep440::Version;
+use uv_pep508::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionRequest,

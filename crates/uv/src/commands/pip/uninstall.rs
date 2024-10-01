@@ -5,14 +5,14 @@ use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
-use pep508_rs::UnnamedRequirement;
-use pypi_types::Requirement;
-use pypi_types::VerbatimParsedUrl;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{KeyringProviderType, TrustedHost};
+use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use uv_fs::Simplified;
+use uv_pep508::UnnamedRequirement;
+use uv_pypi_types::Requirement;
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::EnvironmentPreference;
 use uv_python::PythonRequest;
 use uv_python::{Prefix, PythonEnvironment, Target};

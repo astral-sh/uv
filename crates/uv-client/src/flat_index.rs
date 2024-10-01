@@ -5,13 +5,13 @@ use reqwest::Response;
 use tracing::{debug, info_span, warn, Instrument};
 use url::Url;
 
-use distribution_filename::DistFilename;
-use distribution_types::{File, FileLocation, FlatIndexLocation, IndexUrl, UrlString};
-use uv_cache::{Cache, CacheBucket};
-
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
 use crate::{Connectivity, Error, ErrorKind, OwnedArchive, RegistryClient};
+use uv_cache::{Cache, CacheBucket};
+use uv_cache_key::cache_digest;
+use uv_distribution_filename::DistFilename;
+use uv_distribution_types::{File, FileLocation, FlatIndexLocation, IndexUrl, UrlString};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
@@ -30,7 +30,7 @@ pub enum FindLinksDirectoryError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    VerbatimUrl(#[from] pep508_rs::VerbatimUrlError),
+    VerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
 }
 
 #[derive(Debug, Default, Clone)]
@@ -141,7 +141,7 @@ impl<'a> FlatIndexClient<'a> {
         let cache_entry = self.cache.entry(
             CacheBucket::FlatIndex,
             "html",
-            format!("{}.msgpack", cache_key::cache_digest(&url.to_string())),
+            format!("{}.msgpack", cache_digest(&url.to_string())),
         );
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(

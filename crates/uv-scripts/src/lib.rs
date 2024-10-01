@@ -8,9 +8,9 @@ use memchr::memmem::Finder;
 use serde::Deserialize;
 use thiserror::Error;
 
-use pep440_rs::VersionSpecifiers;
-use pep508_rs::PackageName;
-use pypi_types::VerbatimParsedUrl;
+use uv_pep440::VersionSpecifiers;
+use uv_pep508::PackageName;
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_settings::{GlobalOptions, ResolverInstallerOptions};
 use uv_workspace::pyproject::Sources;
 
@@ -159,7 +159,7 @@ impl Pep723Script {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
-    pub dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
+    pub dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub requires_python: Option<VersionSpecifiers>,
     pub tool: Option<Tool>,
     /// The raw unserialized document.

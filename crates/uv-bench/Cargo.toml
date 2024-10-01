@@ -1,0 +1,55 @@
+[package]
+name = "uv-bench"
+version = "0.0.0"
+description = "uv Micro-benchmarks"
+publish = false
+authors = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[lib]
+bench = false
+
+[[bench]]
+name = "distribution-filename"
+path = "benches/distribution_filename.rs"
+harness = false
+
+[[bench]]
+name = "uv"
+path = "benches/uv.rs"
+harness = false
+
+[dependencies]
+uv-cache = { workspace = true }
+uv-client = { workspace = true }
+uv-configuration = { workspace = true }
+uv-dispatch = { workspace = true }
+uv-distribution = { workspace = true }
+uv-distribution-filename = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-git = { workspace = true }
+uv-install-wheel = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-platform-tags = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-python = { workspace = true }
+uv-resolver = { workspace = true }
+uv-types = { workspace = true }
+
+anyhow = { workspace = true }
+codspeed-criterion-compat = { version = "2.7.2", default-features = false, optional = true }
+criterion = { version = "0.5.1", default-features = false, features = ["async_tokio"] }
+jiff = { workspace = true }
+tokio = { workspace = true }
+
+[features]
+codspeed = ["codspeed-criterion-compat"]

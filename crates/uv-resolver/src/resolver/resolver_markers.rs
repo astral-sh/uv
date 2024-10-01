@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 
-use pep508_rs::{MarkerEnvironment, MarkerTree};
-use pypi_types::ResolverMarkerEnvironment;
+use uv_pep508::{MarkerEnvironment, MarkerTree};
+use uv_pypi_types::ResolverMarkerEnvironment;
 
 #[derive(Debug, Clone)]
 /// Whether we're solving for a specific environment, universally or for a specific fork.

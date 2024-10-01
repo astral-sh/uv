@@ -3,12 +3,10 @@ mod trusted_publishing;
 use crate::trusted_publishing::TrustedPublishingError;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use fs_err::File;
 use futures::TryStreamExt;
 use glob::{glob, GlobError, PatternError};
 use itertools::Itertools;
-use pypi_types::{Metadata23, MetadataError};
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
@@ -28,8 +26,10 @@ use tracing::{debug, enabled, trace, warn, Level};
 use url::Url;
 use uv_client::UvRetryableStrategy;
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
+use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
+use uv_pypi_types::{Metadata23, MetadataError};
 use uv_warnings::warn_user_once;
 
 pub use trusted_publishing::TrustedPublishingToken;
@@ -620,13 +620,13 @@ async fn handle_response(registry: &Url, response: Response) -> Result<bool, Pub
 #[cfg(test)]
 mod tests {
     use crate::{build_request, form_metadata, Reporter};
-    use distribution_filename::DistFilename;
     use insta::{assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
     use std::path::PathBuf;
     use std::sync::Arc;
     use url::Url;
     use uv_client::BaseClientBuilder;
+    use uv_distribution_filename::DistFilename;
 
     struct DummyReporter;
 
