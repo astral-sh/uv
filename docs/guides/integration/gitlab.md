@@ -3,7 +3,7 @@
 ## Using the uv image
 
 Astral provides [Docker images](docker.md#available-images) with uv preinstalled.
-Select a varaint that is suitable for your workflow.
+Select a variant that is suitable for your workflow.
 
 ```yaml title="gitlab-ci.yml
 variables:
