@@ -343,16 +343,8 @@ impl Workspace {
 
     /// Returns the set of overrides for the workspace.
     pub fn overrides(&self) -> Vec<Requirement> {
-        let Some(workspace_package) = self
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.install_path())
-        else {
-            return vec![];
-        };
-
-        let Some(overrides) = workspace_package
-            .pyproject_toml()
+        let Some(overrides) = self
+            .pyproject_toml
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
@@ -375,13 +367,7 @@ impl Workspace {
 
     /// Returns the set of supported environments for the workspace.
     pub fn environments(&self) -> Option<&SupportedEnvironments> {
-        let workspace_package = self
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.install_path())?;
-
-        workspace_package
-            .pyproject_toml()
+        self.pyproject_toml
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
@@ -390,16 +376,8 @@ impl Workspace {
 
     /// Returns the set of constraints for the workspace.
     pub fn constraints(&self) -> Vec<Requirement> {
-        let Some(workspace_package) = self
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.install_path())
-        else {
-            return vec![];
-        };
-
-        let Some(constraints) = workspace_package
-            .pyproject_toml()
+        let Some(constraints) = self
+            .pyproject_toml
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
