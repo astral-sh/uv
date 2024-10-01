@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
-use std::ops::{Bound, Deref};
+use std::ops::Bound;
 use std::sync::Arc;
 
 use indexmap::IndexSet;
@@ -216,7 +216,7 @@ impl NoSolutionError {
                     ver_1,
                     pkg_2,
                     ver_2,
-                )) => match (pkg_1.deref(), pkg_2.deref()) {
+                )) => match (&**pkg_1, &**pkg_2) {
                     (PubGrubPackageInner::Python(_), _) => {
                         if let Some((Bound::Included(version), _)) =
                             ver_1.iter().collect_vec().first()

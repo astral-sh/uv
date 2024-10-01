@@ -396,8 +396,8 @@ pub(crate) async fn install(
                         return Err(err.into());
                     };
 
-                    let _ = writeln!(
-                        printer.stderr(),
+                    writeln!(
+                         printer.stderr(),
                         "Couldn't find acceptable Python version for {package}, downloading Python {version} and re-attempting install."
                     )?;
 
