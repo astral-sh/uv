@@ -549,6 +549,7 @@ async fn do_lock(
                     .collect(),
                 dev,
                 source_trees,
+                // The root is always null in workspaces, it "depends on" the projects
                 None,
                 Some(workspace.packages().keys().cloned().collect()),
                 &extras,
