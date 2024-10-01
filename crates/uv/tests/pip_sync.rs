@@ -5499,7 +5499,7 @@ fn incompatible_build_constraint() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: requests==1.2.0
-      Caused by: Failed to install requirements from `setup.py` build (resolve)
+      Caused by: Failed to resolve requirements from `setup.py` build
       Caused by: No solution found when resolving: `setuptools>=40.8.0`
       Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###

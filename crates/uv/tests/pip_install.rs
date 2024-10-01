@@ -227,11 +227,9 @@ dependencies = ["flask==1.0.x"]
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("./path_dep")?;
 
-    let filters = [("exit status", "exit code")]
-        .into_iter()
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-
     uv_snapshot!(filters, context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @r###"
@@ -241,7 +239,7 @@ dependencies = ["flask==1.0.x"]
 
     ----- stderr -----
     error: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
-      Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit code: 1
+      Caused by: Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
     --- stdout:
     configuration error: `project.dependencies[0]` must be pep508
     DESCRIPTION:
@@ -3820,7 +3818,7 @@ fn no_build_isolation() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
     --- stdout:
 
     --- stderr:
@@ -3890,7 +3888,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
     --- stdout:
 
     --- stderr:
@@ -6759,7 +6757,7 @@ fn incompatible_build_constraint() -> Result<()> {
 
     ----- stderr -----
       × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to install requirements from `setup.py` build (resolve)
+      ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###
@@ -6835,7 +6833,7 @@ fn install_build_isolation_package() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
     --- stdout:
 
     --- stderr:
@@ -7096,7 +7094,7 @@ fn sklearn() {
 
     ----- stderr -----
       × Failed to download and build `sklearn==0.0.post12`
-      ╰─▶ Build backend failed to determine extra requires with `build_wheel()` with exit status: 1
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
           --- stdout:
 
           --- stderr:
