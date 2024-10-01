@@ -675,6 +675,7 @@ impl<'de> Deserialize<'de> for Source {
                 ));
             }
 
+            // At most one of `rev`, `tag`, or `branch` may be set.
             match (rev.as_ref(), tag.as_ref(), branch.as_ref()) {
                 (None, None, None) => {}
                 (Some(_), None, None) => {}
@@ -685,6 +686,13 @@ impl<'de> Deserialize<'de> for Source {
                         "expected at most one of `rev`, `tag`, or `branch`",
                     ))
                 }
+            };
+
+            // If the user prefixed the URL with `git+`, strip it.
+            let git = if let Some(git) = git.as_str().strip_prefix("git+") {
+                Url::parse(git).map_err(serde::de::Error::custom)?
+            } else {
+                git
             };
 
             return Ok(Self::Git {
