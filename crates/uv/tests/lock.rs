@@ -2686,6 +2686,98 @@ fn lock_preference() -> Result<()> {
     Ok(())
 }
 
+/// If the user includes `git+` in a `tool.uv.sources` entry, we shouldn't fail.
+#[test]
+#[cfg(feature = "git")]
+fn lock_git_plus_prefix() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Lock against `main`.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-public-pypackage"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        uv-public-pypackage = { git = "git+https://github.com/astral-test/uv-public-pypackage" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage" }]
+
+        [[package]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile, excluding development dependencies.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    "###);
+
+    Ok(())
+}
+
 /// Respect locked versions with `uv lock`, unless `--upgrade` is passed.
 #[test]
 #[cfg(feature = "git")]
