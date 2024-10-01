@@ -1,6 +1,6 @@
 [package]
 name = "pep440_rs"
-version = "0.6.0"
+version = "0.7.0"
 description = "A library for python version numbers and specifiers, implementing PEP 440"
 license = "Apache-2.0 OR BSD-2-Clause"
 include = ["/src", "Changelog.md", "License-Apache", "License-BSD", "Readme.md", "pyproject.toml"]
@@ -19,7 +19,6 @@ crate-type = ["rlib", "cdylib"]
 workspace = true
 
 [dependencies]
-pyo3 = { workspace = true, optional = true, features = ["extension-module", "abi3-py37"] }
 serde = { workspace = true, features = ["derive"] }
 rkyv = { workspace = true }
 tracing = { workspace = true, optional = true }

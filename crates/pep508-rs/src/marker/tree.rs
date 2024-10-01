@@ -7,8 +7,6 @@ use std::str::FromStr;
 use itertools::Itertools;
 use pep440_rs::{Version, VersionParseError, VersionSpecifier};
 use pubgrub::Range;
-#[cfg(feature = "pyo3")]
-use pyo3::{basic::CompareOp, pyclass, pymethods};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use uv_normalize::ExtraName;
 
@@ -23,7 +21,6 @@ use super::simplify;
 
 /// Ways in which marker evaluation can fail
 #[derive(Debug, Eq, Hash, Ord, PartialOrd, PartialEq, Clone, Copy)]
-#[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
 pub enum MarkerWarningKind {
     /// Using an old name from PEP 345 instead of the modern equivalent
     /// <https://peps.python.org/pep-0345/#environment-markers>
@@ -39,20 +36,6 @@ pub enum MarkerWarningKind {
     Pep440Error,
     /// Comparing two strings, such as `"3.9" > "3.10"`
     StringStringComparison,
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl MarkerWarningKind {
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn __hash__(&self) -> u8 {
-        *self as u8
-    }
-
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn __richcmp__(&self, other: Self, op: CompareOp) -> bool {
-        op.matches(self.cmp(&other))
-    }
 }
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
@@ -373,7 +356,6 @@ impl Display for MarkerOperator {
 
 /// Helper type with a [Version] and its original text
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, module = "pep508"))]
 pub struct StringVersion {
     /// Original unchanged string
     pub string: String,
