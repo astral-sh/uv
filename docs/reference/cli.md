@@ -371,7 +371,7 @@ uv run [OPTIONS] <COMMAND>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--script</code></dt><dd><p>Run the given path as a Python script.</p>
+</dd><dt><code>--script</code>, <code>-s</code></dt><dd><p>Run the given path as a Python script.</p>
 
 <p>Using <code>--script</code> will attempt to parse the path as a PEP 723 script, irrespective of its extension.</p>
 
