@@ -6754,14 +6754,14 @@ fn incompatible_build_constraint() -> Result<()> {
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `requests==1.2.0`
-      Caused by: Failed to install requirements from `setup.py` build (resolve)
-      Caused by: No solution found when resolving: setuptools>=40.8.0
-      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to install requirements from `setup.py` build (resolve)
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -7077,6 +7077,46 @@ fn missing_top_level() {
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      ~ suds-community==0.8.5
+    "###
+    );
+}
+
+/// Show a dedicated error when the user attempts to install `sklearn`.
+#[test]
+fn sklearn() {
+    let context = TestContext::new("3.12");
+
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.pip_install().arg("sklearn"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `sklearn==0.0.post12`
+      ╰─▶ Build backend failed to determine extra requires with `build_wheel()` with exit status: 1
+          --- stdout:
+
+          --- stderr:
+          The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
+          rather than 'sklearn' for pip commands. 
+
+          Here is how to fix this error in the main use cases:
+          - use 'pip install scikit-learn' rather than 'pip install sklearn'
+          - replace 'sklearn' by 'scikit-learn' in your pip requirements files
+            (requirements.txt, setup.py, setup.cfg, Pipfile, etc ...)
+          - if the 'sklearn' package is used by one of your dependencies,
+            it would be great if you take some time to track which package uses
+            'sklearn' instead of 'scikit-learn' and report it to their issue tracker
+          - as a last resort, set the environment variable
+            SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True to avoid this error
+
+          More information is available at
+          https://github.com/scikit-learn/sklearn-pypi-package
+          ---
+      help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
     "###
     );
 }

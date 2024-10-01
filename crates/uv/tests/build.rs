@@ -1398,7 +1398,7 @@ fn build_constraints() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to install requirements from `build-system.requires` (resolve)
-      Caused by: No solution found when resolving: setuptools>=42
+      Caused by: No solution found when resolving: `setuptools>=42`
       Caused by: Because you require setuptools>=42 and setuptools==0.1.0, we can conclude that your requirements are unsatisfiable.
     "###);
 
@@ -1586,7 +1586,7 @@ fn sha() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to install requirements from `build-system.requires` (resolve)
-      Caused by: No solution found when resolving: setuptools>=42
+      Caused by: No solution found when resolving: `setuptools>=42`
       Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `setuptools`
     "###);
 

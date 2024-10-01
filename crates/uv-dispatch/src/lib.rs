@@ -184,7 +184,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let graph = resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
-                requirements.iter().map(ToString::to_string).join(", "),
+                requirements
+                    .iter()
+                    .map(|requirement| format!("`{requirement}`"))
+                    .join(", ")
             )
         })?;
         Ok(Resolution::from(graph))

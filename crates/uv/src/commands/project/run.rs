@@ -42,7 +42,7 @@ use crate::commands::project::{
     WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -202,7 +202,7 @@ pub(crate) async fn run(
                         script_dir,
                         script_sources,
                     )
-                    .map_ok(uv_distribution::LoweredRequirement::into_inner)
+                    .map_ok(LoweredRequirement::into_inner)
                 })
                 .collect::<Result<_, _>>()?;
             let spec = RequirementsSpecification::from_requirements(requirements);
@@ -234,9 +234,19 @@ pub(crate) async fn run(
                 Err(ProjectError::Operation(operations::Error::Resolve(
                     uv_resolver::ResolveError::NoSolution(err),
                 ))) => {
-                    let report = miette::Report::msg(format!("{err}"))
-                        .context(err.header().with_context("script"));
-                    eprint!("{report:?}");
+                    diagnostics::no_solution_context(&err, "script");
+                    return Ok(ExitStatus::Failure);
+                }
+                Err(ProjectError::Operation(operations::Error::Resolve(
+                    uv_resolver::ResolveError::FetchAndBuild(dist, err),
+                ))) => {
+                    diagnostics::fetch_and_build(dist, err);
+                    return Ok(ExitStatus::Failure);
+                }
+                Err(ProjectError::Operation(operations::Error::Resolve(
+                    uv_resolver::ResolveError::Build(dist, err),
+                ))) => {
+                    diagnostics::build(dist, err);
                     return Ok(ExitStatus::Failure);
                 }
                 Err(err) => return Err(err.into()),
@@ -504,8 +514,19 @@ pub(crate) async fn run(
                     Err(ProjectError::Operation(operations::Error::Resolve(
                         uv_resolver::ResolveError::NoSolution(err),
                     ))) => {
-                        let report = miette::Report::msg(format!("{err}")).context(err.header());
-                        eprint!("{report:?}");
+                        diagnostics::no_solution(&err);
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(ProjectError::Operation(operations::Error::Resolve(
+                        uv_resolver::ResolveError::FetchAndBuild(dist, err),
+                    ))) => {
+                        diagnostics::fetch_and_build(dist, err);
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(ProjectError::Operation(operations::Error::Resolve(
+                        uv_resolver::ResolveError::Build(dist, err),
+                    ))) => {
+                        diagnostics::build(dist, err);
                         return Ok(ExitStatus::Failure);
                     }
                     Err(err) => return Err(err.into()),
@@ -669,9 +690,19 @@ pub(crate) async fn run(
                     Err(ProjectError::Operation(operations::Error::Resolve(
                         uv_resolver::ResolveError::NoSolution(err),
                     ))) => {
-                        let report = miette::Report::msg(format!("{err}"))
-                            .context(err.header().with_context("`--with`"));
-                        eprint!("{report:?}");
+                        diagnostics::no_solution_context(&err, "`--with`");
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(ProjectError::Operation(operations::Error::Resolve(
+                        uv_resolver::ResolveError::FetchAndBuild(dist, err),
+                    ))) => {
+                        diagnostics::fetch_and_build(dist, err);
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(ProjectError::Operation(operations::Error::Resolve(
+                        uv_resolver::ResolveError::Build(dist, err),
+                    ))) => {
+                        diagnostics::build(dist, err);
                         return Ok(ExitStatus::Failure);
                     }
                     Err(ProjectError::Operation(operations::Error::Named(err))) => {

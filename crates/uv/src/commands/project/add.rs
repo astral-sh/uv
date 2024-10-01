@@ -1,13 +1,10 @@
 use anyhow::{bail, Context, Result};
-use console::Term;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::sync::LazyLock;
 use tracing::debug;
 
 use cache_key::RepositoryUrl;
@@ -46,21 +43,9 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
 use crate::commands::project::{script_python_requirement, ProjectError};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{pip, project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
-
-static CORRECTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
-    [("dotenv", "python-dotenv"), ("sklearn", "scikit-learn")]
-        .iter()
-        .map(|(k, v)| {
-            (
-                PackageName::from_str(k).unwrap(),
-                PackageName::from_str(v).unwrap(),
-            )
-        })
-        .collect()
-});
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -385,23 +370,6 @@ pub(crate) async fn add(
     }?;
     let mut edits = Vec::<DependencyEdit>::with_capacity(requirements.len());
     for mut requirement in requirements {
-        // If the user requested a package that is often confused for another package, prompt them.
-        if let Some(correction) = CORRECTIONS.get(&requirement.name) {
-            let term = Term::stderr();
-            if term.is_term() {
-                let prompt = format!(
-                    "`{}` is often confused for `{}`. Did you mean `{}`?",
-                    requirement.name.cyan(),
-                    correction.cyan(),
-                    format!("uv add {correction}").green()
-                );
-                let confirmation = uv_console::confirm(&prompt, &term, true)?;
-                if confirmation {
-                    requirement.name = correction.clone();
-                }
-            }
-        }
-
         // Add the specified extras.
         requirement.extras.extend(extras.iter().cloned());
         requirement.extras.sort_unstable();
@@ -605,26 +573,39 @@ pub(crate) async fn add(
     .await
     {
         Ok(()) => Ok(ExitStatus::Success),
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            let header = err.header();
-            let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.") });
-            anstream::eprint!("{report:?}");
-
-            // Revert the changes to the `pyproject.toml`, if necessary.
-            if modified {
-                fs_err::write(root.join("pyproject.toml"), &existing)?;
-            }
-
-            Ok(ExitStatus::Failure)
-        }
         Err(err) => {
             // Revert the changes to the `pyproject.toml`, if necessary.
             if modified {
                 fs_err::write(root.join("pyproject.toml"), &existing)?;
             }
-            Err(err.into())
+
+            match err {
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::NoSolution(err),
+                )) => {
+                    diagnostics::no_solution_hint(err, format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()));
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::FetchAndBuild(dist, err),
+                )) => {
+                    diagnostics::fetch_and_build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::Build(dist, err),
+                )) => {
+                    diagnostics::build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                err => {
+                    // Revert the changes to the `pyproject.toml`, if necessary.
+                    if modified {
+                        fs_err::write(root.join("pyproject.toml"), &existing)?;
+                    }
+                    Err(err.into())
+                }
+            }
         }
     }
 }
@@ -944,21 +925,4 @@ struct DependencyEdit<'a> {
     requirement: Requirement,
     source: Option<Source>,
     edit: ArrayEdit,
-}
-
-/// Render a [`uv_resolver::NoSolutionError`] with a help message.
-#[derive(Debug, miette::Diagnostic, thiserror::Error)]
-#[error("{header}")]
-#[diagnostic()]
-struct WithHelp {
-    /// The header to render in the error message.
-    header: uv_resolver::NoSolutionHeader,
-
-    /// The underlying error.
-    #[source]
-    cause: uv_resolver::NoSolutionError,
-
-    /// The help message to display.
-    #[help]
-    help: Option<&'static str>,
 }
