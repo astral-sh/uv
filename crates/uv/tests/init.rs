@@ -282,7 +282,7 @@ fn init_application_package() -> Result<()> {
         dependencies = []
 
         [project.scripts]
-        hello = "foo:hello"
+        foo = "foo:main"
 
         [build-system]
         requires = ["hatchling"]
@@ -297,13 +297,13 @@ fn init_application_package() -> Result<()> {
     }, {
         assert_snapshot!(
             init, @r###"
-        def hello() -> None:
+        def main() -> None:
             print("Hello from foo!")
         "###
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("hello"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1621,7 +1621,7 @@ fn init_virtual_project() -> Result<()> {
         dependencies = []
 
         [project.scripts]
-        hello = "foo:hello"
+        foo = "foo:main"
 
         [build-system]
         requires = ["hatchling"]
@@ -1655,7 +1655,7 @@ fn init_virtual_project() -> Result<()> {
         dependencies = []
 
         [project.scripts]
-        hello = "foo:hello"
+        foo = "foo:main"
 
         [build-system]
         requires = ["hatchling"]
@@ -1750,7 +1750,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
         dependencies = []
 
         [project.scripts]
-        hello = "foo:hello"
+        foo = "foo:main"
 
         [build-system]
         requires = ["hatchling"]

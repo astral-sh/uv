@@ -8,7 +8,7 @@
   semanticCommits: "disabled",
   separateMajorMinor: false,
   prHourlyLimit: 10,
-  enabledManagers: ["github-actions", "pre-commit", "cargo"],
+  enabledManagers: ["github-actions", "pre-commit", "cargo", "regex"],
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",

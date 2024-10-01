@@ -1,6 +1,6 @@
 use crate::metadata::{LoweredRequirement, MetadataError};
 use crate::Metadata;
-use pypi_types::Requirement;
+
 use std::collections::BTreeMap;
 use std::path::Path;
 use uv_configuration::SourceStrategy;
@@ -84,7 +84,7 @@ impl RequiresDist {
                 .cloned();
             let dev_dependencies = match source_strategy {
                 SourceStrategy::Enabled => dev_dependencies
-                    .map(|requirement| {
+                    .flat_map(|requirement| {
                         let requirement_name = requirement.name.clone();
                         LoweredRequirement::from_requirement(
                             requirement,
@@ -93,13 +93,17 @@ impl RequiresDist {
                             sources,
                             project_workspace.workspace(),
                         )
-                        .map(LoweredRequirement::into_inner)
-                        .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
+                        .map(move |requirement| match requirement {
+                            Ok(requirement) => Ok(requirement.into_inner()),
+                            Err(err) => {
+                                Err(MetadataError::LoweringError(requirement_name.clone(), err))
+                            }
+                        })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
                 SourceStrategy::Disabled => dev_dependencies
                     .into_iter()
-                    .map(Requirement::from)
+                    .map(pypi_types::Requirement::from)
                     .collect(),
             };
             if dev_dependencies.is_empty() {
@@ -112,7 +116,7 @@ impl RequiresDist {
         let requires_dist = metadata.requires_dist.into_iter();
         let requires_dist = match source_strategy {
             SourceStrategy::Enabled => requires_dist
-                .map(|requirement| {
+                .flat_map(|requirement| {
                     let requirement_name = requirement.name.clone();
                     LoweredRequirement::from_requirement(
                         requirement,
@@ -121,11 +125,18 @@ impl RequiresDist {
                         sources,
                         project_workspace.workspace(),
                     )
-                    .map(LoweredRequirement::into_inner)
-                    .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
+                    .map(move |requirement| match requirement {
+                        Ok(requirement) => Ok(requirement.into_inner()),
+                        Err(err) => {
+                            Err(MetadataError::LoweringError(requirement_name.clone(), err))
+                        }
+                    })
                 })
-                .collect::<Result<_, _>>()?,
-            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
+                .collect::<Result<Vec<_>, _>>()?,
+            SourceStrategy::Disabled => requires_dist
+                .into_iter()
+                .map(pypi_types::Requirement::from)
+                .collect(),
         };
 
         Ok(Self {
@@ -212,6 +223,29 @@ mod test {
         assert_snapshot!(format_err(input).await, @r###"
         error: Failed to parse entry for: `tqdm`
           Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
+        "###);
+    }
+
+    #[tokio::test]
+    async fn wrong_type() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm",
+            ]
+            [tool.uv.sources]
+            tqdm = true
+        "#};
+
+        assert_snapshot!(format_err(input).await, @r###"
+        error: TOML parse error at line 8, column 8
+          |
+        8 | tqdm = true
+          |        ^^^^
+        invalid type: boolean `true`, expected an array or map
+
         "###);
     }
 

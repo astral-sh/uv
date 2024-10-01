@@ -223,6 +223,46 @@ members = [
 ]
 ```
 
+### Platform-specific sources
+
+You can limit a source to a given platform or Python version by providing
+[PEP 508](https://peps.python.org/pep-0508/#environment-markers)-compatible environment markers for
+the source.
+
+For example, to pull `httpx` from GitHub, but only on macOS, use the following:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = [
+  "httpx",
+]
+
+[tool.uv.sources]
+httpx = { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" }
+```
+
+By specifying the marker on the source, uv will still include `httpx` on all platforms, but will
+download the source from GitHub on macOS, and fall back to PyPI on all other platforms.
+
+### Multiple sources
+
+You can specify multiple sources for a single dependency by providing a list of sources,
+disambiguated by [PEP 508](https://peps.python.org/pep-0508/#environment-markers)-compatible
+environment markers. For example, to pull in different `httpx` commits on macOS vs. Linux:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = [
+  "httpx",
+]
+
+[tool.uv.sources]
+httpx = [
+  { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" },
+  { git = "https://github.com/encode/httpx", tag = "0.24.1", marker = "sys_platform == 'linux'" },
+]
+```
+
 ## Optional dependencies
 
 It is common for projects that are published as libraries to make some features optional to reduce

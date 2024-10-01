@@ -196,13 +196,13 @@ pub(crate) async fn run(
 
             let requirements = dependencies
                 .into_iter()
-                .map(|requirement| {
+                .flat_map(|requirement| {
                     LoweredRequirement::from_non_workspace_requirement(
                         requirement,
                         script_dir,
                         script_sources,
                     )
-                    .map(LoweredRequirement::into_inner)
+                    .map_ok(uv_distribution::LoweredRequirement::into_inner)
                 })
                 .collect::<Result<_, _>>()?;
             let spec = RequirementsSpecification::from_requirements(requirements);
@@ -832,6 +832,9 @@ pub(crate) enum RunCommand {
     Python(Vec<OsString>),
     /// Execute a `python` script.
     PythonScript(PathBuf, Vec<OsString>),
+    /// Search `sys.path` for the named module and execute its contents as the `__main__` module.
+    /// Equivalent to `python -m module`.
+    PythonModule(OsString, Vec<OsString>),
     /// Execute a `pythonw` script (Windows only).
     PythonGuiScript(PathBuf, Vec<OsString>),
     /// Execute a Python package containing a `__main__.py` file.
@@ -856,6 +859,7 @@ impl RunCommand {
             | Self::PythonPackage(..)
             | Self::PythonZipapp(..)
             | Self::Empty => Cow::Borrowed("python"),
+            Self::PythonModule(..) => Cow::Borrowed("python -m"),
             Self::PythonGuiScript(..) => Cow::Borrowed("pythonw"),
             Self::PythonStdin(_) => Cow::Borrowed("python -c"),
             Self::External(executable, _) => executable.to_string_lossy(),
@@ -875,6 +879,13 @@ impl RunCommand {
             | Self::PythonZipapp(target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg(target);
+                process.args(args);
+                process
+            }
+            Self::PythonModule(module, args) => {
+                let mut process = Command::new(interpreter.sys_executable());
+                process.arg("-m");
+                process.arg(module);
                 process.args(args);
                 process
             }
@@ -944,6 +955,14 @@ impl std::fmt::Display for RunCommand {
                 }
                 Ok(())
             }
+            Self::PythonModule(module, args) => {
+                write!(f, "python -m")?;
+                write!(f, " {}", module.to_string_lossy())?;
+                for arg in args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                Ok(())
+            }
             Self::PythonGuiScript(target, args) => {
                 write!(f, "pythonw {}", target.display())?;
                 for arg in args {
@@ -970,17 +989,18 @@ impl std::fmt::Display for RunCommand {
     }
 }
 
-impl TryFrom<&ExternalCommand> for RunCommand {
-    type Error = std::io::Error;
-
-    fn try_from(command: &ExternalCommand) -> Result<Self, Self::Error> {
+impl RunCommand {
+    pub(crate) fn from_args(command: &ExternalCommand, module: bool) -> anyhow::Result<Self> {
         let (target, args) = command.split();
-
         let Some(target) = target else {
             return Ok(Self::Empty);
         };
 
-        let target_path = PathBuf::from(&target);
+        if module {
+            return Ok(Self::PythonModule(target.clone(), args.to_vec()));
+        }
+
+        let target_path = PathBuf::from(target);
         let metadata = target_path.metadata();
         let is_file = metadata.as_ref().map_or(false, std::fs::Metadata::is_file);
         let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);

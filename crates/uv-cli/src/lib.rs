@@ -2469,6 +2469,12 @@ pub struct RunArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
+    /// Run a Python module.
+    ///
+    /// Equivalent to `python -m <module>`.
+    #[arg(short, long)]
+    pub module: bool,
+
     /// Omit non-development dependencies.
     ///
     /// The project itself will also be omitted.
@@ -2495,7 +2501,7 @@ pub struct RunArgs {
     #[arg(long)]
     pub with: Vec<String>,
 
-    /// Run with the given packages installed as editables
+    /// Run with the given packages installed as editables.
     ///
     /// When used in a project, these dependencies will be layered on top of
     /// the project environment in a separate, ephemeral environment. These
@@ -2528,7 +2534,7 @@ pub struct RunArgs {
     ///
     /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
     /// be updated, since the environment will not be synced regardless).
-    #[arg(long, conflicts_with = "frozen")]
+    #[arg(long, env = "UV_NO_SYNC", value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
@@ -2851,7 +2857,7 @@ pub struct AddArgs {
     pub extra: Option<Vec<ExtraName>>,
 
     /// Avoid syncing the virtual environment.
-    #[arg(long, conflicts_with = "frozen")]
+    #[arg(long, env = "UV_NO_SYNC", value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
@@ -2920,7 +2926,7 @@ pub struct RemoveArgs {
     pub optional: Option<ExtraName>,
 
     /// Avoid syncing the virtual environment after re-locking the project.
-    #[arg(long, conflicts_with = "frozen")]
+    #[arg(long, env = "UV_NO_SYNC", value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.

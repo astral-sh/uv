@@ -132,20 +132,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     // Parse the external command, if necessary.
     let run_command = if let Commands::Project(command) = &*cli.command {
         if let ProjectCommand::Run(uv_cli::RunArgs {
-            command, script, ..
+            command, module, ..
         }) = &**command
         {
-            if *script {
-                let (target, args) = command.split();
-                if let Some(target) = target {
-                    let path = PathBuf::from(&target);
-                    Some(RunCommand::PythonScript(path, args.to_vec()))
-                } else {
-                    anyhow::bail!("Script path must be supplied when using `uv run --script`");
-                }
-            } else {
-                Some(RunCommand::try_from(command)?)
-            }
+            Some(RunCommand::from_args(command, *module)?)
         } else {
             None
         }

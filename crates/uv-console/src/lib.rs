@@ -1,11 +1,10 @@
-use anyhow::Result;
 use console::{style, Key, Term};
 
 /// Prompt the user for confirmation in the given [`Term`].
 ///
 /// This is a slimmed-down version of `dialoguer::Confirm`, with the post-confirmation report
 /// enabled.
-pub(crate) fn confirm(message: &str, term: &Term, default: bool) -> Result<bool> {
+pub fn confirm(message: &str, term: &Term, default: bool) -> std::io::Result<bool> {
     // Set the Ctrl-C handler to exit the process.
     let result = ctrlc::set_handler(move || {
         let term = Term::stderr();
@@ -26,7 +25,7 @@ pub(crate) fn confirm(message: &str, term: &Term, default: bool) -> Result<bool>
             // If multiple handlers were set, we assume that the existing handler is our
             // confirmation handler, and continue.
         }
-        Err(e) => return Err(e.into()),
+        Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::Other, err)),
     }
 
     let prompt = format!(

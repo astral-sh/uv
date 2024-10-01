@@ -213,19 +213,16 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
         // Determine the current environment markers.
         let tags = self.interpreter.tags()?;
-        let markers = self.interpreter.resolver_markers();
 
         // Determine the set of installed packages.
         let site_packages = SitePackages::from_environment(venv)?;
-
-        let requirements = resolution.requirements().collect::<Vec<_>>();
 
         let Plan {
             cached,
             remote,
             reinstalls,
             extraneous: _,
-        } = Planner::new(&requirements).build(
+        } = Planner::new(resolution).build(
             site_packages,
             &Reinstall::default(),
             &BuildOptions::default(),
@@ -234,7 +231,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.config_settings,
             self.cache(),
             venv,
-            &markers,
             tags,
         )?;
 
@@ -243,17 +239,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             debug!("No build requirements to install for build");
             return Ok(vec![]);
         }
-
-        // Resolve any registry-based requirements.
-        let remote = remote
-            .iter()
-            .map(|dist| {
-                resolution
-                    .get_remote(&dist.name)
-                    .cloned()
-                    .expect("Resolution should contain all packages")
-            })
-            .collect::<Vec<_>>();
 
         // Download any missing distributions.
         let wheels = if remote.is_empty() {

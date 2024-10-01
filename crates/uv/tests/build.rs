@@ -1041,21 +1041,21 @@ fn workspace() -> Result<()> {
     Copying src/member.egg-info to build/bdist.linux-x86_64/wheel/member-0.1.0-py3.12.egg-info
     running install_scripts
     creating build/bdist.linux-x86_64/wheel/member-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/packages/member/dist/[TMP]/wheel' to it
+    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
     adding '__init__.py'
     adding 'member-0.1.0.dist-info/METADATA'
     adding 'member-0.1.0.dist-info/WHEEL'
     adding 'member-0.1.0.dist-info/top_level.txt'
     adding 'member-0.1.0.dist-info/RECORD'
     removing build/bdist.linux-x86_64/wheel
-    Successfully built packages/member/dist/member-0.1.0.tar.gz and packages/member/dist/member-0.1.0-py3-none-any.whl
+    Successfully built dist/member-0.1.0.tar.gz and dist/member-0.1.0-py3-none-any.whl
     "###);
 
-    member
+    project
         .child("dist")
         .child("member-0.1.0.tar.gz")
         .assert(predicate::path::is_file());
-    member
+    project
         .child("dist")
         .child("member-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
@@ -1071,15 +1071,15 @@ fn workspace() -> Result<()> {
     [PKG] Building source distribution...
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
-    Successfully built packages/member/dist/member-0.1.0.tar.gz and packages/member/dist/member-0.1.0-py3-none-any.whl
+    Successfully built dist/member-0.1.0.tar.gz and dist/member-0.1.0-py3-none-any.whl
     Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
     "###);
 
-    member
+    project
         .child("dist")
         .child("member-0.1.0.tar.gz")
         .assert(predicate::path::is_file());
-    member
+    project
         .child("dist")
         .child("member-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
@@ -1163,14 +1163,14 @@ fn workspace() -> Result<()> {
     Copying src/member.egg-info to build/bdist.linux-x86_64/wheel/member-0.1.0-py3.12.egg-info
     running install_scripts
     creating build/bdist.linux-x86_64/wheel/member-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/packages/member/dist/[TMP]/wheel' to it
+    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
     adding '__init__.py'
     adding 'member-0.1.0.dist-info/METADATA'
     adding 'member-0.1.0.dist-info/WHEEL'
     adding 'member-0.1.0.dist-info/top_level.txt'
     adding 'member-0.1.0.dist-info/RECORD'
     removing build/bdist.linux-x86_64/wheel
-    Successfully built project/packages/member/dist/member-0.1.0.tar.gz and project/packages/member/dist/member-0.1.0-py3-none-any.whl
+    Successfully built project/dist/member-0.1.0.tar.gz and project/dist/member-0.1.0-py3-none-any.whl
     "###);
 
     // If a source is provided, discover the workspace from the source.
@@ -1184,7 +1184,7 @@ fn workspace() -> Result<()> {
     [PKG] Building source distribution...
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
-    Successfully built project/packages/member/dist/member-0.1.0.tar.gz and project/packages/member/dist/member-0.1.0-py3-none-any.whl
+    Successfully built project/dist/member-0.1.0.tar.gz and project/dist/member-0.1.0-py3-none-any.whl
     Successfully built project/dist/project-0.1.0.tar.gz and project/dist/project-0.1.0-py3-none-any.whl
     "###);
 
@@ -1327,8 +1327,8 @@ fn build_all_with_failure() -> Result<()> {
     [PKG] Building source distribution...
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
-    Successfully built packages/member_a/dist/member_a-0.1.0.tar.gz and packages/member_a/dist/member_a-0.1.0-py3-none-any.whl
-    error: Build backend failed to determine extra requires with `build_sdist()` with exit status: 1
+    Successfully built dist/member_a-0.1.0.tar.gz and dist/member_a-0.1.0-py3-none-any.whl
+    [PKG] error: Build backend failed to determine extra requires with `build_sdist()` with exit status: 1
     Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
     "###);
 
@@ -1342,11 +1342,11 @@ fn build_all_with_failure() -> Result<()> {
         .child("project-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
 
-    member_a
+    project
         .child("dist")
         .child("member_a-0.1.0.tar.gz")
         .assert(predicate::path::is_file());
-    member_a
+    project
         .child("dist")
         .child("member_a-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());

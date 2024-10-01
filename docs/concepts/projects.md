@@ -165,11 +165,11 @@ example-lib
         └── __init__.py
 ```
 
-When creating a library, uv defines a build system and places the source code in placed in a `src`
-directory. These changes ensure that the library is isolated from any `python` invocations in the
-project root and that distributed library code is well separated from the rest of the project source
-code. The project includes a package at `src/example_lib` that will be built and installed into the
-project environment.
+When creating a library, uv defines a build system and places the source code in a `src` directory.
+These changes ensure that the library is isolated from any `python` invocations in the project root
+and that distributed library code is well separated from the rest of the project source code. The
+project includes a package at `src/example_lib` that will be built and installed into the project
+environment.
 
 ```toml title="pyproject.toml"
 [project]
@@ -231,7 +231,7 @@ example-packaged-app
 But the module defines a CLI function:
 
 ```python title="__init__.py"
-def hello() -> None:
+def main() -> None:
     print("Hello from example-packaged-app!")
 ```
 
@@ -247,7 +247,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-hello = "example_packaged_app:hello"
+example-packaged-app = "example_packaged_app:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -257,7 +257,7 @@ build-backend = "hatchling.build"
 Which can be executed with `uv run`:
 
 ```console
-$ uv run hello
+$ uv run example-packaged-app
 Hello from example-packaged-app!
 ```
 

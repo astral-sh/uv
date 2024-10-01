@@ -1,11 +1,13 @@
-use std::collections::hash_map::Entry;
-use std::fmt::Write;
-use std::path::{Path, PathBuf};
-
 use anyhow::{bail, Context, Result};
+use console::Term;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
+use std::collections::hash_map::Entry;
+use std::fmt::Write;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::sync::LazyLock;
 use tracing::debug;
 
 use cache_key::RepositoryUrl;
@@ -47,6 +49,18 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
+
+static CORRECTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
+    [("dotenv", "python-dotenv"), ("sklearn", "scikit-learn")]
+        .iter()
+        .map(|(k, v)| {
+            (
+                PackageName::from_str(k).unwrap(),
+                PackageName::from_str(v).unwrap(),
+            )
+        })
+        .collect()
+});
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -338,6 +352,27 @@ pub(crate) async fn add(
         requirements
     };
 
+    // If any of the requirements are self-dependencies, bail.
+    if matches!(
+        dependency_type,
+        DependencyType::Production | DependencyType::Dev
+    ) {
+        if let Target::Project(project, _) = &target {
+            if let Some(project_name) = project.project_name() {
+                for requirement in &requirements {
+                    if requirement.name == *project_name {
+                        bail!(
+                            "Requirement name `{}` matches project name `{}`, but self-dependencies are not permitted. If your project name (`{}`) is shadowing that of a third-party dependency, consider renaming the project.",
+                            requirement.name.cyan(),
+                            project_name.cyan(),
+                            project_name.cyan(),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     // Add the requirements to the `pyproject.toml` or script.
     let mut toml = match &target {
         Target::Script(script, _) => {
@@ -350,6 +385,23 @@ pub(crate) async fn add(
     }?;
     let mut edits = Vec::<DependencyEdit>::with_capacity(requirements.len());
     for mut requirement in requirements {
+        // If the user requested a package that is often confused for another package, prompt them.
+        if let Some(correction) = CORRECTIONS.get(&requirement.name) {
+            let term = Term::stderr();
+            if term.is_term() {
+                let prompt = format!(
+                    "`{}` is often confused for `{}`. Did you mean `{}`?",
+                    requirement.name.cyan(),
+                    correction.cyan(),
+                    format!("uv add {correction}").green()
+                );
+                let confirmation = uv_console::confirm(&prompt, &term, true)?;
+                if confirmation {
+                    requirement.name = correction.clone();
+                }
+            }
+        }
+
         // Add the specified extras.
         requirement.extras.extend(extras.iter().cloned());
         requirement.extras.sort_unstable();
@@ -401,6 +453,7 @@ pub(crate) async fn add(
                 rev,
                 tag,
                 branch,
+                marker,
             }) => {
                 let credentials = Credentials::from_url(&git);
                 if let Some(credentials) = credentials {
@@ -416,6 +469,7 @@ pub(crate) async fn add(
                     rev,
                     tag,
                     branch,
+                    marker,
                 })
             }
             _ => source,

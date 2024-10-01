@@ -293,15 +293,15 @@ async fn do_lock(
                     let lhs = lhs
                         .contents()
                         .map(|contents| contents.to_string())
-                        .unwrap_or("true".to_string());
+                        .unwrap_or_else(|| "true".to_string());
                     let rhs = rhs
                         .contents()
                         .map(|contents| contents.to_string())
-                        .unwrap_or("true".to_string());
+                        .unwrap_or_else(|| "true".to_string());
                     let hint = hint
                         .contents()
                         .map(|contents| contents.to_string())
-                        .unwrap_or("true".to_string());
+                        .unwrap_or_else(|| "true".to_string());
 
                     return Err(ProjectError::OverlappingMarkers(lhs, rhs, hint));
                 }

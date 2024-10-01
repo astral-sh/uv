@@ -928,7 +928,6 @@ pub(crate) async fn sync_environment(
     // Determine the markers tags to use for resolution.
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
-    let markers = interpreter.resolver_markers();
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
@@ -1006,7 +1005,6 @@ pub(crate) async fn sync_environment(
         index_locations,
         config_setting,
         &hasher,
-        &markers,
         tags,
         &client,
         &state.in_flight,
@@ -1242,7 +1240,6 @@ pub(crate) async fn update_environment(
         index_locations,
         config_setting,
         &hasher,
-        &markers,
         tags,
         &client,
         &state.in_flight,
