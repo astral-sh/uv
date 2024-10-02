@@ -3944,7 +3944,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 fn install_utf16le_requirements() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli"))?;
+    requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
         .env_remove("UV_EXCLUDE_NEWER")
@@ -3971,7 +3971,7 @@ fn install_utf16le_requirements() -> Result<()> {
 fn install_utf16be_requirements() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli"))?;
+    requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
         .env_remove("UV_EXCLUDE_NEWER")
