@@ -240,7 +240,8 @@ dependencies = ["flask==1.0.x"]
     ----- stderr -----
     error: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
       Caused by: Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
-    --- stdout:
+
+    [stdout]
     configuration error: `project.dependencies[0]` must be pep508
     DESCRIPTION:
         Project dependency specification according to PEP 508
@@ -257,7 +258,8 @@ dependencies = ["flask==1.0.x"]
             "type": "string",
             "format": "pep508"
         }
-    --- stderr:
+
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 14, in <module>
       File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
@@ -289,7 +291,7 @@ dependencies = ["flask==1.0.x"]
         raise ValueError(f"{error}/n{summary}") from None
     ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
     configuration error: `project.dependencies[0]` must be pep508
-    ---
+
     "###
     );
 
@@ -3834,13 +3836,12 @@ fn no_build_isolation() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
-    --- stdout:
 
-    --- stderr:
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 8, in <module>
     ModuleNotFoundError: No module named 'setuptools'
-    ---
+
     "###
     );
 
@@ -3904,13 +3905,12 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
-    --- stdout:
 
-    --- stderr:
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 8, in <module>
     ModuleNotFoundError: No module named 'setuptools'
-    ---
+
     "###
     );
 
@@ -6850,13 +6850,12 @@ fn install_build_isolation_package() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
-    --- stdout:
 
-    --- stderr:
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 8, in <module>
     ModuleNotFoundError: No module named 'hatchling'
-    ---
+
     "###
     );
 
@@ -7111,9 +7110,8 @@ fn sklearn() {
     ----- stderr -----
       × Failed to download and build `sklearn==0.0.post12`
       ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
-          --- stdout:
 
-          --- stderr:
+          [stderr]
           The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
           rather than 'sklearn' for pip commands. 
 
@@ -7129,7 +7127,7 @@ fn sklearn() {
 
           More information is available at
           https://github.com/scikit-learn/sklearn-pypi-package
-          ---
+
       help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
     "###
     );

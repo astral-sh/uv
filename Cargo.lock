@@ -4267,6 +4267,7 @@ dependencies = [
  "indoc",
  "insta",
  "itertools 0.13.0",
+ "owo-colors",
  "regex",
  "rustc-hash",
  "serde",
