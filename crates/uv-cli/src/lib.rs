@@ -4380,7 +4380,8 @@ pub struct DisplayTreeArgs {
     #[arg(long)]
     pub no_dedupe: bool,
 
-    /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
+    /// Show the reverse dependencies for the given package. This flag will invert the tree and
+    /// display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
 }
@@ -4394,9 +4395,9 @@ pub struct PublishArgs {
     #[arg(default_value = "dist/*")]
     pub files: Vec<String>,
 
-    /// The URL of the upload endpoint.
+    /// The URL of the upload endpoint (not the simple index URL!).
     ///
-    /// Note that this typically differs from the index URL.
+    /// Note that there are typically different URLs for index access ("simple") and index upload.
     ///
     /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
     ///

@@ -81,8 +81,12 @@ pub enum PublishSendError {
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
     #[error("Upload failed with status {0}")]
     StatusNoBody(StatusCode, #[source] reqwest::Error),
-    #[error("Upload failed with status code {0}: {1}")]
+    #[error("Upload failed with status code {0}. Server says: {1}")]
     Status(StatusCode, String),
+    #[error("POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?")]
+    MethodNotAllowedNoBody,
+    #[error("POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL? Server says: {0}")]
+    MethodNotAllowed(String),
     /// The registry returned a "403 Forbidden".
     #[error("Permission denied (status code {0}): {1}")]
     PermissionDenied(StatusCode, String),
@@ -573,18 +577,32 @@ async fn handle_response(registry: &Url, response: Response) -> Result<bool, Pub
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|content_type| content_type.to_str().ok())
         .map(ToString::to_string);
-    let upload_error = response
-        .bytes()
-        .await
-        .map_err(|err| PublishSendError::StatusNoBody(status_code, err))?;
+    let upload_error = response.bytes().await.map_err(|err| {
+        if status_code == StatusCode::METHOD_NOT_ALLOWED {
+            PublishSendError::MethodNotAllowedNoBody
+        } else {
+            PublishSendError::StatusNoBody(status_code, err)
+        }
+    })?;
     let upload_error = String::from_utf8_lossy(&upload_error);
 
-    trace!("Response content for non-200 for {registry}: {upload_error}");
+    trace!("Response content for non-200 response for {registry}: {upload_error}");
 
     debug!("Upload error response: {upload_error}");
+
+    // That's most likely the simple index URL, not the upload URL.
+    if status_code == StatusCode::METHOD_NOT_ALLOWED {
+        return Err(PublishSendError::MethodNotAllowed(
+            PublishSendError::extract_error_message(
+                upload_error.to_string(),
+                content_type.as_deref(),
+            ),
+        ));
+    }
+
     // Detect existing file errors the way twine does.
     // https://github.com/pypa/twine/blob/c512bbf166ac38239e58545a39155285f8747a7b/twine/commands/upload.py#L34-L72
-    if status_code == 403 {
+    if status_code == StatusCode::FORBIDDEN {
         if upload_error.contains("overwrite artifact") {
             // Artifactory (https://jfrog.com/artifactory/)
             Ok(false)
@@ -597,10 +615,10 @@ async fn handle_response(registry: &Url, response: Response) -> Result<bool, Pub
                 ),
             ))
         }
-    } else if status_code == 409 {
+    } else if status_code == StatusCode::CONFLICT {
         // conflict, pypiserver (https://pypi.org/project/pypiserver)
         Ok(false)
-    } else if status_code == 400
+    } else if status_code == StatusCode::BAD_REQUEST
         && (upload_error.contains("updating asset") || upload_error.contains("already been taken"))
     {
         // Nexus Repository OSS (https://www.sonatype.com/nexus-repository-oss)
