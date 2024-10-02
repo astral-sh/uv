@@ -11,7 +11,7 @@ use url::Url;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{FlatIndexLocation, IndexUrl};
 use uv_normalize::{ExtraName, PackageName};
@@ -2460,6 +2460,13 @@ pub struct InitArgs {
     /// avoid initializing a version control system.
     #[arg(long, value_enum, conflicts_with = "script")]
     pub vcs: Option<VersionControlSystem>,
+
+    /// Initialize a build-backend of choice for the project.
+    ///
+    /// By default, uv will use (`hatchling`). Use `--build-backend` to specify an
+    /// alternative build backend.
+    #[arg(long, value_enum, conflicts_with_all=["script", "no_package"])]
+    pub build_backend: Option<ProjectBuildBackend>,
 
     /// Do not create a `README.md` file.
     #[arg(long)]
