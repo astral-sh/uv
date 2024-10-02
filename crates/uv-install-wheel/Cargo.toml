@@ -17,7 +17,7 @@ license = { workspace = true }
 workspace = true
 
 [lib]
-name = "install_wheel_rs"
+name = "uv_install_wheel"
 
 [dependencies]
 uv-cache-info = { workspace = true }

@@ -4,7 +4,6 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
-use install_wheel_rs::linker::LinkMode;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -19,6 +18,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
+use uv_install_wheel::linker::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_pep508::PackageName;
 use uv_pypi_types::Requirement;

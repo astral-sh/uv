@@ -11,11 +11,11 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{trace, warn};
 
-use install_wheel_rs::Layout;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
+use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform_tags::Platform;
