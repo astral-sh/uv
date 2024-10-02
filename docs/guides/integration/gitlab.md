@@ -5,7 +5,7 @@
 Astral provides [Docker images](docker.md#available-images) with uv preinstalled.
 Select a variant that is suitable for your workflow.
 
-```yaml title="gitlab-ci.yml
+```yaml title="gitlab-ci.yml"
 variables:
   UV_VERSION: 0.4
   PYTHON_VERSION: 3.12
