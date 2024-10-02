@@ -35,7 +35,9 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
-use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
+use crate::commands::project::{
+    find_requires_python, ProjectError, ProjectInterpreter, SharedState,
+};
 use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
@@ -84,7 +86,7 @@ pub(crate) async fn lock(
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
-    let interpreter = FoundInterpreter::discover(
+    let interpreter = ProjectInterpreter::discover(
         &workspace,
         python.as_deref().map(PythonRequest::parse),
         python_preference,
