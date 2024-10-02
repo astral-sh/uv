@@ -11,7 +11,6 @@ use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_settings::ToolOptions;
 
 /// A tool entry.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "ToolWire", into = "ToolWire")]
 pub struct Tool {
@@ -25,7 +24,7 @@ pub struct Tool {
     options: ToolOptions,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct ToolWire {
     requirements: Vec<RequirementWire>,
     python: Option<String>,
