@@ -540,15 +540,16 @@ pub fn add_dependency(
             // Additionally, if the table is invalid (i.e. contains non-string values)
             // we still treat it as unsorted for the sake of simplicity.
             let sorted = deps.iter().all(toml_edit::Value::is_str)
-                && deps
-                    .iter()
-                    .tuple_windows()
-                    .all(|(a, b)| a.as_str() <= b.as_str());
+                && deps.iter().tuple_windows().all(|(a, b)| {
+                    a.as_str().map(str::to_lowercase) <= b.as_str().map(str::to_lowercase)
+                });
 
             let req_string = req.to_string();
             let index = if sorted {
                 deps.iter()
-                    .position(|d: &Value| d.as_str() > Some(req_string.as_str()))
+                    .position(|d: &Value| {
+                        d.as_str().map(str::to_lowercase) > Some(req_string.as_str().to_lowercase())
+                    })
                     .unwrap_or(deps.len())
             } else {
                 deps.len()

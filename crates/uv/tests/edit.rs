@@ -4692,8 +4692,8 @@ fn sorted_dependencies() -> Result<()> {
         description = "Add your description here"
         requires-python = ">=3.12"
         dependencies = [
-            "CacheControl[filecache]>=0.14,<0.15",
             "anyio>=4.3.0",
+            "CacheControl[filecache]>=0.14,<0.15",
             "iniconfig",
             "typing-extensions>=4.10.0",
         ]
