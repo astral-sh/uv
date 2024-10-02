@@ -110,7 +110,6 @@ impl Options {
 }
 
 /// Global settings, relevant to all invocations.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -229,10 +228,7 @@ pub struct GlobalOptions {
 }
 
 /// Settings relevant to all installer operations.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize, CombineOptions)]
-#[serde(rename_all = "kebab-case")]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Default, CombineOptions)]
 pub struct InstallerOptions {
     pub index_url: Option<IndexUrl>,
     pub extra_index_url: Option<Vec<IndexUrl>>,
@@ -256,10 +252,7 @@ pub struct InstallerOptions {
 }
 
 /// Settings relevant to all resolver operations.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize, CombineOptions)]
-#[serde(rename_all = "kebab-case")]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Default, CombineOptions)]
 pub struct ResolverOptions {
     pub index_url: Option<IndexUrl>,
     pub extra_index_url: Option<Vec<IndexUrl>>,
@@ -287,10 +280,7 @@ pub struct ResolverOptions {
 
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
 /// union of [`InstallerOptions`] and [`ResolverOptions`].
-#[allow(dead_code)]
-#[derive(
-    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata,
-)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ResolverInstallerOptions {
@@ -624,7 +614,6 @@ pub struct ResolverInstallerOptions {
 ///
 /// These values will be ignored when running commands outside the `uv pip` namespace (e.g.,
 /// `uv lock`, `uvx`).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
