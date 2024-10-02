@@ -2212,6 +2212,7 @@ fn run_script_explicit_no_file() {
         .stderr(contains("[Errno 2] No such file or directory"));
 }
 
+#[cfg(target_family = "unix")]
 #[test]
 fn run_script_explicit_directory() -> Result<()> {
     let context = TestContext::new("3.12");
