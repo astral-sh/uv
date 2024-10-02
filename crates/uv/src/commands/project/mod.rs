@@ -280,10 +280,13 @@ pub(crate) fn validate_requires_python(
     }
 }
 
+/// An interpreter suitable for the project.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub(crate) enum FoundInterpreter {
+pub(crate) enum ProjectInterpreter {
+    /// An interpreter from outside the project, to create a new project virtual environment.
     Interpreter(Interpreter),
+    /// An interpreter from an existing project virtual environment.
     Environment(PythonEnvironment),
 }
 
@@ -351,7 +354,7 @@ impl WorkspacePython {
     }
 }
 
-impl FoundInterpreter {
+impl ProjectInterpreter {
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
         workspace: &Workspace,
@@ -478,11 +481,11 @@ impl FoundInterpreter {
         Ok(Self::Interpreter(interpreter))
     }
 
-    /// Convert the [`FoundInterpreter`] into an [`Interpreter`].
+    /// Convert the [`ProjectInterpreter`] into an [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
-            FoundInterpreter::Interpreter(interpreter) => interpreter,
-            FoundInterpreter::Environment(venv) => venv.into_interpreter(),
+            ProjectInterpreter::Interpreter(interpreter) => interpreter,
+            ProjectInterpreter::Environment(venv) => venv.into_interpreter(),
         }
     }
 }
@@ -498,7 +501,7 @@ pub(crate) async fn get_or_init_environment(
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
-    match FoundInterpreter::discover(
+    match ProjectInterpreter::discover(
         workspace,
         python,
         python_preference,
@@ -511,10 +514,10 @@ pub(crate) async fn get_or_init_environment(
     .await?
     {
         // If we found an existing, compatible environment, use it.
-        FoundInterpreter::Environment(environment) => Ok(environment),
+        ProjectInterpreter::Environment(environment) => Ok(environment),
 
         // Otherwise, create a virtual environment with the discovered interpreter.
-        FoundInterpreter::Interpreter(interpreter) => {
+        ProjectInterpreter::Interpreter(interpreter) => {
             let venv = workspace.venv();
 
             // Avoid removing things that are not virtual environments
