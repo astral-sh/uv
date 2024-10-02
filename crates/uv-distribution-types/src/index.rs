@@ -1,8 +1,10 @@
-use crate::{IndexUrl, IndexUrlError};
 use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 use uv_auth::Credentials;
+
+use crate::origin::Origin;
+use crate::{IndexUrl, IndexUrlError};
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -52,6 +54,9 @@ pub struct Index {
     /// is given the highest priority when resolving packages.
     #[serde(default)]
     pub default: bool,
+    /// The origin of the index (e.g., a CLI flag, a user-level configuration file, etc.).
+    #[serde(skip)]
+    pub origin: Option<Origin>,
     // /// The type of the index.
     // ///
     // /// Indexes can either be PEP 503-compliant (i.e., a registry implementing the Simple API) or
@@ -81,6 +86,7 @@ impl Index {
             name: None,
             explicit: false,
             default: true,
+            origin: None,
         }
     }
 
@@ -91,6 +97,7 @@ impl Index {
             name: None,
             explicit: false,
             default: false,
+            origin: None,
         }
     }
 
@@ -101,12 +108,25 @@ impl Index {
             name: None,
             explicit: false,
             default: false,
+            origin: None,
         }
+    }
+
+    /// Set the [`Origin`] of the index.
+    #[must_use]
+    pub fn with_origin(mut self, origin: Origin) -> Self {
+        self.origin = Some(origin);
+        self
     }
 
     /// Return the [`IndexUrl`] of the index.
     pub fn url(&self) -> &IndexUrl {
         &self.url
+    }
+
+    /// Consume the [`Index`] and return the [`IndexUrl`].
+    pub fn into_url(self) -> IndexUrl {
+        self.url
     }
 
     /// Return the raw [`URL`] of the index.
@@ -145,6 +165,7 @@ impl FromStr for Index {
                     url,
                     explicit: false,
                     default: false,
+                    origin: None,
                 });
             }
         }
@@ -156,6 +177,7 @@ impl FromStr for Index {
             url,
             explicit: false,
             default: false,
+            origin: None,
         })
     }
 }

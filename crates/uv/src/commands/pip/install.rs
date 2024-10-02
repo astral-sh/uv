@@ -13,7 +13,7 @@ use uv_configuration::{
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Resolution,
+    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin, Resolution,
     UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
@@ -279,8 +279,13 @@ pub(crate) async fn pip_install(
             .into_iter()
             .map(Index::from_extra_index_url)
             .chain(index_url.map(Index::from_index_url))
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
             .collect(),
-        find_links.into_iter().map(Index::from_find_links).collect(),
+        find_links
+            .into_iter()
+            .map(Index::from_find_links)
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
         no_index,
     );
 

@@ -156,7 +156,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.sources
     }
 
-    fn index_locations(&self) -> &IndexLocations {
+    fn locations(&self) -> &IndexLocations {
         self.index_locations
     }
 
@@ -350,6 +350,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self,
             self.source_build_context.clone(),
             version_id,
+            self.index_locations,
             sources,
             self.config_settings.clone(),
             self.build_isolation,
