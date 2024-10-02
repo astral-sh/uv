@@ -551,7 +551,7 @@ pub(crate) fn report_target_environment(
         env.root().user_display()
     );
 
-    let Ok(target) = env.root().canonicalize() else {
+    let Ok(target) = std::path::absolute(env.root()) else {
         debug!("{}", message);
         return Ok(());
     };
@@ -571,7 +571,7 @@ pub(crate) fn report_target_environment(
     }
 
     // Do not report a default environment path
-    if let Ok(default) = PathBuf::from(".venv").canonicalize() {
+    if let Ok(default) = std::path::absolute(PathBuf::from(".venv")) {
         if target == default {
             debug!("{}", message);
             return Ok(());
