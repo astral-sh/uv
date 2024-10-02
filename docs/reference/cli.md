@@ -371,6 +371,10 @@ uv run [OPTIONS] <COMMAND>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
+</dd><dt><code>--script</code>, <code>-s</code></dt><dd><p>Run the given path as a Python script.</p>
+
+<p>Using <code>--script</code> will attempt to parse the path as a PEP 723 script, irrespective of its extension.</p>
+
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>

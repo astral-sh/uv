@@ -248,6 +248,7 @@ impl RunSettings {
             module: _,
             only_dev,
             no_editable,
+            script: _,
             command: _,
             with,
             with_editable,

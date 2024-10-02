@@ -5,6 +5,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::indoc;
+use predicates::str::contains;
 use std::path::Path;
 
 use uv_python::PYTHON_VERSION_FILENAME;
@@ -2160,6 +2161,72 @@ fn run_script_without_build_system() -> Result<()> {
     Audited in [TIME]
     error: Failed to spawn: `entry`
       Caused by: No such file or directory (os error 2)
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_script_explicit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--script").arg("script"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from: script
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_script_explicit_no_file() {
+    let context = TestContext::new("3.12");
+    context
+        .run()
+        .arg("--script")
+        .arg("script")
+        .assert()
+        .stderr(contains("can't open file"))
+        .stderr(contains("[Errno 2] No such file or directory"));
+}
+
+#[cfg(target_family = "unix")]
+#[test]
+fn run_script_explicit_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    fs_err::create_dir(context.temp_dir.child("script"))?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--script").arg("script"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: failed to read from file `script`
+      Caused by: Is a directory (os error 21)
     "###);
 
     Ok(())
