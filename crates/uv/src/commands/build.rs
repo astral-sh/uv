@@ -22,7 +22,7 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
@@ -378,7 +378,10 @@ async fn build_package(
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        specifiers.clone(),
+                        PythonVariant::Default,
+                    ))
                 });
         }
     }

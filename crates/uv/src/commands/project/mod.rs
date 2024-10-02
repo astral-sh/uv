@@ -23,7 +23,8 @@ use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
+    VersionRequest,
 };
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::{
@@ -337,7 +338,10 @@ impl WorkspacePython {
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        specifiers.clone(),
+                        PythonVariant::Default,
+                    ))
                 });
             let source = PythonRequestSource::RequiresPython;
             (source, request)

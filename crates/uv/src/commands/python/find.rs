@@ -5,8 +5,8 @@ use std::path::Path;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::{
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionRequest,
+    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVariant,
+    PythonVersionFile, VersionRequest,
 };
 use uv_resolver::RequiresPython;
 use uv_warnings::warn_user_once;
@@ -59,7 +59,10 @@ pub(crate) async fn find(
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        specifiers.clone(),
+                        PythonVariant::Default,
+                    ))
                 });
         }
     }
