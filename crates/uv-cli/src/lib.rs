@@ -1209,7 +1209,8 @@ pub struct PipSyncArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
@@ -1491,7 +1492,8 @@ pub struct PipInstallArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
@@ -1656,7 +1658,8 @@ pub struct PipUninstallArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
@@ -1764,7 +1767,8 @@ pub struct PipFreezeArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
@@ -1828,7 +1832,8 @@ pub struct PipListArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
@@ -1868,7 +1873,8 @@ pub struct PipCheckArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
@@ -1916,7 +1922,8 @@ pub struct PipShowArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
@@ -1971,7 +1978,8 @@ pub struct PipTreeArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
@@ -2106,7 +2114,8 @@ pub struct BuildArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
@@ -2135,7 +2144,8 @@ pub struct VenvArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
@@ -2423,7 +2433,8 @@ pub struct InitArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 }
@@ -2591,7 +2602,8 @@ pub struct RunArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
@@ -2733,7 +2745,8 @@ pub struct SyncArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 }
@@ -2776,7 +2789,8 @@ pub struct LockArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 }
@@ -2898,7 +2912,8 @@ pub struct AddArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 }
@@ -2964,7 +2979,8 @@ pub struct RemoveArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 }
@@ -3038,7 +3054,8 @@ pub struct TreeArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 }
@@ -3162,7 +3179,8 @@ pub struct ExportArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 }
@@ -3311,7 +3329,8 @@ pub struct ToolRunArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
@@ -3372,7 +3391,8 @@ pub struct ToolInstallArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 }
@@ -3448,7 +3468,8 @@ pub struct ToolUpgradeArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = clap::builder::NonEmptyStringValueParser::new(),
     )]
     pub python: Option<String>,
 
