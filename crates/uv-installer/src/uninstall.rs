@@ -1,4 +1,4 @@
-use distribution_types::{InstalledDist, InstalledEggInfoFile};
+use uv_distribution_types::{InstalledDist, InstalledEggInfoFile};
 
 /// Uninstall a package from the specified Python environment.
 pub async fn uninstall(

@@ -11,11 +11,6 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{
-    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, Name, Resolution,
-    SourceDist, VersionOrUrlRef,
-};
-use pypi_types::Requirement;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
@@ -24,8 +19,13 @@ use uv_configuration::{
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
+use uv_distribution_types::{
+    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, Name, Resolution,
+    SourceDist, VersionOrUrlRef,
+};
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
+use uv_pypi_types::Requirement;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
     ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
@@ -314,9 +314,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         build_kind: BuildKind,
         build_output: BuildOutput,
     ) -> Result<SourceBuild> {
-        let dist_name = dist.map(distribution_types::Name::name);
+        let dist_name = dist.map(uv_distribution_types::Name::name);
         let dist_version = dist
-            .map(distribution_types::DistributionMetadata::version_or_url)
+            .map(uv_distribution_types::DistributionMetadata::version_or_url)
             .and_then(|version| match version {
                 VersionOrUrlRef::Version(version) => Some(version),
                 VersionOrUrlRef::Url(_) => None,

@@ -3,7 +3,7 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use platform_tags::PlatformError;
+use uv_platform_tags::PlatformError;
 use uv_python::{Interpreter, PythonEnvironment};
 
 mod virtualenv;

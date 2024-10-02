@@ -10,8 +10,8 @@ use fs_err::File;
 use itertools::Itertools;
 use tracing::debug;
 
-use pypi_types::Scheme;
 use uv_fs::{cachedir, Simplified, CWD};
+use uv_pypi_types::Scheme;
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_version::version;
 

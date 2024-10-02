@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 use itertools::Itertools;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use pypi_types::ResolverMarkerEnvironment;
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pypi_types::ResolverMarkerEnvironment;
 
 use crate::lock::{Dependency, PackageId};
 use crate::Lock;

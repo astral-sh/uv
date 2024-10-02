@@ -27,12 +27,12 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
 pub use crate::error::{Error, MissingHeaderCause};
-use distribution_types::Resolution;
-use pep440_rs::Version;
-use pep508_rs::PackageName;
-use pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings};
+use uv_distribution_types::Resolution;
 use uv_fs::{rename_with_retry, PythonExt, Simplified};
+use uv_pep440::Version;
+use uv_pep508::PackageName;
+use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
 
@@ -41,7 +41,7 @@ static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend
     backend: "setuptools.build_meta:__legacy__".to_string(),
     backend_path: None,
     requirements: vec![Requirement::from(
-        pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap(),
+        uv_pep508::Requirement::from_str("setuptools >= 40.8.0").unwrap(),
     )],
 });
 
@@ -76,7 +76,7 @@ struct Project {
 #[serde(rename_all = "kebab-case")]
 struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.
-    requires: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
+    requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
     /// A string naming a Python object that will be used to perform the build.
     build_backend: Option<String>,
     /// Specify that their backend code is hosted in-tree, this key contains a list of directories.
@@ -826,7 +826,7 @@ async fn create_pep517_build_environment(
     })?;
 
     // Deserialize the requirements from the output file.
-    let extra_requires: Vec<pep508_rs::Requirement<VerbatimParsedUrl>> = serde_json::from_slice::<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>(&contents).map_err(|err| {
+    let extra_requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>> = serde_json::from_slice::<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>(&contents).map_err(|err| {
         Error::from_command_output(
             format!(
                 "Build backend failed to return requirements from `get_requires_for_build_{build_kind}`: {err}"

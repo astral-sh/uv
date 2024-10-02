@@ -333,33 +333,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
-name = "bench"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "codspeed-criterion-compat",
- "criterion",
- "distribution-filename",
- "distribution-types",
- "install-wheel-rs",
- "jiff",
- "pep440_rs",
- "pep508_rs",
- "platform-tags",
- "pypi-types",
- "tokio",
- "uv-cache",
- "uv-client",
- "uv-configuration",
- "uv-dispatch",
- "uv-distribution",
- "uv-git",
- "uv-python",
- "uv-resolver",
- "uv-types",
-]
-
-[[package]]
 name = "bisection"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -475,15 +448,6 @@ dependencies = [
  "cc",
  "libc",
  "pkg-config",
-]
-
-[[package]]
-name = "cache-key"
-version = "0.0.1"
-dependencies = [
- "hex",
- "seahash",
- "url",
 ]
 
 [[package]]
@@ -972,49 +936,6 @@ dependencies = [
  "option-ext",
  "redox_users",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "distribution-filename"
-version = "0.0.1"
-dependencies = [
- "insta",
- "pep440_rs",
- "platform-tags",
- "rkyv",
- "serde",
- "thiserror",
- "url",
- "uv-normalize",
-]
-
-[[package]]
-name = "distribution-types"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "cache-key",
- "distribution-filename",
- "fs-err",
- "itertools 0.13.0",
- "jiff",
- "pep440_rs",
- "pep508_rs",
- "platform-tags",
- "pypi-types",
- "rkyv",
- "rustc-hash",
- "schemars",
- "serde",
- "serde_json",
- "thiserror",
- "tracing",
- "url",
- "urlencoding",
- "uv-cache-info",
- "uv-fs",
- "uv-git",
- "uv-normalize",
 ]
 
 [[package]]
@@ -1704,43 +1625,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "install-wheel-rs"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "assert_fs",
- "clap",
- "configparser",
- "csv",
- "data-encoding",
- "distribution-filename",
- "fs-err",
- "indoc",
- "mailparse",
- "pathdiff",
- "pep440_rs",
- "platform-info",
- "platform-tags",
- "pypi-types",
- "reflink-copy",
- "regex",
- "rustc-hash",
- "schemars",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "tracing",
- "uv-cache-info",
- "uv-fs",
- "uv-normalize",
- "uv-warnings",
- "walkdir",
- "zip",
-]
-
-[[package]]
 name = "instant"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2272,15 +2156,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "once-map"
-version = "0.0.1"
-dependencies = [
- "dashmap",
- "futures",
- "tokio",
-]
-
-[[package]]
 name = "once_cell"
 version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2387,45 +2262,6 @@ name = "pathdiff"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
-
-[[package]]
-name = "pep440_rs"
-version = "0.7.0"
-dependencies = [
- "indoc",
- "rkyv",
- "serde",
- "tracing",
- "unicode-width",
- "unscanny",
-]
-
-[[package]]
-name = "pep508_rs"
-version = "0.6.0"
-dependencies = [
- "boxcar",
- "indexmap",
- "insta",
- "itertools 0.13.0",
- "log",
- "pep440_rs",
- "pubgrub",
- "regex",
- "rustc-hash",
- "schemars",
- "serde",
- "serde_json",
- "smallvec",
- "testing_logger",
- "thiserror",
- "tracing",
- "unicode-width",
- "url",
- "uv-fs",
- "uv-normalize",
- "uv-pubgrub",
-]
 
 [[package]]
 name = "percent-encoding"
@@ -2555,16 +2391,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "platform-tags"
-version = "0.0.1"
-dependencies = [
- "insta",
- "rustc-hash",
- "serde",
- "thiserror",
-]
-
-[[package]]
 name = "png"
 version = "0.17.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2691,32 +2517,6 @@ dependencies = [
  "priority-queue",
  "rustc-hash",
  "thiserror",
-]
-
-[[package]]
-name = "pypi-types"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "distribution-filename",
- "indexmap",
- "itertools 0.13.0",
- "jiff",
- "mailparse",
- "pep440_rs",
- "pep508_rs",
- "regex",
- "rkyv",
- "serde",
- "serde-untagged",
- "thiserror",
- "toml",
- "toml_edit",
- "tracing",
- "url",
- "uv-fs",
- "uv-git",
- "uv-normalize",
 ]
 
 [[package]]
@@ -2947,36 +2747,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31c1f1959e4db12c985c0283656be0925f1539549db1e47c4bd0b8b599e1ef7"
 dependencies = [
  "bytecheck",
-]
-
-[[package]]
-name = "requirements-txt"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "assert_fs",
- "distribution-types",
- "fs-err",
- "indoc",
- "insta",
- "itertools 0.13.0",
- "pep508_rs",
- "pypi-types",
- "regex",
- "reqwest",
- "reqwest-middleware",
- "tempfile",
- "test-case",
- "thiserror",
- "tokio",
- "tracing",
- "unscanny",
- "url",
- "uv-client",
- "uv-configuration",
- "uv-fs",
- "uv-normalize",
- "uv-warnings",
 ]
 
 [[package]]
@@ -4361,11 +4131,8 @@ dependencies = [
  "axoupdater",
  "base64 0.22.1",
  "byteorder",
- "cache-key",
  "clap",
  "ctrlc",
- "distribution-filename",
- "distribution-types",
  "etcetera",
  "filetime",
  "flate2",
@@ -4377,16 +4144,11 @@ dependencies = [
  "indicatif",
  "indoc",
  "insta",
- "install-wheel-rs",
  "itertools 0.13.0",
  "jiff",
  "miette",
  "owo-colors",
- "pep440_rs",
- "pep508_rs",
- "platform-tags",
  "predicates",
- "pypi-types",
  "rayon",
  "regex",
  "reqwest",
@@ -4408,19 +4170,27 @@ dependencies = [
  "uv-auth",
  "uv-cache",
  "uv-cache-info",
+ "uv-cache-key",
  "uv-cli",
  "uv-client",
  "uv-configuration",
  "uv-dispatch",
  "uv-distribution",
+ "uv-distribution-filename",
+ "uv-distribution-types",
  "uv-extract",
  "uv-fs",
  "uv-git",
+ "uv-install-wheel",
  "uv-installer",
  "uv-normalize",
+ "uv-pep440",
+ "uv-pep508",
  "uv-performance-flate2-backend",
  "uv-performance-memory-allocator",
+ "uv-platform-tags",
  "uv-publish",
+ "uv-pypi-types",
  "uv-python",
  "uv-requirements",
  "uv-resolver",
@@ -4446,7 +4216,6 @@ dependencies = [
  "futures",
  "http",
  "insta",
- "once-map",
  "reqwest",
  "reqwest-middleware",
  "rust-netrc",
@@ -4457,7 +4226,35 @@ dependencies = [
  "tracing",
  "url",
  "urlencoding",
+ "uv-once-map",
  "wiremock",
+]
+
+[[package]]
+name = "uv-bench"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "codspeed-criterion-compat",
+ "criterion",
+ "jiff",
+ "tokio",
+ "uv-cache",
+ "uv-client",
+ "uv-configuration",
+ "uv-dispatch",
+ "uv-distribution",
+ "uv-distribution-filename",
+ "uv-distribution-types",
+ "uv-git",
+ "uv-install-wheel",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-platform-tags",
+ "uv-pypi-types",
+ "uv-python",
+ "uv-resolver",
+ "uv-types",
 ]
 
 [[package]]
@@ -4466,14 +4263,10 @@ version = "0.0.1"
 dependencies = [
  "anstream",
  "anyhow",
- "distribution-types",
  "fs-err",
  "indoc",
  "insta",
  "itertools 0.13.0",
- "pep440_rs",
- "pep508_rs",
- "pypi-types",
  "regex",
  "rustc-hash",
  "serde",
@@ -4484,7 +4277,11 @@ dependencies = [
  "toml_edit",
  "tracing",
  "uv-configuration",
+ "uv-distribution-types",
  "uv-fs",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-pypi-types",
  "uv-python",
  "uv-types",
  "uv-virtualenv",
@@ -4494,14 +4291,11 @@ dependencies = [
 name = "uv-cache"
 version = "0.0.1"
 dependencies = [
- "cache-key",
  "clap",
  "directories",
- "distribution-types",
  "etcetera",
  "fs-err",
  "nanoid",
- "pypi-types",
  "rmp-serde",
  "rustc-hash",
  "serde",
@@ -4509,8 +4303,11 @@ dependencies = [
  "tracing",
  "url",
  "uv-cache-info",
+ "uv-cache-key",
+ "uv-distribution-types",
  "uv-fs",
  "uv-normalize",
+ "uv-pypi-types",
  "walkdir",
 ]
 
@@ -4528,6 +4325,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-cache-key"
+version = "0.0.1"
+dependencies = [
+ "hex",
+ "seahash",
+ "url",
+]
+
+[[package]]
 name = "uv-cli"
 version = "0.0.1"
 dependencies = [
@@ -4535,17 +4341,17 @@ dependencies = [
  "anyhow",
  "clap",
  "clap_complete_command",
- "distribution-types",
  "fs-err",
  "insta",
- "install-wheel-rs",
- "pep508_rs",
- "pypi-types",
  "serde",
  "url",
  "uv-cache",
  "uv-configuration",
+ "uv-distribution-types",
+ "uv-install-wheel",
  "uv-normalize",
+ "uv-pep508",
+ "uv-pypi-types",
  "uv-python",
  "uv-resolver",
  "uv-settings",
@@ -4562,9 +4368,6 @@ dependencies = [
  "async_http_range_reader",
  "async_zip",
  "bytecheck",
- "cache-key",
- "distribution-filename",
- "distribution-types",
  "fs-err",
  "futures",
  "html-escape",
@@ -4575,10 +4378,6 @@ dependencies = [
  "insta",
  "itertools 0.13.0",
  "jiff",
- "pep440_rs",
- "pep508_rs",
- "platform-tags",
- "pypi-types",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
@@ -4596,10 +4395,17 @@ dependencies = [
  "urlencoding",
  "uv-auth",
  "uv-cache",
+ "uv-cache-key",
  "uv-configuration",
+ "uv-distribution-filename",
+ "uv-distribution-types",
  "uv-fs",
  "uv-metadata",
  "uv-normalize",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-platform-tags",
+ "uv-pypi-types",
  "uv-version",
  "uv-warnings",
 ]
@@ -4609,13 +4415,9 @@ name = "uv-configuration"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "cache-key",
  "clap",
  "either",
  "fs-err",
- "pep508_rs",
- "platform-tags",
- "pypi-types",
  "rustc-hash",
  "schemars",
  "serde",
@@ -4627,7 +4429,11 @@ dependencies = [
  "uv-auth",
  "uv-cache",
  "uv-cache-info",
+ "uv-cache-key",
  "uv-normalize",
+ "uv-pep508",
+ "uv-platform-tags",
+ "uv-pypi-types",
  "which",
 ]
 
@@ -4646,16 +4452,12 @@ dependencies = [
  "anstream",
  "anyhow",
  "clap",
- "distribution-filename",
- "distribution-types",
  "fs-err",
  "itertools 0.13.0",
  "markdown",
  "owo-colors",
- "pep508_rs",
  "poloto",
  "pretty_assertions",
- "pypi-types",
  "resvg",
  "schemars",
  "serde",
@@ -4669,10 +4471,14 @@ dependencies = [
  "uv-cache",
  "uv-cli",
  "uv-client",
+ "uv-distribution-filename",
+ "uv-distribution-types",
  "uv-installer",
  "uv-macros",
  "uv-options-metadata",
+ "uv-pep508",
  "uv-performance-memory-allocator",
+ "uv-pypi-types",
  "uv-python",
  "uv-settings",
  "uv-workspace",
@@ -4684,11 +4490,8 @@ name = "uv-dispatch"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "distribution-types",
  "futures",
- "install-wheel-rs",
  "itertools 0.13.0",
- "pypi-types",
  "rustc-hash",
  "tracing",
  "uv-build-frontend",
@@ -4696,8 +4499,11 @@ dependencies = [
  "uv-client",
  "uv-configuration",
  "uv-distribution",
+ "uv-distribution-types",
  "uv-git",
+ "uv-install-wheel",
  "uv-installer",
+ "uv-pypi-types",
  "uv-python",
  "uv-resolver",
  "uv-types",
@@ -4708,9 +4514,6 @@ name = "uv-distribution"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "cache-key",
- "distribution-filename",
- "distribution-types",
  "either",
  "fs-err",
  "futures",
@@ -4718,10 +4521,6 @@ dependencies = [
  "insta",
  "nanoid",
  "owo-colors",
- "pep440_rs",
- "pep508_rs",
- "platform-tags",
- "pypi-types",
  "reqwest",
  "reqwest-middleware",
  "rmp-serde",
@@ -4735,13 +4534,20 @@ dependencies = [
  "url",
  "uv-cache",
  "uv-cache-info",
+ "uv-cache-key",
  "uv-client",
  "uv-configuration",
+ "uv-distribution-filename",
+ "uv-distribution-types",
  "uv-extract",
  "uv-fs",
  "uv-git",
  "uv-metadata",
  "uv-normalize",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-platform-tags",
+ "uv-pypi-types",
  "uv-types",
  "uv-warnings",
  "uv-workspace",
@@ -4750,17 +4556,58 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-distribution-filename"
+version = "0.0.1"
+dependencies = [
+ "insta",
+ "rkyv",
+ "serde",
+ "thiserror",
+ "url",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-platform-tags",
+]
+
+[[package]]
+name = "uv-distribution-types"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "fs-err",
+ "itertools 0.13.0",
+ "jiff",
+ "rkyv",
+ "rustc-hash",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+ "url",
+ "urlencoding",
+ "uv-cache-info",
+ "uv-cache-key",
+ "uv-distribution-filename",
+ "uv-fs",
+ "uv-git",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-platform-tags",
+ "uv-pypi-types",
+]
+
+[[package]]
 name = "uv-extract"
 version = "0.0.1"
 dependencies = [
  "async-compression",
  "async_zip",
- "distribution-filename",
  "fs-err",
  "futures",
  "krata-tokio-tar",
  "md-5",
- "pypi-types",
  "rayon",
  "reqwest",
  "rustc-hash",
@@ -4769,6 +4616,8 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "uv-distribution-filename",
+ "uv-pypi-types",
  "xz2",
  "zip",
 ]
@@ -4799,7 +4648,6 @@ name = "uv-git"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "cache-key",
  "cargo-util",
  "dashmap",
  "fs-err",
@@ -4811,7 +4659,45 @@ dependencies = [
  "tracing",
  "url",
  "uv-auth",
+ "uv-cache-key",
  "uv-fs",
+]
+
+[[package]]
+name = "uv-install-wheel"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "assert_fs",
+ "clap",
+ "configparser",
+ "csv",
+ "data-encoding",
+ "fs-err",
+ "indoc",
+ "mailparse",
+ "pathdiff",
+ "platform-info",
+ "reflink-copy",
+ "regex",
+ "rustc-hash",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "uv-cache-info",
+ "uv-distribution-filename",
+ "uv-fs",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-platform-tags",
+ "uv-pypi-types",
+ "uv-warnings",
+ "walkdir",
+ "zip",
 ]
 
 [[package]]
@@ -4820,15 +4706,8 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-channel",
- "cache-key",
- "distribution-types",
  "fs-err",
  "futures",
- "install-wheel-rs",
- "pep440_rs",
- "pep508_rs",
- "platform-tags",
- "pypi-types",
  "rayon",
  "rustc-hash",
  "same-file",
@@ -4839,11 +4718,18 @@ dependencies = [
  "url",
  "uv-cache",
  "uv-cache-info",
+ "uv-cache-key",
  "uv-configuration",
  "uv-distribution",
+ "uv-distribution-types",
  "uv-extract",
  "uv-fs",
+ "uv-install-wheel",
  "uv-normalize",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-platform-tags",
+ "uv-pypi-types",
  "uv-python",
  "uv-types",
  "uv-warnings",
@@ -4865,14 +4751,14 @@ name = "uv-metadata"
 version = "0.1.0"
 dependencies = [
  "async_zip",
- "distribution-filename",
  "fs-err",
  "futures",
- "pypi-types",
  "thiserror",
  "tokio",
  "tokio-util",
+ "uv-distribution-filename",
  "uv-normalize",
+ "uv-pypi-types",
  "zip",
 ]
 
@@ -4886,10 +4772,58 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-once-map"
+version = "0.0.1"
+dependencies = [
+ "dashmap",
+ "futures",
+ "tokio",
+]
+
+[[package]]
 name = "uv-options-metadata"
 version = "0.0.1"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "uv-pep440"
+version = "0.7.0"
+dependencies = [
+ "indoc",
+ "rkyv",
+ "serde",
+ "tracing",
+ "unicode-width",
+ "unscanny",
+]
+
+[[package]]
+name = "uv-pep508"
+version = "0.6.0"
+dependencies = [
+ "boxcar",
+ "indexmap",
+ "insta",
+ "itertools 0.13.0",
+ "log",
+ "pubgrub",
+ "regex",
+ "rustc-hash",
+ "schemars",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "testing_logger",
+ "thiserror",
+ "tracing",
+ "unicode-width",
+ "url",
+ "uv-fs",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-pubgrub",
 ]
 
 [[package]]
@@ -4908,13 +4842,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-platform-tags"
+version = "0.0.1"
+dependencies = [
+ "insta",
+ "rustc-hash",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "uv-pubgrub"
 version = "0.0.1"
 dependencies = [
  "itertools 0.13.0",
- "pep440_rs",
  "pubgrub",
  "thiserror",
+ "uv-pep440",
 ]
 
 [[package]]
@@ -4923,14 +4867,12 @@ version = "0.1.0"
 dependencies = [
  "async-compression",
  "base64 0.22.1",
- "distribution-filename",
  "fs-err",
  "futures",
  "glob",
  "insta",
  "itertools 0.13.0",
  "krata-tokio-tar",
- "pypi-types",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
@@ -4945,9 +4887,37 @@ dependencies = [
  "url",
  "uv-client",
  "uv-configuration",
+ "uv-distribution-filename",
  "uv-fs",
  "uv-metadata",
+ "uv-pypi-types",
  "uv-warnings",
+]
+
+[[package]]
+name = "uv-pypi-types"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "indexmap",
+ "itertools 0.13.0",
+ "jiff",
+ "mailparse",
+ "regex",
+ "rkyv",
+ "serde",
+ "serde-untagged",
+ "thiserror",
+ "toml",
+ "toml_edit",
+ "tracing",
+ "url",
+ "uv-distribution-filename",
+ "uv-fs",
+ "uv-git",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-pep508",
 ]
 
 [[package]]
@@ -4956,21 +4926,14 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "assert_fs",
- "cache-key",
  "clap",
  "configparser",
- "distribution-filename",
  "fs-err",
  "futures",
  "goblin",
  "indoc",
- "install-wheel-rs",
  "itertools 0.13.0",
  "owo-colors",
- "pep440_rs",
- "pep508_rs",
- "platform-tags",
- "pypi-types",
  "regex",
  "reqwest",
  "reqwest-middleware",
@@ -4991,9 +4954,16 @@ dependencies = [
  "url",
  "uv-cache",
  "uv-cache-info",
+ "uv-cache-key",
  "uv-client",
+ "uv-distribution-filename",
  "uv-extract",
  "uv-fs",
+ "uv-install-wheel",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-platform-tags",
+ "uv-pypi-types",
  "uv-state",
  "uv-warnings",
  "which",
@@ -5008,29 +4978,29 @@ name = "uv-requirements"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cache-key",
  "configparser",
  "console",
- "distribution-filename",
- "distribution-types",
  "fs-err",
  "futures",
- "pep508_rs",
- "pypi-types",
- "requirements-txt",
  "rustc-hash",
  "serde",
  "thiserror",
  "toml",
  "tracing",
  "url",
+ "uv-cache-key",
  "uv-client",
  "uv-configuration",
  "uv-console",
  "uv-distribution",
+ "uv-distribution-filename",
+ "uv-distribution-types",
  "uv-fs",
  "uv-git",
  "uv-normalize",
+ "uv-pep508",
+ "uv-pypi-types",
+ "uv-requirements-txt",
  "uv-resolver",
  "uv-types",
  "uv-warnings",
@@ -5038,30 +5008,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-requirements-txt"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "assert_fs",
+ "fs-err",
+ "indoc",
+ "insta",
+ "itertools 0.13.0",
+ "regex",
+ "reqwest",
+ "reqwest-middleware",
+ "tempfile",
+ "test-case",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "unscanny",
+ "url",
+ "uv-client",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-fs",
+ "uv-normalize",
+ "uv-pep508",
+ "uv-pypi-types",
+ "uv-warnings",
+]
+
+[[package]]
 name = "uv-resolver"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "cache-key",
  "clap",
  "dashmap",
- "distribution-filename",
- "distribution-types",
  "either",
  "futures",
  "indexmap",
  "insta",
  "itertools 0.13.0",
  "jiff",
- "once-map",
  "owo-colors",
- "pep440_rs",
- "pep508_rs",
  "petgraph",
- "platform-tags",
  "pubgrub",
- "pypi-types",
- "requirements-txt",
  "rkyv",
  "rustc-hash",
  "same-file",
@@ -5075,15 +5066,24 @@ dependencies = [
  "toml_edit",
  "tracing",
  "url",
+ "uv-cache-key",
  "uv-client",
  "uv-configuration",
  "uv-distribution",
+ "uv-distribution-filename",
+ "uv-distribution-types",
  "uv-fs",
  "uv-git",
  "uv-metadata",
  "uv-normalize",
+ "uv-once-map",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-platform-tags",
  "uv-pubgrub",
+ "uv-pypi-types",
  "uv-python",
+ "uv-requirements-txt",
  "uv-types",
  "uv-warnings",
  "uv-workspace",
@@ -5096,12 +5096,12 @@ dependencies = [
  "fs-err",
  "indoc",
  "memchr",
- "pep440_rs",
- "pep508_rs",
- "pypi-types",
  "serde",
  "thiserror",
  "toml",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-pypi-types",
  "uv-settings",
  "uv-workspace",
 ]
@@ -5112,11 +5112,7 @@ version = "0.0.1"
 dependencies = [
  "clap",
  "dirs-sys",
- "distribution-types",
  "fs-err",
- "install-wheel-rs",
- "pep508_rs",
- "pypi-types",
  "schemars",
  "serde",
  "textwrap",
@@ -5126,10 +5122,14 @@ dependencies = [
  "url",
  "uv-cache-info",
  "uv-configuration",
+ "uv-distribution-types",
  "uv-fs",
+ "uv-install-wheel",
  "uv-macros",
  "uv-normalize",
  "uv-options-metadata",
+ "uv-pep508",
+ "uv-pypi-types",
  "uv-python",
  "uv-resolver",
  "uv-warnings",
@@ -5163,11 +5163,7 @@ version = "0.0.1"
 dependencies = [
  "dirs-sys",
  "fs-err",
- "install-wheel-rs",
  "pathdiff",
- "pep440_rs",
- "pep508_rs",
- "pypi-types",
  "serde",
  "thiserror",
  "toml",
@@ -5175,7 +5171,11 @@ dependencies = [
  "tracing",
  "uv-cache",
  "uv-fs",
+ "uv-install-wheel",
  "uv-installer",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-pypi-types",
  "uv-python",
  "uv-settings",
  "uv-state",
@@ -5187,18 +5187,18 @@ name = "uv-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "distribution-types",
- "once-map",
- "pep440_rs",
- "pep508_rs",
- "pypi-types",
  "rustc-hash",
  "thiserror",
  "url",
  "uv-cache",
  "uv-configuration",
+ "uv-distribution-types",
  "uv-git",
  "uv-normalize",
+ "uv-once-map",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-pypi-types",
  "uv-python",
 ]
 
@@ -5213,11 +5213,11 @@ dependencies = [
  "fs-err",
  "itertools 0.13.0",
  "pathdiff",
- "platform-tags",
- "pypi-types",
  "thiserror",
  "tracing",
  "uv-fs",
+ "uv-platform-tags",
+ "uv-pypi-types",
  "uv-python",
  "uv-version",
 ]
@@ -5243,9 +5243,6 @@ dependencies = [
  "insta",
  "itertools 0.13.0",
  "owo-colors",
- "pep440_rs",
- "pep508_rs",
- "pypi-types",
  "regex",
  "rustc-hash",
  "same-file",
@@ -5264,6 +5261,9 @@ dependencies = [
  "uv-macros",
  "uv-normalize",
  "uv-options-metadata",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-pypi-types",
  "uv-warnings",
 ]
 

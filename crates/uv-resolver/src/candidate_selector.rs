@@ -3,12 +3,12 @@ use pubgrub::Range;
 use std::fmt::{Display, Formatter};
 use tracing::{debug, trace};
 
-use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
-use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
-use pep440_rs::Version;
-use pep508_rs::MarkerTree;
 use uv_configuration::IndexStrategy;
+use uv_distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
+use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::Preferences;
@@ -578,7 +578,7 @@ impl Name for Candidate<'_> {
 }
 
 impl DistributionMetadata for Candidate<'_> {
-    fn version_or_url(&self) -> distribution_types::VersionOrUrlRef {
-        distribution_types::VersionOrUrlRef::Version(self.version)
+    fn version_or_url(&self) -> uv_distribution_types::VersionOrUrlRef {
+        uv_distribution_types::VersionOrUrlRef::Version(self.version)
     }
 }

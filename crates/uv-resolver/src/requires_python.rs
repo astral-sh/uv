@@ -5,9 +5,9 @@ use std::ops::Deref;
 use itertools::Itertools;
 use pubgrub::Range;
 
-use distribution_filename::WheelFilename;
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_distribution_filename::WheelFilename;
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
 
 #[derive(thiserror::Error, Debug)]
 pub enum RequiresPythonError {
@@ -708,8 +708,8 @@ mod tests {
     use std::collections::Bound;
     use std::str::FromStr;
 
-    use distribution_filename::WheelFilename;
-    use pep440_rs::{Version, VersionSpecifiers};
+    use uv_distribution_filename::WheelFilename;
+    use uv_pep440::{Version, VersionSpecifiers};
 
     use crate::requires_python::{LowerBound, UpperBound};
     use crate::RequiresPython;

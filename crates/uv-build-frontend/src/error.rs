@@ -1,7 +1,5 @@
 use crate::PythonRunnerOutput;
 use itertools::Itertools;
-use pep440_rs::Version;
-use pep508_rs::PackageName;
 use regex::Regex;
 use std::env;
 use std::fmt::{Display, Formatter};
@@ -13,6 +11,8 @@ use thiserror::Error;
 use tracing::error;
 use uv_configuration::BuildOutput;
 use uv_fs::Simplified;
+use uv_pep440::Version;
+use uv_pep508::PackageName;
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE_GCC: LazyLock<Regex> = LazyLock::new(|| {
@@ -285,11 +285,11 @@ impl Error {
 mod test {
     use crate::{Error, PythonRunnerOutput};
     use indoc::indoc;
-    use pep440_rs::Version;
-    use pep508_rs::PackageName;
     use std::process::ExitStatus;
     use std::str::FromStr;
     use uv_configuration::BuildOutput;
+    use uv_pep440::Version;
+    use uv_pep508::PackageName;
 
     #[test]
     fn missing_header() {

@@ -5,8 +5,8 @@ use std::convert;
 use tokio::sync::oneshot;
 use tracing::instrument;
 
-use distribution_types::CachedDist;
 use uv_cache::Cache;
+use uv_distribution_types::CachedDist;
 use uv_python::PythonEnvironment;
 
 pub struct Installer<'a> {
@@ -146,7 +146,7 @@ fn install(
             wheel
                 .parsed_url()?
                 .as_ref()
-                .map(pypi_types::DirectUrl::try_from)
+                .map(uv_pypi_types::DirectUrl::try_from)
                 .transpose()?
                 .as_ref(),
             if wheel.cache_info().is_empty() {

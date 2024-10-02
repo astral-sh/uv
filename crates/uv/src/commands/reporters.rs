@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_types::{
+use uv_distribution_types::{
     BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;

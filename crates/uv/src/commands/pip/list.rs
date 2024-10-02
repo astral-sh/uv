@@ -8,9 +8,9 @@ use serde::Serialize;
 use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
-use distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_cache::Cache;
 use uv_cli::ListFormat;
+use uv_distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;

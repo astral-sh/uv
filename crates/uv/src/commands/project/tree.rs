@@ -2,10 +2,10 @@ use anyhow::Result;
 use std::fmt::Write;
 use std::path::Path;
 
-use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, TargetTriple};
+use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
 use uv_workspace::{DiscoveryOptions, Workspace};

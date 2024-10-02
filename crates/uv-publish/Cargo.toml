@@ -10,12 +10,12 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-distribution-filename = { workspace = true }
-pypi-types = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
+uv-distribution-filename = { workspace = true }
 uv-fs = { workspace = true }
 uv-metadata = { workspace = true }
+uv-pypi-types = { workspace = true }
 uv-warnings = { workspace = true }
 
 async-compression = { workspace = true }

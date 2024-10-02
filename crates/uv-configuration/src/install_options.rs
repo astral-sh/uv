@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use tracing::debug;
 
-use pep508_rs::PackageName;
+use uv_pep508::PackageName;
 
 #[derive(Debug, Clone, Default)]
 pub struct InstallOptions {

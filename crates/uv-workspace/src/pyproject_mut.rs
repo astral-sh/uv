@@ -1,12 +1,12 @@
 use itertools::Itertools;
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
 use uv_fs::PortablePath;
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 
 use crate::pyproject::{DependencyType, Source};
 

@@ -1,9 +1,6 @@
 use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
 
-use distribution_types::{FlatIndexLocation, IndexUrl, StaticMetadata};
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::Requirement;
-use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use serde::{Deserialize, Serialize};
 use url::Url;
 use uv_cache_info::CacheKey;
@@ -11,8 +8,11 @@ use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
     TrustedHost, TrustedPublishing,
 };
+use uv_distribution_types::{FlatIndexLocation, IndexUrl, StaticMetadata};
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
+use uv_pep508::Requirement;
+use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 

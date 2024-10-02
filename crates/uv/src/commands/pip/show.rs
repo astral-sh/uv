@@ -6,8 +6,8 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use tracing::debug;
 
-use distribution_types::{Diagnostic, Name};
 use uv_cache::Cache;
+use uv_distribution_types::{Diagnostic, Name};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;

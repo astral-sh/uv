@@ -14,19 +14,19 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, warn, Instrument};
 use url::Url;
 
-use distribution_filename::WheelFilename;
-use distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, Name, SourceDist,
-};
-use platform_tags::Tags;
-use pypi_types::HashDigest;
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
+use uv_distribution_filename::WheelFilename;
+use uv_distribution_types::{
+    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, Name, SourceDist,
+};
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
+use uv_platform_tags::Tags;
+use uv_pypi_types::HashDigest;
 use uv_types::BuildContext;
 
 use crate::archive::Archive;
@@ -148,7 +148,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let wheel = wheels.best_wheel();
                 let url = match &wheel.file.url {
                     FileLocation::RelativeUrl(base, url) => {
-                        pypi_types::base_url_join_relative(base, url)?
+                        uv_pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
                 };

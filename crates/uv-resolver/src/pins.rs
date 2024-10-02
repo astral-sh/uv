@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap;
 
-use distribution_types::{CompatibleDist, ResolvedDist};
+use uv_distribution_types::{CompatibleDist, ResolvedDist};
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::Candidate;
@@ -10,7 +10,7 @@ use crate::candidate_selector::Candidate;
 /// For example, given `Flask==3.0.0`, the [`FilePins`] would contain a mapping from `Flask` to
 /// `3.0.0` to the specific wheel or source distribution archive that was pinned for that version.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct FilePins(FxHashMap<PackageName, FxHashMap<pep440_rs::Version, ResolvedDist>>);
+pub(crate) struct FilePins(FxHashMap<PackageName, FxHashMap<uv_pep440::Version, ResolvedDist>>);
 
 impl FilePins {
     /// Pin a candidate package.
@@ -25,7 +25,7 @@ impl FilePins {
     pub(crate) fn get(
         &self,
         name: &PackageName,
-        version: &pep440_rs::Version,
+        version: &uv_pep440::Version,
     ) -> Option<&ResolvedDist> {
         self.0.get(name)?.get(version)
     }

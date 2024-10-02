@@ -5,9 +5,9 @@ use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
-use pep508_rs::MarkerTree;
+use uv_distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
 use uv_normalize::PackageName;
+use uv_pep508::MarkerTree;
 
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolutionGraph, ResolverMarkers};
@@ -210,7 +210,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     let mut dependents = petgraph
                         .edges_directed(index, Direction::Incoming)
                         .map(|edge| &petgraph[edge.source()])
-                        .map(distribution_types::Name::name)
+                        .map(uv_distribution_types::Name::name)
                         .collect::<Vec<_>>();
                     dependents.sort_unstable();
                     dependents.dedup();

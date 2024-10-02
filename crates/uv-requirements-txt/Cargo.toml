@@ -1,0 +1,45 @@
+[package]
+name = "uv-requirements-txt"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-distribution-types = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-client = { workspace = true }
+uv-fs = { workspace = true }
+uv-normalize = { workspace = true }
+uv-configuration = { workspace = true }
+uv-warnings = { workspace = true }
+
+fs-err = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true, optional = true }
+reqwest-middleware = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+unscanny = { workspace = true }
+url = { workspace = true }
+
+[features]
+http = ["reqwest", "reqwest-middleware"]
+
+[dev-dependencies]
+anyhow = { version = "1.0.89" }
+assert_fs = { version = "1.1.2" }
+indoc = { version = "2.0.5" }
+insta = { version = "1.40.0", features = ["filters"] }
+itertools = { version = "0.13.0" }
+tempfile = { version = "3.12.0" }
+test-case = { version = "3.3.1" }
+tokio = { version = "1.40.0" }

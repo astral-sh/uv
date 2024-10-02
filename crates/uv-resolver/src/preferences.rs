@@ -3,12 +3,12 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
-use pep440_rs::{Operator, Version};
-use pep508_rs::{MarkerTree, VersionOrUrl};
-use pypi_types::{HashDigest, HashError};
-use requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
+use uv_distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
 use uv_normalize::PackageName;
+use uv_pep440::{Operator, Version};
+use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_pypi_types::{HashDigest, HashError};
+use uv_requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 
 use crate::ResolverMarkers;
 

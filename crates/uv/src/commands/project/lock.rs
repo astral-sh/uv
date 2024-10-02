@@ -8,12 +8,6 @@ use std::fmt::Write;
 use std::path::Path;
 use tracing::debug;
 
-use distribution_types::{
-    DependencyMetadata, IndexLocations, NameRequirementSpecification,
-    UnresolvedRequirementSpecification,
-};
-use pep440_rs::Version;
-use pypi_types::{Requirement, SupportedEnvironments};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -22,8 +16,14 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
+use uv_distribution_types::{
+    DependencyMetadata, IndexLocations, NameRequirementSpecification,
+    UnresolvedRequirementSpecification,
+};
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_pep440::Version;
+use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_resolver::{

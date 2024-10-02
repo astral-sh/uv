@@ -7,13 +7,15 @@ use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
 use url::Url;
 
-use distribution_types::{BuildableSource, DirectorySourceUrl, HashPolicy, SourceUrl, VersionId};
-use pep508_rs::RequirementOrigin;
-use pypi_types::Requirement;
 use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, Reporter, RequiresDist};
+use uv_distribution_types::{
+    BuildableSource, DirectorySourceUrl, HashPolicy, SourceUrl, VersionId,
+};
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
+use uv_pep508::RequirementOrigin;
+use uv_pypi_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 

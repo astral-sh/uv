@@ -4,10 +4,10 @@ use same_file::is_same_file;
 use tracing::{debug, trace};
 use url::Url;
 
-use cache_key::{CanonicalUrl, RepositoryUrl};
-use distribution_types::{InstalledDirectUrlDist, InstalledDist};
-use pypi_types::{DirInfo, DirectUrl, RequirementSource, VcsInfo, VcsKind};
 use uv_cache_info::CacheInfo;
+use uv_cache_key::{CanonicalUrl, RepositoryUrl};
+use uv_distribution_types::{InstalledDirectUrlDist, InstalledDist};
+use uv_pypi_types::{DirInfo, DirectUrl, RequirementSource, VcsInfo, VcsKind};
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum RequirementSatisfaction {

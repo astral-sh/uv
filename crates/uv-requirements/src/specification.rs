@@ -33,19 +33,19 @@ use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
 
-use cache_key::CanonicalUrl;
-use distribution_types::{
+use uv_cache_key::CanonicalUrl;
+use uv_client::BaseClientBuilder;
+use uv_configuration::{NoBinary, NoBuild};
+use uv_distribution_types::{
     FlatIndexLocation, IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
-use pep508_rs::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
-use pypi_types::Requirement;
-use pypi_types::VerbatimParsedUrl;
-use requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
-use uv_client::BaseClientBuilder;
-use uv_configuration::{NoBinary, NoBuild};
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{ExtraName, PackageName};
+use uv_pep508::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
+use uv_pypi_types::Requirement;
+use uv_pypi_types::VerbatimParsedUrl;
+use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
 use uv_workspace::pyproject::PyProjectToml;
 
 use crate::RequirementsSource;

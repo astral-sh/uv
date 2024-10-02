@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use pep440_rs::Version;
-use pypi_types::RequirementSource;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pypi_types::RequirementSource;
 
 use crate::{DependencyMode, Manifest, ResolverMarkers};
 
@@ -31,7 +31,7 @@ impl AllowedYanks {
             };
             if matches!(
                 specifier.operator(),
-                pep440_rs::Operator::Equal | pep440_rs::Operator::ExactEqual
+                uv_pep440::Operator::Equal | uv_pep440::Operator::ExactEqual
             ) {
                 allowed_yanks
                     .entry(requirement.name.clone())

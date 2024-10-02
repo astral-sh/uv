@@ -4,8 +4,6 @@ use std::path::Path;
 use std::{env, iter};
 
 use itertools::Itertools;
-use pep508_rs::MarkerEnvironment;
-use platform_tags::Platform;
 use reqwest::{Client, ClientBuilder, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
@@ -17,6 +15,8 @@ use url::Url;
 use uv_auth::AuthMiddleware;
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
+use uv_pep508::MarkerEnvironment;
+use uv_platform_tags::Platform;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 

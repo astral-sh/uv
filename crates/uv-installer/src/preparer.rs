@@ -2,18 +2,18 @@ use std::cmp::Reverse;
 use std::sync::Arc;
 
 use futures::{stream::FuturesUnordered, FutureExt, Stream, TryFutureExt, TryStreamExt};
-use pep508_rs::PackageName;
 use tokio::task::JoinError;
 use tracing::{debug, instrument};
 use url::Url;
+use uv_pep508::PackageName;
 
-use distribution_types::{
-    BuildableSource, CachedDist, Dist, Hashed, Identifier, Name, RemoteSource,
-};
-use platform_tags::Tags;
 use uv_cache::Cache;
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, LocalWheel};
+use uv_distribution_types::{
+    BuildableSource, CachedDist, Dist, Hashed, Identifier, Name, RemoteSource,
+};
+use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy, InFlight};
 
 #[derive(thiserror::Error, Debug)]

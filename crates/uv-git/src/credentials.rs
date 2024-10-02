@@ -1,9 +1,9 @@
-use cache_key::RepositoryUrl;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 use tracing::trace;
 use url::Url;
 use uv_auth::Credentials;
+use uv_cache_key::RepositoryUrl;
 
 /// Global authentication cache for a uv invocation.
 ///
