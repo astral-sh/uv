@@ -29,6 +29,7 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, HashStrategy};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
+use crate::commands::pip::operations::report_target_environment;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{diagnostics, ExitStatus, SharedState};
@@ -131,11 +132,7 @@ pub(crate) async fn pip_sync(
         &cache,
     )?;
 
-    debug!(
-        "Using Python {} environment at {}",
-        environment.interpreter().python_version(),
-        environment.python_executable().user_display().cyan()
-    );
+    report_target_environment(&environment, &cache, printer)?;
 
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
