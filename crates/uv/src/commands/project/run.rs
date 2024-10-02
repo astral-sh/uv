@@ -23,7 +23,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::Lock;
@@ -128,7 +128,10 @@ pub(crate) async fn run(
                 .requires_python
                 .as_ref()
                 .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python.clone(), false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        requires_python.clone(),
+                        PythonVariant::Default,
+                    ))
                 });
             let source = PythonRequestSource::RequiresPython;
             (source, request)
