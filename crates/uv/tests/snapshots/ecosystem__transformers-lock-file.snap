@@ -2388,6 +2388,9 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/99/1a/472900644359cdd208d1fbe71706bdeecbc6e8db2e39c35ebe89459e9172/multiprocess-0.70.12.2.zip", hash = "sha256:206bb9b97b73f87fec1ed15a19f8762950256aa84225450abc7150d02855a083", size = 3308461 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/97/0a/c9e66e0c3fd4f2a9404c91ba1a967858041c865c958746bb6939454eed10/multiprocess-0.70.12.2-pp27-none-any.whl", hash = "sha256:a9f58945edb234591684c0a181b744a3231643814ef3a8f47cea9a2073b4b2bb", size = 82019 },
+    { url = "https://files.pythonhosted.org/packages/df/d0/c3011a5bb77f307e68682a5046cce1a2c6591267bf24b5bf3fc4130bb39d/multiprocess-0.70.12.2-py36-none-any.whl", hash = "sha256:b3f866f7d9c7acc1a9cb1b6063a29f5cb140ff545b35b71fd4bfdac6f19d75fa", size = 106969 },
+    { url = "https://files.pythonhosted.org/packages/aa/d8/d7bbcef5c03890f5fe983d8419b0c5236af3657c5aa9bddf1991a6ed813a/multiprocess-0.70.12.2-py37-none-any.whl", hash = "sha256:6aa67e805e50b6e9dfc56dd0f0c85ac3409e6791d4ec5405c5f9bc0a47d745a4", size = 112117 },
+    { url = "https://files.pythonhosted.org/packages/e6/22/b09b8394f8c86ff0cfebd725ea96bba0accd4a4b2be437bcba6a0cf7d1c3/multiprocess-0.70.12.2-py38-none-any.whl", hash = "sha256:85941e650c277af44fc82e3e97faacb920e5ce3615238b540cbad4012d6f60e9", size = 128323 },
     { url = "https://files.pythonhosted.org/packages/e3/12/c1c7b5574a574a5bc898c8656b0ab8514d0609356b3ca18180e2ae94c2f7/multiprocess-0.70.12.2-py39-none-any.whl", hash = "sha256:6f812a1d3f198b7cacd63983f60e2dc1338bd4450893f90c435067b5a3127e6f", size = 128693 },
 ]
 
