@@ -18,6 +18,7 @@ use uv_python::PythonRequest;
 use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
+use crate::commands::pip::operations::report_target_environment;
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
@@ -57,11 +58,7 @@ pub(crate) async fn pip_uninstall(
         &cache,
     )?;
 
-    debug!(
-        "Using Python {} environment at {}",
-        environment.interpreter().python_version(),
-        environment.python_executable().user_display().cyan(),
-    );
+    report_target_environment(&environment, &cache, printer)?;
 
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {

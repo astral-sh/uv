@@ -7,6 +7,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 use tracing::debug;
+use uv_tool::InstalledTools;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
@@ -536,6 +537,48 @@ pub(crate) async fn install(
     logger.on_complete(&changelog, printer)?;
 
     Ok(changelog)
+}
+
+/// Display a message about the target environment for the operation.
+pub(crate) fn report_target_environment(
+    env: &PythonEnvironment,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<(), Error> {
+    let message = format!(
+        "Using Python {} environment at {}",
+        env.interpreter().python_version(),
+        env.root().user_display()
+    );
+
+    let Ok(target) = env.root().canonicalize() else {
+        debug!("{}", message);
+        return Ok(());
+    };
+
+    // Do not report environments in the cache
+    if target.starts_with(cache.root()) {
+        debug!("{}", message);
+        return Ok(());
+    }
+
+    // Do not report tool environments
+    if let Ok(tools) = InstalledTools::from_settings() {
+        if target.starts_with(tools.root()) {
+            debug!("{}", message);
+            return Ok(());
+        }
+    }
+
+    // Do not report a default environment path
+    if let Ok(default) = PathBuf::from(".venv").canonicalize() {
+        if target == default {
+            debug!("{}", message);
+            return Ok(());
+        }
+    }
+
+    Ok(writeln!(printer.stderr(), "{}", message.dimmed())?)
 }
 
 /// Report on the results of a dry-run installation.
