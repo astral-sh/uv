@@ -2,11 +2,11 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use url::Url;
 
-use install_wheel_rs::linker::LinkMode;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, TargetTriple, TrustedPublishing,
 };
 use uv_distribution_types::IndexUrl;
+use uv_install_wheel::linker::LinkMode;
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};

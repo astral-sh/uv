@@ -83,7 +83,6 @@ mod resolver {
 
     use anyhow::Result;
 
-    use install_wheel_rs::linker::LinkMode;
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
@@ -93,6 +92,7 @@ mod resolver {
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{DependencyMetadata, IndexCapabilities, IndexLocations};
     use uv_git::GitResolver;
+    use uv_install_wheel::linker::LinkMode;
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use uv_platform_tags::{Arch, Os, Platform, Tags};

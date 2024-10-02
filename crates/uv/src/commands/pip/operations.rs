@@ -8,7 +8,6 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use tracing::debug;
 
-use install_wheel_rs::linker::LinkMode;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
@@ -25,6 +24,7 @@ use uv_distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
 };
 use uv_fs::Simplified;
+use uv_install_wheel::linker::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{GroupName, PackageName};
 use uv_platform_tags::Tags;
@@ -487,7 +487,7 @@ pub(crate) async fn install(
                     );
                 }
                 Err(uv_installer::UninstallError::Uninstall(
-                    install_wheel_rs::Error::MissingRecord(_),
+                    uv_install_wheel::Error::MissingRecord(_),
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
@@ -495,7 +495,7 @@ pub(crate) async fn install(
                     );
                 }
                 Err(uv_installer::UninstallError::Uninstall(
-                    install_wheel_rs::Error::MissingTopLevel(_),
+                    uv_install_wheel::Error::MissingTopLevel(_),
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",

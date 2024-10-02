@@ -1,6 +1,5 @@
 use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
 
-use install_wheel_rs::linker::LinkMode;
 use serde::{Deserialize, Serialize};
 use url::Url;
 use uv_cache_info::CacheKey;
@@ -9,6 +8,7 @@ use uv_configuration::{
     TrustedHost, TrustedPublishing,
 };
 use uv_distribution_types::{FlatIndexLocation, IndexUrl, StaticMetadata};
+use uv_install_wheel::linker::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::Requirement;

@@ -9,7 +9,6 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use install_wheel_rs::linker::LinkMode;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -20,6 +19,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{DependencyMetadata, IndexLocations};
 use uv_fs::Simplified;
+use uv_install_wheel::linker::LinkMode;
 use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,

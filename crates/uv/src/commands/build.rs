@@ -5,10 +5,10 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use install_wheel_rs::linker::LinkMode;
 use owo_colors::OwoColorize;
 use uv_distribution_filename::SourceDistExtension;
 use uv_distribution_types::{DependencyMetadata, IndexLocations};
+use uv_install_wheel::linker::LinkMode;
 
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;

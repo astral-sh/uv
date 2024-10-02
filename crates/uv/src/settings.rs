@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
 
-use install_wheel_rs::linker::LinkMode;
 use url::Url;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::{
@@ -26,6 +25,7 @@ use uv_configuration::{
     TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, IndexLocations};
+use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
 use uv_pypi_types::{Requirement, SupportedEnvironments};

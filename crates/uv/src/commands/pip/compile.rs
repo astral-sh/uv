@@ -6,7 +6,6 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use install_wheel_rs::linker::LinkMode;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -22,6 +21,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_git::GitResolver;
+use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
 use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{
