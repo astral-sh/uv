@@ -616,3 +616,158 @@ fn optional_dependencies_inverted() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["foo", "bar"]
+    "#,
+    )?;
+
+    let foo = context.temp_dir.child("foo");
+    foo.create_dir_all()?;
+    foo.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    let bar = context.temp_dir.child("bar");
+    bar.create_dir_all()?;
+    bar.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    bar v0.1.0
+    └── iniconfig v2.0.0
+    foo v0.1.0
+    └── anyio v4.3.0
+        ├── idna v3.6
+        └── sniffio v1.3.1
+    project v0.1.0
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--package").arg("foo"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    foo v0.1.0
+    └── anyio v4.3.0
+        ├── idna v3.6
+        └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+/// Workspace members depend on each other, `uv tree` should display their dependencies even if they
+/// are non-roots.
+#[test]
+fn workspace_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["foo", "bar"]
+    "#,
+    )?;
+
+    let foo = context.temp_dir.child("foo");
+    foo.create_dir_all()?;
+    foo.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar"]
+
+        [tool.uv.sources]
+        bar = { workspace = true }
+        "#,
+    )?;
+
+    let bar = context.temp_dir.child("bar");
+    bar.create_dir_all()?;
+    bar.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo"]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    bar v0.1.0
+    └── foo v0.1.0
+        └── bar v0.1.0 (*)
+    foo v0.1.0 (*)
+    project v0.1.0
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("foo"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    foo v0.1.0
+    └── bar v0.1.0
+        └── foo v0.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    Ok(())
+}
