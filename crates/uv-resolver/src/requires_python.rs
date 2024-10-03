@@ -1,8 +1,7 @@
 use std::cmp::Ordering;
-use std::collections::Bound;
+use std::collections::{BTreeSet, Bound};
 use std::ops::Deref;
 
-use itertools::Itertools;
 use pubgrub::Range;
 
 use uv_distribution_filename::WheelFilename;
@@ -70,37 +69,39 @@ impl RequiresPython {
     pub fn intersection<'a>(
         specifiers: impl Iterator<Item = &'a VersionSpecifiers>,
     ) -> Result<Option<Self>, RequiresPythonError> {
-        // Convert to PubGrub range and perform an intersection.
-        let range = specifiers
-            .into_iter()
-            .map(crate::pubgrub::PubGrubSpecifier::from_release_specifiers)
-            .fold_ok(None, |range: Option<Range<Version>>, requires_python| {
-                if let Some(range) = range {
-                    Some(range.intersection(&requires_python.into()))
-                } else {
-                    Some(requires_python.into())
+        let mut combined: BTreeSet<VersionSpecifier> = BTreeSet::new();
+        let mut lower_bound: LowerBound = LowerBound(Bound::Unbounded);
+        let mut upper_bound: UpperBound = UpperBound(Bound::Unbounded);
+
+        for specifier in specifiers {
+            // Convert to PubGrub range and perform an intersection.
+            let requires_python =
+                crate::pubgrub::PubGrubSpecifier::from_release_specifiers(specifier)?;
+            if let Some((lower, upper)) = requires_python.bounding_range() {
+                let lower = LowerBound(lower.cloned());
+                let upper = UpperBound(upper.cloned());
+                if lower > lower_bound {
+                    lower_bound = lower;
                 }
-            })?;
+                if upper < upper_bound {
+                    upper_bound = upper;
+                }
+            }
 
-        let Some(range) = range else {
+            // Track all specifiers for the final result.
+            combined.extend(specifier.iter().cloned());
+        }
+
+        if combined.is_empty() {
             return Ok(None);
-        };
+        }
 
-        // Extract the bounds.
-        let (lower_bound, upper_bound) = range
-            .bounding_range()
-            .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
-            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
-
-        // Convert back to PEP 440 specifiers.
-        let specifiers = range
-            .iter()
-            .flat_map(VersionSpecifier::from_release_only_bounds)
-            .collect();
+        // Compute the intersection by combining the specifiers.
+        let specifiers = combined.into_iter().collect();
 
         Ok(Some(Self {
             specifiers,
-            range: RequiresPythonRange(LowerBound(lower_bound), UpperBound(upper_bound)),
+            range: RequiresPythonRange(lower_bound, upper_bound),
         }))
     }
 
@@ -231,29 +232,10 @@ impl RequiresPython {
             .map(|(lower, _)| lower)
             .unwrap_or(&Bound::Unbounded);
 
-        // We want, e.g., `requires_python_lower` to be `>=3.8` and `version_lower` to be
-        // `>=3.7`.
+        // We want, e.g., `self.range.lower()` to be `>=3.8` and `target` to be `>=3.7`.
         //
-        // That is: `version_lower` should be less than or equal to `requires_python_lower`.
-        match (target, self.range.lower().as_ref()) {
-            (Bound::Included(target_lower), Bound::Included(requires_python_lower)) => {
-                target_lower <= requires_python_lower
-            }
-            (Bound::Excluded(target_lower), Bound::Included(requires_python_lower)) => {
-                target_lower < requires_python_lower
-            }
-            (Bound::Included(target_lower), Bound::Excluded(requires_python_lower)) => {
-                target_lower <= requires_python_lower
-            }
-            (Bound::Excluded(target_lower), Bound::Excluded(requires_python_lower)) => {
-                target_lower < requires_python_lower
-            }
-            // If the dependency has no lower bound, then it supports all versions.
-            (Bound::Unbounded, _) => true,
-            // If we have no lower bound, then there must be versions we support that the
-            // dependency does not.
-            (_, Bound::Unbounded) => false,
-        }
+        // That is: `target` should be less than or equal to `self.range.lower()`.
+        *self.range.lower() >= LowerBound(target.clone())
     }
 
     /// Returns the [`VersionSpecifiers`] for the `Requires-Python` specifier.
