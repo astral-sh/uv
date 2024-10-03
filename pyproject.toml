@@ -85,7 +85,10 @@ version_files = [
 
 [tool.mypy]
 ignore_missing_imports = true
-files = "crates/uv-python/*.py"
+files = [
+  "crates/uv-python/*.py",
+  "python/uv/*.py",
+]
 
 [tool.uv]
 managed = false
