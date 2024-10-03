@@ -3351,9 +3351,9 @@ pub struct ToolInstallArgs {
     #[arg(long)]
     pub with: Vec<String>,
 
-    /// Additionally include entrypoints from the following packages.
+    /// Additionally include command entrypoints from the following packages.
     #[arg(long)]
-    pub i_want_ponies: Vec<PackageName>,
+    pub with_commands_from: Vec<PackageName>,
 
     /// Run all requirements listed in the given `requirements.txt` files.
     #[arg(long, value_parser = parse_maybe_file_path)]

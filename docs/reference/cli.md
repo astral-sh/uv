@@ -2869,8 +2869,6 @@ uv tool install [OPTIONS] <PACKAGE>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
-</dd><dt><code>--i-want-ponies</code> <i>i-want-ponies</i></dt><dd><p>Additionally include entrypoints from the following packages</p>
-
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
@@ -3056,6 +3054,8 @@ uv tool install [OPTIONS] <PACKAGE>
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd><dt><code>--with</code> <i>with</i></dt><dd><p>Include the following extra requirements</p>
+
+</dd><dt><code>--with-commands-from</code> <i>with-commands-from</i></dt><dd><p>Additionally include command entrypoints from the following packages</p>
 
 </dd><dt><code>--with-requirements</code> <i>with-requirements</i></dt><dd><p>Run all requirements listed in the given <code>requirements.txt</code> files</p>
 

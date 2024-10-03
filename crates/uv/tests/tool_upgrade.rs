@@ -749,7 +749,7 @@ fn test_tool_upgrade_additional_entrypoints() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("--python")
         .arg("3.11")
-        .arg("--i-want-ponies")
+        .arg("--with-commands-from")
         .arg("black")
         .arg("babel==2.14.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())

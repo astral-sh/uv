@@ -3022,9 +3022,9 @@ fn tool_install_additional_entrypoints() {
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("--i-want-ponies")
+        .arg("--with-commands-from")
         .arg("ansible-core")
-        .arg("--i-want-ponies")
+        .arg("--with-commands-from")
         .arg("black")
         .arg("ansible==9.3.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())

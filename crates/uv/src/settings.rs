@@ -402,7 +402,7 @@ impl ToolInstallSettings {
             from,
             with,
             with_requirements,
-            i_want_ponies,
+            with_commands_from,
             installer,
             force,
             build,
@@ -418,7 +418,7 @@ impl ToolInstallSettings {
         );
 
         let settings = ResolverInstallerSettings::from(options.clone());
-        let extra_entrypoints_packages = i_want_ponies.into_iter().collect();
+        let extra_entrypoints_packages = with_commands_from.into_iter().collect();
 
         Self {
             package,
