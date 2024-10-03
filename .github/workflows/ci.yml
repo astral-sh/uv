@@ -174,10 +174,10 @@ jobs:
         run: rustup show
 
       - name: "Install required Python versions"
-        uses: astral-sh/setup-uv@v3
-        with:
-          version: "latest"
-          enable-cache: true
+        run: |
+          # astral-sh/setup-uv sets `UV_CACHE_DIR` which disrupts the help message check
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -222,10 +222,10 @@ jobs:
         run: rustup show
 
       - name: "Install required Python versions"
-        uses: astral-sh/setup-uv@v3
-        with:
-          version: "latest"
-          enable-cache: true
+        run: |
+          # astral-sh/setup-uv sets `UV_CACHE_DIR` which disrupts the help message check
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
