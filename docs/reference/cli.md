@@ -3055,6 +3055,8 @@ uv tool install [OPTIONS] <PACKAGE>
 
 </dd><dt><code>--with</code> <i>with</i></dt><dd><p>Include the following extra requirements</p>
 
+</dd><dt><code>--with-commands-from</code> <i>with-commands-from</i></dt><dd><p>Additionally include command entrypoints from the following packages</p>
+
 </dd><dt><code>--with-requirements</code> <i>with-requirements</i></dt><dd><p>Run all requirements listed in the given <code>requirements.txt</code> files</p>
 
 </dd></dl>

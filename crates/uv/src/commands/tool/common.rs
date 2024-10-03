@@ -1,4 +1,6 @@
+use std::env::consts::EXE_SUFFIX;
 use std::fmt::Write;
+use std::path::Path;
 use std::{collections::BTreeSet, ffi::OsString};
 
 use anyhow::{bail, Context};
@@ -16,10 +18,9 @@ use uv_pypi_types::Requirement;
 use uv_python::PythonEnvironment;
 use uv_settings::ToolOptions;
 use uv_shell::Shell;
-use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
+use uv_tool::{entrypoint_paths, InstalledTools, Tool, ToolEntrypoint};
 use uv_warnings::warn_user;
 
-use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Return all packages which contain an executable with the given name.
@@ -64,24 +65,22 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
 /// Installs tool executables for a given package and handles any conflicts.
 pub(crate) fn install_executables(
     environment: &PythonEnvironment,
+    tool_name: &PackageName,
     name: &PackageName,
     installed_tools: &InstalledTools,
+    existing_entrypoints: &[ToolEntrypoint],
+    executable_directory: &Path,
     options: ToolOptions,
     force: bool,
     python: Option<String>,
     requirements: Vec<Requirement>,
     printer: Printer,
-) -> anyhow::Result<ExitStatus> {
+) -> anyhow::Result<Vec<ToolEntrypoint>> {
     let site_packages = SitePackages::from_environment(environment)?;
     let installed = site_packages.get_packages(name);
     let Some(installed_dist) = installed.first().copied() else {
         bail!("Expected at least one requirement")
     };
-
-    // Find a suitable path to install into
-    let executable_directory = find_executable_directory()?;
-    fs_err::create_dir_all(&executable_directory)
-        .context("Failed to create executable directory")?;
 
     debug!(
         "Installing tool executables into: {}",
@@ -120,7 +119,10 @@ pub(crate) fn install_executables(
         // Clean up the environment we just created.
         installed_tools.remove_environment(name)?;
 
-        return Ok(ExitStatus::Failure);
+        return Err(anyhow::anyhow!(
+            "Failed to install entrypoints for `{from}`",
+            from = name.cyan()
+        ));
     }
 
     // Check if they exist, before installing
@@ -129,7 +131,7 @@ pub(crate) fn install_executables(
         .filter(|(_, _, target_path)| target_path.exists())
         .peekable();
 
-    // Ignore any existing entrypoints if the user passed `--force`, or the existing recept was
+    // Ignore any existing entrypoints if the user passed `--force`, or the existing receipt was
     // broken.
     if force {
         for (name, _, target) in existing_entry_points {
@@ -138,7 +140,7 @@ pub(crate) fn install_executables(
         }
     } else if existing_entry_points.peek().is_some() {
         // Clean up the environment we just created
-        installed_tools.remove_environment(name)?;
+        installed_tools.remove_environment(tool_name)?;
 
         let existing_entry_points = existing_entry_points
             // SAFETY: We know the target has a filename because we just constructed it above
@@ -158,44 +160,49 @@ pub(crate) fn install_executables(
         )
     }
 
+    let mut names = BTreeSet::new();
     for (name, source_path, target_path) in &target_entry_points {
         debug!("Installing executable: `{name}`");
         #[cfg(unix)]
         replace_symlink(source_path, target_path).context("Failed to install executable")?;
         #[cfg(windows)]
         fs_err::copy(source_path, target_path).context("Failed to install entrypoint")?;
+        names.insert(name.trim_end_matches(EXE_SUFFIX));
     }
 
-    let s = if target_entry_points.len() == 1 {
-        ""
+    let s = if names.len() == 1 { "" } else { "s" };
+    let from_pkg = if tool_name == name {
+        String::new()
     } else {
-        "s"
+        format!(" from `{name}`")
     };
     writeln!(
         printer.stderr(),
-        "Installed {} executable{s}: {}",
-        target_entry_points.len(),
-        target_entry_points
-            .iter()
-            .map(|(name, _, _)| name.bold())
-            .join(", ")
+        "Installed {} executable{s}{from_pkg}: {}",
+        names.len(),
+        names.iter().map(|name| name.bold()).join(", ")
     )?;
 
-    debug!("Adding receipt for tool `{name}`");
-    let tool = Tool::new(
-        requirements.into_iter().collect(),
-        python,
-        target_entry_points
-            .into_iter()
-            .map(|(name, _, target_path)| ToolEntrypoint::new(name, target_path)),
-        options,
-    );
-    installed_tools.add_tool_receipt(name, tool)?;
+    debug!("Adding receipt for tool `{tool_name}`");
 
+    let mut all_entrypoints = existing_entrypoints.to_vec();
+    let mut new_entrypoints = Vec::with_capacity(target_entry_points.len());
+    for (entry, _, target_path) in target_entry_points {
+        let tool_entry = ToolEntrypoint::new(entry, target_path, name.to_string());
+        all_entrypoints.push(tool_entry.clone());
+        new_entrypoints.push(tool_entry);
+    }
+    let tool = Tool::new(requirements, python, all_entrypoints, options);
+    installed_tools.add_tool_receipt(tool_name, tool.clone())?;
+
+    Ok(new_entrypoints)
+}
+
+pub(crate) fn warn_out_of_path(executable_directory: &Path) {
     // If the executable directory isn't on the user's PATH, warn.
-    if !Shell::contains_path(&executable_directory) {
+    if !Shell::contains_path(executable_directory) {
         if let Some(shell) = Shell::from_env() {
-            if let Some(command) = shell.prepend_path(&executable_directory) {
+            if let Some(command) = shell.prepend_path(executable_directory) {
                 if shell.configuration_files().is_empty() {
                     warn_user!(
                         "`{}` is not on your PATH. To use installed tools, run `{}`.",
@@ -223,7 +230,6 @@ pub(crate) fn install_executables(
             );
         }
     }
-    Ok(ExitStatus::Success)
 }
 
 /// Displays a hint if an executable matching the package name can be found in a dependency of the package.

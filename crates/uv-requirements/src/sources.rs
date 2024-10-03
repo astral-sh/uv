@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use console::Term;
 
 use uv_fs::Simplified;
+use uv_normalize::PackageName;
 use uv_warnings::warn_user;
 
 #[derive(Debug, Clone)]
@@ -119,6 +120,11 @@ impl RequirementsSource {
         }
 
         Self::Package(name)
+    }
+
+    /// Build a [`RequirementsSource`] from a [`PackageName`].
+    pub fn from_package_name(pkg_name: &PackageName) -> Self {
+        Self::Package(pkg_name.to_string())
     }
 
     /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a path to a source

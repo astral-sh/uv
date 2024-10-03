@@ -888,10 +888,20 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            let requirements = args
+            // Synthesize extra dependencies by merging all additionally
+            // specified requirements.
+            let extra_deps = args
                 .with
                 .into_iter()
                 .map(RequirementsSource::from_package)
+                .chain(
+                    args.extra_entrypoints_packages
+                        .iter()
+                        .map(RequirementsSource::from_package_name),
+                );
+
+            let requirements = extra_deps
+                .into_iter()
                 .chain(
                     args.with_requirements
                         .into_iter()
@@ -904,6 +914,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.editable,
                 args.from,
                 &requirements,
+                args.extra_entrypoints_packages,
                 args.python,
                 args.force,
                 args.options,

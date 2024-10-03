@@ -3351,6 +3351,10 @@ pub struct ToolInstallArgs {
     #[arg(long)]
     pub with: Vec<String>,
 
+    /// Additionally include command entrypoints from the following packages.
+    #[arg(long)]
+    pub with_commands_from: Vec<PackageName>,
+
     /// Run all requirements listed in the given `requirements.txt` files.
     #[arg(long, value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
