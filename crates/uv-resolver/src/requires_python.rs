@@ -353,8 +353,11 @@ impl RequiresPython {
                 true
             } else if abi_tag == "none" {
                 wheel.python_tag.iter().any(|python_tag| {
-                    // Remove `py2-none-any` and `py27-none-any`.
-                    if python_tag.starts_with("py2") {
+                    // Remove `py2-none-any` and `py27-none-any` and analogous `cp` and `pp` tags.
+                    if python_tag.starts_with("py2")
+                        || python_tag.starts_with("cp2")
+                        || python_tag.starts_with("pp2")
+                    {
                         return false;
                     }
 
@@ -724,9 +727,9 @@ mod tests {
             "black-24.4.2-cp310-cp310-win_amd64.whl",
             "black-24.4.2-cp310-none-win_amd64.whl",
             "cbor2-5.6.4-py3-none-any.whl",
-            "watchfiles-0.22.0-pp310-pypy310_pp73-macosx_11_0_arm64.whl",
             "dearpygui-1.11.1-cp312-cp312-win_amd64.whl",
             "solace_pubsubplus-1.8.0-py36-none-manylinux_2_12_x86_64.whl",
+            "watchfiles-0.22.0-pp310-pypy310_pp73-macosx_11_0_arm64.whl",
         ];
         for wheel_name in wheel_names {
             assert!(
@@ -753,6 +756,7 @@ mod tests {
         let wheel_names = &[
             "PySocks-1.7.1-py27-none-any.whl",
             "black-24.4.2-cp39-cp39-win_amd64.whl",
+            "psutil-6.0.0-cp27-none-win32.whl",
             "psutil-6.0.0-cp36-cp36m-win32.whl",
             "pydantic_core-2.20.1-pp39-pypy39_pp73-win_amd64.whl",
             "torch-1.10.0-cp36-none-macosx_10_9_x86_64.whl",
