@@ -4703,6 +4703,75 @@ fn sorted_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that the added dependencies are case sensitive sorted if the dependency list was already
+/// case sensitive sorted prior to the operation.
+#[test]
+fn case_sensitive_sorted_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    description = "Add your description here"
+    requires-python = ">=3.12"
+    dependencies = [
+        "CacheControl[filecache]>=0.14,<0.15",
+        "PyYAML",
+        "iniconfig",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "anyio"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 14 packages in [TIME]
+    Prepared 13 packages in [TIME]
+    Installed 13 packages in [TIME]
+     + anyio==4.3.0
+     + cachecontrol==0.14.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + filelock==3.13.1
+     + idna==3.6
+     + iniconfig==2.0.0
+     + msgpack==1.0.8
+     + pyyaml==6.0.1
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+        dependencies = [
+            "CacheControl[filecache]>=0.14,<0.15",
+            "PyYAML",
+            "anyio>=4.3.0",
+            "iniconfig",
+            "typing-extensions>=4.10.0",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
 /// Ensure that the custom ordering of the dependencies is preserved
 /// after adding a package.
 #[test]

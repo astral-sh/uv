@@ -539,16 +539,30 @@ pub fn add_dependency(
             // so that user's custom dependency ordering is preserved.
             // Additionally, if the table is invalid (i.e. contains non-string values)
             // we still treat it as unsorted for the sake of simplicity.
-            let sorted = deps.iter().all(toml_edit::Value::is_str)
+            // We account for both case-sensitive and case-insensitive sorting.
+            let all_strings = deps.iter().all(toml_edit::Value::is_str);
+
+            let case_insensitive_sorted = all_strings
                 && deps.iter().tuple_windows().all(|(a, b)| {
                     a.as_str().map(str::to_lowercase) <= b.as_str().map(str::to_lowercase)
                 });
 
+            let case_sensitive_sorted = all_strings
+                && deps
+                    .iter()
+                    .tuple_windows()
+                    .all(|(a, b)| a.as_str() <= b.as_str());
+
             let req_string = req.to_string();
-            let index = if sorted {
+            let index = if case_sensitive_sorted || case_insensitive_sorted {
                 deps.iter()
                     .position(|d: &Value| {
-                        d.as_str().map(str::to_lowercase) > Some(req_string.as_str().to_lowercase())
+                        if case_insensitive_sorted {
+                            d.as_str().map(str::to_lowercase)
+                                > Some(req_string.as_str().to_lowercase())
+                        } else {
+                            d.as_str() > Some(req_string.as_str())
+                        }
                     })
                     .unwrap_or(deps.len())
             } else {
