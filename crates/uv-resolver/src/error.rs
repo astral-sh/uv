@@ -52,6 +52,16 @@ pub enum ResolveError {
         fork_markers: MarkerTree,
     },
 
+    #[error("Requirements contain conflicting indexes for package `{0}`:\n- {}", _1.join("\n- "))]
+    ConflictingIndexesUniversal(PackageName, Vec<String>),
+
+    #[error("Requirements contain conflicting indexes for package `{package_name}` in split `{fork_markers:?}`:\n- {}", indexes.join("\n- "))]
+    ConflictingIndexesFork {
+        package_name: PackageName,
+        indexes: Vec<String>,
+        fork_markers: MarkerTree,
+    },
+
     #[error("Requirements contain conflicting indexes for package `{0}`: `{1}` vs. `{2}`")]
     ConflictingIndexes(PackageName, String, String),
 

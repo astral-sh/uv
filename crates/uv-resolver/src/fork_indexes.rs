@@ -1,56 +1,46 @@
 use std::collections::hash_map::Entry;
 
 use rustc_hash::FxHashMap;
-
-use uv_distribution_types::Verbatim;
+use uv_distribution_types::IndexUrl;
 use uv_normalize::PackageName;
-use uv_pypi_types::VerbatimParsedUrl;
 
 use crate::resolver::ResolverMarkers;
 use crate::ResolveError;
 
 /// See [`crate::resolver::ForkState`].
 #[derive(Default, Debug, Clone)]
-pub(crate) struct ForkUrls(FxHashMap<PackageName, VerbatimParsedUrl>);
+pub(crate) struct ForkIndexes(FxHashMap<PackageName, IndexUrl>);
 
-impl ForkUrls {
-    /// Get the URL previously used for a package in this fork.
-    pub(crate) fn get(&self, package_name: &PackageName) -> Option<&VerbatimParsedUrl> {
+impl ForkIndexes {
+    /// Get the [`IndexUrl`] previously used for a package in this fork.
+    pub(crate) fn get(&self, package_name: &PackageName) -> Option<&IndexUrl> {
         self.0.get(package_name)
     }
 
-    /// Whether we use a URL for this package.
-    pub(crate) fn contains_key(&self, package_name: &PackageName) -> bool {
-        self.0.contains_key(package_name)
-    }
-
-    /// Check that this is the only URL used for this package in this fork.
+    /// Check that this is the only [`IndexUrl`] used for this package in this fork.
     pub(crate) fn insert(
         &mut self,
         package_name: &PackageName,
-        url: &VerbatimParsedUrl,
+        index: &IndexUrl,
         fork_markers: &ResolverMarkers,
     ) -> Result<(), ResolveError> {
         match self.0.entry(package_name.clone()) {
             Entry::Occupied(previous) => {
-                if previous.get() != url {
-                    let mut conflicting_url = vec![
-                        previous.get().verbatim.verbatim().to_string(),
-                        url.verbatim.verbatim().to_string(),
-                    ];
-                    conflicting_url.sort();
+                if previous.get() != index {
+                    let mut conflicts = vec![previous.get().to_string(), index.to_string()];
+                    conflicts.sort();
                     return match fork_markers {
                         ResolverMarkers::Universal { .. }
                         | ResolverMarkers::SpecificEnvironment(_) => {
-                            Err(ResolveError::ConflictingUrlsUniversal(
+                            Err(ResolveError::ConflictingIndexesUniversal(
                                 package_name.clone(),
-                                conflicting_url,
+                                conflicts,
                             ))
                         }
                         ResolverMarkers::Fork(fork_markers) => {
-                            Err(ResolveError::ConflictingUrlsFork {
+                            Err(ResolveError::ConflictingIndexesFork {
                                 package_name: package_name.clone(),
-                                urls: conflicting_url,
+                                indexes: conflicts,
                                 fork_markers: fork_markers.clone(),
                             })
                         }
@@ -58,7 +48,7 @@ impl ForkUrls {
                 }
             }
             Entry::Vacant(vacant) => {
-                vacant.insert(url.clone());
+                vacant.insert(index.clone());
             }
         }
         Ok(())
