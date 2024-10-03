@@ -82,7 +82,7 @@ jobs:
         run: uvx mypy
 
       - name: "Lint shell scripts"
-        uses: ludeeus/action-shellcheck@2
+        uses: ludeeus/action-shellcheck@2.0.0
         env:
           SHELLCHECK_OPTS: --shell bash
         with:
