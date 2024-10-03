@@ -201,10 +201,8 @@ impl TestContext {
             r"\[env:[\n\s]* UV_CACHE_DIR=.+\]".to_string(),
             "[env: UV_CACHE_DIR=]".to_string(),
         ));
-        self.filters.push((
-            r"--cache-dir <CACHE_DIR> ".to_string(),
-            "".to_string(),
-        ));
+        self.filters
+            .push((r"--cache-dir <CACHE_DIR> ".to_string(), String::new()));
         self
     }
 
