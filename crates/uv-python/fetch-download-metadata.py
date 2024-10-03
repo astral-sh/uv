@@ -73,8 +73,8 @@ def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
 
 
 class PlatformTriple(NamedTuple):
-    arch: str
     platform: str
+    arch: str
     libc: str
 
 
@@ -335,7 +335,7 @@ class CPythonFinder(Finder):
             logging.debug("Skipping %r: unknown triple", triple)
             return None
 
-        return PlatformTriple(arch, operating_system, libc)
+        return PlatformTriple(operating_system, arch, libc)
 
     def _normalize_arch(self, arch: str) -> str:
         arch = self.ARCH_MAP.get(arch, arch)
@@ -410,8 +410,8 @@ class PyPyFinder(Finder):
                 download = PythonDownload(
                     version=python_version,
                     triple=PlatformTriple(
-                        arch=arch,
                         platform=platform,
+                        arch=arch,
                         libc=libc,
                     ),
                     flavor="",
