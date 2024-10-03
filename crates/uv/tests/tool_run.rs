@@ -830,6 +830,166 @@ fn tool_run_without_output() {
 }
 
 #[test]
+fn tool_run_csv_with() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let anyio_local = context.temp_dir.child("src").child("anyio_local");
+    copy_dir_all(
+        context.workspace_root.join("scripts/packages/anyio_local"),
+        &anyio_local,
+    )?;
+
+    let black_editable = context.temp_dir.child("src").child("black_editable");
+    copy_dir_all(
+        context
+            .workspace_root
+            .join("scripts/packages/black_editable"),
+        &black_editable,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio", "sniffio==1.3.1"]
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import sniffio
+       "
+    })?;
+
+    // performs a tool run with CSV `with` flag
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with")
+        .arg("numpy,pandas")
+        .arg("ipython")
+        .arg("-c")
+        .arg("import numpy; import pandas;")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + asttokens==2.4.1
+     + decorator==5.1.1
+     + executing==2.0.1
+     + ipython==8.22.2
+     + jedi==0.19.1
+     + matplotlib-inline==0.1.6
+     + numpy==1.26.4
+     + pandas==2.2.1
+     + parso==0.8.3
+     + pexpect==4.9.0
+     + prompt-toolkit==3.0.43
+     + ptyprocess==0.7.0
+     + pure-eval==0.2.2
+     + pygments==2.17.2
+     + python-dateutil==2.9.0.post0
+     + pytz==2024.1
+     + six==1.16.0
+     + stack-data==0.6.3
+     + traitlets==5.14.2
+     + tzdata==2024.1
+     + wcwidth==0.2.13
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn tool_run_repeated_with() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let anyio_local = context.temp_dir.child("src").child("anyio_local");
+    copy_dir_all(
+        context.workspace_root.join("scripts/packages/anyio_local"),
+        &anyio_local,
+    )?;
+
+    let black_editable = context.temp_dir.child("src").child("black_editable");
+    copy_dir_all(
+        context
+            .workspace_root
+            .join("scripts/packages/black_editable"),
+        &black_editable,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio", "sniffio==1.3.1"]
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import sniffio
+       "
+    })?;
+
+    // performs a tool run with repeated `with` flag
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with")
+        .arg("numpy")
+        .arg("--with")
+        .arg("pandas")
+        .arg("ipython")
+        .arg("-c")
+        .arg("import numpy; import pandas;")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + asttokens==2.4.1
+     + decorator==5.1.1
+     + executing==2.0.1
+     + ipython==8.22.2
+     + jedi==0.19.1
+     + matplotlib-inline==0.1.6
+     + numpy==1.26.4
+     + pandas==2.2.1
+     + parso==0.8.3
+     + pexpect==4.9.0
+     + prompt-toolkit==3.0.43
+     + ptyprocess==0.7.0
+     + pure-eval==0.2.2
+     + pygments==2.17.2
+     + python-dateutil==2.9.0.post0
+     + pytz==2024.1
+     + six==1.16.0
+     + stack-data==0.6.3
+     + traitlets==5.14.2
+     + tzdata==2024.1
+     + wcwidth==0.2.13
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn tool_run_with_editable() -> anyhow::Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
