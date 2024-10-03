@@ -368,6 +368,13 @@ pub(crate) async fn add(
         }
     }
 
+    // If the user provides a single, named index, pin all requirements to that index.
+    let index = indexes
+        .first()
+        .as_ref()
+        .and_then(|index| index.name.as_ref())
+        .filter(|_| indexes.len() == 1);
+
     // Add the requirements to the `pyproject.toml` or script.
     let mut toml = match &target {
         Target::Script(script, _) => {
@@ -396,6 +403,7 @@ pub(crate) async fn add(
                     requirement,
                     false,
                     editable,
+                    index.cloned(),
                     rev.clone(),
                     tag.clone(),
                     branch.clone(),
@@ -411,6 +419,7 @@ pub(crate) async fn add(
                     requirement,
                     workspace,
                     editable,
+                    index.cloned(),
                     rev.clone(),
                     tag.clone(),
                     branch.clone(),
@@ -692,7 +701,11 @@ async fn lock_and_sync(
             };
 
             // Only set a minimum version for registry requirements.
-            if edit.source.is_some() {
+            if edit
+                .source
+                .as_ref()
+                .is_some_and(|source| !matches!(source, Source::Registry { .. }))
+            {
                 continue;
             }
 
@@ -883,6 +896,7 @@ fn resolve_requirement(
     requirement: uv_pypi_types::Requirement,
     workspace: bool,
     editable: Option<bool>,
+    index: Option<String>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -893,6 +907,7 @@ fn resolve_requirement(
         requirement.source.clone(),
         workspace,
         editable,
+        index,
         rev,
         tag,
         branch,

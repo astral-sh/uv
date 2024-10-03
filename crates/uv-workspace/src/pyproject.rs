@@ -977,6 +977,7 @@ impl Source {
         source: RequirementSource,
         workspace: bool,
         editable: Option<bool>,
+        index: Option<String>,
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
@@ -1017,7 +1018,19 @@ impl Source {
         }
 
         let source = match source {
-            RequirementSource::Registry { .. } => return Ok(None),
+            RequirementSource::Registry { index: Some(_), .. } => {
+                return Ok(None);
+            }
+            RequirementSource::Registry { index: None, .. } => {
+                if let Some(index) = index {
+                    Source::Registry {
+                        index,
+                        marker: MarkerTree::TRUE,
+                    }
+                } else {
+                    return Ok(None);
+                }
+            }
             RequirementSource::Path { install_path, .. }
             | RequirementSource::Directory { install_path, .. } => Source::Path {
                 editable,

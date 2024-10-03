@@ -5063,7 +5063,7 @@ fn add_no_warn_index_url() -> Result<()> {
 
 /// Add an index provided via `--index`.
 #[test]
-fn add_index_url() -> Result<()> {
+fn add_index() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -5148,6 +5148,7 @@ fn add_index_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Missing version constraint (e.g., a lower bound) for `jinja2`
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -5177,6 +5178,9 @@ fn add_index_url() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
         "###
         );
     });
@@ -5236,7 +5240,7 @@ fn add_index_url() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3" },
+            { name = "jinja2", specifier = ">=3.1.3", index = "https://download.pytorch.org/whl/cu121" },
         ]
         "###
         );
@@ -5275,6 +5279,9 @@ fn add_index_url() -> Result<()> {
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
         "###
         );
     });
@@ -5340,7 +5347,7 @@ fn add_index_url() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3" },
+            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
         ]
         "###
         );
