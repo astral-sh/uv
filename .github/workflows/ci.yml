@@ -84,6 +84,8 @@ jobs:
       - name: "Lint shell scripts"
         uses: ludeeus/action-shellcheck@2.0.0
         env:
+          # renovate: datasource=github-tags depName=koalaman/shellcheck
+          SHELLCHECK_VERSION: "v0.10.0"
           SHELLCHECK_OPTS: --shell bash
         with:
           severity: style
