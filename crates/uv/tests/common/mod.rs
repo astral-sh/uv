@@ -201,8 +201,10 @@ impl TestContext {
             r"\[env:[\n\s]* UV_CACHE_DIR=.+\]".to_string(),
             "[env: UV_CACHE_DIR=]".to_string(),
         ));
+        // When `--cache-dir` is followed with other options,
+        // remove it from the text. Since its presence is inconsistent.
         self.filters
-            .push((r"--cache-dir <CACHE_DIR> ".to_string(), String::new()));
+            .push((r"--cache-dir <CACHE_DIR> <".to_string(), "<".to_string()));
         self
     }
 

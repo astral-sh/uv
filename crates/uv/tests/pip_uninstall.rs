@@ -12,7 +12,7 @@ use crate::common::{get_bin, venv_to_interpreter, TestContext};
 mod common;
 
 #[test]
-fn no_arguments() -> Result<()> {
+fn no_arguments() {
     let context = TestContext::new_with_versions(&[]).with_ignore_cache_dir();
 
     uv_snapshot!(context.filters(), context.pip_uninstall(), @r###"
@@ -29,8 +29,6 @@ fn no_arguments() -> Result<()> {
     For more information, try '--help'.
     "###
     );
-
-    Ok(())
 }
 
 #[test]
