@@ -766,6 +766,10 @@ impl<T> Maybe<T> {
             Maybe::None => None,
         }
     }
+
+    pub fn is_some(&self) -> bool {
+        matches!(self, Maybe::Some(_))
+    }
 }
 
 /// Parse a string into an [`IndexUrl`], mapping the empty string to `None`.

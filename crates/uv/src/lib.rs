@@ -1359,6 +1359,7 @@ async fn run_project(
                 args.editable,
                 args.dependency_type,
                 args.raw_sources,
+                args.indexes,
                 args.rev,
                 args.tag,
                 args.branch,

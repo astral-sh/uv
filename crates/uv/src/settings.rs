@@ -805,6 +805,7 @@ pub(crate) struct AddSettings {
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
+    pub(crate) indexes: Vec<Index>,
     pub(crate) settings: ResolverInstallerSettings,
 }
 
@@ -843,6 +844,51 @@ impl AddSettings {
             DependencyType::Production
         };
 
+        // Track the `--index` and `--default-index` arguments from the command-line.
+        let indexes = installer
+            .index_args
+            .default_index
+            .clone()
+            .and_then(Maybe::into_option)
+            .into_iter()
+            .chain(
+                installer
+                    .index_args
+                    .index
+                    .clone()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Maybe::into_option),
+            )
+            .collect::<Vec<_>>();
+
+        // If the user passed an `--index-url` or `--extra-index-url`, warn.
+        if installer
+            .index_args
+            .index_url
+            .as_ref()
+            .is_some_and(Maybe::is_some)
+        {
+            if script.is_some() {
+                warn_user_once!("Indexes specified via `--index-url` will not be persisted to the script; use `--default-index` instead.");
+            } else {
+                warn_user_once!("Indexes specified via `--index-url` will not be persisted to the `pyproject.toml` file; use `--default-index` instead.");
+            }
+        }
+
+        if installer
+            .index_args
+            .extra_index_url
+            .as_ref()
+            .is_some_and(|extra_index_url| extra_index_url.iter().any(Maybe::is_some))
+        {
+            if script.is_some() {
+                warn_user_once!("Indexes specified via `--extra-index-url` will not be persisted to the script; use `--index` instead.");
+            } else {
+                warn_user_once!("Indexes specified via `--extra-index-url` will not be persisted to the `pyproject.toml` file; use `--index` instead.");
+            }
+        }
+
         Self {
             locked,
             frozen,
@@ -857,6 +903,7 @@ impl AddSettings {
             package,
             script,
             python,
+            indexes,
             editable: flag(editable, no_editable),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
