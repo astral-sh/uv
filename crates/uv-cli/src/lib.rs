@@ -3281,7 +3281,7 @@ pub struct ToolRunArgs {
     pub from: Option<String>,
 
     /// Run with the given packages installed.
-    #[arg(long)]
+    #[arg(long, value_delimiter = ',')]
     pub with: Vec<String>,
 
     /// Run with the given packages installed as editables
