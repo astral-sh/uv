@@ -815,6 +815,15 @@ fn parse_maybe_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
     }
 }
 
+// Parse a string, mapping the empty string to `None`.
+fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        Ok(Maybe::Some(input.to_string()))
+    }
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipCompileArgs {
@@ -955,8 +964,8 @@ pub struct PipCompileArgs {
     ///
     /// See `uv help python` for details on Python discovery and supported
     /// request formats.
-    #[arg(long, verbatim_doc_comment, help_heading = "Python options")]
-    pub python: Option<String>,
+    #[arg(long, verbatim_doc_comment, help_heading = "Python options", value_parser = parse_maybe_string)]
+    pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
     ///
@@ -1210,9 +1219,9 @@ pub struct PipSyncArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
     ///
@@ -1493,9 +1502,9 @@ pub struct PipInstallArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
     ///
@@ -1659,9 +1668,9 @@ pub struct PipUninstallArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Attempt to use `keyring` for authentication for remote requirements files.
     ///
@@ -1768,9 +1777,9 @@ pub struct PipFreezeArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// List packages in the system Python environment.
     ///
@@ -1833,9 +1842,9 @@ pub struct PipListArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// List packages in the system Python environment.
     ///
@@ -1874,9 +1883,9 @@ pub struct PipCheckArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Check packages in the system Python environment.
     ///
@@ -1923,9 +1932,9 @@ pub struct PipShowArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Show a package in the system Python environment.
     ///
@@ -1979,9 +1988,9 @@ pub struct PipTreeArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// List packages in the system Python environment.
     ///
@@ -2115,9 +2124,9 @@ pub struct BuildArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     #[command(flatten)]
     pub resolver: ResolverArgs,
@@ -2145,9 +2154,9 @@ pub struct VenvArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Ignore virtual environments when searching for the Python interpreter.
     ///
@@ -2434,9 +2443,9 @@ pub struct InitArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -2603,9 +2612,9 @@ pub struct RunArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Whether to show resolver and installer output from any environment modifications.
     ///
@@ -2746,9 +2755,9 @@ pub struct SyncArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -2790,9 +2799,9 @@ pub struct LockArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -2913,9 +2922,9 @@ pub struct AddArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -2980,9 +2989,9 @@ pub struct RemoveArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -3055,9 +3064,9 @@ pub struct TreeArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -3180,9 +3189,9 @@ pub struct ExportArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -3330,9 +3339,9 @@ pub struct ToolRunArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Whether to show resolver and installer output from any environment modifications.
     ///
@@ -3392,9 +3401,9 @@ pub struct ToolInstallArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -3469,9 +3478,9 @@ pub struct ToolUpgradeArgs {
         env = "UV_PYTHON",
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = clap::builder::NonEmptyStringValueParser::new(),
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
