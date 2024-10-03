@@ -35,3 +35,6 @@ profile.json
 
 # macOS
 **/.DS_Store
+
+# IntelliJ RustRover
+.idea/

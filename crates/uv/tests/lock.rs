@@ -13340,7 +13340,7 @@ fn lock_request_requires_python() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: The Python request from `.python-version` resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.8, <=3.10`
+    error: The Python version from `.python-version` should be pinned to `>=3.8, <=3.10`
     "###);
 
     Ok(())
