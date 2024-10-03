@@ -448,14 +448,26 @@ class PyPyFinder(Finder):
 def render(downloads: list[PythonDownload]) -> None:
     """Render `download-metadata.json`."""
 
+    def prerelease_sort_key(prerelease: str) -> tuple[int, int]:
+        if prerelease.startswith("a"):
+            return 0, int(prerelease[1:])
+        if prerelease.startswith("b"):
+            return 1, int(prerelease[1:])
+        if prerelease.startswith("rc"):
+            return 2, int(prerelease[2:])
+        return 3, 0
+
     def sort_key(download: PythonDownload) -> tuple:
         # Sort by implementation, version (latest first), and then by triple.
         impl_order = [ImplementationName.CPYTHON, ImplementationName.PYPY]
+        prerelease = prerelease_sort_key(download.version.prerelease)
         return (
             impl_order.index(download.implementation),
             -download.version.major,
             -download.version.minor,
             -download.version.patch,
+            -prerelease[0],
+            -prerelease[1],
             download.triple,
         )
 
