@@ -4,8 +4,7 @@ mod common;
 
 #[test]
 fn help() {
-    let mut context = TestContext::new_with_versions(&[]);
-    context.ignore_cache_dir();
+    let mut context = TestContext::new_with_versions(&[]).with_ignore_cache_dir();
 
     // The `uv help` command should show the long help message
     uv_snapshot!(context.filters(), context.help(), @r###"
@@ -75,8 +74,7 @@ fn help() {
 
 #[test]
 fn help_flag() {
-    let mut context = TestContext::new_with_versions(&[]);
-    context.ignore_cache_dir();
+    let mut context = TestContext::new_with_versions(&[]).with_ignore_cache_dir();
 
     uv_snapshot!(context.filters(), context.command().arg("--help"), @r###"
     success: true
@@ -143,8 +141,7 @@ fn help_flag() {
 
 #[test]
 fn help_short_flag() {
-    let mut context = TestContext::new_with_versions(&[]);
-    context.ignore_cache_dir();
+    let mut context = TestContext::new_with_versions(&[]).with_ignore_cache_dir();
 
     uv_snapshot!(context.filters(), context.command().arg("-h"), @r###"
     success: true
@@ -211,8 +208,7 @@ fn help_short_flag() {
 
 #[test]
 fn help_subcommand() {
-    let mut context = TestContext::new_with_versions(&[]);
-    context.ignore_cache_dir();
+    let mut context = TestContext::new_with_versions(&[]).with_ignore_cache_dir();
 
     uv_snapshot!(context.filters(), context.help().arg("python"), @r###"
     success: true
@@ -400,8 +396,7 @@ fn help_subcommand() {
 
 #[test]
 fn help_subsubcommand() {
-    let mut context = TestContext::new_with_versions(&[]);
-    context.ignore_cache_dir();
+    let mut context = TestContext::new_with_versions(&[]).with_ignore_cache_dir();
 
     uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r###"
     success: true
@@ -569,8 +564,7 @@ fn help_subsubcommand() {
 
 #[test]
 fn help_flag_subcommand() {
-    let mut context = TestContext::new_with_versions(&[]);
-    context.ignore_cache_dir();
+    let mut context = TestContext::new_with_versions(&[]).with_ignore_cache_dir();
 
     uv_snapshot!(context.filters(), context.command().arg("python").arg("--help"), @r###"
     success: true
@@ -626,8 +620,7 @@ fn help_flag_subcommand() {
 
 #[test]
 fn help_flag_subsubcommand() {
-    let mut context = TestContext::new_with_versions(&[]);
-    context.ignore_cache_dir();
+    let mut context = TestContext::new_with_versions(&[]).with_ignore_cache_dir();
 
     uv_snapshot!(context.filters(), context.command().arg("python").arg("install").arg("--help"), @r###"
     success: true
@@ -756,8 +749,7 @@ fn help_unknown_subsubcommand() {
 
 #[test]
 fn help_with_global_option() {
-    let mut context = TestContext::new_with_versions(&[]);
-    context.ignore_cache_dir();
+    let mut context = TestContext::new_with_versions(&[]).with_ignore_cache_dir();
 
     uv_snapshot!(context.filters(), context.help().arg("--no-cache"), @r###"
     success: true
@@ -859,8 +851,7 @@ fn help_with_version() {
 
 #[test]
 fn help_with_no_pager() {
-    let mut context = TestContext::new_with_versions(&[]);
-    context.ignore_cache_dir();
+    let mut context = TestContext::new_with_versions(&[]).with_ignore_cache_dir();
 
     // We can't really test whether the --no-pager option works with a snapshot test.
     // It's still nice to have a test for the option to confirm the option exists.
