@@ -88,6 +88,7 @@ jobs:
           SHELLCHECK_VERSION: "v0.10.0"
           SHELLCHECK_OPTS: --shell bash
         with:
+          version: ${{ env.SHELLCHECK_VERSION }}
           severity: style
           check_together: "yes"
 
