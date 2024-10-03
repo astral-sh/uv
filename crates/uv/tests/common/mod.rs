@@ -198,7 +198,7 @@ impl TestContext {
     #[must_use]
     pub fn with_ignore_cache_dir(mut self) -> Self {
         self.filters.push((
-            r"\[env: UV_CACHE_DIR=.+\]".to_string(),
+            r"\[env:[\n\s]* UV_CACHE_DIR=.+\]".to_string(),
             "[env: UV_CACHE_DIR=]".to_string(),
         ));
         self
