@@ -62,19 +62,24 @@ curl -LsSf https://insta.rs/install.sh | sh
 powershell -c "irm https://insta.rs/install.ps1 | iex"
 ```
 
-In tests, you can use `uv_snapshot!` to simplify creating snapshots for uv commands. For example:
+In tests, you can use `uv_snapshot!` macro to simplify creating snapshots for uv commands. For
+example:
 
 ```rust
 #[test]
 fn test_add() {
     let context = TestContext::new("3.12");
-    uv_snapshot!(context.filters(), context.add().arg("pip"), @r"");
+    uv_snapshot!(context.filters(), context.add().arg("requests"), @"");
 }
 ```
 
 To run and review a specific snapshot test:
 
 ```shell
+cargo test --package <package> --test <test> -- <test_name> -- --exact
+cargo insta review
+
+# or combined into one command:
 cargo insta test --review --package <package> --test <test> -- <test_name> -- --exact
 ```
 
