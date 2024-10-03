@@ -81,6 +81,14 @@ jobs:
       - name: "Python type check"
         run: uvx mypy
 
+      - name: "Lint shell scripts"
+        uses: ludeeus/action-shellcheck@2
+        env:
+          SHELLCHECK_OPTS: --shell bash
+        with:
+          severity: style
+          check_together: "yes"
+
   cargo-clippy:
     timeout-minutes: 10
     needs: determine_changes
