@@ -11,6 +11,7 @@ use itertools::Itertools;
 use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
+use uv_auth::{store_credentials, store_credentials_from_url};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -266,8 +267,13 @@ pub(super) async fn do_sync(
     let resolution = apply_editable_mode(resolution, editable);
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.allowed_urls() {
-        uv_auth::store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            store_credentials(index.raw_url(), credentials);
+        }
+    }
+    for index in index_locations.flat_indexes() {
+        store_credentials_from_url(index.url());
     }
 
     // Populate credentials from the workspace.
@@ -306,7 +312,7 @@ pub(super) async fn do_sync(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client.fetch(index_locations.flat_indexes()).await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 

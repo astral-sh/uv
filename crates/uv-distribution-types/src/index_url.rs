@@ -407,7 +407,7 @@ impl<'a> IndexLocations {
     }
 
     /// Return an iterator over the [`FlatIndexLocation`] entries.
-    pub fn flat_index(&'a self) -> impl Iterator<Item = &'a FlatIndexLocation> + 'a {
+    pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a FlatIndexLocation> + 'a {
         self.flat_index.iter()
     }
 
@@ -424,9 +424,10 @@ impl<'a> IndexLocations {
         }
     }
 
-    /// Return an iterator over all allowed [`IndexUrl`] entries.
+    /// Return an iterator over all allowed [`Index`] entries.
     ///
-    /// This includes both explicit and implicit indexes, as well as the default index.
+    /// This includes both explicit and implicit indexes, as well as the default index (but _not_
+    /// the flat indexes).
     ///
     /// If `no_index` was enabled, then this always returns an empty
     /// iterator.
@@ -434,18 +435,6 @@ impl<'a> IndexLocations {
         self.explicit_indexes()
             .chain(self.implicit_indexes())
             .chain(self.default_index())
-    }
-
-    /// Return an iterator over all allowed [`Url`] entries.
-    ///
-    /// This includes both explicit and implicit index URLs, as well as the default index.
-    ///
-    /// If `no_index` was enabled, then this always returns an empty
-    /// iterator.
-    pub fn allowed_urls(&'a self) -> impl Iterator<Item = &'a Url> + 'a {
-        self.allowed_indexes()
-            .map(Index::raw_url)
-            .chain(self.flat_index().map(FlatIndexLocation::url))
     }
 }
 

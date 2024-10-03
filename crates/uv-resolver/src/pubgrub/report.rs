@@ -621,7 +621,7 @@ impl PubGrubReportFormatter<'_> {
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
-        let no_find_links = index_locations.flat_index().peekable().peek().is_none();
+        let no_find_links = index_locations.flat_indexes().peekable().peek().is_none();
 
         // Add hints due to the package being entirely unavailable.
         match unavailable_packages.get(name) {

@@ -139,6 +139,21 @@ impl Credentials {
         })
     }
 
+    /// Extract the [`Credentials`] from the environment, given a named source.
+    ///
+    /// For example, given a name of `"pytorch"`, search for `UV_HTTP_BASIC_PYTORCH_USERNAME` and
+    /// `UV_HTTP_BASIC_PYTORCH_PASSWORD`.
+    pub fn from_env(name: &str) -> Option<Self> {
+        let name = name.to_uppercase();
+        let username = std::env::var(format!("UV_HTTP_BASIC_{name}_USERNAME")).ok();
+        let password = std::env::var(format!("UV_HTTP_BASIC_{name}_PASSWORD")).ok();
+        if username.is_none() && password.is_none() {
+            None
+        } else {
+            Some(Self::new(username, password))
+        }
+    }
+
     /// Parse [`Credentials`] from an HTTP request, if any.
     ///
     /// Only HTTP Basic Authentication is supported.

@@ -2,6 +2,7 @@ use crate::{IndexUrl, IndexUrlError};
 use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
+use uv_auth::Credentials;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -101,6 +102,19 @@ impl Index {
     /// Return the raw [`URL`] of the index.
     pub fn raw_url(&self) -> &Url {
         self.url.url()
+    }
+
+    /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
+    pub fn credentials(&self) -> Option<Credentials> {
+        // If the index is named, and credentials are provided via the environment, prefer those.
+        if let Some(name) = self.name.as_deref() {
+            if let Some(credentials) = Credentials::from_env(name) {
+                return Some(credentials);
+            }
+        }
+
+        // Otherwise, extract the credentials from the URL.
+        Credentials::from_url(self.url.url())
     }
 }
 

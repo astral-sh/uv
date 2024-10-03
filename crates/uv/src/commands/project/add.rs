@@ -7,7 +7,6 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
-use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -244,8 +243,13 @@ pub(crate) async fn add(
         resolution_environment(python_version, python_platform, target.interpreter())?;
 
     // Add all authenticated sources to the cache.
-    for url in settings.index_locations.allowed_urls() {
-        store_credentials_from_url(url);
+    for index in settings.index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
+    }
+    for index in settings.index_locations.flat_indexes() {
+        uv_auth::store_credentials_from_url(index.url());
     }
 
     // Initialize the registry client.
@@ -274,7 +278,9 @@ pub(crate) async fn add(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(settings.index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(settings.index_locations.flat_indexes())
+            .await?;
         FlatIndex::from_entries(entries, Some(&tags), &hasher, &settings.build_options)
     };
 
@@ -426,7 +432,7 @@ pub(crate) async fn add(
                 branch,
                 marker,
             }) => {
-                let credentials = Credentials::from_url(&git);
+                let credentials = uv_auth::Credentials::from_url(&git);
                 if let Some(credentials) = credentials {
                     debug!("Caching credentials for: {git}");
                     GIT_STORE.insert(RepositoryUrl::new(&git), credentials);

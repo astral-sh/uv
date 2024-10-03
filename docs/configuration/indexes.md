@@ -95,6 +95,45 @@ Users can opt in to alternate index behaviors via the`--index-strategy` command-
 While `unsafe-best-match` is the closest to pip's behavior, it exposes users to the risk of
 "dependency confusion" attacks.
 
+## Providing credentials
+
+Most private registries require authentication to access packages, typically via a username and
+password (or access token).
+
+To authenticate with a provide index, either provide credentials via environment variables or embed
+them in the URL.
+
+For example, given an index named `internal` that requires a username (`public`) and password
+(`koala`), define the index (without credentials) in your `pyproject.toml`:
+
+```toml
+[[tool.uv.index]]
+name = "internal"
+url = "https://pypi-proxy.corp.dev/simple"
+```
+
+From there, you can set the `UV_INDEX_INTERNAL_USERNAME` and `UV_INDEX_INTERNAL_PASSWORD`
+environment variables, where `INTERNAL` is the uppercase version of the index name:
+
+```sh
+export UV_INDEX_INTERNAL_USERNAME=public
+export UV_INDEX_INTERNAL_PASSWORD=koala
+```
+
+By providing credentials via environment variables, you can avoid storing sensitive information in
+the plaintext `pyproject.toml` file.
+
+Alternatively, credentials can be embedded directly in the index definition:
+
+```toml
+[[tool.uv.index]]
+name = "internal"
+url = "https://public:koala@https://pypi-proxy.corp.dev/simple"
+```
+
+For security purposes, credentials are _never_ stored in the `uv.lock` file; as such, uv _must_ have
+access to the authenticated URL at installation time.
+
 ## `--index-url` and `--extra-index-url`
 
 In addition to the `[[tool.uv.index]]` configuration option, uv supports pip-style `--index-url` and
