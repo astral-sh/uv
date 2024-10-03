@@ -52,15 +52,8 @@ The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`.
 ### Snapshot testing
 
 uv uses [insta](https://insta.rs/) for snapshot testing. It's recommended (but not necessary) to use
-`cargo-insta` for a better snapshot review experience:
-
-```shell
-# Unix
-curl -LsSf https://insta.rs/install.sh | sh
-
-# Windows
-powershell -c "irm https://insta.rs/install.ps1 | iex"
-```
+`cargo-insta` for a better snapshot review experience. See the
+[installation guide](https://insta.rs/docs/cli/) for more information.
 
 In tests, you can use `uv_snapshot!` macro to simplify creating snapshots for uv commands. For
 example:
