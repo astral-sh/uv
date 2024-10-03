@@ -407,7 +407,10 @@ impl TestContext {
 
     /// Ignore `UV_CACHE_DIR` env variable in tests.
     pub fn ignore_cache_dir(&mut self) {
-        self.filters.push((r"\[env: UV_CACHE_DIR=.+\]".to_string(), "[env: UV_CACHE_DIR=]".to_string()));
+        self.filters.push((
+            r"\[env: UV_CACHE_DIR=.+\]".to_string(),
+            "[env: UV_CACHE_DIR=]".to_string(),
+        ));
     }
 
     /// Create a uv command for testing.
