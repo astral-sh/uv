@@ -3,11 +3,7 @@ use std::fmt::Write;
 use std::str::FromStr;
 
 use anyhow::{bail, Context as _, Result};
-use distribution_types::UnresolvedRequirementSpecification;
 use owo_colors::OwoColorize;
-use pep440_rs::{VersionSpecifier, VersionSpecifiers};
-use pep508_rs::MarkerTree;
-use pypi_types::{Requirement, RequirementSource};
 use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
