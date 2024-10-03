@@ -816,6 +816,7 @@ fn parse_maybe_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
 }
 
 // Parse a string, mapping the empty string to `None`.
+#[allow(clippy::unnecessary_wraps)]
 fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
