@@ -2254,7 +2254,7 @@ fn init_git_not_installed() {
 }
 
 #[test]
-fn init_with_author() -> Result<()> {
+fn init_with_author() {
     let context = TestContext::new("3.12");
 
     // Create a Git repository and set the author.
@@ -2282,7 +2282,7 @@ fn init_with_author() -> Result<()> {
 
     // `authors` is not filled for non-package application by default,
     context.init().arg("foo").assert().success();
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("foo/pyproject.toml"))?;
+    let pyproject = context.read("foo/pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -2299,14 +2299,15 @@ fn init_with_author() -> Result<()> {
         );
     });
 
-    // use `--authors` to explicitly fill it.
+    // use `--author-from auto` to explicitly fill it.
     context
         .init()
         .arg("bar")
-        .arg("--authors")
+        .arg("--author-from")
+        .arg("auto")
         .assert()
         .success();
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("bar/pyproject.toml"))?;
+    let pyproject = context.read("bar/pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -2328,7 +2329,7 @@ fn init_with_author() -> Result<()> {
 
     // Fill `authors` for library by default,
     context.init().arg("baz").arg("--lib").assert().success();
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("baz/pyproject.toml"))?;
+    let pyproject = context.read("baz/pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -2352,15 +2353,16 @@ fn init_with_author() -> Result<()> {
         );
     });
 
-    // use `--no-authors` to prevent it.
+    // use `--authors-from none` to prevent it.
     context
         .init()
         .arg("qux")
         .arg("--lib")
-        .arg("--no-authors")
+        .arg("--author-from")
+        .arg("none")
         .assert()
         .success();
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("qux/pyproject.toml"))?;
+    let pyproject = context.read("qux/pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -2380,6 +2382,4 @@ fn init_with_author() -> Result<()> {
         "#
         );
     });
-
-    Ok(())
 }

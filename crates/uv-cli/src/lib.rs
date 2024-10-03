@@ -2314,6 +2314,17 @@ impl ExternalCommand {
     }
 }
 
+#[derive(Debug, Default, Copy, Clone, clap::ValueEnum)]
+pub enum AuthorFrom {
+    /// Fetch the author information from some sources (e.g., Git) automatically.
+    #[default]
+    Auto,
+    /// Fetch the author information from Git configuration only.
+    Git,
+    /// Do not infer the author information.
+    None,
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct InitArgs {
@@ -2400,13 +2411,13 @@ pub struct InitArgs {
     #[arg(long)]
     pub no_readme: bool,
 
-    /// Do not fill in the `authors` field in the `pyproject.toml`.
-    #[arg(long)]
-    pub no_authors: bool,
-
     /// Fill in the `authors` field in the `pyproject.toml`.
-    #[arg(long, overrides_with = "no_authors", hide = true)]
-    pub authors: bool,
+    ///
+    /// By default, uv will attempt to infer the author information from some sources (e.g., Git) (`auto`).
+    /// Use `--author-from git` to only infer from Git configuration.
+    /// Use `--author-from none` to avoid inferring the author information.
+    #[arg(long, value_enum)]
+    pub author_from: Option<AuthorFrom>,
 
     /// Do not create a `.python-version` file for the project.
     ///

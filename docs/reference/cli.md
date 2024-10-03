@@ -439,6 +439,19 @@ uv init [OPTIONS] [PATH]
 
 <p>By default, an application is not intended to be built and distributed as a Python package. The <code>--package</code> option can be used to create an application that is distributable, e.g., if you want to distribute a command-line interface via PyPI.</p>
 
+</dd><dt><code>--author-from</code> <i>author-from</i></dt><dd><p>Fill in the <code>authors</code> field in the <code>pyproject.toml</code>.</p>
+
+<p>By default, uv will attempt to infer the author information from some sources (e.g., Git) (<code>auto</code>). Use <code>--author-from git</code> to only infer from Git configuration. Use <code>--author-from none</code> to avoid inferring the author information.</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Fetch the author information from some sources (e.g., Git) automatically</li>
+
+<li><code>git</code>:  Fetch the author information from Git configuration only</li>
+
+<li><code>none</code>:  Do not infer the author information</li>
+</ul>
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
@@ -484,8 +497,6 @@ uv init [OPTIONS] [PATH]
 <p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
 
 <p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
-</dd><dt><code>--no-authors</code></dt><dd><p>Do not fill in the <code>authors</code> field in the <code>pyproject.toml</code></p>
-
 </dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>

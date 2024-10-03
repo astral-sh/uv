@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 
 use tracing::{debug, warn};
 use uv_cache::Cache;
+use uv_cli::AuthorFrom;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{VersionControlError, VersionControlSystem};
 use uv_fs::{Simplified, CWD};
@@ -37,7 +38,7 @@ pub(crate) async fn init(
     init_kind: InitKind,
     vcs: Option<VersionControlSystem>,
     no_readme: bool,
-    with_authors: Option<bool>,
+    author_from: Option<AuthorFrom>,
     no_pin_python: bool,
     python: Option<String>,
     no_workspace: bool,
@@ -64,7 +65,7 @@ pub(crate) async fn init(
                 printer,
                 no_workspace,
                 no_readme,
-                with_authors,
+                author_from,
                 no_pin_python,
                 package,
                 native_tls,
@@ -114,7 +115,7 @@ pub(crate) async fn init(
                 project_kind,
                 vcs,
                 no_readme,
-                with_authors,
+                author_from,
                 no_pin_python,
                 python,
                 no_workspace,
@@ -169,7 +170,7 @@ async fn init_script(
     printer: Printer,
     no_workspace: bool,
     no_readme: bool,
-    with_authors: Option<bool>,
+    author_from: Option<AuthorFrom>,
     no_pin_python: bool,
     package: bool,
     native_tls: bool,
@@ -180,8 +181,8 @@ async fn init_script(
     if no_readme {
         warn_user_once!("`--no_readme` is a no-op for Python scripts, which are standalone");
     }
-    if with_authors.is_some() {
-        warn_user_once!("`--no_authors` is a no-op for Python scripts, which are standalone");
+    if author_from.is_some() {
+        warn_user_once!("`--author-from` is a no-op for Python scripts, which are standalone");
     }
     if package {
         warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
@@ -245,7 +246,7 @@ async fn init_project(
     project_kind: InitProjectKind,
     vcs: Option<VersionControlSystem>,
     no_readme: bool,
-    with_authors: Option<bool>,
+    author_from: Option<AuthorFrom>,
     no_pin_python: bool,
     python: Option<String>,
     no_workspace: bool,
@@ -484,7 +485,7 @@ async fn init_project(
             &requires_python,
             python_request.as_ref(),
             vcs,
-            with_authors,
+            author_from,
             no_readme,
             package,
         )
@@ -574,7 +575,7 @@ impl InitProjectKind {
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
-        with_authors: Option<bool>,
+        author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
     ) -> Result<()> {
@@ -586,7 +587,7 @@ impl InitProjectKind {
                     requires_python,
                     python_request,
                     vcs,
-                    with_authors,
+                    author_from,
                     no_readme,
                     package,
                 )
@@ -599,7 +600,7 @@ impl InitProjectKind {
                     requires_python,
                     python_request,
                     vcs,
-                    with_authors,
+                    author_from,
                     no_readme,
                     package,
                 )
@@ -616,18 +617,21 @@ impl InitProjectKind {
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
-        with_authors: Option<bool>,
+        author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
     ) -> Result<()> {
         fs_err::create_dir_all(path)?;
 
         // Do no fill in `authors` for non-packaged applications unless explicitly requested.
-        let author = if with_authors.unwrap_or(package) {
-            get_author_info(path)
-        } else {
-            None
-        };
+        let author_from = author_from.unwrap_or_else(|| {
+            if package {
+                AuthorFrom::default()
+            } else {
+                AuthorFrom::None
+            }
+        });
+        let author = get_author_info(path, author_from);
 
         // Create the `pyproject.toml`
         let mut pyproject = pyproject_project(name, requires_python, author.as_ref(), no_readme);
@@ -705,7 +709,7 @@ impl InitProjectKind {
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
-        with_authors: Option<bool>,
+        author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
     ) -> Result<()> {
@@ -715,11 +719,7 @@ impl InitProjectKind {
 
         fs_err::create_dir_all(path)?;
 
-        let author = if with_authors.unwrap_or(true) {
-            get_author_info(path)
-        } else {
-            None
-        };
+        let author = get_author_info(path, author_from.unwrap_or_default());
 
         // Create the `pyproject.toml`
         let mut pyproject = pyproject_project(name, requires_python, author.as_ref(), no_readme);
@@ -880,10 +880,15 @@ fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
 /// Try to get the author information.
 ///
 /// Currently, this only tries to get the author information from git.
-fn get_author_info(path: &Path) -> Option<Author> {
-    match get_author_from_git(path) {
-        Ok(author) => return Some(author),
-        Err(err) => warn!("Failed to get author from git: {err}"),
+fn get_author_info(path: &Path, author_from: AuthorFrom) -> Option<Author> {
+    if matches!(author_from, AuthorFrom::None) {
+        return None;
+    }
+    if matches!(author_from, AuthorFrom::Auto | AuthorFrom::Git) {
+        match get_author_from_git(path) {
+            Ok(author) => return Some(author),
+            Err(err) => warn!("Failed to get author from git: {err}"),
+        }
     }
 
     None
