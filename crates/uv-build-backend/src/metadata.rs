@@ -359,13 +359,12 @@ impl PyProjectToml {
             }
         }
 
-        // TODO(konsti): https://peps.python.org/pep-0753/#label-normalization (Draft)
         let project_urls = self
             .project
             .urls
             .iter()
             .flatten()
-            .map(|(key, value)| format!("{key}, {value}"))
+            .map(|(label, value)| format!("{}, {}", pep753_normalization(label), value))
             .collect();
 
         let extras = self
@@ -623,6 +622,24 @@ struct BuildSystem {
     backend_path: Option<Vec<String>>,
 }
 
+/// PEP 753 label normalization.
+///
+/// ```python
+/// import string
+/// def normalize_label(label: str) -> str:
+///     chars_to_remove = string.punctuation + string.whitespace
+///     removal_map = str.maketrans("", "", chars_to_remove)
+///     return label.translate(removal_map).lower()
+/// ```
+fn pep753_normalization(label: &str) -> String {
+    let punctuation_and_whitespace = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ \t\n\r\x0b\x0c";
+    label
+        .chars()
+        .filter(|c| !punctuation_and_whitespace.chars().contains(c))
+        .collect::<String>()
+        .to_lowercase()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -750,8 +767,8 @@ mod tests {
         Requires-Dist: flask>=3,<4
         Requires-Dist: sqlalchemy[asyncio]>=2.0.35,<3
         Maintainer: Konsti
-        Project-URL: Homepage, https://github.com/astral-sh/uv
-        Project-URL: Repository, https://astral.sh
+        Project-URL: homepage, https://github.com/astral-sh/uv
+        Project-URL: repository, https://astral.sh
         Provides-Extra: mysql
         Provides-Extra: postgres
         Description-Content-Type: text/markdown
@@ -1034,5 +1051,19 @@ mod tests {
         "#
         });
         assert_snapshot!(script_error(&contents), @"Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`");
+    }
+
+    #[test]
+    fn pep753_normalization_example() {
+        let cases = [
+            ("Homepage", "homepage"),
+            ("Home-page", "homepage"),
+            ("Home page", "homepage"),
+            ("Change_Log", "changelog"),
+            ("What's New?", "whatsnew"),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(pep753_normalization(input), expected);
+        }
     }
 }
