@@ -14,15 +14,22 @@ use uv_python::PythonRequest;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
+use std::path::Path;
 
 /// Uninstall managed Python versions.
 pub(crate) async fn uninstall(
+    install_dir: Option<&Path>,
     targets: Vec<String>,
     all: bool,
 
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let installations = ManagedPythonInstallations::from_settings()?.init()?;
+    let installations = if let Some(install_dir) = install_dir {
+        ManagedPythonInstallations::from_path(install_dir)
+    } else {
+        ManagedPythonInstallations::from_settings()?.init()?
+    };
+
     let _lock = installations.lock().await?;
 
     // Perform the uninstallation.
