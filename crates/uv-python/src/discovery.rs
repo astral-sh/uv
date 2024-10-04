@@ -1313,7 +1313,13 @@ impl PythonRequest {
         // It mean that name is end of path provided by PYENV_VIRTUAL_ENV variable
         if let Some(pyenv_virtual_env) = std::env::var_os("PYENV_VIRTUAL_ENV") {
             if let Some(pyenv_virtual_env) = pyenv_virtual_env.to_str() {
-                if value == Path::new(pyenv_virtual_env).file_name().unwrap().to_str().unwrap() {
+                if value
+                    == Path::new(pyenv_virtual_env)
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                {
                     return Self::Directory(PathBuf::from(pyenv_virtual_env));
                 }
             }
