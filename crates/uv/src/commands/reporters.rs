@@ -522,9 +522,8 @@ impl uv_publish::Reporter for PublishReporter {
         self.reporter.on_download_progress(id, inc);
     }
 
-    fn on_download_complete(&self) {
-        self.reporter.root.set_message("");
-        self.reporter.root.finish_and_clear();
+    fn on_download_complete(&self, id: usize) {
+        self.reporter.on_download_complete(id);
     }
 }
 
