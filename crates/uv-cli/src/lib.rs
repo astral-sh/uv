@@ -779,6 +779,18 @@ fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
     }
 }
 
+/// Parse a string into an [`FlatIndexLocation`], mapping the empty string to `None`.
+fn parse_flat_index(input: &str) -> Result<Maybe<FlatIndexLocation>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match FlatIndexLocation::from_str(input) {
+            Ok(url) => Ok(Maybe::Some(url)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
 /// Parse a string into an [`Url`], mapping the empty string to `None`.
 fn parse_insecure_host(input: &str) -> Result<Maybe<TrustedHost>, String> {
     if input.is_empty() {
@@ -3735,9 +3747,10 @@ pub struct IndexArgs {
         short,
         env = "UV_FIND_LINKS",
         value_delimiter = ' ',
+        value_parser = parse_flat_index,
         help_heading = "Index options"
     )]
-    pub find_links: Option<Vec<FlatIndexLocation>>,
+    pub find_links: Option<Vec<Maybe<FlatIndexLocation>>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// provided via `--find-links`.
