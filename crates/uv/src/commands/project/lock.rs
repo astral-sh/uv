@@ -35,7 +35,9 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
-use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
+use crate::commands::project::{
+    find_requires_python, ProjectError, ProjectInterpreter, SharedState,
+};
 use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
@@ -84,7 +86,7 @@ pub(crate) async fn lock(
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
-    let interpreter = FoundInterpreter::discover(
+    let interpreter = ProjectInterpreter::discover(
         &workspace,
         python.as_deref().map(PythonRequest::parse),
         python_preference,
@@ -685,25 +687,6 @@ impl ValidatedLock {
             }
         }
 
-        // If the set of supported environments has changed, we have to perform a clean resolution.
-        if lock.simplified_supported_environments()
-            != environments
-                .map(SupportedEnvironments::as_markers)
-                .unwrap_or_default()
-        {
-            return Ok(Self::Versions(lock));
-        }
-
-        // If the Requires-Python bound has changed, we have to perform a clean resolution, since
-        // the set of `resolution-markers` may no longer cover the entire supported Python range.
-        if lock.requires_python().range() != requires_python.range() {
-            return if lock.fork_markers().is_empty() {
-                Ok(Self::Preferable(lock))
-            } else {
-                Ok(Self::Versions(lock))
-            };
-        }
-
         match upgrade {
             Upgrade::None => {}
             Upgrade::All => {
@@ -714,8 +697,41 @@ impl ValidatedLock {
             Upgrade::Packages(_) => {
                 // If the user specified `--upgrade-package`, then at best we can prefer some of
                 // the existing versions.
+                debug!("Ignoring existing lockfile due to `--upgrade-package`");
                 return Ok(Self::Preferable(lock));
             }
+        }
+
+        // If the Requires-Python bound has changed, we have to perform a clean resolution, since
+        // the set of `resolution-markers` may no longer cover the entire supported Python range.
+        if lock.requires_python().range() != requires_python.range() {
+            debug!(
+                "Ignoring existing lockfile due to change in Python requirement: `{}` vs. `{}`",
+                lock.requires_python(),
+                requires_python,
+            );
+            return if lock.fork_markers().is_empty() {
+                Ok(Self::Preferable(lock))
+            } else {
+                Ok(Self::Versions(lock))
+            };
+        }
+
+        // If the set of supported environments has changed, we have to perform a clean resolution.
+        let expected = lock.simplified_supported_environments();
+        let actual = environments
+            .map(SupportedEnvironments::as_markers)
+            .unwrap_or_default()
+            .iter()
+            .cloned()
+            .map(|marker| lock.simplify_environment(marker))
+            .collect::<Vec<_>>();
+        if expected != actual {
+            debug!(
+                "Ignoring existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
+                expected, actual
+            );
+            return Ok(Self::Versions(lock));
         }
 
         // If the user provided at least one index URL (from the command line, or from a configuration

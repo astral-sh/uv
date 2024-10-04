@@ -37,13 +37,13 @@ def call(args: "list[str]", config_settings: "dict | None" = None) -> str:
     if result.returncode != 0:
         sys.exit(result.returncode)
     # If there was extra stdout, forward it (there should not be extra stdout)
-    result = result.stdout.decode("utf-8").strip().splitlines(keepends=True)
-    sys.stdout.writelines(result[:-1])
+    stdout = result.stdout.decode("utf-8").strip().splitlines(keepends=True)
+    sys.stdout.writelines(stdout[:-1])
     # Fail explicitly instead of an irrelevant stacktrace
-    if not result:
+    if not stdout:
         print("uv subprocess did not return a filename on stdout", file=sys.stderr)
         sys.exit(1)
-    return result[-1].strip()
+    return stdout[-1].strip()
 
 
 def build_sdist(sdist_directory: str, config_settings: "dict | None" = None):

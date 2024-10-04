@@ -73,8 +73,8 @@ def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
 
 
 class PlatformTriple(NamedTuple):
-    arch: str
     platform: str
+    arch: str
     libc: str
 
 
@@ -335,7 +335,7 @@ class CPythonFinder(Finder):
             logging.debug("Skipping %r: unknown triple", triple)
             return None
 
-        return PlatformTriple(arch, operating_system, libc)
+        return PlatformTriple(operating_system, arch, libc)
 
     def _normalize_arch(self, arch: str) -> str:
         arch = self.ARCH_MAP.get(arch, arch)
@@ -410,8 +410,8 @@ class PyPyFinder(Finder):
                 download = PythonDownload(
                     version=python_version,
                     triple=PlatformTriple(
-                        arch=arch,
                         platform=platform,
+                        arch=arch,
                         libc=libc,
                     ),
                     flavor="",
@@ -448,14 +448,26 @@ class PyPyFinder(Finder):
 def render(downloads: list[PythonDownload]) -> None:
     """Render `download-metadata.json`."""
 
+    def prerelease_sort_key(prerelease: str) -> tuple[int, int]:
+        if prerelease.startswith("a"):
+            return 0, int(prerelease[1:])
+        if prerelease.startswith("b"):
+            return 1, int(prerelease[1:])
+        if prerelease.startswith("rc"):
+            return 2, int(prerelease[2:])
+        return 3, 0
+
     def sort_key(download: PythonDownload) -> tuple:
         # Sort by implementation, version (latest first), and then by triple.
         impl_order = [ImplementationName.CPYTHON, ImplementationName.PYPY]
+        prerelease = prerelease_sort_key(download.version.prerelease)
         return (
             impl_order.index(download.implementation),
             -download.version.major,
             -download.version.minor,
             -download.version.patch,
+            -prerelease[0],
+            -prerelease[1],
             download.triple,
         )
 

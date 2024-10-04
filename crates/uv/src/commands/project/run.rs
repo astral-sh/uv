@@ -23,7 +23,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::Lock;
@@ -128,7 +128,10 @@ pub(crate) async fn run(
                 .requires_python
                 .as_ref()
                 .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python.clone(), false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        requires_python.clone(),
+                        PythonVariant::Default,
+                    ))
                 });
             let source = PythonRequestSource::RequiresPython;
             (source, request)
@@ -1021,7 +1024,11 @@ impl std::fmt::Display for RunCommand {
 }
 
 impl RunCommand {
-    pub(crate) fn from_args(command: &ExternalCommand, module: bool) -> anyhow::Result<Self> {
+    pub(crate) fn from_args(
+        command: &ExternalCommand,
+        module: bool,
+        script: bool,
+    ) -> anyhow::Result<Self> {
         let (target, args) = command.split();
         let Some(target) = target else {
             return Ok(Self::Empty);
@@ -1029,6 +1036,8 @@ impl RunCommand {
 
         if module {
             return Ok(Self::PythonModule(target.clone(), args.to_vec()));
+        } else if script {
+            return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
         }
 
         let target_path = PathBuf::from(target);

@@ -353,26 +353,56 @@ impl RequiresPython {
                 true
             } else if abi_tag == "none" {
                 wheel.python_tag.iter().any(|python_tag| {
-                    // Remove `py2-none-any` and `py27-none-any`.
-                    if python_tag.starts_with("py2") {
+                    // Remove `py2-none-any` and `py27-none-any` and analogous `cp` and `pp` tags.
+                    if python_tag.starts_with("py2")
+                        || python_tag.starts_with("cp2")
+                        || python_tag.starts_with("pp2")
+                    {
                         return false;
                     }
 
-                    // Remove (e.g.) `cp36-none-any` if the specifier is `==3.10.*`.
-                    let Some(minor) = python_tag
-                        .strip_prefix("cp3")
-                        .or_else(|| python_tag.strip_prefix("pp3"))
-                        .or_else(|| python_tag.strip_prefix("py3"))
-                    else {
-                        return true;
-                    };
-                    let Ok(minor) = minor.parse::<u64>() else {
+                    // Remove (e.g.) `py312-none-any` if the specifier is `==3.10.*`. However,
+                    // `py37-none-any` would be fine, since the `3.7` represents a lower bound.
+                    if let Some(minor) = python_tag.strip_prefix("py3") {
+                        let Ok(minor) = minor.parse::<u64>() else {
+                            return true;
+                        };
+
+                        // Ex) If the wheel bound is `3.12`, then it doesn't match `==3.10.*`.
+                        let wheel_bound = UpperBound(Bound::Excluded(Version::new([3, minor + 1])));
+                        if wheel_bound > self.range.upper().major_minor() {
+                            return false;
+                        }
+
                         return true;
                     };
 
-                    // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
-                    let wheel_bound = LowerBound(Bound::Included(Version::new([3, minor])));
-                    wheel_bound >= self.bound_major_minor()
+                    // Remove (e.g.) `cp36-none-any` or `cp312-none-any` if the specifier is
+                    // `==3.10.*`, since these tags require an exact match.
+                    if let Some(minor) = python_tag
+                        .strip_prefix("cp3")
+                        .or_else(|| python_tag.strip_prefix("pp3"))
+                    {
+                        let Ok(minor) = minor.parse::<u64>() else {
+                            return true;
+                        };
+
+                        // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
+                        let wheel_bound = LowerBound(Bound::Included(Version::new([3, minor])));
+                        if wheel_bound < self.range.lower().major_minor() {
+                            return false;
+                        }
+
+                        let wheel_bound = UpperBound(Bound::Excluded(Version::new([3, minor + 1])));
+                        if wheel_bound > self.range.upper().major_minor() {
+                            return false;
+                        }
+
+                        return true;
+                    }
+
+                    // Unknown tags are allowed.
+                    true
                 })
             } else if abi_tag.starts_with("cp2") || abi_tag.starts_with("pypy2") {
                 // Python 2 is never allowed.
@@ -385,8 +415,19 @@ impl RequiresPython {
                     return true;
                 };
 
+                // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
                 let wheel_bound = LowerBound(Bound::Included(Version::new([3, minor])));
-                wheel_bound >= self.bound_major_minor()
+                if wheel_bound < self.range.lower().major_minor() {
+                    return false;
+                }
+
+                // Ex) If the wheel bound is `3.12`, then it doesn't match `==3.10.*`.
+                let wheel_bound = UpperBound(Bound::Excluded(Version::new([3, minor + 1])));
+                if wheel_bound > self.range.upper().major_minor() {
+                    return false;
+                }
+
+                true
             } else if let Some(minor_no_dot_abi) = abi_tag.strip_prefix("pypy3") {
                 // Given  `pypy39_pp73`, we just removed `pypy3`, now we remove `_pp73` ...
                 let Some((minor_not_dot, _)) = minor_no_dot_abi.split_once('_') else {
@@ -399,10 +440,21 @@ impl RequiresPython {
                     return true;
                 };
 
+                // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
                 let wheel_bound = LowerBound(Bound::Included(Version::new([3, minor])));
-                wheel_bound >= self.bound_major_minor()
+                if wheel_bound < self.range.lower().major_minor() {
+                    return false;
+                }
+
+                // Ex) If the wheel bound is `3.12`, then it doesn't match `==3.10.*`.
+                let wheel_bound = UpperBound(Bound::Excluded(Version::new([3, minor + 1])));
+                if wheel_bound > self.range.upper().major_minor() {
+                    return false;
+                }
+
+                true
             } else {
-                // Unknown python tag -> allowed.
+                // Unknown tags are allowed.
                 true
             }
         })
@@ -515,6 +567,25 @@ impl SimplifiedMarkerTree {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct LowerBound(Bound<Version>);
 
+impl LowerBound {
+    /// Return the [`LowerBound`] truncated to the major and minor version.
+    fn major_minor(&self) -> Self {
+        match &self.0 {
+            // Ex) `>=3.10.1` -> `>=3.10` (and `>=3.10.0` is `>=3.10`)
+            Bound::Included(version) => Self(Bound::Included(Version::new(
+                version.release().iter().take(2),
+            ))),
+            // Ex) `>3.10.1` -> `>=3.10`.
+            // This is unintuitive, but `>3.10.1` does indicate that _some_ version of Python 3.10
+            // is supported.
+            Bound::Excluded(version) => Self(Bound::Included(Version::new(
+                version.release().iter().take(2),
+            ))),
+            Bound::Unbounded => Self(Bound::Unbounded),
+        }
+    }
+}
+
 impl PartialOrd for LowerBound {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -610,6 +681,35 @@ impl From<LowerBound> for Bound<Version> {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct UpperBound(Bound<Version>);
+
+impl UpperBound {
+    /// Return the [`UpperBound`] truncated to the major and minor version.
+    fn major_minor(&self) -> Self {
+        match &self.0 {
+            // Ex) `<=3.10.1` -> `<3.11` (but `<=3.10.0` is `<=3.10`)
+            Bound::Included(version) => {
+                let major = version.release().first().copied().unwrap_or(3);
+                let minor = version.release().get(1).copied().unwrap_or(0);
+                if version.release().get(2).is_some_and(|patch| *patch > 0) {
+                    Self(Bound::Excluded(Version::new([major, minor + 1])))
+                } else {
+                    Self(Bound::Included(Version::new([major, minor])))
+                }
+            }
+            // Ex) `<3.10.1` -> `<3.11` (but `<3.10.0` is `<3.10`)
+            Bound::Excluded(version) => {
+                let major = version.release().first().copied().unwrap_or(3);
+                let minor = version.release().get(1).copied().unwrap_or(0);
+                if version.release().get(2).is_some_and(|patch| *patch > 0) {
+                    Self(Bound::Excluded(Version::new([major, minor + 1])))
+                } else {
+                    Self(Bound::Excluded(Version::new([major, minor])))
+                }
+            }
+            Bound::Unbounded => Self(Bound::Unbounded),
+        }
+    }
+}
 
 impl PartialOrd for UpperBound {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -723,8 +823,10 @@ mod tests {
             "black-24.4.2-cp310-cp310-win_amd64.whl",
             "black-24.4.2-cp310-none-win_amd64.whl",
             "cbor2-5.6.4-py3-none-any.whl",
+            "solace_pubsubplus-1.8.0-py36-none-manylinux_2_12_x86_64.whl",
+            "torch-1.10.0-py310-none-macosx_10_9_x86_64.whl",
+            "torch-1.10.0-py37-none-macosx_10_9_x86_64.whl",
             "watchfiles-0.22.0-pp310-pypy310_pp73-macosx_11_0_arm64.whl",
-            "dearpygui-1.11.1-cp312-cp312-win_amd64.whl",
         ];
         for wheel_name in wheel_names {
             assert!(
@@ -751,10 +853,13 @@ mod tests {
         let wheel_names = &[
             "PySocks-1.7.1-py27-none-any.whl",
             "black-24.4.2-cp39-cp39-win_amd64.whl",
+            "dearpygui-1.11.1-cp312-cp312-win_amd64.whl",
+            "psutil-6.0.0-cp27-none-win32.whl",
             "psutil-6.0.0-cp36-cp36m-win32.whl",
             "pydantic_core-2.20.1-pp39-pypy39_pp73-win_amd64.whl",
+            "torch-1.10.0-cp311-none-macosx_10_9_x86_64.whl",
             "torch-1.10.0-cp36-none-macosx_10_9_x86_64.whl",
-            "torch-1.10.0-py36-none-macosx_10_9_x86_64.whl",
+            "torch-1.10.0-py311-none-macosx_10_9_x86_64.whl",
         ];
         for wheel_name in wheel_names {
             assert!(

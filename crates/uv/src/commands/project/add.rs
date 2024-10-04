@@ -25,7 +25,7 @@ use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{redact_git_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
@@ -158,7 +158,10 @@ pub(crate) async fn add(
                 .requires_python
                 .clone()
                 .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python, false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        requires_python,
+                        PythonVariant::Default,
+                    ))
                 })
         };
 

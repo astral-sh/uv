@@ -13,7 +13,7 @@ use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVersionFile, VersionRequest,
+    PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
@@ -299,7 +299,11 @@ async fn init_project(
     let (requires_python, python_request) = if let Some(request) = python.as_deref() {
         // (1) Explicit request from user
         match PythonRequest::parse(request) {
-            PythonRequest::Version(VersionRequest::MajorMinor(major, minor, false)) => {
+            PythonRequest::Version(VersionRequest::MajorMinor(
+                major,
+                minor,
+                PythonVariant::Default,
+            )) => {
                 let requires_python = RequiresPython::greater_than_equal_version(&Version::new([
                     u64::from(major),
                     u64::from(minor),
@@ -309,13 +313,20 @@ async fn init_project(
                     None
                 } else {
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
-                        major, minor, false,
+                        major,
+                        minor,
+                        PythonVariant::Default,
                     )))
                 };
 
                 (requires_python, python_request)
             }
-            PythonRequest::Version(VersionRequest::MajorMinorPatch(major, minor, patch, false)) => {
+            PythonRequest::Version(VersionRequest::MajorMinorPatch(
+                major,
+                minor,
+                patch,
+                PythonVariant::Default,
+            )) => {
                 let requires_python = RequiresPython::greater_than_equal_version(&Version::new([
                     u64::from(major),
                     u64::from(minor),
@@ -326,7 +337,10 @@ async fn init_project(
                     None
                 } else {
                     Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(
-                        major, minor, patch, false,
+                        major,
+                        minor,
+                        patch,
+                        PythonVariant::Default,
                     )))
                 };
 
@@ -354,7 +368,7 @@ async fn init_project(
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         interpreter.python_major(),
                         interpreter.python_minor(),
-                        false,
+                        PythonVariant::Default,
                     )))
                 };
 
@@ -382,7 +396,7 @@ async fn init_project(
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         interpreter.python_major(),
                         interpreter.python_minor(),
-                        false,
+                        PythonVariant::Default,
                     )))
                 };
 
@@ -396,7 +410,7 @@ async fn init_project(
         // (2) `Requires-Python` from the workspace
         let python_request = PythonRequest::Version(VersionRequest::Range(
             requires_python.specifiers().clone(),
-            false,
+            PythonVariant::Default,
         ));
 
         // Pin to the minor version.
@@ -418,7 +432,7 @@ async fn init_project(
             Some(PythonRequest::Version(VersionRequest::MajorMinor(
                 interpreter.python_major(),
                 interpreter.python_minor(),
-                false,
+                PythonVariant::Default,
             )))
         };
 
@@ -447,7 +461,7 @@ async fn init_project(
             Some(PythonRequest::Version(VersionRequest::MajorMinor(
                 interpreter.python_major(),
                 interpreter.python_minor(),
-                false,
+                PythonVariant::Default,
             )))
         };
 

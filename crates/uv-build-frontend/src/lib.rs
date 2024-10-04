@@ -7,6 +7,7 @@ mod error;
 use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use serde::de::{value, IntoDeserializer, SeqAccess, Visitor};
 use serde::{de, Deserialize, Deserializer};
@@ -564,7 +565,10 @@ impl SourceBuild {
             .await?;
         if !output.status.success() {
             return Err(Error::from_command_output(
-                format!("Build backend failed to determine metadata through `prepare_metadata_for_build_{}`", self.build_kind),
+                format!(
+                    "Build backend failed to determine metadata through `{}`",
+                    format!("prepare_metadata_for_build_{}", self.build_kind).green()
+                ),
                 &output,
                 self.level,
                 self.package_name.as_ref(),
@@ -694,8 +698,9 @@ impl SourceBuild {
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to build {} through `build_{}()`",
-                    self.build_kind, self.build_kind,
+                    "Build backend failed to build {} through `{}`",
+                    self.build_kind,
+                    format!("build_{}", self.build_kind).green(),
                 ),
                 &output,
                 self.level,
@@ -709,8 +714,8 @@ impl SourceBuild {
         if !output_dir.join(&distribution_filename).is_file() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to produce {} through `build_{}()`: `{distribution_filename}` not found",
-                    self.build_kind, self.build_kind,
+                    "Build backend failed to produce {} through `{}`: `{distribution_filename}` not found",
+                    self.build_kind, format!("build_{}", self.build_kind).green(),
                 ),
                 &output,
                 self.level,
@@ -802,7 +807,10 @@ async fn create_pep517_build_environment(
         .await?;
     if !output.status.success() {
         return Err(Error::from_command_output(
-            format!("Build backend failed to determine requirements with `build_{build_kind}()`"),
+            format!(
+                "Build backend failed to determine requirements with `{}`",
+                format!("build_{build_kind}()").green()
+            ),
             &output,
             level,
             package_name,
@@ -815,7 +823,8 @@ async fn create_pep517_build_environment(
     let contents = fs_err::read(&outfile).map_err(|err| {
         Error::from_command_output(
             format!(
-                "Build backend failed to read requirements from `get_requires_for_build_{build_kind}`: {err}"
+                "Build backend failed to read requirements from `{}`: {err}",
+                format!("get_requires_for_build_{build_kind}").green(),
             ),
             &output,
             level,
@@ -826,18 +835,21 @@ async fn create_pep517_build_environment(
     })?;
 
     // Deserialize the requirements from the output file.
-    let extra_requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>> = serde_json::from_slice::<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>(&contents).map_err(|err| {
-        Error::from_command_output(
-            format!(
-                "Build backend failed to return requirements from `get_requires_for_build_{build_kind}`: {err}"
-            ),
-            &output,
-            level,
-            package_name,
-            package_version,
-            version_id,
-        )
-    })?;
+    let extra_requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>> =
+        serde_json::from_slice::<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>(&contents)
+            .map_err(|err| {
+                Error::from_command_output(
+                    format!(
+                        "Build backend failed to return requirements from `{}`: {err}",
+                        format!("get_requires_for_build_{build_kind}").green(),
+                    ),
+                    &output,
+                    level,
+                    package_name,
+                    package_version,
+                    version_id,
+                )
+            })?;
     let extra_requires: Vec<_> = extra_requires.into_iter().map(Requirement::from).collect();
 
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of

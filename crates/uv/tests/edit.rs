@@ -4594,10 +4594,9 @@ fn fail_to_add_revert_project() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: pytorch==1.0.2
-      Caused by: Build backend failed to build wheel through `build_wheel()` (exit status: 1)
-    --- stdout:
+      Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
-    --- stderr:
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 11, in <module>
       File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 410, in build_wheel
@@ -4611,7 +4610,7 @@ fn fail_to_add_revert_project() -> Result<()> {
         exec(code, locals())
       File "<string>", line 15, in <module>
     Exception: You tried to install "pytorch". The package named for PyTorch is "torch"
-    ---
+
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");

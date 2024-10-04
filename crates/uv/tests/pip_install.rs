@@ -240,7 +240,8 @@ dependencies = ["flask==1.0.x"]
     ----- stderr -----
     error: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
       Caused by: Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
-    --- stdout:
+
+    [stdout]
     configuration error: `project.dependencies[0]` must be pep508
     DESCRIPTION:
         Project dependency specification according to PEP 508
@@ -257,7 +258,8 @@ dependencies = ["flask==1.0.x"]
             "type": "string",
             "format": "pep508"
         }
-    --- stderr:
+
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 14, in <module>
       File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
@@ -289,7 +291,7 @@ dependencies = ["flask==1.0.x"]
         raise ValueError(f"{error}/n{summary}") from None
     ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
     configuration error: `project.dependencies[0]` must be pep508
-    ---
+
     "###
     );
 
@@ -1124,6 +1126,7 @@ fn install_editable_bare_cli() {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1150,6 +1153,7 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3265,6 +3269,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3284,6 +3289,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3309,6 +3315,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -3356,6 +3363,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3375,6 +3383,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3391,6 +3400,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3411,6 +3421,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3441,6 +3452,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3473,6 +3485,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3493,6 +3506,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3548,6 +3562,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3567,6 +3582,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3589,6 +3605,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3819,13 +3836,12 @@ fn no_build_isolation() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
-    --- stdout:
 
-    --- stderr:
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 8, in <module>
     ModuleNotFoundError: No module named 'setuptools'
-    ---
+
     "###
     );
 
@@ -3889,13 +3905,12 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
-    --- stdout:
 
-    --- stderr:
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 8, in <module>
     ModuleNotFoundError: No module named 'setuptools'
-    ---
+
     "###
     );
 
@@ -3944,7 +3959,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 fn install_utf16le_requirements() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli"))?;
+    requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
         .env_remove("UV_EXCLUDE_NEWER")
@@ -3971,7 +3986,7 @@ fn install_utf16le_requirements() -> Result<()> {
 fn install_utf16be_requirements() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli"))?;
+    requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4688,6 +4703,7 @@ fn deptry_gitignore() {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -6834,13 +6850,12 @@ fn install_build_isolation_package() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
-    --- stdout:
 
-    --- stderr:
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 8, in <module>
     ModuleNotFoundError: No module named 'hatchling'
-    ---
+
     "###
     );
 
@@ -7095,9 +7110,8 @@ fn sklearn() {
     ----- stderr -----
       × Failed to download and build `sklearn==0.0.post12`
       ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
-          --- stdout:
 
-          --- stderr:
+          [stderr]
           The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
           rather than 'sklearn' for pip commands. 
 
@@ -7113,7 +7127,7 @@ fn sklearn() {
 
           More information is available at
           https://github.com/scikit-learn/sklearn-pypi-package
-          ---
+
       help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
     "###
     );

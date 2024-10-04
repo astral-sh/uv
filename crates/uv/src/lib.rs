@@ -132,10 +132,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     // Parse the external command, if necessary.
     let run_command = if let Commands::Project(command) = &*cli.command {
         if let ProjectCommand::Run(uv_cli::RunArgs {
-            command, module, ..
+            command,
+            module,
+            script,
+            ..
         }) = &**command
         {
-            Some(RunCommand::from_args(command, *module)?)
+            Some(RunCommand::from_args(command, *module, *script)?)
         } else {
             None
         }

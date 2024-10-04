@@ -524,8 +524,15 @@ impl Lock {
     pub fn simplified_supported_environments(&self) -> Vec<MarkerTree> {
         self.supported_environments()
             .iter()
-            .map(|marker| self.requires_python.simplify_markers(marker.clone()))
+            .cloned()
+            .map(|marker| self.simplify_environment(marker))
             .collect()
+    }
+
+    /// Simplify the given marker environment with respect to the lockfile's
+    /// `requires-python` setting.
+    pub fn simplify_environment(&self, marker: MarkerTree) -> MarkerTree {
+        self.requires_python.simplify_markers(marker)
     }
 
     /// If this lockfile was built from a forking resolution with non-identical forks, return the
