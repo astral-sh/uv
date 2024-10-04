@@ -12,13 +12,10 @@ use crate::common::{get_bin, venv_to_interpreter, TestContext};
 mod common;
 
 #[test]
-fn no_arguments() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
+fn no_arguments() {
+    let context = TestContext::new_with_versions(&[]).with_ignore_cache_dir();
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("uninstall")
-        .current_dir(&temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.pip_uninstall(), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -32,8 +29,6 @@ fn no_arguments() -> Result<()> {
     For more information, try '--help'.
     "###
     );
-
-    Ok(())
 }
 
 #[test]

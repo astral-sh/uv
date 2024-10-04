@@ -173,11 +173,12 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
       - name: "Install required Python versions"
-        run: |
-          # astral-sh/setup-uv sets `UV_CACHE_DIR` which disrupts the help message check
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv python install
+        run: uv python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -221,11 +222,12 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
       - name: "Install required Python versions"
-        run: |
-          # astral-sh/setup-uv sets `UV_CACHE_DIR` which disrupts the help message check
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv python install
+        run: uv python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2

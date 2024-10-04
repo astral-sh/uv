@@ -16,5 +16,8 @@ indent_size = 4
 [*.snap]
 trim_trailing_whitespace = false
 
+[crates/uv/tests/help.rs]
+trim_trailing_whitespace = false
+
 [*.md]
 max_line_length = 100

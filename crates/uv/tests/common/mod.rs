@@ -194,6 +194,20 @@ impl TestContext {
         self
     }
 
+    /// Ignore `UV_CACHE_DIR` env variable in tests.
+    #[must_use]
+    pub fn with_ignore_cache_dir(mut self) -> Self {
+        self.filters.push((
+            r"\[env:[\n\s]* UV_CACHE_DIR=.+\]".to_string(),
+            "[env: UV_CACHE_DIR=]".to_string(),
+        ));
+        // When `--cache-dir` is followed with other options,
+        // remove it from the text. Since its presence is inconsistent.
+        self.filters
+            .push((r"--cache-dir <CACHE_DIR> <".to_string(), "<".to_string()));
+        self
+    }
+
     /// Discover the path to the XDG state directory. We use this, rather than the OS-specific
     /// temporary directory, because on macOS (and Windows on GitHub Actions), they involve
     /// symlinks. (On macOS, the temporary directory is, like `/var/...`, which resolves to
