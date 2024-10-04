@@ -1315,10 +1315,10 @@ impl PythonRequest {
             if let Some(pyenv_virtual_env) = pyenv_virtual_env.to_str() {
                 if value
                     == Path::new(pyenv_virtual_env)
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
                 {
                     return Self::Directory(PathBuf::from(pyenv_virtual_env));
                 }
