@@ -3730,7 +3730,13 @@ pub struct IndexArgs {
     ///
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.
-    #[arg(long, short, help_heading = "Index options")]
+    #[arg(
+        long,
+        short,
+        env = "UV_FIND_LINKS",
+        value_delimiter = ' ',
+        help_heading = "Index options"
+    )]
     pub find_links: Option<Vec<FlatIndexLocation>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
