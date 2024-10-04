@@ -827,6 +827,16 @@ fn parse_maybe_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
     }
 }
 
+// Parse a string, mapping the empty string to `None`.
+#[allow(clippy::unnecessary_wraps)]
+fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        Ok(Maybe::Some(input.to_string()))
+    }
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipCompileArgs {
@@ -967,8 +977,8 @@ pub struct PipCompileArgs {
     ///
     /// See `uv help python` for details on Python discovery and supported
     /// request formats.
-    #[arg(long, verbatim_doc_comment, help_heading = "Python options")]
-    pub python: Option<String>,
+    #[arg(long, verbatim_doc_comment, help_heading = "Python options", value_parser = parse_maybe_string)]
+    pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
     ///
@@ -1221,9 +1231,10 @@ pub struct PipSyncArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
     ///
@@ -1503,9 +1514,10 @@ pub struct PipInstallArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
     ///
@@ -1668,9 +1680,10 @@ pub struct PipUninstallArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Attempt to use `keyring` for authentication for remote requirements files.
     ///
@@ -1776,9 +1789,10 @@ pub struct PipFreezeArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// List packages in the system Python environment.
     ///
@@ -1840,9 +1854,10 @@ pub struct PipListArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// List packages in the system Python environment.
     ///
@@ -1880,9 +1895,10 @@ pub struct PipCheckArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Check packages in the system Python environment.
     ///
@@ -1928,9 +1944,10 @@ pub struct PipShowArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Show a package in the system Python environment.
     ///
@@ -1983,9 +2000,10 @@ pub struct PipTreeArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// List packages in the system Python environment.
     ///
@@ -2118,9 +2136,10 @@ pub struct BuildArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     #[command(flatten)]
     pub resolver: ResolverArgs,
@@ -2147,9 +2166,10 @@ pub struct VenvArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Ignore virtual environments when searching for the Python interpreter.
     ///
@@ -2435,9 +2455,10 @@ pub struct InitArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -2610,9 +2631,10 @@ pub struct RunArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Whether to show resolver and installer output from any environment modifications.
     ///
@@ -2752,9 +2774,10 @@ pub struct SyncArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -2795,9 +2818,10 @@ pub struct LockArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -2917,9 +2941,10 @@ pub struct AddArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -2983,9 +3008,10 @@ pub struct RemoveArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -3057,9 +3083,10 @@ pub struct TreeArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -3181,9 +3208,10 @@ pub struct ExportArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -3330,9 +3358,10 @@ pub struct ToolRunArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Whether to show resolver and installer output from any environment modifications.
     ///
@@ -3391,9 +3420,10 @@ pub struct ToolInstallArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -3467,9 +3497,10 @@ pub struct ToolUpgradeArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,

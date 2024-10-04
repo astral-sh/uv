@@ -208,7 +208,7 @@ impl InitSettings {
             no_readme,
             no_pin_python,
             no_workspace,
-            python,
+            python: python.and_then(Maybe::into_option),
         }
     }
 }
@@ -286,7 +286,7 @@ impl RunSettings {
             package,
             no_project,
             no_sync,
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
@@ -364,7 +364,7 @@ impl ToolRunSettings {
                 .collect(),
             isolated,
             show_resolution,
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
@@ -424,7 +424,7 @@ impl ToolInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            python,
+            python: python.and_then(Maybe::into_option),
             force,
             editable,
             refresh: Refresh::from(refresh),
@@ -472,7 +472,7 @@ impl ToolUpgradeSettings {
 
         Self {
             name: if all { vec![] } else { name },
-            python,
+            python: python.and_then(Maybe::into_option),
             args,
             filesystem,
         }
@@ -744,7 +744,7 @@ impl SyncSettings {
                 Modifications::Sufficient
             },
             package,
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings,
         }
@@ -778,7 +778,7 @@ impl LockSettings {
         Self {
             locked,
             frozen,
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
@@ -856,7 +856,7 @@ impl AddSettings {
             branch,
             package,
             script,
-            python,
+            python: python.and_then(Maybe::into_option),
             editable: flag(editable, no_editable),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
@@ -919,7 +919,7 @@ impl RemoveSettings {
             dependency_type,
             package,
             script,
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
@@ -973,7 +973,7 @@ impl TreeSettings {
             invert: tree.invert,
             python_version,
             python_platform,
-            python,
+            python: python.and_then(Maybe::into_option),
             resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
     }
@@ -1044,7 +1044,7 @@ impl ExportSettings {
             output_file,
             locked,
             frozen,
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
@@ -1173,7 +1173,7 @@ impl PipCompileSettings {
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     no_build: flag(no_build, build),
                     no_binary,
@@ -1266,7 +1266,7 @@ impl PipSyncSettings {
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
@@ -1398,7 +1398,7 @@ impl PipInstallSettings {
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
@@ -1454,7 +1454,7 @@ impl PipUninstallSettings {
             requirement,
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
@@ -1499,7 +1499,7 @@ impl PipFreezeSettings {
             exclude_editable,
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
@@ -1542,7 +1542,7 @@ impl PipListSettings {
             format,
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
@@ -1578,7 +1578,7 @@ impl PipShowSettings {
             package,
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
@@ -1627,7 +1627,7 @@ impl PipTreeSettings {
             // Shared settings.
             shared: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
@@ -1657,7 +1657,7 @@ impl PipCheckSettings {
         Self {
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     ..PipOptions::default()
                 },
@@ -1724,7 +1724,7 @@ impl BuildSettings {
                 flag(require_hashes, no_require_hashes).unwrap_or_default(),
                 flag(verify_hashes, no_verify_hashes).unwrap_or_default(),
             ),
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
@@ -1778,7 +1778,7 @@ impl VenvSettings {
             relocatable,
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     index_strategy,
                     keyring_provider,
