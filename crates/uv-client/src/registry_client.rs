@@ -1,13 +1,13 @@
-use std::collections::BTreeMap;
-use std::fmt::Debug;
-use std::path::PathBuf;
-use std::str::FromStr;
-
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
 use reqwest::{Client, Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
+use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::time::Duration;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
@@ -171,7 +171,7 @@ pub struct RegistryClient {
     /// The connectivity mode to use.
     connectivity: Connectivity,
     /// Configured client timeout, in seconds.
-    timeout: u64,
+    timeout: Duration,
 }
 
 impl RegistryClient {
@@ -191,7 +191,7 @@ impl RegistryClient {
     }
 
     /// Return the timeout this client is configured with, in seconds.
-    pub fn timeout(&self) -> u64 {
+    pub fn timeout(&self) -> Duration {
         self.timeout
     }
 
@@ -713,7 +713,7 @@ impl RegistryClient {
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.timeout()
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.timeout().as_secs()
                 ),
             )
         } else {
