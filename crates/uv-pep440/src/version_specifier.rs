@@ -558,6 +558,18 @@ impl VersionSpecifier {
             | Operator::NotEqual => false,
         }
     }
+
+    /// True if this specifier is attempting to match to a specific version, but only provides a
+    /// major and minor version, leaving the patch version to be pinned to `0` ambiguously.
+    /// e.g. `==3.11` which will be interpreted as `==3.11.0`
+    pub fn has_matching_release_without_patch(&self) -> bool {
+        self.operator == Operator::Equal
+            && self.version.release().len() == 2
+            && self.version.pre().is_none()
+            && self.version.post().is_none()
+            && self.version.dev().is_none()
+            && self.version.local().is_empty()
+    }
 }
 
 impl FromStr for VersionSpecifier {
@@ -584,6 +596,17 @@ impl FromStr for VersionSpecifier {
         s.eat_while(|c: char| c.is_whitespace());
         if !s.done() {
             return Err(ParseErrorKind::InvalidTrailing(s.after().to_string()).into());
+        }
+        if version_specifier.has_matching_release_without_patch() {
+            #[cfg(feature = "tracing")]
+            {
+                tracing::warn!(
+                    "Specified version `{}` will be interpreted as `{}`. Did you mean `{}`?",
+                    version,
+                    format!("{}.{}", version, "0"),
+                    format!("{}.{}", version, "*")
+                );
+            }
         }
         Ok(version_specifier)
     }
