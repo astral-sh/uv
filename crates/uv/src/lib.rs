@@ -1036,6 +1036,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             commands::python_install(
                 &project_dir,
+                args.install_dir.as_deref(),
                 args.targets,
                 args.reinstall,
                 globals.python_downloads,
@@ -1053,7 +1054,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(args.targets, args.all, printer).await
+            commands::python_uninstall(args.install_dir.as_deref(), args.targets, args.all, printer)
+                .await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),

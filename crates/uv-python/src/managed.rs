@@ -66,7 +66,7 @@ pub struct ManagedPythonInstallations {
 
 impl ManagedPythonInstallations {
     /// A directory for Python installations at `root`.
-    fn from_path(root: impl Into<PathBuf>) -> Self {
+    pub fn from_path(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
 
