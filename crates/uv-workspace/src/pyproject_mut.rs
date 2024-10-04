@@ -533,41 +533,57 @@ pub fn add_dependency(
 
     match to_replace.as_slice() {
         [] => {
+            #[derive(Debug, Copy, Clone)]
+            enum Sort {
+                /// The list is sorted in a case-sensitive manner.
+                CaseSensitive,
+                /// The list is sorted in a case-insensitive manner.
+                CaseInsensitive,
+                /// The list is unsorted.
+                Unsorted,
+            }
+
             // Determine if the dependency list is sorted prior to
             // adding the new dependency; the new dependency list
             // will be sorted only when the original list is sorted
             // so that user's custom dependency ordering is preserved.
+            //
             // Additionally, if the table is invalid (i.e. contains non-string values)
             // we still treat it as unsorted for the sake of simplicity.
+            //
             // We account for both case-sensitive and case-insensitive sorting.
-            let all_strings = deps.iter().all(toml_edit::Value::is_str);
-
-            let case_insensitive_sorted = all_strings
-                && deps.iter().tuple_windows().all(|(a, b)| {
-                    a.as_str().map(str::to_lowercase) <= b.as_str().map(str::to_lowercase)
-                });
-
-            let case_sensitive_sorted = all_strings
-                && deps
-                    .iter()
-                    .tuple_windows()
-                    .all(|(a, b)| a.as_str() <= b.as_str());
+            let sort = deps
+                .iter()
+                .all(Value::is_str)
+                .then(|| {
+                    if deps.iter().tuple_windows().all(|(a, b)| {
+                        a.as_str().map(str::to_lowercase) <= b.as_str().map(str::to_lowercase)
+                    }) {
+                        Some(Sort::CaseInsensitive)
+                    } else if deps
+                        .iter()
+                        .tuple_windows()
+                        .all(|(a, b)| a.as_str() <= b.as_str())
+                    {
+                        Some(Sort::CaseSensitive)
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .unwrap_or(Sort::Unsorted);
 
             let req_string = req.to_string();
-            let index = if case_sensitive_sorted || case_insensitive_sorted {
-                deps.iter()
-                    .position(|d: &Value| {
-                        if case_insensitive_sorted {
-                            d.as_str().map(str::to_lowercase)
-                                > Some(req_string.as_str().to_lowercase())
-                        } else {
-                            d.as_str() > Some(req_string.as_str())
-                        }
-                    })
-                    .unwrap_or(deps.len())
-            } else {
-                deps.len()
+            let index = match sort {
+                Sort::CaseSensitive => deps
+                    .iter()
+                    .position(|d| d.as_str() > Some(req_string.as_str())),
+                Sort::CaseInsensitive => deps.iter().position(|d| {
+                    d.as_str().map(str::to_lowercase) > Some(req_string.as_str().to_lowercase())
+                }),
+                Sort::Unsorted => None,
             };
+            let index = index.unwrap_or(deps.len());
 
             deps.insert(index, req_string);
             // `reformat_array_multiline` uses the indentation of the first dependency entry.
