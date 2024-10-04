@@ -4397,7 +4397,8 @@ pub struct PublishArgs {
 
     /// The URL of the upload endpoint (not the simple index URL!).
     ///
-    /// Note that there are typically different URLs for index access ("simple") and index upload.
+    /// Note that there are typically different URLs for index access (e.g., `https:://.../simple`)
+    /// and index upload.
     ///
     /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
     ///
