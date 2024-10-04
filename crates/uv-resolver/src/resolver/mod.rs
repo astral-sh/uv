@@ -28,8 +28,9 @@ use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
-    IncompatibleWheel, IndexCapabilities, IndexLocations, InstalledDist, PythonRequirementKind,
-    RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    IncompatibleWheel, IndexCapabilities, IndexLocations, IndexUrl, InstalledDist,
+    PythonRequirementKind, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist,
+    VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -60,6 +61,7 @@ pub(crate) use crate::resolver::availability::{
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 use crate::resolver::groups::Groups;
 pub use crate::resolver::index::InMemoryIndex;
+use crate::resolver::indexes::Indexes;
 pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
     VersionsResponse, WheelMetadataResult,
@@ -74,6 +76,7 @@ mod batch_prefetch;
 mod fork_map;
 mod groups;
 mod index;
+mod indexes;
 mod locals;
 mod provider;
 mod reporter;
@@ -100,6 +103,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     exclusions: Exclusions,
     urls: Urls,
     locals: Locals,
+    indexes: Indexes,
     dependency_mode: DependencyMode,
     hasher: HashStrategy,
     markers: ResolverMarkers,
@@ -204,6 +208,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &markers, git, options.dependency_mode)?,
             locals: Locals::from_manifest(&manifest, &markers, options.dependency_mode),
+            indexes: Indexes::from_manifest(&manifest, &markers, options.dependency_mode)?,
             groups: Groups::from_manifest(&manifest, &markers),
             project: manifest.project,
             workspace_members: manifest.workspace_members,
@@ -377,7 +382,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     continue 'FORK;
                 };
                 state.next = highest_priority_pkg;
+
                 let url = state.next.name().and_then(|name| state.fork_urls.get(name));
+                let index = state.next.name().and_then(|name| self.indexes.get(name));
 
                 // Consider:
                 // ```toml
@@ -390,7 +397,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // since we weren't sure whether it might also be a URL requirement when
                 // transforming the requirements. For that case, we do another request here
                 // (idempotent due to caching).
-                self.request_package(&state.next, url, &request_sink)?;
+                self.request_package(&state.next, url, index, &request_sink)?;
 
                 prefetcher.version_tried(state.next.clone());
 
@@ -529,7 +536,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 url: _,
                             } = dependency;
                             let url = package.name().and_then(|name| state.fork_urls.get(name));
-                            self.visit_package(package, url, &request_sink)?;
+                            let index = package.name().and_then(|name| self.indexes.get(name));
+                            self.visit_package(package, url, index, &request_sink)?;
                         }
                     }
                     ForkedDependencies::Forked {
@@ -697,7 +705,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let url = package
                         .name()
                         .and_then(|name| forked_state.fork_urls.get(name));
-                    self.visit_package(package, url, request_sink)?;
+                    let index = package.name().and_then(|name| self.indexes.get(name));
+                    self.visit_package(package, url, index, request_sink)?;
                 }
                 Ok(forked_state)
             })
@@ -720,6 +729,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         url: Option<&VerbatimParsedUrl>,
+        index: Option<&IndexUrl>,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
         // Ignore unresolved URL packages.
@@ -732,13 +742,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(());
         }
 
-        self.request_package(package, url, request_sink)
+        self.request_package(package, url, index, request_sink)
     }
 
     fn request_package(
         &self,
         package: &PubGrubPackage,
         url: Option<&VerbatimParsedUrl>,
+        index: Option<&IndexUrl>,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
         // Only request real package
@@ -760,7 +771,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         } else {
             // Emit a request to fetch the metadata for this package.
             if self.index.packages().register(name.clone()) {
-                request_sink.blocking_send(Request::Package(name.clone()))?;
+                request_sink.blocking_send(Request::Package(name.clone(), index.cloned()))?;
             }
         }
         Ok(())
@@ -1709,9 +1720,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Result<Option<Response>, ResolveError> {
         match request {
             // Fetch package metadata from the registry.
-            Request::Package(package_name) => {
+            Request::Package(package_name, index) => {
                 let package_versions = provider
-                    .get_package_versions(&package_name)
+                    .get_package_versions(&package_name, index.as_ref())
                     .boxed_local()
                     .await
                     .map_err(ResolveError::Client)?;
@@ -2504,7 +2515,7 @@ impl ResolutionPackage {
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
-    Package(PackageName),
+    Package(PackageName, Option<IndexUrl>),
     /// A request to fetch the metadata for a built or source distribution.
     Dist(Dist),
     /// A request to fetch the metadata from an already-installed distribution.
@@ -2553,7 +2564,7 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
 impl Display for Request {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Package(package_name) => {
+            Self::Package(package_name, _) => {
                 write!(f, "Versions {package_name}")
             }
             Self::Dist(dist) => {

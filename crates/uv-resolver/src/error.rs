@@ -52,6 +52,9 @@ pub enum ResolveError {
         fork_markers: MarkerTree,
     },
 
+    #[error("Requirements contain conflicting indexes for package `{0}`: `{1}` vs. `{2}`")]
+    ConflictingIndexes(PackageName, String, String),
+
     #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
     DisallowedUrl(PackageName, String),
 

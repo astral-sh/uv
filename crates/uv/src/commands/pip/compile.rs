@@ -16,7 +16,7 @@ use uv_configuration::{
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
-    DependencyMetadata, IndexCapabilities, IndexLocations, NameRequirementSpecification,
+    DependencyMetadata, Index, IndexCapabilities, IndexLocations, NameRequirementSpecification,
     UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::Simplified;
@@ -273,11 +273,18 @@ pub(crate) async fn pip_compile(
     let dev = Vec::default();
 
     // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+    let index_locations = index_locations.combine(
+        extra_index_urls
+            .into_iter()
+            .map(Index::from_extra_index_url)
+            .chain(index_url.map(Index::from_index_url))
+            .collect(),
+        find_links,
+        no_index,
+    );
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
+    for url in index_locations.allowed_urls() {
         store_credentials_from_url(url);
     }
 
@@ -446,12 +453,12 @@ pub(crate) async fn pip_compile(
 
     // If necessary, include the `--index-url` and `--extra-index-url` locations.
     if include_index_url {
-        if let Some(index) = index_locations.index() {
-            writeln!(writer, "--index-url {}", index.verbatim())?;
+        if let Some(index) = index_locations.default_index() {
+            writeln!(writer, "--index-url {}", index.url().verbatim())?;
             wrote_preamble = true;
         }
-        for extra_index in index_locations.extra_index() {
-            writeln!(writer, "--extra-index-url {}", extra_index.verbatim())?;
+        for extra_index in index_locations.implicit_indexes() {
+            writeln!(writer, "--extra-index-url {}", extra_index.url().verbatim())?;
             wrote_preamble = true;
         }
     }

@@ -3,7 +3,7 @@ use std::collections::hash_map::Entry;
 use rustc_hash::FxHashMap;
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
-use uv_distribution_types::{CachedRegistryDist, Hashed, IndexLocations, IndexUrl};
+use uv_distribution_types::{CachedRegistryDist, Hashed, Index, IndexLocations, IndexUrl};
 use uv_fs::{directories, files, symlinks};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -17,6 +17,8 @@ use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LO
 pub struct IndexEntry {
     /// The cached distribution.
     pub dist: CachedRegistryDist,
+    /// The index from which the wheel was downloaded.
+    pub index: Index,
     /// Whether the wheel was built from source (true), or downloaded from the registry directly (false).
     pub built: bool,
 }
@@ -80,23 +82,22 @@ impl<'a> RegistryWheelIndex<'a> {
     ) -> Vec<IndexEntry> {
         let mut entries = vec![];
 
-        // Collect into owned `IndexUrl`.
-        let flat_index_urls: Vec<IndexUrl> = index_locations
+        let flat_index_urls: Vec<Index> = index_locations
             .flat_index()
-            .map(|flat_index| IndexUrl::from(flat_index.clone()))
+            .map(|flat_index| Index::from_extra_index_url(IndexUrl::from(flat_index.clone())))
             .collect();
 
-        for index_url in index_locations.indexes().chain(flat_index_urls.iter()) {
+        for index in index_locations.indexes().chain(flat_index_urls.iter()) {
             // Index all the wheels that were downloaded directly from the registry.
             let wheel_dir = cache.shard(
                 CacheBucket::Wheels,
-                WheelCache::Index(index_url).wheel_dir(package.to_string()),
+                WheelCache::Index(index.url()).wheel_dir(package.to_string()),
             );
 
             // For registry wheels, the cache structure is: `<index>/<package-name>/<wheel>.http`
             // or `<index>/<package-name>/<version>/<wheel>.rev`.
             for file in files(&wheel_dir) {
-                match index_url {
+                match index.url() {
                     // Add files from remote registries.
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                         if file
@@ -116,6 +117,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                     ) {
                                         entries.push(IndexEntry {
                                             dist: wheel.into_registry_dist(),
+                                            index: index.clone(),
                                             built: false,
                                         });
                                     }
@@ -142,6 +144,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                     ) {
                                         entries.push(IndexEntry {
                                             dist: wheel.into_registry_dist(),
+                                            index: index.clone(),
                                             built: false,
                                         });
                                     }
@@ -156,7 +159,7 @@ impl<'a> RegistryWheelIndex<'a> {
             // from the registry.
             let cache_shard = cache.shard(
                 CacheBucket::SourceDistributions,
-                WheelCache::Index(index_url).wheel_dir(package.to_string()),
+                WheelCache::Index(index.url()).wheel_dir(package.to_string()),
             );
 
             // For registry wheels, the cache structure is: `<index>/<package-name>/<version>/`.
@@ -165,7 +168,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 let cache_shard = cache_shard.shard(shard);
 
                 // Read the revision from the cache.
-                let revision = match index_url {
+                let revision = match index.url() {
                     // Add files from remote registries.
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                         let revision_entry = cache_shard.entry(HTTP_REVISION);
@@ -197,6 +200,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                 ) {
                                     entries.push(IndexEntry {
                                         dist: wheel.into_registry_dist(),
+                                        index: index.clone(),
                                         built: true,
                                     });
                                 }

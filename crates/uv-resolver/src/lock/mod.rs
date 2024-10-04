@@ -1053,10 +1053,10 @@ impl Lock {
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let remotes = indexes.map(|locations| {
             locations
-                .indexes()
-                .filter_map(|index_url| match index_url {
+                .allowed_indexes()
+                .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index_url.redacted()))
+                        Some(UrlString::from(index.url().redacted()))
                     }
                     IndexUrl::Path(_) => None,
                 })
@@ -1075,11 +1075,11 @@ impl Lock {
 
         let locals = indexes.map(|locations| {
             locations
-                .indexes()
-                .filter_map(|index_url| match index_url {
+                .allowed_indexes()
+                .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
-                    IndexUrl::Path(index_url) => {
-                        let path = index_url.to_file_path().ok()?;
+                    IndexUrl::Path(url) => {
+                        let path = url.to_file_path().ok()?;
                         let path = relative_to(&path, workspace.install_path())
                             .or_else(|_| std::path::absolute(path))
                             .ok()?;

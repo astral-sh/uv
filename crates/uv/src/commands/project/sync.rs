@@ -266,7 +266,7 @@ pub(super) async fn do_sync(
     let resolution = apply_editable_mode(resolution, editable);
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
+    for url in index_locations.allowed_urls() {
         uv_auth::store_credentials_from_url(url);
     }
 

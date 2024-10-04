@@ -13,6 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio", "schemars"] }
 uv-git = { workspace = true }
 uv-macros = { workspace = true }

@@ -400,7 +400,7 @@ async fn build_package(
     .into_interpreter();
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
+    for url in index_locations.allowed_urls() {
         store_credentials_from_url(url);
     }
 

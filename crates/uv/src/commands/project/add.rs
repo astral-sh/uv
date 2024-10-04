@@ -244,7 +244,7 @@ pub(crate) async fn add(
         resolution_environment(python_version, python_platform, target.interpreter())?;
 
     // Add all authenticated sources to the cache.
-    for url in settings.index_locations.urls() {
+    for url in settings.index_locations.allowed_urls() {
         store_credentials_from_url(url);
     }
 
