@@ -4278,6 +4278,7 @@ dependencies = [
  "insta",
  "itertools 0.13.0",
  "serde",
+ "sha2",
  "spdx",
  "tempfile",
  "thiserror",
@@ -4294,6 +4295,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-version",
  "uv-warnings",
+ "walkdir",
 ]
 
 [[package]]

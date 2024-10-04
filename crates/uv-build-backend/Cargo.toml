@@ -25,12 +25,14 @@ fs-err = { workspace = true, features = ["tokio"] }
 glob = { workspace = true }
 itertools = { workspace = true }
 serde = { workspace = true }
+sha2 = { workspace = true }
 spdx = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
+walkdir = { workspace = true }
 
 [lints]
 workspace = true
