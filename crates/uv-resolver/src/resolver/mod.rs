@@ -176,7 +176,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             index,
             build_context.git(),
             build_context.capabilities(),
-            build_context.index_locations(),
+            build_context.locations(),
             provider,
             installed_packages,
         )

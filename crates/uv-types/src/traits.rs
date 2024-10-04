@@ -79,7 +79,7 @@ pub trait BuildContext {
     fn sources(&self) -> SourceStrategy;
 
     /// The index locations being searched.
-    fn index_locations(&self) -> &IndexLocations;
+    fn locations(&self) -> &IndexLocations;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(

@@ -218,6 +218,7 @@ pub(crate) async fn run(
                         script_dir,
                         script_sources,
                         script_indexes,
+                        &settings.index_locations,
                     )
                     .map_ok(LoweredRequirement::into_inner)
                 })

@@ -12176,7 +12176,7 @@ fn lock_named_index_cli() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0", "jinja2"]
+        dependencies = ["jinja2==3.1.2"]
 
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
@@ -12184,7 +12184,7 @@ fn lock_named_index_cli() -> Result<()> {
     )?;
 
     // The package references a non-existent index.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -12195,16 +12195,14 @@ fn lock_named_index_cli() -> Result<()> {
       Caused by: Package `jinja2` references an undeclared index: `pytorch`
     "###);
 
-    // This also isn't supported right now; you need to specify the index in the `pyproject.toml`.
-    uv_snapshot!(context.filters(), context.lock().arg("--index").arg("pytorch=https://download.pytorch.org/whl/cu121"), @r###"
-    success: false
-    exit_code: 2
+    // But it's fine if it comes from the CLI.
+    uv_snapshot!(context.filters(), context.lock().arg("--index").arg("pytorch=https://download.pytorch.org/whl/cu121").env_remove("UV_EXCLUDE_NEWER"), @r###"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `project @ file://[TEMP_DIR]/`
-      Caused by: Failed to parse entry for: `jinja2`
-      Caused by: Package `jinja2` references an undeclared index: `pytorch`
+    Resolved 3 packages in [TIME]
     "###);
 
     Ok(())

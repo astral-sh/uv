@@ -6,7 +6,7 @@ use thiserror::Error;
 use url::Url;
 
 use uv_distribution_filename::DistExtension;
-use uv_distribution_types::Index;
+use uv_distribution_types::{Index, IndexLocations, Origin};
 use uv_git::GitReference;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
@@ -20,7 +20,7 @@ use uv_workspace::Workspace;
 pub struct LoweredRequirement(Requirement);
 
 #[derive(Debug, Clone, Copy)]
-enum Origin {
+enum RequirementOrigin {
     /// The `tool.uv.sources` were read from the project.
     Project,
     /// The `tool.uv.sources` were read from the workspace root.
@@ -35,14 +35,15 @@ impl LoweredRequirement {
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
         project_indexes: &'data [Index],
+        locations: &'data IndexLocations,
         workspace: &'data Workspace,
-    ) -> impl Iterator<Item = Result<LoweredRequirement, LoweringError>> + 'data {
+    ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
-            (Some(source), Origin::Project)
+            (Some(source), RequirementOrigin::Project)
         } else if let Some(source) = workspace.sources().get(&requirement.name) {
-            (Some(source), Origin::Workspace)
+            (Some(source), RequirementOrigin::Workspace)
         } else {
-            (None, Origin::Project)
+            (None, RequirementOrigin::Project)
         };
         let source = source.cloned();
 
@@ -152,15 +153,13 @@ impl LoweredRequirement {
                         Source::Registry { index, marker } => {
                             // Identify the named index from either the project indexes or the workspace indexes,
                             // in that order.
-                            let Some(index) = project_indexes
-                                .iter()
+                            let Some(index) = locations
+                                .indexes()
+                                .filter(|index| matches!(index.origin, Some(Origin::Cli)))
+                                .chain(project_indexes.iter())
+                                .chain(workspace.indexes().iter())
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
-                                })
-                                .or_else(|| {
-                                    workspace.indexes().iter().find(|Index { name, .. }| {
-                                        name.as_ref().is_some_and(|name| *name == index)
-                                    })
                                 })
                                 .map(|Index { url: index, .. }| index.clone())
                             else {
@@ -257,7 +256,8 @@ impl LoweredRequirement {
         dir: &'data Path,
         sources: &'data BTreeMap<PackageName, Sources>,
         indexes: &'data [Index],
-    ) -> impl Iterator<Item = Result<LoweredRequirement, LoweringError>> + 'data {
+        locations: &'data IndexLocations,
+    ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let source = sources.get(&requirement.name).cloned();
 
         let Some(source) = source else {
@@ -329,7 +329,7 @@ impl LoweredRequirement {
                             }
                             let source = path_source(
                                 PathBuf::from(path),
-                                Origin::Project,
+                                RequirementOrigin::Project,
                                 dir,
                                 dir,
                                 editable.unwrap_or(false),
@@ -337,8 +337,10 @@ impl LoweredRequirement {
                             (source, marker)
                         }
                         Source::Registry { index, marker } => {
-                            let Some(index) = indexes
-                                .iter()
+                            let Some(index) = locations
+                                .indexes()
+                                .filter(|index| matches!(index.origin, Some(Origin::Cli)))
+                                .chain(indexes.iter())
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
@@ -505,15 +507,15 @@ fn registry_source(
 /// Convert a path string to a file or directory source.
 fn path_source(
     path: impl AsRef<Path>,
-    origin: Origin,
+    origin: RequirementOrigin,
     project_dir: &Path,
     workspace_root: &Path,
     editable: bool,
 ) -> Result<RequirementSource, LoweringError> {
     let path = path.as_ref();
     let base = match origin {
-        Origin::Project => project_dir,
-        Origin::Workspace => workspace_root,
+        RequirementOrigin::Project => project_dir,
+        RequirementOrigin::Workspace => workspace_root,
     };
     let url = VerbatimUrl::from_path(path, base)?.with_given(path.to_string_lossy());
     let install_path = url.to_file_path().map_err(|()| {
