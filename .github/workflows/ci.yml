@@ -174,9 +174,6 @@ jobs:
         run: rustup show
 
       - uses: astral-sh/setup-uv@v3
-        with:
-          version: "latest"
-          enable-cache: true
       - name: "Install required Python versions"
         run: uv python install
 
@@ -223,9 +220,6 @@ jobs:
         run: rustup show
 
       - uses: astral-sh/setup-uv@v3
-        with:
-          version: "latest"
-          enable-cache: true
       - name: "Install required Python versions"
         run: uv python install
 

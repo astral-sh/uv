@@ -194,20 +194,6 @@ impl TestContext {
         self
     }
 
-    /// Ignore `UV_CACHE_DIR` env variable in tests.
-    #[must_use]
-    pub fn with_ignore_cache_dir(mut self) -> Self {
-        self.filters.push((
-            r"\[env:[\n\s]* UV_CACHE_DIR=.+\]".to_string(),
-            "[env: UV_CACHE_DIR=]".to_string(),
-        ));
-        // When `--cache-dir` is followed with other options,
-        // remove it from the text. Since its presence is inconsistent.
-        self.filters
-            .push((r"--cache-dir <CACHE_DIR> <".to_string(), "<".to_string()));
-        self
-    }
-
     /// Discover the path to the XDG state directory. We use this, rather than the OS-specific
     /// temporary directory, because on macOS (and Windows on GitHub Actions), they involve
     /// symlinks. (On macOS, the temporary directory is, like `/var/...`, which resolves to
@@ -447,6 +433,7 @@ impl TestContext {
             .env("UV_PYTHON_INSTALL_DIR", "")
             .env("UV_TEST_PYTHON_PATH", self.python_path())
             .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+            .env_remove("UV_CACHE_DIR")
             .current_dir(self.temp_dir.path());
 
         if activate_venv {
@@ -543,6 +530,7 @@ impl TestContext {
     pub fn help(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("help");
+        command.env_remove("UV_CACHE_DIR");
 
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the

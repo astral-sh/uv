@@ -13,9 +13,10 @@ mod common;
 
 #[test]
 fn no_arguments() {
-    let context = TestContext::new_with_versions(&[]).with_ignore_cache_dir();
-
-    uv_snapshot!(context.filters(), context.pip_uninstall(), @r###"
+    uv_snapshot!(Command::new(get_bin())
+        .arg("pip")
+        .arg("uninstall")
+        .env_clear(), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
