@@ -99,15 +99,6 @@ impl Verbatim for IndexUrl {
     }
 }
 
-impl From<FlatIndexLocation> for IndexUrl {
-    fn from(location: FlatIndexLocation) -> Self {
-        match location {
-            FlatIndexLocation::Path(url) => Self::Path(url),
-            FlatIndexLocation::Url(url) => Self::Url(url),
-        }
-    }
-}
-
 /// An error that can occur when parsing an [`IndexUrl`].
 #[derive(Error, Debug)]
 pub enum IndexUrlError {
@@ -185,117 +176,6 @@ impl Deref for IndexUrl {
     }
 }
 
-/// A directory with distributions or a URL to an HTML file with a flat listing of distributions.
-///
-/// Also known as `--find-links`.
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub enum FlatIndexLocation {
-    Path(VerbatimUrl),
-    Url(VerbatimUrl),
-}
-
-#[cfg(feature = "schemars")]
-impl schemars::JsonSchema for FlatIndexLocation {
-    fn schema_name() -> String {
-        "FlatIndexLocation".to_string()
-    }
-
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("The path to a directory of distributions, or a URL to an HTML file with a flat listing of distributions.".to_string()),
-              ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
-    }
-}
-
-impl FlatIndexLocation {
-    /// Return the raw URL for the `--find-links` index.
-    pub fn url(&self) -> &Url {
-        match self {
-            Self::Url(url) => url.raw(),
-            Self::Path(url) => url.raw(),
-        }
-    }
-
-    /// Return the redacted URL for the `--find-links` index, omitting any sensitive credentials.
-    pub fn redacted(&self) -> Cow<'_, Url> {
-        let url = self.url();
-        if url.username().is_empty() && url.password().is_none() {
-            Cow::Borrowed(url)
-        } else {
-            let mut url = url.clone();
-            let _ = url.set_username("");
-            let _ = url.set_password(None);
-            Cow::Owned(url)
-        }
-    }
-}
-
-impl Display for FlatIndexLocation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Url(url) => Display::fmt(url, f),
-            Self::Path(url) => Display::fmt(url, f),
-        }
-    }
-}
-
-impl Verbatim for FlatIndexLocation {
-    fn verbatim(&self) -> Cow<'_, str> {
-        match self {
-            Self::Url(url) => url.verbatim(),
-            Self::Path(url) => url.verbatim(),
-        }
-    }
-}
-
-impl FromStr for FlatIndexLocation {
-    type Err = IndexUrlError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let url = if Path::new(s).exists() {
-            VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
-        } else {
-            VerbatimUrl::parse_url(s)?
-        };
-        Ok(Self::from(url.with_given(s)))
-    }
-}
-
-impl serde::ser::Serialize for FlatIndexLocation {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        self.to_string().serialize(serializer)
-    }
-}
-
-impl<'de> serde::de::Deserialize<'de> for FlatIndexLocation {
-    fn deserialize<D>(deserializer: D) -> Result<FlatIndexLocation, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        FlatIndexLocation::from_str(&s).map_err(serde::de::Error::custom)
-    }
-}
-
-impl From<VerbatimUrl> for FlatIndexLocation {
-    fn from(url: VerbatimUrl) -> Self {
-        if url.scheme() == "file" {
-            Self::Path(url)
-        } else {
-            Self::Url(url)
-        }
-    }
-}
-
 /// The index locations to use for fetching packages. By default, uses the PyPI index.
 ///
 /// This type merges the legacy `--index-url`, `--extra-index-url`, and `--find-links` options,
@@ -304,13 +184,13 @@ impl From<VerbatimUrl> for FlatIndexLocation {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct IndexLocations {
     indexes: Vec<Index>,
-    flat_index: Vec<FlatIndexLocation>,
+    flat_index: Vec<Index>,
     no_index: bool,
 }
 
 impl IndexLocations {
     /// Determine the index URLs to use for fetching packages.
-    pub fn new(indexes: Vec<Index>, flat_index: Vec<FlatIndexLocation>, no_index: bool) -> Self {
+    pub fn new(indexes: Vec<Index>, flat_index: Vec<Index>, no_index: bool) -> Self {
         Self {
             indexes,
             flat_index,
@@ -325,12 +205,7 @@ impl IndexLocations {
     ///
     /// If the current index location has an `index` set, it will be preserved.
     #[must_use]
-    pub fn combine(
-        self,
-        indexes: Vec<Index>,
-        flat_index: Vec<FlatIndexLocation>,
-        no_index: bool,
-    ) -> Self {
+    pub fn combine(self, indexes: Vec<Index>, flat_index: Vec<Index>, no_index: bool) -> Self {
         Self {
             indexes: self.indexes.into_iter().chain(indexes).collect(),
             flat_index: self.flat_index.into_iter().chain(flat_index).collect(),
@@ -407,7 +282,7 @@ impl<'a> IndexLocations {
     }
 
     /// Return an iterator over the [`FlatIndexLocation`] entries.
-    pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a FlatIndexLocation> + 'a {
+    pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         self.flat_index.iter()
     }
 
@@ -426,13 +301,12 @@ impl<'a> IndexLocations {
 
     /// Return an iterator over all allowed [`Index`] entries.
     ///
-    /// This includes both explicit and implicit indexes, as well as the default index (but _not_
-    /// the flat indexes).
+    /// This includes explicit indexes, implicit indexes flat indexes, and the default index.
     ///
-    /// If `no_index` was enabled, then this always returns an empty
-    /// iterator.
+    /// If `no_index` was enabled, then this always returns an empty iterator.
     pub fn allowed_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
-        self.explicit_indexes()
+        self.flat_indexes()
+            .chain(self.explicit_indexes())
             .chain(self.implicit_indexes())
             .chain(self.default_index())
     }

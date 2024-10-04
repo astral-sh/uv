@@ -1,17 +1,10 @@
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations;
-use crate::commands::pip::operations::Modifications;
-use crate::commands::project::lock::do_safe_lock;
-use crate::commands::project::{ProjectError, SharedState};
-use crate::commands::{diagnostics, pip, project, ExitStatus};
-use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
-use anyhow::{Context, Result};
-use itertools::Itertools;
 use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
-use uv_auth::{store_credentials, store_credentials_from_url};
+
+use anyhow::{Context, Result};
+use itertools::Itertools;
+use uv_auth::store_credentials;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -19,7 +12,7 @@ use uv_configuration::{
     HashCheckingMode, InstallOptions,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution_types::{DirectorySourceDist, Dist, ResolvedDist, SourceDist};
+use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
 use uv_installer::SitePackages;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
@@ -32,6 +25,15 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
+
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
+use crate::commands::pip::operations;
+use crate::commands::pip::operations::Modifications;
+use crate::commands::project::lock::do_safe_lock;
+use crate::commands::project::{ProjectError, SharedState};
+use crate::commands::{diagnostics, pip, project, ExitStatus};
+use crate::printer::Printer;
+use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -272,9 +274,6 @@ pub(super) async fn do_sync(
             store_credentials(index.raw_url(), credentials);
         }
     }
-    for index in index_locations.flat_indexes() {
-        store_credentials_from_url(index.url());
-    }
 
     // Populate credentials from the workspace.
     store_credentials_from_workspace(target.workspace());
@@ -312,7 +311,9 @@ pub(super) async fn do_sync(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_indexes()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 

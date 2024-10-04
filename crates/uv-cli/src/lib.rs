@@ -14,7 +14,7 @@ use uv_configuration::{
     ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
     TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
-use uv_distribution_types::{FlatIndexLocation, Index, IndexUrl};
+use uv_distribution_types::{Index, IndexUrl};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
@@ -3787,7 +3787,7 @@ pub struct IndexArgs {
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.
     #[arg(long, short, help_heading = "Index options")]
-    pub find_links: Option<Vec<FlatIndexLocation>>,
+    pub find_links: Option<Vec<IndexUrl>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// provided via `--find-links`.

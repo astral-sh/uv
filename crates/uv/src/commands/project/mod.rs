@@ -168,7 +168,7 @@ pub(crate) enum ProjectError {
     Name(#[from] uv_normalize::InvalidNameError),
 
     #[error(transparent)]
-    NamedRequirements(#[from] uv_requirements::NamedRequirementsError),
+    NamedRequirements(#[from] NamedRequirementsError),
 
     #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
@@ -637,9 +637,6 @@ pub(crate) async fn resolve_names(
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
-    for index in index_locations.flat_indexes() {
-        uv_auth::store_credentials_from_url(index.url());
-    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -790,9 +787,6 @@ pub(crate) async fn resolve_environment<'a>(
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
-    for index in index_locations.flat_indexes() {
-        uv_auth::store_credentials_from_url(index.url());
-    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -853,7 +847,9 @@ pub(crate) async fn resolve_environment<'a>(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_indexes()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
@@ -953,9 +949,6 @@ pub(crate) async fn sync_environment(
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
-    for index in index_locations.flat_indexes() {
-        uv_auth::store_credentials_from_url(index.url());
-    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -988,7 +981,9 @@ pub(crate) async fn sync_environment(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_indexes()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
@@ -1146,9 +1141,6 @@ pub(crate) async fn update_environment(
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
-    for index in index_locations.flat_indexes() {
-        uv_auth::store_credentials_from_url(index.url());
-    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -1195,7 +1187,9 @@ pub(crate) async fn update_environment(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_indexes()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
@@ -1374,7 +1368,11 @@ fn warn_on_requirements_txt_setting(
             }
         }
         for find_link in find_links {
-            if !settings.index_locations.flat_indexes().contains(find_link) {
+            if !settings
+                .index_locations
+                .flat_indexes()
+                .any(|index| index.url() == find_link)
+            {
                 warn_user_once!(
                     "Ignoring `--find-links` from requirements file: `{find_link}`. Instead, use the `--find-links` command-line argument, or set `find-links` in a `uv.toml` or `pyproject.toml` file.`"
                 );

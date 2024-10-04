@@ -278,7 +278,7 @@ pub(crate) async fn pip_compile(
             .map(Index::from_extra_index_url)
             .chain(index_url.map(Index::from_index_url))
             .collect(),
-        find_links,
+        find_links.into_iter().map(Index::from_find_links).collect(),
         no_index,
     );
 
@@ -287,9 +287,6 @@ pub(crate) async fn pip_compile(
         if let Some(credentials) = index.credentials() {
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
-    }
-    for index in index_locations.flat_indexes() {
-        uv_auth::store_credentials_from_url(index.url());
     }
 
     // Initialize the registry client.
@@ -312,7 +309,9 @@ pub(crate) async fn pip_compile(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
-        let entries = client.fetch(index_locations.flat_indexes()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, tags.as_deref(), &hasher, &build_options)
     };
 
@@ -470,7 +469,7 @@ pub(crate) async fn pip_compile(
     // If necessary, include the `--find-links` locations.
     if include_find_links {
         for flat_index in index_locations.flat_indexes() {
-            writeln!(writer, "--find-links {}", flat_index.verbatim())?;
+            writeln!(writer, "--find-links {}", flat_index.url().verbatim())?;
             wrote_preamble = true;
         }
     }

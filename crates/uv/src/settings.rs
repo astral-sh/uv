@@ -1961,7 +1961,12 @@ impl From<ResolverOptions> for ResolverSettings {
                     )
                     .chain(value.index_url.into_iter().map(Index::from_index_url))
                     .collect(),
-                value.find_links.unwrap_or_default(),
+                value
+                    .find_links
+                    .into_iter()
+                    .flatten()
+                    .map(Index::from_find_links)
+                    .collect(),
                 value.no_index.unwrap_or_default(),
             ),
             resolution: value.resolution.unwrap_or_default(),
@@ -2099,7 +2104,12 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                     )
                     .chain(value.index_url.into_iter().map(Index::from_index_url))
                     .collect(),
-                value.find_links.unwrap_or_default(),
+                value
+                    .find_links
+                    .into_iter()
+                    .flatten()
+                    .map(Index::from_find_links)
+                    .collect(),
                 value.no_index.unwrap_or_default(),
             ),
             resolution: value.resolution.unwrap_or_default(),
@@ -2333,7 +2343,12 @@ impl PipSettings {
                     )
                     .chain(index_url.into_iter().map(Index::from_index_url))
                     .collect(),
-                args.find_links.combine(find_links).unwrap_or_default(),
+                args.find_links
+                    .combine(find_links)
+                    .into_iter()
+                    .flatten()
+                    .map(Index::from_find_links)
+                    .collect(),
                 args.no_index.combine(no_index).unwrap_or_default(),
             ),
             extras: ExtrasSpecification::from_args(

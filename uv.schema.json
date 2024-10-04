@@ -144,7 +144,7 @@
         "null"
       ],
       "items": {
-        "$ref": "#/definitions/FlatIndexLocation"
+        "$ref": "#/definitions/IndexUrl"
       }
     },
     "index": {
@@ -551,10 +551,6 @@
       "description": "The normalized name of an extra dependency.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`. For example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: - <https://peps.python.org/pep-0685/#specification/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
     },
-    "FlatIndexLocation": {
-      "description": "The path to a directory of distributions, or a URL to an HTML file with a flat listing of distributions.",
-      "type": "string"
-    },
     "Index": {
       "type": "object",
       "required": [
@@ -835,7 +831,7 @@
             "null"
           ],
           "items": {
-            "$ref": "#/definitions/FlatIndexLocation"
+            "$ref": "#/definitions/IndexUrl"
           }
         },
         "generate-hashes": {

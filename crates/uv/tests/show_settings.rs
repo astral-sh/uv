@@ -1414,28 +1414,33 @@ fn resolve_find_links() -> anyhow::Result<()> {
             index_locations: IndexLocations {
                 indexes: [],
                 flat_index: [
-                    Url(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "download.pytorch.org",
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "download.pytorch.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/whl/torch_stable.html",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://download.pytorch.org/whl/torch_stable.html",
                                 ),
-                                port: None,
-                                path: "/whl/torch_stable.html",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://download.pytorch.org/whl/torch_stable.html",
-                            ),
-                        },
-                    ),
+                        ),
+                        explicit: false,
+                        default: false,
+                    },
                 ],
                 no_index: true,
             },

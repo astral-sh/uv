@@ -249,9 +249,6 @@ pub(crate) async fn add(
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
-    for index in settings.index_locations.flat_indexes() {
-        uv_auth::store_credentials_from_url(index.url());
-    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
@@ -280,7 +277,7 @@ pub(crate) async fn add(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client
-            .fetch(settings.index_locations.flat_indexes())
+            .fetch(settings.index_locations.flat_indexes().map(Index::url))
             .await?;
         FlatIndex::from_entries(entries, Some(&tags), &hasher, &settings.build_options)
     };

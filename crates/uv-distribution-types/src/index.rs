@@ -94,6 +94,16 @@ impl Index {
         }
     }
 
+    /// Initialize an [`Index`] from a pip-style `--find-links`.
+    pub fn from_find_links(url: IndexUrl) -> Self {
+        Self {
+            url,
+            name: None,
+            explicit: false,
+            default: false,
+        }
+    }
+
     /// Return the [`IndexUrl`] of the index.
     pub fn url(&self) -> &IndexUrl {
         &self.url

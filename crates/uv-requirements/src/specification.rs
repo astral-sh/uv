@@ -32,12 +32,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
-
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_distribution_types::{
-    FlatIndexLocation, IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
+    IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
 use uv_fs::{Simplified, CWD};
@@ -71,7 +70,7 @@ pub struct RequirementsSpecification {
     /// Whether to disallow index usage.
     pub no_index: bool,
     /// The `--find-links` locations to use for fetching packages.
-    pub find_links: Vec<FlatIndexLocation>,
+    pub find_links: Vec<IndexUrl>,
     /// The `--no-binary` flags to enforce when selecting distributions.
     pub no_binary: NoBinary,
     /// The `--no-build` flags to enforce when selecting distributions.
@@ -142,7 +141,7 @@ impl RequirementsSpecification {
                     find_links: requirements_txt
                         .find_links
                         .into_iter()
-                        .map(FlatIndexLocation::from)
+                        .map(IndexUrl::from)
                         .collect(),
                     no_binary: requirements_txt.no_binary,
                     no_build: requirements_txt.only_binary,
