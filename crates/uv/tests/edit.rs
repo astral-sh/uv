@@ -4959,7 +4959,7 @@ fn add_self() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirement name `anyio` matches project name `anyio`, but self-dependencies are not permitted. If your project name (`anyio`) is shadowing that of a third-party dependency, consider renaming the project.
+    error: Requirement name `anyio` matches project name `anyio`, but self-dependencies are not permitted without the `--dev` or `--optional` flags. If your project name (`anyio`) is shadowing that of a third-party dependency, consider renaming the project.
     "###);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -5023,12 +5023,16 @@ fn add_self() -> Result<()> {
 
     // And recursive development dependencies
     uv_snapshot!(context.filters(), context.add().arg("anyio[types]").arg("--dev"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirement name `anyio` matches project name `anyio`, but self-dependencies are not permitted. If your project name (`anyio`) is shadowing that of a third-party dependency, consider renaming the project.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ anyio==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -5053,6 +5057,11 @@ fn add_self() -> Result<()> {
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
+
+        [tool.uv]
+        dev-dependencies = [
+            "anyio[types]",
+        ]
 
         [tool.uv.sources]
         anyio = { workspace = true }

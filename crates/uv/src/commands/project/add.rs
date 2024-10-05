@@ -341,16 +341,13 @@ pub(crate) async fn add(
     };
 
     // If any of the requirements are self-dependencies, bail.
-    if matches!(
-        dependency_type,
-        DependencyType::Production | DependencyType::Dev
-    ) {
+    if matches!(dependency_type, DependencyType::Production) {
         if let Target::Project(project, _) = &target {
             if let Some(project_name) = project.project_name() {
                 for requirement in &requirements {
                     if requirement.name == *project_name {
                         bail!(
-                            "Requirement name `{}` matches project name `{}`, but self-dependencies are not permitted. If your project name (`{}`) is shadowing that of a third-party dependency, consider renaming the project.",
+                            "Requirement name `{}` matches project name `{}`, but self-dependencies are not permitted without the `--dev` or `--optional` flags. If your project name (`{}`) is shadowing that of a third-party dependency, consider renaming the project.",
                             requirement.name.cyan(),
                             project_name.cyan(),
                             project_name.cyan(),
