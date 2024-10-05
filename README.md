@@ -63,17 +63,14 @@ details and alternative installation methods.
 
 ## Upgrading uv
 
-When uv is installed via the standalone installer, it can update itself on-demand:
+If installed via standallone installer, uv can update itself:
 
 ```console
 $ uv self update
 ```
 
-Updating uv will re-run the installer and can modify your shell profiles. To disable this behavior,
-set `INSTALLER_NO_MODIFY_PATH=1`.
-
-When another installation method is used, self-updates are disabled. Use the package manager's
-upgrade method instead. For example, with pip:
+To prevent modifying shell profiles, set `INSTALLER_NO_MODIFY_PATH=1`. For other methods, use the
+package manager’s upgrade command, like:
 
 ```console
 $ pip install --upgrade uv
