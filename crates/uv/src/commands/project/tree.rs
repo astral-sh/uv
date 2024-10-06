@@ -47,6 +47,7 @@ pub(crate) async fn tree(
     // Find an interpreter for the project
     let interpreter = ProjectInterpreter::discover(
         &workspace,
+        project_dir,
         python.as_deref().map(PythonRequest::parse),
         python_preference,
         python_downloads,

@@ -23,7 +23,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::Lock;
@@ -38,8 +38,8 @@ use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{
-    validate_requires_python, EnvironmentSpecification, ProjectError, PythonRequestSource,
-    WorkspacePython,
+    validate_requires_python, validate_script_requires_python, EnvironmentSpecification,
+    ProjectError, ScriptPython, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{diagnostics, project, ExitStatus, SharedState};
@@ -111,31 +111,12 @@ pub(crate) async fn run(
             script.path.user_display().cyan()
         )?;
 
-        let (source, python_request) = if let Some(request) = python.as_deref() {
-            // (1) Explicit request from user
-            let source = PythonRequestSource::UserRequest;
-            let request = Some(PythonRequest::parse(request));
-            (source, request)
-        } else if let Some(file) = PythonVersionFile::discover(&project_dir, false, false).await? {
-            // (2) Request from `.python-version`
-            let source = PythonRequestSource::DotPythonVersion(file.file_name().to_string());
-            let request = file.into_version();
-            (source, request)
-        } else {
-            // (3) `Requires-Python` in the script
-            let request = script
-                .metadata
-                .requires_python
-                .as_ref()
-                .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        requires_python.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
-            let source = PythonRequestSource::RequiresPython;
-            (source, request)
-        };
+        let ScriptPython {
+            source,
+            python_request,
+            requires_python,
+        } = ScriptPython::from_request(python.as_deref().map(PythonRequest::parse), None, &script)
+            .await?;
 
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
@@ -153,30 +134,18 @@ pub(crate) async fn run(
         .await?
         .into_interpreter();
 
-        if let Some(requires_python) = script.metadata.requires_python.as_ref() {
-            if !requires_python.contains(interpreter.python_version()) {
-                let err = match source {
-                    PythonRequestSource::UserRequest => {
-                        ProjectError::RequestedPythonScriptIncompatibility(
-                            interpreter.python_version().clone(),
-                            requires_python.clone(),
-                        )
-                    }
-                    PythonRequestSource::DotPythonVersion(file) => {
-                        ProjectError::DotPythonVersionScriptIncompatibility(
-                            file,
-                            interpreter.python_version().clone(),
-                            requires_python.clone(),
-                        )
-                    }
-                    PythonRequestSource::RequiresPython => {
-                        ProjectError::RequiresPythonScriptIncompatibility(
-                            interpreter.python_version().clone(),
-                            requires_python.clone(),
-                        )
-                    }
-                };
-                warn_user!("{err}");
+        if let Some((requires_python, requires_python_source)) = requires_python {
+            match validate_script_requires_python(
+                &interpreter,
+                None,
+                &requires_python,
+                &requires_python_source,
+                &source,
+            ) {
+                Ok(()) => {}
+                Err(err) => {
+                    warn_user!("{err}");
+                }
             }
         }
 
@@ -430,7 +399,8 @@ pub(crate) async fn run(
                     requires_python,
                 } = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
-                    project.workspace(),
+                    Some(project.workspace()),
+                    project_dir,
                 )
                 .await?;
 
@@ -449,7 +419,7 @@ pub(crate) async fn run(
                 if let Some(requires_python) = requires_python.as_ref() {
                     validate_requires_python(
                         &interpreter,
-                        project.workspace(),
+                        Some(project.workspace()),
                         requires_python,
                         &source,
                     )?;
@@ -578,9 +548,12 @@ pub(crate) async fn run(
                     Some(PythonRequest::parse(request))
                 // (2) Request from `.python-version`
                 } else {
-                    PythonVersionFile::discover(&project_dir, no_config, false)
-                        .await?
-                        .and_then(PythonVersionFile::into_version)
+                    PythonVersionFile::discover(
+                        &project_dir,
+                        &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+                    )
+                    .await?
+                    .and_then(PythonVersionFile::into_version)
                 };
 
                 let python = PythonInstallation::find_or_download(

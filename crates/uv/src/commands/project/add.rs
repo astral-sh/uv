@@ -25,7 +25,7 @@ use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{redact_git_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
@@ -41,7 +41,9 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
-use crate::commands::project::{script_python_requirement, ProjectError};
+use crate::commands::project::{
+    init_script_python_requirement, validate_script_requires_python, ProjectError, ScriptPython,
+};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -128,7 +130,7 @@ pub(crate) async fn add(
         let script = if let Some(script) = Pep723Script::read(&script).await? {
             script
         } else {
-            let requires_python = script_python_requirement(
+            let requires_python = init_script_python_requirement(
                 python.as_deref(),
                 project_dir,
                 false,
@@ -142,28 +144,12 @@ pub(crate) async fn add(
             Pep723Script::init(&script, requires_python.specifiers()).await?
         };
 
-        let python_request = if let Some(request) = python.as_deref() {
-            // (1) Explicit request from user
-            Some(PythonRequest::parse(request))
-        } else if let Some(request) = PythonVersionFile::discover(project_dir, false, false)
-            .await?
-            .and_then(PythonVersionFile::into_version)
-        {
-            // (2) Request from `.python-version`
-            Some(request)
-        } else {
-            // (3) `Requires-Python` in `pyproject.toml`
-            script
-                .metadata
-                .requires_python
-                .clone()
-                .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        requires_python,
-                        PythonVariant::Default,
-                    ))
-                })
-        };
+        let ScriptPython {
+            source,
+            python_request,
+            requires_python,
+        } = ScriptPython::from_request(python.as_deref().map(PythonRequest::parse), None, &script)
+            .await?;
 
         let interpreter = PythonInstallation::find_or_download(
             python_request.as_ref(),
@@ -176,6 +162,16 @@ pub(crate) async fn add(
         )
         .await?
         .into_interpreter();
+
+        if let Some((requires_python, requires_python_source)) = requires_python {
+            validate_script_requires_python(
+                &interpreter,
+                None,
+                &requires_python,
+                &requires_python_source,
+                &source,
+            )?;
+        }
 
         Target::Script(script, Box::new(interpreter))
     } else {

@@ -14,7 +14,7 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -24,7 +24,7 @@ use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
-    VersionRequest,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::{
@@ -34,6 +34,7 @@ use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph,
     ResolverMarkers,
 };
+use uv_scripts::Pep723Script;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::Workspace;
@@ -81,13 +82,13 @@ pub(crate) enum ProjectError {
     RequiresPythonProjectIncompatibility(Version, RequiresPython),
 
     #[error("The requested interpreter resolved to Python {0}, which is incompatible with the script's Python requirement: `{1}`")]
-    RequestedPythonScriptIncompatibility(Version, VersionSpecifiers),
+    RequestedPythonScriptIncompatibility(Version, RequiresPython),
 
     #[error("The Python request from `{0}` resolved to Python {1}, which is incompatible with the script's Python requirement: `{2}`")]
-    DotPythonVersionScriptIncompatibility(String, Version, VersionSpecifiers),
+    DotPythonVersionScriptIncompatibility(String, Version, RequiresPython),
 
     #[error("The resolved Python interpreter (Python {0}) is incompatible with the script's Python requirement: `{1}`")]
-    RequiresPythonScriptIncompatibility(Version, VersionSpecifiers),
+    RequiresPythonScriptIncompatibility(Version, RequiresPython),
 
     #[error("The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`. However, a workspace member (`{member}`) supports Python {3}. To install the workspace member on its own, navigate to `{path}`, then run `{venv}` followed by `{install}`.", member = _2.cyan(), venv = format!("uv venv --python {_0}").green(), install = "uv pip install -e .".green(), path = _4.user_display().cyan() )]
     RequestedMemberIncompatibility(
@@ -204,7 +205,7 @@ pub(crate) fn find_requires_python(
 #[allow(clippy::result_large_err)]
 pub(crate) fn validate_requires_python(
     interpreter: &Interpreter,
-    workspace: &Workspace,
+    workspace: Option<&Workspace>,
     requires_python: &RequiresPython,
     source: &PythonRequestSource,
 ) -> Result<(), ProjectError> {
@@ -217,7 +218,7 @@ pub(crate) fn validate_requires_python(
     // a library in the workspace is compatible with Python >=3.8, the user may attempt
     // to sync on Python 3.8. This will fail, but we should provide a more helpful error
     // message.
-    for (name, member) in workspace.packages() {
+    for (name, member) in workspace.into_iter().flat_map(Workspace::packages) {
         let Some(project) = member.pyproject_toml().project.as_ref() else {
             continue;
         };
@@ -237,7 +238,7 @@ pub(crate) fn validate_requires_python(
                 }
                 PythonRequestSource::DotPythonVersion(file) => {
                     Err(ProjectError::DotPythonVersionMemberIncompatibility(
-                        file.to_string(),
+                        file.path().user_display().to_string(),
                         interpreter.python_version().clone(),
                         requires_python.clone(),
                         name.clone(),
@@ -267,13 +268,56 @@ pub(crate) fn validate_requires_python(
         }
         PythonRequestSource::DotPythonVersion(file) => {
             Err(ProjectError::DotPythonVersionProjectIncompatibility(
-                file.to_string(),
+                file.path().user_display().to_string(),
                 interpreter.python_version().clone(),
                 requires_python.clone(),
             ))
         }
         PythonRequestSource::RequiresPython => {
             Err(ProjectError::RequiresPythonProjectIncompatibility(
+                interpreter.python_version().clone(),
+                requires_python.clone(),
+            ))
+        }
+    }
+}
+
+/// Returns an error if the [`Interpreter`] does not satisfy script or workspace `requires-python`.
+#[allow(clippy::result_large_err)]
+pub(crate) fn validate_script_requires_python(
+    interpreter: &Interpreter,
+    workspace: Option<&Workspace>,
+    requires_python: &RequiresPython,
+    requires_python_source: &RequiresPythonSource,
+    request_source: &PythonRequestSource,
+) -> Result<(), ProjectError> {
+    match requires_python_source {
+        RequiresPythonSource::Project => {
+            validate_requires_python(interpreter, workspace, requires_python, request_source)?;
+        }
+        RequiresPythonSource::Script => {}
+    };
+
+    if requires_python.contains(interpreter.python_version()) {
+        return Ok(());
+    }
+
+    match request_source {
+        PythonRequestSource::UserRequest => {
+            Err(ProjectError::RequestedPythonScriptIncompatibility(
+                interpreter.python_version().clone(),
+                requires_python.clone(),
+            ))
+        }
+        PythonRequestSource::DotPythonVersion(file) => {
+            Err(ProjectError::DotPythonVersionScriptIncompatibility(
+                file.file_name().to_string(),
+                interpreter.python_version().clone(),
+                requires_python.clone(),
+            ))
+        }
+        PythonRequestSource::RequiresPython => {
+            Err(ProjectError::RequiresPythonScriptIncompatibility(
                 interpreter.python_version().clone(),
                 requires_python.clone(),
             ))
@@ -296,43 +340,64 @@ pub(crate) enum PythonRequestSource {
     /// The request was provided by the user.
     UserRequest,
     /// The request was inferred from a `.python-version` or `.python-versions` file.
-    DotPythonVersion(String),
+    DotPythonVersion(PythonVersionFile),
     /// The request was inferred from a `pyproject.toml` file.
     RequiresPython,
+}
+
+impl std::fmt::Display for PythonRequestSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PythonRequestSource::UserRequest => write!(f, "explicit request"),
+            PythonRequestSource::DotPythonVersion(file) => {
+                write!(f, "version file at `{}`", file.path().user_display())
+            }
+            PythonRequestSource::RequiresPython => write!(f, "`requires-python` metadata"),
+        }
+    }
 }
 
 /// The resolved Python request and requirement for a [`Workspace`].
 #[derive(Debug, Clone)]
 pub(crate) struct WorkspacePython {
     /// The source of the Python request.
-    source: PythonRequestSource,
+    pub(crate) source: PythonRequestSource,
     /// The resolved Python request, computed by considering (1) any explicit request from the user
     /// via `--python`, (2) any implicit request from the user via `.python-version`, and (3) any
     /// `Requires-Python` specifier in the `pyproject.toml`.
-    python_request: Option<PythonRequest>,
+    pub(crate) python_request: Option<PythonRequest>,
     /// The resolved Python requirement for the project, computed by taking the intersection of all
     /// `Requires-Python` specifiers in the workspace.
-    requires_python: Option<RequiresPython>,
+    pub(crate) requires_python: Option<RequiresPython>,
 }
 
 impl WorkspacePython {
     /// Determine the [`WorkspacePython`] for the current [`Workspace`].
     pub(crate) async fn from_request(
         python_request: Option<PythonRequest>,
-        workspace: &Workspace,
+        workspace: Option<&Workspace>,
+        project_dir: &Path,
     ) -> Result<Self, ProjectError> {
-        let requires_python = find_requires_python(workspace)?;
+        let requires_python = workspace
+            .and_then(|workspace| find_requires_python(workspace).transpose())
+            .transpose()?;
+
+        let workspace_root = workspace.map(Workspace::install_path);
 
         let (source, python_request) = if let Some(request) = python_request {
             // (1) Explicit request from user
             let source = PythonRequestSource::UserRequest;
             let request = Some(request);
             (source, request)
-        } else if let Some(file) =
-            PythonVersionFile::discover(workspace.install_path(), false, false).await?
+        } else if let Some(file) = PythonVersionFile::discover(
+            project_dir,
+            &VersionFileDiscoveryOptions::default()
+                .with_stop_discovery_at(workspace_root.map(PathBuf::as_ref)),
+        )
+        .await?
         {
             // (2) Request from `.python-version`
-            let source = PythonRequestSource::DotPythonVersion(file.file_name().to_string());
+            let source = PythonRequestSource::DotPythonVersion(file.clone());
             let request = file.into_version();
             (source, request)
         } else {
@@ -350,6 +415,85 @@ impl WorkspacePython {
             (source, request)
         };
 
+        if let Some(python_request) = python_request.as_ref() {
+            debug!(
+                "Using Python request `{}` from {source}",
+                python_request.to_canonical_string()
+            );
+        };
+
+        Ok(Self {
+            source,
+            python_request,
+            requires_python,
+        })
+    }
+}
+
+/// The source of a `Requires-Python` specifier.
+#[derive(Debug, Clone)]
+pub(crate) enum RequiresPythonSource {
+    /// From the PEP 723 inline script metadata.
+    Script,
+    /// From a `pyproject.toml` in a workspace.
+    Project,
+}
+
+/// The resolved Python request and requirement for a [`Pep723Script`]
+#[derive(Debug, Clone)]
+pub(crate) struct ScriptPython {
+    /// The source of the Python request.
+    pub(crate) source: PythonRequestSource,
+    /// The resolved Python request, computed by considering (1) any explicit request from the user
+    /// via `--python`, (2) any implicit request from the user via `.python-version`, (3) any
+    /// `Requires-Python` specifier in the script metadata, and (4) any `Requires-Python` specifier
+    /// in the `pyproject.toml`.
+    pub(crate) python_request: Option<PythonRequest>,
+    /// The resolved Python requirement for the script and its source.
+    pub(crate) requires_python: Option<(RequiresPython, RequiresPythonSource)>,
+}
+
+impl ScriptPython {
+    /// Determine the [`ScriptPython`] for the current [`Workspace`].
+    pub(crate) async fn from_request(
+        python_request: Option<PythonRequest>,
+        workspace: Option<&Workspace>,
+        script: &Pep723Script,
+    ) -> Result<Self, ProjectError> {
+        // First, discover a requirement from the workspace
+        let WorkspacePython {
+            mut source,
+            mut python_request,
+            requires_python,
+        } = WorkspacePython::from_request(
+            python_request,
+            workspace,
+            script.path.parent().unwrap_or(&**CWD),
+        )
+        .await?;
+
+        // If the script has a `Requires-Python` specifier, prefer that over one from the workspace.
+        let requires_python =
+            if let Some(requires_python_specifiers) = script.metadata.requires_python.as_ref() {
+                if python_request.is_none() {
+                    python_request = Some(PythonRequest::Version(VersionRequest::Range(
+                        requires_python_specifiers.clone(),
+                        PythonVariant::Default,
+                    )));
+                    source = PythonRequestSource::RequiresPython;
+                }
+                Some((
+                    RequiresPython::from_specifiers(requires_python_specifiers)?,
+                    RequiresPythonSource::Script,
+                ))
+            } else {
+                requires_python.map(|requirement| (requirement, RequiresPythonSource::Project))
+            };
+
+        if let Some(python_request) = python_request.as_ref() {
+            debug!("Using Python request {python_request} from {source}");
+        };
+
         Ok(Self {
             source,
             python_request,
@@ -362,6 +506,7 @@ impl ProjectInterpreter {
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
         workspace: &Workspace,
+        project_dir: &Path,
         python_request: Option<PythonRequest>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
@@ -375,7 +520,7 @@ impl ProjectInterpreter {
             source,
             python_request,
             requires_python,
-        } = WorkspacePython::from_request(python_request, workspace).await?;
+        } = WorkspacePython::from_request(python_request, Some(workspace), project_dir).await?;
 
         // Read from the virtual environment first.
         let venv = workspace.venv();
@@ -383,11 +528,15 @@ impl ProjectInterpreter {
             Ok(venv) => {
                 if python_request.as_ref().map_or(true, |request| {
                     if request.satisfied(venv.interpreter(), cache) {
-                        debug!("The virtual environment's Python version satisfies `{request}`");
+                        debug!(
+                            "The virtual environment's Python version satisfies `{}`",
+                            request.to_canonical_string()
+                        );
                         true
                     } else {
                         debug!(
-                            "The virtual environment's Python version does not satisfy `{request}`"
+                            "The virtual environment's Python version does not satisfy `{}`",
+                            request.to_canonical_string()
                         );
                         false
                     }
@@ -479,7 +628,7 @@ impl ProjectInterpreter {
         }
 
         if let Some(requires_python) = requires_python.as_ref() {
-            validate_requires_python(&interpreter, workspace, requires_python, &source)?;
+            validate_requires_python(&interpreter, Some(workspace), requires_python, &source)?;
         }
 
         Ok(Self::Interpreter(interpreter))
@@ -507,6 +656,7 @@ pub(crate) async fn get_or_init_environment(
 ) -> Result<PythonEnvironment, ProjectError> {
     match ProjectInterpreter::discover(
         workspace,
+        workspace.install_path().as_ref(),
         python,
         python_preference,
         python_downloads,
@@ -1271,8 +1421,8 @@ pub(crate) async fn update_environment(
     })
 }
 
-/// Determine the [`RequiresPython`] requirement for a PEP 723 script.
-pub(crate) async fn script_python_requirement(
+/// Determine the [`RequiresPython`] requirement for a new PEP 723 script.
+pub(crate) async fn init_script_python_requirement(
     python: Option<&str>,
     directory: &Path,
     no_pin_python: bool,
@@ -1287,7 +1437,7 @@ pub(crate) async fn script_python_requirement(
         PythonRequest::parse(request)
     } else if let (false, Some(request)) = (
         no_pin_python,
-        PythonVersionFile::discover(directory, false, false)
+        PythonVersionFile::discover(directory, &VersionFileDiscoveryOptions::default())
             .await?
             .and_then(PythonVersionFile::into_version),
     ) {
