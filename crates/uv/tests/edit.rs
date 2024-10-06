@@ -5021,5 +5021,44 @@ fn add_self() -> Result<()> {
         );
     });
 
+    // And recursive development dependencies
+    uv_snapshot!(context.filters(), context.add().arg("anyio[types]").arg("--dev"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requirement name `anyio` matches project name `anyio`, but self-dependencies are not permitted. If your project name (`anyio`) is shadowing that of a third-party dependency, consider renaming the project.
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        types = ["typing-extensions>=4"]
+        all = [
+            "anyio[types]",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        anyio = { workspace = true }
+        "###
+        );
+    });
+
     Ok(())
 }
