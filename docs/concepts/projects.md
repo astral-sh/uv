@@ -269,11 +269,13 @@ Hello from example-packaged-app!
 
 ## Project environments
 
-uv creates a virtual environment in a `.venv` directory next to the `pyproject.toml`. This virtual
-environment contains the project and its dependencies. It is stored inside the project to make it
-easy for editors to find — they need the environment to give code completions and type hints. It is
-not recommended to include the `.venv` directory in version control; it is automatically excluded
-from `git` with an internal `.gitignore` file.
+When working on a project with uv, uv will create a virtual environment as needed. While some uv
+commands will create a temporary environment (e.g., `uv run --isolated`), uv also manages a
+persistent environment with the project and its dependencies in a `.venv` directory next to the
+`pyproject.toml`. It is stored inside the project to make it easy for editors to find — they need
+the environment to give code completions and type hints. It is not recommended to include the
+`.venv` directory in version control; it is automatically excluded from `git` with an internal
+`.gitignore` file.
 
 To run a command in the project environment, use `uv run`. Alternatively the project environment can
 be activated as normal for a virtual environment.
