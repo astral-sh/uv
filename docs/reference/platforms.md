@@ -31,4 +31,4 @@ build on aarch64 Windows, but does not consider either platform to be supported 
 minimum supported Windows versions are Windows 10 and Windows Server 2016, following
 [Rust's own Tier 1 support](https://blog.rust-lang.org/2024/02/26/Windows-7.html).
 
-uv supports and is tested against Python 3.8, 3.9, 3.10, 3.11, and 3.12.
+uv supports and is tested against Python 3.8, 3.9, 3.10, 3.11, 3.12, and 3.13.
