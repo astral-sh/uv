@@ -946,13 +946,13 @@ jobs:
           ./uv add anyio
 
       - name: "Sync to the system Python"
-        run: ./uv sync --python 3.12
+        run: ./uv sync -v --python 3.12
         env:
           UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.6/x64"
 
       - name: "Attempt to sync to the system Python with an incompatible version"
         run: |
-          ./uv sync --python 3.11 && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
+          ./uv sync -v --python 3.11 && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
         env:
           UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.6/x64"
 
@@ -960,7 +960,7 @@ jobs:
         run: |
           mkdir -p /home/runner/example
           touch /home/runner/example/some-file
-          ./uv sync && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
+          ./uv sync -v && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
         env:
           UV_PROJECT_ENVIRONMENT: "/home/runner/example"
 
