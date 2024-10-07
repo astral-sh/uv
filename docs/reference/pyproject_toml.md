@@ -5,31 +5,15 @@
 specifying the metadata and build system of a Python project. See [Projects](../guides/projects.md)
 for an introduction.
 
-Most parts of uv only consider the name, version, (optional) dependencies and build system of a
-project, and read only those fields from `pyproject.toml`. The `project.name` is always required,
-while `project.version`. If `project.dependencies` is not specified, it means that the project has
-no dependencies. If you need to use dynamic dependencies (discouraged), you must add `dependencies`
-to `project.dynamic`. The same applies to `optional-dependencies`.
+Most of uv's subcommands only read the name, version, (optional) dependencies and build system of a
+project from its `pyproject.toml`. The `project.name` is always required, while `project.version`
+may be dynamic in some build backends. If `project.dependencies` is not specified, it means that the
+project has no dependencies. If you need to use dynamic dependencies (discouraged), you must add
+`dependencies` to `project.dynamic`. The same applies to `optional-dependencies`.
 
-For the build backend (`build-system = "uv"`), all fields are relevant and get translated to
-[Core Metadata](https://packaging.python.org/en/latest/specifications/core-metadata) in the final
-field. uv supports the
-[living standard](https://packaging.python.org/en/latest/specifications/core-metadata) in addition
-to the provisional [PEP 639](https://peps.python.org/pep-0639/) for better upload metadata. When
-using the uv build backend, the `project.name`, `project.version`, `build-system.requires` and
-`build-system.build-backend` keys are required, `project.dynamic` is not supported, and all other
-fields are optional.
-
-## The `[build-system]` table
-
-The may be breaking changes to the uv build backend configuration in future uv versions, so you
-constrain the uv version with lower and upper bounds.
-
-```toml
-[build-system]
-requires = ["uv>=0.4.15,<5"]
-build-backend = "uv"
-```
+When building a package, these fields get translated to
+[Core Metadata](https://packaging.python.org/en/latest/specifications/core-metadata) in the source
+distribution and wheel.
 
 ## The `[project]` table
 
@@ -85,11 +69,17 @@ as written, the resolver does only use the lower bound on published packages.
 
 ### `license` and `license-files`
 
-The packaging ecosystem is currently transitioning from packaging core metadata version 2.3 to
-version 2.4, which brings an overhaul of the license metadata.
+The recommended way to specify license information is using the `license` field, which takes an
+[SPDX Expression](https://spdx.org/licenses/), and `license-files`, which takes a list of globs of
+license files to include:
 
-In version 2.3, the two variants of the `license` key are supported, while `license-files` is not
-supported:
+```toml
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE.apache", "LICENSE.mit", "_vendor/licenses/*"]
+```
+
+There are two old variant of the `license` key that are also supported. `license.file` specifies the
+path to a license file to be included, `license.text` is included in the wheel metadata.
 
 ```toml
 license = { file = "LICENSE" }
@@ -99,17 +89,7 @@ license = { file = "LICENSE" }
 license = { text = "Lorem ipsum dolor sit amet\nconsetetur sadipscing elitr." }
 ```
 
-In version 2.4, the `license` key is an [SPDX Expression](https://spdx.org/licenses/) and
-`license-files` is a list of glob expression of license files to include:
-
-```toml
-license = "MIT OR Apache-2.0"
-license-files = ["LICENSE.apache", "LICENSE.mit", "_vendor/licenses/*"]
-```
-
-When using both `license-files` and `license`, `license` must be a valid SPDX expression. Using
-`license` with a string or specifying `license-files` increases the default metadata version from
-2.3 to 2.4. At time of writing, PyPI does not support publishing packages using version 2.4.
+These variants may not be combined with setting `license-files`.
 
 ### `authors` and `maintainers`
 
@@ -149,14 +129,23 @@ To prevent a private project from accidentally being uploaded to PyPI, add the
 
 ### `urls`
 
-Links to important pages of the project
+Links to important pages of the project. The following labels are known to be supported:
+
+- `changelog` (Changelog): The project's comprehensive changelog
+- `documentation` (Documentation): The project's online documentation
+- `download` (Download): A download URL for the current distribution
+- `funding` (Funding): Funding Information
+- `homepage` (Homepage): The project's home page
+- `issues` (Issue Tracker): The project's bug tracker
+- `releasenotes` (Release Notes): The project's curated release notes
+- `source` (Source Code): The project's hosted source code or repository
 
 ```toml
 [project.urls]
-Repository = "https://github.com/astral-sh/uv"
-Documentation = "https://docs.astral.sh/uv"
-Changelog = "https://github.com/astral-sh/uv/blob/main/CHANGELOG.md"
-Releases = "https://github.com/astral-sh/uv/releases"
+changelog = "https://github.com/astral-sh/uv/blob/main/CHANGELOG.md"
+documentation = "https://docs.astral.sh/uv"
+releases = "https://github.com/astral-sh/uv/releases"
+repository = "https://github.com/astral-sh/uv"
 ```
 
 ### `scripts`, `gui-scripts` and `entry-points`
@@ -187,7 +176,7 @@ See [Dependencies](../concepts/dependencies.md).
 
 ### `dynamic`
 
-Dynamic metadata is not support. Please specify all metadata statically.
+Dynamic metadata is not supported. Please specify all metadata statically.
 
 ## Full example
 
@@ -221,7 +210,7 @@ mysql = ["pymysql>=1.1.1,<2"]
 foo = "foo.cli:__main__"
 
 [project.gui-scripts]
-foo-gui = "foo.gui"
+foo-gui = "foo.gui:main"
 
 [project.entry-points.bar_group]
 foo-bar = "foo:bar"

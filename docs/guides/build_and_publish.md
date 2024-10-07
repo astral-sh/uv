@@ -1,12 +1,9 @@
-# Publishing a package
+# Building and publishing a package
 
-uv supports building Python packages into source and binary distributions via `uv build` and
-uploading them to a registry with `uv publish`.
+uv supports building Python packages into source and binary distributions via the `uv` build
+backend, the `uv build` build frontend and uploading them to a registry with `uv publish`.
 
-## Preparing your project for packaging
-
-Before attempting to publish your project, you'll want to make sure it's ready to be packaged for
-distribution.
+## Building your package
 
 If your project does not include a `[build-system]` definition in the `pyproject.toml`, uv will not
 build it by default. This means that your project may not be ready for distribution. Read more about
@@ -29,7 +26,15 @@ the effect of declaring a build system in the
     We also recommend only generating per-project tokens: Without a PyPI token matching the project,
     it can't be accidentally published.
 
-## Building your package
+To use uv as build backend, add the following to `pyproject.toml`:
+
+```toml
+[build-system]
+requires = ["uv>=0.5.9,<0.6"]
+build-backend = "uv"
+```
+
+By default, uv expects your code to be in `src/<package_name_with_underscores>`.
 
 Build your package with `uv build`:
 

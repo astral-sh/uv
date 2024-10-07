@@ -214,4 +214,4 @@ To learn more about working on projects with uv, see the
 [projects concept](../concepts/projects/index.md) page and the
 [command reference](../reference/cli.md#uv).
 
-Or, read on to learn how to [publish your project as a package](./publish.md).
+Or, read on to learn how to [publish your project as a package](./build_and_publish).
