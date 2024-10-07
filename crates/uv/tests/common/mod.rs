@@ -730,6 +730,16 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv build_backend` command.
+    ///
+    /// Note that this command is hidden and only invoking it through a build frontend is supported.
+    pub fn build_backend(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("build-backend");
+        self.add_shared_args(&mut command, false);
+        command
+    }
+
     pub fn interpreter(&self) -> PathBuf {
         venv_to_interpreter(&self.venv)
     }
