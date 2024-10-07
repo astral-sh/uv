@@ -192,8 +192,8 @@ jobs:
       - name: "Smoke test"
         run: |
           uv="./target/debug/uv"
-          $uv venv
-          $uv pip install ruff
+          $uv venv -v
+          $uv pip install ruff -v
 
       - name: "Smoke test completion"
         run: |
@@ -238,8 +238,8 @@ jobs:
       - name: "Smoke test"
         run: |
           uv="./target/debug/uv"
-          $uv venv
-          $uv pip install ruff
+          $uv venv -v
+          $uv pip install ruff -v
 
   cargo-test-windows:
     timeout-minutes: 15
@@ -296,8 +296,8 @@ jobs:
           UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
-          uv venv
-          uv pip install ruff
+          uv venv -v
+          uv pip install ruff -v
 
       - name: "Smoke test completion"
         working-directory: ${{ env.UV_WORKSPACE }}
