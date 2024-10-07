@@ -1,7 +1,7 @@
 use uv_pypi_types::RequirementSource;
 
 use uv_normalize::PackageName;
-
+use uv_pep440::Operator;
 use crate::resolver::ForkSet;
 use crate::{DependencyMode, Manifest, ResolverMarkers};
 
@@ -84,6 +84,7 @@ impl PrereleaseStrategy {
 
                     if specifier
                         .iter()
+                        .filter(|spec| (spec.operator() != &Operator::NotEqual))
                         .any(uv_pep440::VersionSpecifier::any_prerelease)
                     {
                         packages.add(&requirement, ());
