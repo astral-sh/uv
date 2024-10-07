@@ -12,6 +12,7 @@ use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{io, mem};
 use thiserror::Error;
+use tracing::{debug, trace};
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use walkdir::WalkDir;
@@ -38,7 +39,7 @@ pub enum Error {
         #[source]
         err: walkdir::Error,
     },
-    #[error("Non-UTF-8 paths are not supported: {}", _0.user_display())]
+    #[error("Non-UTF-8 paths are not supported: `{}`", _0.user_display())]
     NotUtf8Path(PathBuf),
     #[error("Failed to walk source tree")]
     StripPrefix(#[from] StripPrefixError),
@@ -48,6 +49,8 @@ pub enum Error {
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
+    #[error("Expected a Python module with an `__init__.py` at: `{}`", _0.user_display())]
+    MissingModule(PathBuf),
 }
 
 /// Allow dispatching between writing to a directory, writing to zip and writing to a `.tar.gz`.
@@ -106,6 +109,7 @@ impl ZipDirectoryWriter {
 
 impl DirectoryWriter for ZipDirectoryWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
+        trace!("Adding {}", path);
         let options = zip::write::FileOptions::default().compression_method(self.compression);
         self.writer.start_file(path, options)?;
         self.writer.write_all(bytes)?;
@@ -130,6 +134,7 @@ impl DirectoryWriter for ZipDirectoryWriter {
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
+        trace!("Adding {} from {}", path, file.user_display());
         let mut reader = BufReader::new(File::open(file)?);
         let mut writer = self.new_writer(path)?;
         let record = write_hashed(path, &mut reader, &mut writer)?;
@@ -139,19 +144,19 @@ impl DirectoryWriter for ZipDirectoryWriter {
     }
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
+        trace!("Adding directory {}", directory);
         let options = zip::write::FileOptions::default().compression_method(self.compression);
         Ok(self.writer.add_directory(directory, options)?)
     }
 
     /// Write the `RECORD` file and the central directory.
     fn close(mut self, dist_info_dir: &str) -> Result<(), Error> {
+        let record_path = format!("{dist_info_dir}/RECORD");
+        trace!("Adding {record_path}");
         let record = mem::take(&mut self.record);
-        write_record(
-            &mut self.new_writer(&format!("{dist_info_dir}/RECORD"))?,
-            dist_info_dir,
-            record,
-        )?;
+        write_record(&mut self.new_writer(&record_path)?, dist_info_dir, record)?;
 
+        trace!("Adding central directory");
         self.writer.finish()?;
         Ok(())
     }
@@ -176,6 +181,7 @@ impl FilesystemWrite {
 /// File system writer.
 impl DirectoryWriter for FilesystemWrite {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
+        trace!("Adding {}", path);
         let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
             path: path.to_string(),
@@ -187,10 +193,12 @@ impl DirectoryWriter for FilesystemWrite {
     }
 
     fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
+        trace!("Adding {}", path);
         Ok(Box::new(File::create(self.root.join(path))?))
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
+        trace!("Adding {} from {}", path, file.user_display());
         let mut reader = BufReader::new(File::open(file)?);
         let mut writer = self.new_writer(path)?;
         let record = write_hashed(path, &mut reader, &mut writer)?;
@@ -200,6 +208,7 @@ impl DirectoryWriter for FilesystemWrite {
     }
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
+        trace!("Adding directory {}", directory);
         Ok(fs_err::create_dir(self.root.join(directory))?)
     }
 
@@ -279,11 +288,16 @@ pub fn build(source_tree: &Path, wheel_dir: &Path) -> Result<WheelFilename, Erro
         platform_tag: vec!["any".to_string()],
     };
 
-    let mut wheel_writer =
-        ZipDirectoryWriter::new_wheel(File::create(wheel_dir.join(filename.to_string()))?);
+    let wheel_path = wheel_dir.join(filename.to_string());
+    debug!("Writing wheel at {}", wheel_path.user_display());
+    let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
+    debug!("Adding content files to {}", wheel_path.user_display());
     let strip_root = source_tree.join("src");
     let module_root = strip_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
+    if !module_root.join("__init__.py").is_file() {
+        return Err(Error::MissingModule(module_root));
+    }
     for entry in WalkDir::new(module_root) {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: source_tree.to_path_buf(),
@@ -306,6 +320,7 @@ pub fn build(source_tree: &Path, wheel_dir: &Path) -> Result<WheelFilename, Erro
         entry.path();
     }
 
+    debug!("Adding metadata files to {}", wheel_path.user_display());
     let dist_info_dir =
         write_dist_info(&mut wheel_writer, &pyproject_toml, &filename, source_tree)?;
     wheel_writer.close(&dist_info_dir)?;
@@ -328,6 +343,10 @@ pub fn metadata(source_tree: &Path, metadata_directory: &Path) -> Result<String,
         platform_tag: vec!["any".to_string()],
     };
 
+    debug!(
+        "Writing metadata files to {}",
+        metadata_directory.user_display()
+    );
     let mut wheel_writer = FilesystemWrite::new(metadata_directory);
     let dist_info_dir =
         write_dist_info(&mut wheel_writer, &pyproject_toml, &filename, source_tree)?;
