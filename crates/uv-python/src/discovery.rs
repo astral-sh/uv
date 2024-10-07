@@ -198,8 +198,12 @@ pub enum Error {
     Io(#[from] io::Error),
 
     /// An error was encountering when retrieving interpreter information.
-    #[error(transparent)]
-    Query(#[from] crate::interpreter::Error),
+    #[error("Failed to inspect Python interpreter from {2} at `{}` ", .1.user_display())]
+    Query(
+        #[source] Box<crate::interpreter::Error>,
+        PathBuf,
+        PythonSource,
+    ),
 
     /// An error was encountered when interacting with a managed Python installation.
     #[error(transparent)]
@@ -600,7 +604,7 @@ fn python_interpreters_from_executables<'a>(
                     path.display()
                 );
             })
-            .map_err(Error::from)
+            .map_err(|err| Error::Query(Box::new(err), path, source))
             .inspect_err(|err| debug!("{err}")),
         Err(err) => Err(err),
     })
@@ -674,14 +678,17 @@ impl Error {
         match self {
             // When querying the Python interpreter fails, we will only raise errors that demonstrate that something is broken
             // If the Python interpreter returned a bad response, we'll continue searching for one that works
-            Error::Query(err) => match err {
+            Error::Query(err, _, source) => match &**err {
                 InterpreterError::Encode(_)
                 | InterpreterError::Io(_)
                 | InterpreterError::SpawnFailed { .. } => true,
                 InterpreterError::QueryScript { path, .. }
                 | InterpreterError::UnexpectedResponse { path, .. }
                 | InterpreterError::StatusCode { path, .. } => {
-                    debug!("Skipping bad interpreter at {}: {err}", path.display());
+                    debug!(
+                        "Skipping bad interpreter at {} from {source}: {err}",
+                        path.display()
+                    );
                     false
                 }
                 InterpreterError::NotFound(path) => {
@@ -747,7 +754,11 @@ pub fn find_python_installations<'a>(
                             environment_preference: environments,
                         }))
                     }
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(Error::Query(
+                        Box::new(err),
+                        path.clone(),
+                        PythonSource::ProvidedPath,
+                    )),
                 }
             } else {
                 Err(Error::SourceNotAllowed(
@@ -770,7 +781,11 @@ pub fn find_python_installations<'a>(
                             environment_preference: environments,
                         }))
                     }
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(Error::Query(
+                        Box::new(err),
+                        path.clone(),
+                        PythonSource::ProvidedPath,
+                    )),
                 }
             } else {
                 Err(Error::SourceNotAllowed(
