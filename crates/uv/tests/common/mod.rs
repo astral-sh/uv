@@ -138,6 +138,21 @@ impl TestContext {
         self
     }
 
+    /// Add extra standard filtering for executable suffixes on the current platform e.g.
+    /// drops `.exe` on Windows.
+    #[must_use]
+    pub fn with_filtered_python_sources(mut self) -> Self {
+        self.filters.push((
+            "managed installations or system path".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
+            "managed installations, system path, or `py` launcher".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self
+    }
+
     /// Add extra standard filtering for Python executable names, e.g., stripping version number
     /// and `.exe` suffixes.
     #[must_use]
