@@ -42,7 +42,9 @@ fn uv_backend_direct() -> Result<()> {
         .run()
         .arg("python")
         .arg("-c")
-        .arg("import uv_backend\nuv_backend.greet()"), @r###"
+        .arg("import uv_backend\nuv_backend.greet()")
+        // Python on windows
+        .env("PYTHONUTF8", "1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
