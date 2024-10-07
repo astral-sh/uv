@@ -4395,7 +4395,7 @@ pub struct PublishArgs {
     #[arg(default_value = "dist/*")]
     pub files: Vec<String>,
 
-    /// The URL of the upload endpoint (not the simple index URL!).
+    /// The URL of the upload endpoint (not the index URL).
     ///
     /// Note that there are typically different URLs for index access (e.g., `https:://.../simple`)
     /// and index upload.
