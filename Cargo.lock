@@ -4271,12 +4271,14 @@ dependencies = [
 name = "uv-build-backend"
 version = "0.1.0"
 dependencies = [
+ "csv",
  "fs-err",
  "glob",
  "indoc",
  "insta",
  "itertools 0.13.0",
  "serde",
+ "sha2",
  "spdx",
  "tempfile",
  "thiserror",
@@ -4291,6 +4293,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-version",
  "uv-warnings",
+ "walkdir",
  "zip",
 ]
 
