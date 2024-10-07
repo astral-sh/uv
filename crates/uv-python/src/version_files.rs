@@ -70,7 +70,6 @@ impl PythonVersionFile {
                         let trimmed = line.trim();
                         !(trimmed.is_empty() || trimmed.starts_with('#'))
                     })
-                    .flat_map(|line| line.split_whitespace())
                     .map(ToString::to_string)
                     .map(|version| PythonRequest::parse(&version))
                     .collect();
