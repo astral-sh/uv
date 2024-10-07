@@ -161,7 +161,7 @@ impl PyProjectToml {
     /// <https://packaging.python.org/en/latest/guides/writing-pyproject-toml/>
     /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/>
     /// <https://packaging.python.org/en/latest/specifications/core-metadata/>
-    pub(crate) async fn to_metadata(&self, root: &Path) -> Result<Metadata23, Error> {
+    pub(crate) fn to_metadata(&self, root: &Path) -> Result<Metadata23, Error> {
         let summary = if let Some(description) = &self.project.description {
             if description.contains('\n') {
                 return Err(ValidationError::DescriptionNewlines.into());
@@ -174,7 +174,7 @@ impl PyProjectToml {
         let supported_content_types = ["text/plain", "text/x-rst", "text/markdown"];
         let (description, description_content_type) = match &self.project.readme {
             Some(Readme::String(path)) => {
-                let content = fs_err::tokio::read_to_string(root.join(path)).await?;
+                let content = fs_err::read_to_string(root.join(path))?;
                 let content_type = match path.extension().and_then(OsStr::to_str) {
                     Some("txt") => "text/plain",
                     Some("rst") => "text/x-rst",
@@ -192,7 +192,7 @@ impl PyProjectToml {
                 content_type,
                 charset,
             }) => {
-                let content = fs_err::tokio::read_to_string(root.join(file)).await?;
+                let content = fs_err::read_to_string(root.join(file))?;
                 if !supported_content_types.contains(&content_type.as_str()) {
                     return Err(
                         ValidationError::UnsupportedContentType(content_type.clone()).into(),
@@ -346,7 +346,7 @@ impl PyProjectToml {
                     }
                     Some(License::Text { text }) => (Some(text.clone()), None, Vec::new()),
                     Some(License::File { file }) => {
-                        let text = fs_err::tokio::read_to_string(root.join(file)).await?;
+                        let text = fs_err::read_to_string(root.join(file))?;
                         (Some(text), None, Vec::new())
                     }
                 }
@@ -653,8 +653,8 @@ mod tests {
         formatted
     }
 
-    #[tokio::test]
-    async fn valid() {
+    #[test]
+    fn valid() {
         let temp_dir = TempDir::new().unwrap();
 
         fs_err::write(
@@ -728,7 +728,7 @@ mod tests {
         };
 
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
-        let metadata = pyproject_toml.to_metadata(temp_dir.path()).await.unwrap();
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
         assert_snapshot!(metadata.core_metadata_format(), @r###"
         Metadata-Version: 2.3
@@ -841,14 +841,13 @@ mod tests {
         assert!(!pyproject_toml.check_build_system());
     }
 
-    #[tokio::test]
-    async fn minimal() {
+    #[test]
+    fn minimal() {
         let contents = extend_project("");
 
         let metadata = PyProjectToml::parse(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
-            .await
             .unwrap();
 
         assert_snapshot!(metadata.core_metadata_format(), @r###"
@@ -876,8 +875,8 @@ mod tests {
         "###);
     }
 
-    #[tokio::test]
-    async fn missing_readme() {
+    #[test]
+    fn missing_readme() {
         let contents = extend_project(indoc! {r#"
             readme = "Readme.md"
         "#
@@ -886,16 +885,13 @@ mod tests {
         let err = PyProjectToml::parse(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
-            .await
             .unwrap_err();
         // Simplified for windows compatibility.
-        assert_snapshot!(err.to_string().replace('\\', "/"), @r###"
-        failed to read from file `/do/not/read/Readme.md`
-        "###);
+        assert_snapshot!(err.to_string().replace('\\', "/"), @"failed to open file `/do/not/read/Readme.md`");
     }
 
-    #[tokio::test]
-    async fn multiline_description() {
+    #[test]
+    fn multiline_description() {
         let contents = extend_project(indoc! {r#"
             description = "Hi :)\nThis is my project"
         "#
@@ -904,7 +900,6 @@ mod tests {
         let err = PyProjectToml::parse(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
-            .await
             .unwrap_err();
         assert_snapshot!(format_err(err), @r###"
         Invalid pyproject.toml
@@ -912,8 +907,8 @@ mod tests {
         "###);
     }
 
-    #[tokio::test]
-    async fn mixed_licenses() {
+    #[test]
+    fn mixed_licenses() {
         let contents = extend_project(indoc! {r#"
             license-files = ["licenses/*"]
             license =  { text = "MIT" }
@@ -923,7 +918,6 @@ mod tests {
         let err = PyProjectToml::parse(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
-            .await
             .unwrap_err();
         assert_snapshot!(format_err(err), @r###"
         Invalid pyproject.toml
@@ -931,8 +925,8 @@ mod tests {
         "###);
     }
 
-    #[tokio::test]
-    async fn valid_license() {
+    #[test]
+    fn valid_license() {
         let contents = extend_project(indoc! {r#"
             license = "MIT OR Apache-2.0"
         "#
@@ -940,7 +934,6 @@ mod tests {
         let metadata = PyProjectToml::parse(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
-            .await
             .unwrap();
         assert_snapshot!(metadata.core_metadata_format(), @r###"
         Metadata-Version: 2.4
@@ -950,8 +943,8 @@ mod tests {
         "###);
     }
 
-    #[tokio::test]
-    async fn invalid_license() {
+    #[test]
+    fn invalid_license() {
         let contents = extend_project(indoc! {r#"
             license = "MIT XOR Apache-2"
         "#
@@ -959,7 +952,6 @@ mod tests {
         let err = PyProjectToml::parse(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
-            .await
             .unwrap_err();
         // TODO(konsti): We mess up the indentation in the error.
         assert_snapshot!(format_err(err), @r###"
@@ -970,8 +962,8 @@ mod tests {
         "###);
     }
 
-    #[tokio::test]
-    async fn dynamic() {
+    #[test]
+    fn dynamic() {
         let contents = extend_project(indoc! {r#"
             dynamic = ["dependencies"]
         "#
@@ -980,7 +972,6 @@ mod tests {
         let err = PyProjectToml::parse(&contents)
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
-            .await
             .unwrap_err();
         assert_snapshot!(format_err(err), @r###"
         Invalid pyproject.toml

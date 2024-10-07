@@ -4271,7 +4271,6 @@ dependencies = [
 name = "uv-build-backend"
 version = "0.1.0"
 dependencies = [
- "async_zip",
  "fs-err",
  "glob",
  "indoc",
@@ -4281,8 +4280,6 @@ dependencies = [
  "spdx",
  "tempfile",
  "thiserror",
- "tokio",
- "tokio-util",
  "toml",
  "tracing",
  "uv-distribution-filename",
@@ -4294,6 +4291,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-version",
  "uv-warnings",
+ "zip",
 ]
 
 [[package]]
