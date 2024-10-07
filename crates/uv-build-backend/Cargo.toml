@@ -20,17 +20,15 @@ uv-pypi-types = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 
-async_zip = { workspace = true }
-fs-err = { workspace = true, features = ["tokio"] }
+fs-err = { workspace = true }
 glob = { workspace = true }
 itertools = { workspace = true }
 serde = { workspace = true }
 spdx = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
-tokio-util = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
+zip = { workspace = true }
 
 [lints]
 workspace = true
