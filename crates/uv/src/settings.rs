@@ -120,7 +120,7 @@ impl GlobalSettings {
             python_preference: args
                 .python_preference
                 .combine(workspace.and_then(|workspace| workspace.globals.python_preference))
-                .unwrap_or_else(PythonPreference::default_from_env),
+                .unwrap_or_default(),
             python_downloads: flag(args.allow_python_downloads, args.no_python_downloads)
                 .map(PythonDownloads::from)
                 .combine(env(env::UV_PYTHON_DOWNLOADS))
