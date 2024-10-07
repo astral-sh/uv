@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.4.19
+
+### Enhancements
+
+- Add managed downloads for CPython 3.13.0rc3 and 3.12.7 ([#7880](https://github.com/astral-sh/uv/pull/7880))
+- Display the target virtual environment path if non-default ([#7850](https://github.com/astral-sh/uv/pull/7850))
+- Preserve case-insensitive sorts in `uv add` ([#7864](https://github.com/astral-sh/uv/pull/7864))
+- Respect project upper bounds when filtering wheels on `requires-python` ([#7904](https://github.com/astral-sh/uv/pull/7904))
+- Add `--script` to `uv run` to treat an input as PEP 723 regardless of extension ([#7739](https://github.com/astral-sh/uv/pull/7739))
+- Improve legibility of build failure errors ([#7854](https://github.com/astral-sh/uv/pull/7854))
+- Show interpreter source during Python discovery query errors ([#7928](https://github.com/astral-sh/uv/pull/7928))
+
+### Configuration
+
+- Add `UV_FIND_LINKS` environment variable for `--find-links` ([#7912](https://github.com/astral-sh/uv/pull/7912))
+- Ignore empty string values for `UV_PYTHON` environment variable ([#7878](https://github.com/astral-sh/uv/pull/7878))
+
+### Bug fixes
+
+- Allow `py3x-none` tags in newer than Python 3.x ([#7867](https://github.com/astral-sh/uv/pull/7867))
+- Allow self-dependencies in the `dev` section ([#7943](https://github.com/astral-sh/uv/pull/7943))
+- Always ignore `cp2` wheels in resolution ([#7902](https://github.com/astral-sh/uv/pull/7902))
+- Clear the publish progress bar on retry ([#7921](https://github.com/astral-sh/uv/pull/7921))
+- Fix parsing of `gnueabi` libc variants in Python version requests ([#7975](https://github.com/astral-sh/uv/pull/7975))
+- Simplify supported environments when comparing to lockfile ([#7894](https://github.com/astral-sh/uv/pull/7894))
+- Trim commits when reading from Git refs ([#7922](https://github.com/astral-sh/uv/pull/7922))
+- Use a higher HTTP read timeout when publishing packages ([#7923](https://github.com/astral-sh/uv/pull/7923))
+- Remove the first empty line for `uv tree --package foo` ([#7885](https://github.com/astral-sh/uv/pull/7885))
+
+### Documentation
+
+- Add 3.13 support to the platform reference ([#7971](https://github.com/astral-sh/uv/pull/7971))
+- Clarify project environment creation a little ([#7941](https://github.com/astral-sh/uv/pull/7941))
+- Fix code block title in Gitlab integration docs ([#7861](https://github.com/astral-sh/uv/pull/7861))
+- Fix documentation (projects guide) regarding adding a git dependency ([#7916](https://github.com/astral-sh/uv/pull/7916))
+- fix uninstallation command for windows on documentation ([#7944](https://github.com/astral-sh/uv/pull/7944))
+
+- Clearly specify the minimum supported Windows Server version in the document ([#7946](https://github.com/astral-sh/uv/pull/7946))
+
+### Rust API
+
+- Remove unused `Sha256Reader` ([#7929](https://github.com/astral-sh/uv/pull/7929))
+- Remove unnecessary `Deserialize` derives on settings ([#7856](https://github.com/astral-sh/uv/pull/7856))
+
 ## 0.4.18
 
 ### Enhancements
