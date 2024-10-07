@@ -56,12 +56,12 @@ pub enum Error {
 ///
 /// Contract: You must call close before dropping to obtain a valid output (dropping is fine in the
 /// error case).
-trait DirectoryWriter: Sized {
+trait DirectoryWriter {
     /// Add a file with the given content.
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error>;
 
     /// Add file with the given name and return a writer for it.
-    fn new_writer(&mut self, path: &str) -> Result<impl Write, Error>;
+    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error>;
 
     /// Add a local file.
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error>;
@@ -122,13 +122,13 @@ impl DirectoryWriter for ZipDirectoryWriter {
         Ok(())
     }
 
-    fn new_writer(&mut self, path: &str) -> Result<impl Write, Error> {
+    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
         // TODO(konsti): We need to preserve permissions, at least the executable bit.
         self.writer.start_file(
             path,
             zip::write::FileOptions::default().compression_method(self.compression),
         )?;
-        Ok(&mut self.writer)
+        Ok(Box::new(&mut self.writer))
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
@@ -176,7 +176,7 @@ impl DirectoryWriter for ZipDirectoryWriter {
         let record = self.record;
         self.record = Vec::new();
         write_record(
-            self.new_writer(&format!("{dist_info_dir}/RECORD"))?,
+            &mut self.new_writer(&format!("{dist_info_dir}/RECORD"))?,
             dist_info_dir,
             record,
         )?;
@@ -208,8 +208,8 @@ impl DirectoryWriter for FilesystemWrite {
         Ok(fs_err::write(path, bytes)?)
     }
 
-    fn new_writer(&mut self, path: &str) -> Result<impl Write, Error> {
-        Ok(File::create(path)?)
+    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
+        Ok(Box::new(File::create(path)?))
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
@@ -226,7 +226,7 @@ impl DirectoryWriter for FilesystemWrite {
         let record = self.record;
         self.record = Vec::new();
         write_record(
-            self.new_writer(&format!("{dist_info_dir}/RECORD"))?,
+            &mut self.new_writer(&format!("{dist_info_dir}/RECORD"))?,
             dist_info_dir,
             record,
         )?;
@@ -325,7 +325,7 @@ pub fn metadata(source_tree: &Path, metadata_directory: &Path) -> Result<String,
 ///
 /// Returns the name of the dist-info directory.
 fn write_dist_info(
-    writer: &mut impl DirectoryWriter,
+    writer: &mut dyn DirectoryWriter,
     pyproject_toml: &PyProjectToml,
     filename: &WheelFilename,
     root: &Path,
@@ -383,7 +383,7 @@ fn wheel_info(filename: &WheelFilename) -> String {
 ///
 /// <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-record-file>
 fn write_record(
-    writer: impl Write,
+    writer: &mut dyn Write,
     dist_info_dir: &str,
     record: Vec<RecordEntry>,
 ) -> Result<(), Error> {
