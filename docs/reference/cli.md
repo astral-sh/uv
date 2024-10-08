@@ -7186,7 +7186,7 @@ uv publish [OPTIONS] [FILES]...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint (not the simple index URL!).</p>
+</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint (not the index URL).</p>
 
 <p>Note that there are typically different URLs for index access (e.g., <code>https:://.../simple</code>) and index upload.</p>
 
