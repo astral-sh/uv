@@ -4,8 +4,8 @@ use pubgrub::Range;
 use rustc_hash::FxHashMap;
 
 use crate::fork_urls::ForkUrls;
-use pep440_rs::Version;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::PubGrubPackageInner;

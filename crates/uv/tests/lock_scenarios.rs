@@ -77,7 +77,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -194,7 +194,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -293,7 +293,7 @@ fn fork_basic() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -578,7 +578,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -756,7 +756,7 @@ fn fork_upgrade() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -876,7 +876,7 @@ fn fork_incomplete_markers() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -1029,7 +1029,7 @@ fn fork_marker_accrue() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -1232,7 +1232,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -1412,7 +1412,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -1581,7 +1581,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -1743,7 +1743,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -1891,7 +1891,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -2047,7 +2047,7 @@ fn fork_marker_inherit() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -2185,7 +2185,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -2340,7 +2340,7 @@ fn fork_marker_selection() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -2495,7 +2495,7 @@ fn fork_marker_track() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -2647,7 +2647,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -2946,7 +2946,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -3113,7 +3113,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -3491,7 +3491,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -3774,7 +3774,7 @@ fn preferences_dependent_forking() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -3948,7 +3948,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -4100,7 +4100,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -4184,7 +4184,7 @@ fn fork_requires_python_full() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -4272,7 +4272,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -4365,7 +4365,7 @@ fn fork_requires_python() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -4448,7 +4448,7 @@ fn unreachable_package() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -4549,7 +4549,7 @@ fn unreachable_wheels() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
@@ -4666,7 +4666,7 @@ fn requires_python_wheels() -> Result<()> {
     "###
     );
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {

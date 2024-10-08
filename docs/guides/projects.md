@@ -124,7 +124,7 @@ $ # Specify a version constraint
 $ uv add 'requests==2.31.0'
 
 $ # Add a git dependency
-$ uv add requests --git https://github.com/psf/requests
+$ uv add git+https://github.com/psf/requests
 ```
 
 To remove a package, you can use `uv remove`:

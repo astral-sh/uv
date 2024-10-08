@@ -1,18 +1,11 @@
 use std::env;
 use std::path::Path;
 
-use anstream::eprint;
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{
-    DependencyMetadata, IndexCapabilities, IndexLocations, NameRequirementSpecification,
-    UnresolvedRequirementSpecification, Verbatim,
-};
-use install_wheel_rs::linker::LinkMode;
-use pypi_types::{Requirement, SupportedEnvironments};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -22,9 +15,15 @@ use uv_configuration::{
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
+use uv_distribution_types::{
+    DependencyMetadata, IndexCapabilities, IndexLocations, NameRequirementSpecification,
+    UnresolvedRequirementSpecification, Verbatim,
+};
 use uv_fs::Simplified;
 use uv_git::GitResolver;
+use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
+use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersion, VersionRequest,
@@ -42,7 +41,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_environment};
-use crate::commands::{ExitStatus, OutputWriter};
+use crate::commands::{diagnostics, ExitStatus, OutputWriter};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
@@ -391,8 +390,15 @@ pub(crate) async fn pip_compile(
     {
         Ok(resolution) => resolution,
         Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            let report = miette::Report::msg(format!("{err}")).context(err.header());
-            eprint!("{report:?}");
+            diagnostics::no_solution(&err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(operations::Error::Resolve(uv_resolver::ResolveError::FetchAndBuild(dist, err))) => {
+            diagnostics::fetch_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err))) => {
+            diagnostics::build(dist, err);
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),

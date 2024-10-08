@@ -3,9 +3,9 @@ use std::borrow::Cow;
 use either::Either;
 use rustc_hash::FxHashMap;
 
-use pep508_rs::MarkerTree;
-use pypi_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
+use uv_pep508::MarkerTree;
+use uv_pypi_types::{Requirement, RequirementSource};
 
 /// A set of constraints for a set of requirements.
 #[derive(Debug, Default, Clone)]

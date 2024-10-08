@@ -4,9 +4,9 @@ use tl::HTMLTag;
 use tracing::{instrument, warn};
 use url::Url;
 
-use pep440_rs::VersionSpecifiers;
-use pypi_types::LenientVersionSpecifiers;
-use pypi_types::{BaseUrl, CoreMetadata, File, Hashes, Yanked};
+use uv_pep440::VersionSpecifiers;
+use uv_pypi_types::LenientVersionSpecifiers;
+use uv_pypi_types::{BaseUrl, CoreMetadata, File, Hashes, Yanked};
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
@@ -200,10 +200,10 @@ pub enum Error {
     MissingHash(String),
 
     #[error(transparent)]
-    FragmentParse(#[from] pypi_types::HashError),
+    FragmentParse(#[from] uv_pypi_types::HashError),
 
     #[error("Invalid `requires-python` specifier: {0}")]
-    Pep440(#[source] pep440_rs::VersionSpecifiersParseError),
+    Pep440(#[source] uv_pep440::VersionSpecifiersParseError),
 }
 
 #[cfg(test)]

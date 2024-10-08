@@ -1,10 +1,10 @@
 use std::future::Future;
 
-use distribution_types::{Dist, IndexLocations};
-use platform_tags::Tags;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution_types::Dist;
 use uv_normalize::PackageName;
+use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
 
 use crate::flat_index::FlatIndex;
@@ -35,7 +35,7 @@ pub enum MetadataResponse {
     /// The wheel metadata was not found.
     MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
-    InvalidMetadata(Box<pypi_types::MetadataError>),
+    InvalidMetadata(Box<uv_pypi_types::MetadataError>),
     /// The wheel metadata was found, but the metadata was inconsistent.
     InconsistentMetadata(Box<uv_distribution::Error>),
     /// The wheel has an invalid structure.
@@ -60,9 +60,6 @@ pub trait ResolverProvider {
         &'io self,
         dist: &'io Dist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
-
-    /// Returns the [`IndexLocations`] used by this resolver.
-    fn index_locations(&self) -> &IndexLocations;
 
     /// Set the [`uv_distribution::Reporter`] to use for this installer.
     #[must_use]
@@ -204,10 +201,6 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                 err => Err(err),
             },
         }
-    }
-
-    fn index_locations(&self) -> &IndexLocations {
-        self.fetcher.index_locations()
     }
 
     /// Set the [`uv_distribution::Reporter`] to use for this installer.

@@ -1,10 +1,10 @@
 use either::Either;
-use pep508_rs::PackageName;
+use uv_pep508::PackageName;
 
-use pypi_types::Requirement;
 use rustc_hash::FxHashMap;
 use uv_cache::Refresh;
 use uv_cache_info::Timestamp;
+use uv_pypi_types::Requirement;
 
 /// Whether to reinstall packages.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]

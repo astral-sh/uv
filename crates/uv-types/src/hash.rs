@@ -3,15 +3,15 @@ use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
 
-use distribution_types::{
+use uv_configuration::HashCheckingMode;
+use uv_distribution_types::{
     DistributionMetadata, HashPolicy, Name, Resolution, UnresolvedRequirement, VersionId,
 };
-use pep440_rs::Version;
-use pypi_types::{
+use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pypi_types::{
     HashDigest, HashError, Hashes, Requirement, RequirementSource, ResolverMarkerEnvironment,
 };
-use uv_configuration::HashCheckingMode;
-use uv_normalize::PackageName;
 
 #[derive(Debug, Default, Clone)]
 pub enum HashStrategy {
@@ -305,7 +305,7 @@ impl HashStrategy {
                 };
 
                 // Must be pinned to a specific version.
-                if *specifier.operator() != pep440_rs::Operator::Equal {
+                if *specifier.operator() != uv_pep440::Operator::Equal {
                     return None;
                 }
 

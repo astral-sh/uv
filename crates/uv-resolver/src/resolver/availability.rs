@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 
-use distribution_types::IncompatibleDist;
-use pep440_rs::Version;
+use uv_distribution_types::IncompatibleDist;
+use uv_pep440::Version;
 
 /// The reason why a package or a version cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]

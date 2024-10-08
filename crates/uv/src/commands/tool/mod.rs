@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use tracing::debug;
 
-use pep440_rs::Version;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 
 mod common;
 pub(crate) mod dir;

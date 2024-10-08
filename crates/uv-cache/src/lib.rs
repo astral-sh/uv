@@ -10,11 +10,11 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 pub use archive::ArchiveId;
-use distribution_types::InstalledDist;
-use pypi_types::ResolutionMetadata;
 use uv_cache_info::Timestamp;
+use uv_distribution_types::InstalledDist;
 use uv_fs::{cachedir, directories};
 use uv_normalize::PackageName;
+use uv_pypi_types::ResolutionMetadata;
 
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]

@@ -7,6 +7,7 @@ mod error;
 use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use serde::de::{value, IntoDeserializer, SeqAccess, Visitor};
 use serde::{de, Deserialize, Deserializer};
@@ -27,12 +28,12 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
 pub use crate::error::{Error, MissingHeaderCause};
-use distribution_types::Resolution;
-use pep440_rs::Version;
-use pep508_rs::PackageName;
-use pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings};
+use uv_distribution_types::Resolution;
 use uv_fs::{rename_with_retry, PythonExt, Simplified};
+use uv_pep440::Version;
+use uv_pep508::PackageName;
+use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
 
@@ -41,7 +42,7 @@ static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend
     backend: "setuptools.build_meta:__legacy__".to_string(),
     backend_path: None,
     requirements: vec![Requirement::from(
-        pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap(),
+        uv_pep508::Requirement::from_str("setuptools >= 40.8.0").unwrap(),
     )],
 });
 
@@ -76,7 +77,7 @@ struct Project {
 #[serde(rename_all = "kebab-case")]
 struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.
-    requires: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
+    requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
     /// A string naming a Python object that will be used to perform the build.
     build_backend: Option<String>,
     /// Specify that their backend code is hosted in-tree, this key contains a list of directories.
@@ -310,9 +311,7 @@ impl SourceBuild {
             build_context
                 .install(&resolved_requirements, &venv)
                 .await
-                .map_err(|err| {
-                    Error::RequirementsInstall("`build-system.requires` (install)", err)
-                })?;
+                .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err))?;
         } else {
             debug!("Proceeding without build isolation");
         }
@@ -407,9 +406,7 @@ impl SourceBuild {
                     let resolved_requirements = build_context
                         .resolve(&default_backend.requirements)
                         .await
-                        .map_err(|err| {
-                            Error::RequirementsInstall("`setup.py` build (resolve)", err)
-                        })?;
+                        .map_err(|err| Error::RequirementsResolve("`setup.py` build", err))?;
                     *resolution = Some(resolved_requirements.clone());
                     resolved_requirements
                 }
@@ -417,9 +414,7 @@ impl SourceBuild {
                 build_context
                     .resolve(&pep517_backend.requirements)
                     .await
-                    .map_err(|err| {
-                        Error::RequirementsInstall("`build-system.requires` (resolve)", err)
-                    })?
+                    .map_err(|err| Error::RequirementsResolve("`build-system.requires`", err))?
             },
         )
     }
@@ -570,7 +565,10 @@ impl SourceBuild {
             .await?;
         if !output.status.success() {
             return Err(Error::from_command_output(
-                format!("Build backend failed to determine metadata through `prepare_metadata_for_build_{}`", self.build_kind),
+                format!(
+                    "Build backend failed to determine metadata through `{}`",
+                    format!("prepare_metadata_for_build_{}", self.build_kind).green()
+                ),
                 &output,
                 self.level,
                 self.package_name.as_ref(),
@@ -700,8 +698,9 @@ impl SourceBuild {
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to build {} through `build_{}()`",
-                    self.build_kind, self.build_kind,
+                    "Build backend failed to build {} through `{}`",
+                    self.build_kind,
+                    format!("build_{}", self.build_kind).green(),
                 ),
                 &output,
                 self.level,
@@ -715,8 +714,8 @@ impl SourceBuild {
         if !output_dir.join(&distribution_filename).is_file() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to produce {} through `build_{}()`: `{distribution_filename}` not found",
-                    self.build_kind, self.build_kind,
+                    "Build backend failed to produce {} through `{}`: `{distribution_filename}` not found",
+                    self.build_kind, format!("build_{}", self.build_kind).green(),
                 ),
                 &output,
                 self.level,
@@ -808,7 +807,10 @@ async fn create_pep517_build_environment(
         .await?;
     if !output.status.success() {
         return Err(Error::from_command_output(
-            format!("Build backend failed to determine extra requires with `build_{build_kind}()`"),
+            format!(
+                "Build backend failed to determine requirements with `{}`",
+                format!("build_{build_kind}()").green()
+            ),
             &output,
             level,
             package_name,
@@ -821,7 +823,8 @@ async fn create_pep517_build_environment(
     let contents = fs_err::read(&outfile).map_err(|err| {
         Error::from_command_output(
             format!(
-                "Build backend failed to read extra requires from `get_requires_for_build_{build_kind}`: {err}"
+                "Build backend failed to read requirements from `{}`: {err}",
+                format!("get_requires_for_build_{build_kind}").green(),
             ),
             &output,
             level,
@@ -832,18 +835,21 @@ async fn create_pep517_build_environment(
     })?;
 
     // Deserialize the requirements from the output file.
-    let extra_requires: Vec<pep508_rs::Requirement<VerbatimParsedUrl>> = serde_json::from_slice::<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>(&contents).map_err(|err| {
-        Error::from_command_output(
-            format!(
-                "Build backend failed to return extra requires with `get_requires_for_build_{build_kind}`: {err}"
-            ),
-            &output,
-            level,
-            package_name,
-            package_version,
-            version_id,
-        )
-    })?;
+    let extra_requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>> =
+        serde_json::from_slice::<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>(&contents)
+            .map_err(|err| {
+                Error::from_command_output(
+                    format!(
+                        "Build backend failed to return requirements from `{}`: {err}",
+                        format!("get_requires_for_build_{build_kind}").green(),
+                    ),
+                    &output,
+                    level,
+                    package_name,
+                    package_version,
+                    version_id,
+                )
+            })?;
     let extra_requires: Vec<_> = extra_requires.into_iter().map(Requirement::from).collect();
 
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of
@@ -864,12 +870,12 @@ async fn create_pep517_build_environment(
         let resolution = build_context
             .resolve(&requirements)
             .await
-            .map_err(|err| Error::RequirementsInstall("`build-system.requires` (resolve)", err))?;
+            .map_err(|err| Error::RequirementsResolve("`build-system.requires`", err))?;
 
         build_context
             .install(&resolution, venv)
             .await
-            .map_err(|err| Error::RequirementsInstall("`build-system.requires` (install)", err))?;
+            .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err))?;
     }
 
     Ok(())
@@ -939,6 +945,7 @@ impl PythonRunner {
             .env("PATH", modified_path)
             .env("VIRTUAL_ENV", venv.root())
             .env("CLICOLOR_FORCE", "1")
+            .env("PYTHONIOENCODING", "utf-8")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()

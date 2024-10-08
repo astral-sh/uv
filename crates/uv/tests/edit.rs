@@ -45,7 +45,7 @@ fn add_registry() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -67,7 +67,7 @@ fn add_registry() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -208,7 +208,7 @@ fn add_git() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -234,7 +234,7 @@ fn add_git() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -348,7 +348,7 @@ fn add_git_private_source() -> Result<()> {
      + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -373,7 +373,7 @@ fn add_git_private_source() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -452,7 +452,7 @@ fn add_git_private_raw() -> Result<()> {
      + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     let filters: Vec<_> = [(token.as_str(), "***")]
         .into_iter()
@@ -479,7 +479,7 @@ fn add_git_private_raw() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -676,7 +676,7 @@ fn add_git_raw() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -699,7 +699,7 @@ fn add_git_raw() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -907,7 +907,7 @@ fn add_unnamed() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -932,7 +932,7 @@ fn add_unnamed() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1010,7 +1010,7 @@ fn add_remove_dev() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1036,7 +1036,7 @@ fn add_remove_dev() -> Result<()> {
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1136,7 +1136,7 @@ fn add_remove_dev() -> Result<()> {
      - sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1159,7 +1159,7 @@ fn add_remove_dev() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1226,7 +1226,7 @@ fn add_remove_optional() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1252,7 +1252,7 @@ fn add_remove_optional() -> Result<()> {
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1351,7 +1351,7 @@ fn add_remove_optional() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1374,7 +1374,7 @@ fn add_remove_optional() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1441,7 +1441,7 @@ fn add_remove_inline_optional() -> Result<()> {
      + typing-extensions==4.10.0
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1483,7 +1483,7 @@ fn add_remove_inline_optional() -> Result<()> {
      - typing-extensions==4.10.0
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1611,7 +1611,7 @@ fn add_remove_workspace() -> Result<()> {
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1696,7 +1696,7 @@ fn add_remove_workspace() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1827,7 +1827,7 @@ fn add_workspace_editable() -> Result<()> {
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1926,7 +1926,7 @@ fn add_workspace_path() -> Result<()> {
      + child==0.1.0 (from file://[TEMP_DIR]/child)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1951,7 +1951,7 @@ fn add_workspace_path() -> Result<()> {
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2177,7 +2177,7 @@ fn update() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2215,7 +2215,7 @@ fn update() -> Result<()> {
      + pysocks==1.7.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2255,7 +2255,7 @@ fn update() -> Result<()> {
      + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2281,7 +2281,7 @@ fn update() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2468,7 +2468,7 @@ fn add_update_marker() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     // Should add a new line for the dependency since the marker does not match an existing one
     insta::with_settings!({
@@ -2506,7 +2506,7 @@ fn add_update_marker() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     // Should mutate the existing dependency since the marker matches
     insta::with_settings!({
@@ -2548,7 +2548,7 @@ fn add_update_marker() -> Result<()> {
      + urllib3==1.23
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     // Should add a new line for the dependency since the marker does not match an existing one
     insta::with_settings!({
@@ -2587,7 +2587,7 @@ fn add_update_marker() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     // Should add a new line for the dependency since the marker does not exactly match an existing
     // one — although it is a subset of the existing marker.
@@ -2633,7 +2633,7 @@ fn add_update_marker() -> Result<()> {
      - urllib3==1.23
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     // Should remove all variants of `requests`
     insta::with_settings!({
@@ -2695,7 +2695,7 @@ fn update_source_replace_url() -> Result<()> {
      + urllib3==2.2.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2791,7 +2791,7 @@ fn add_inexact() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2813,7 +2813,7 @@ fn add_inexact() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2932,7 +2932,7 @@ fn remove_registry() -> Result<()> {
      - sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2952,7 +2952,7 @@ fn remove_registry() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3022,7 +3022,7 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
      + urllib3==2.2.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3083,7 +3083,7 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
      + urllib3==2.2.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3134,7 +3134,7 @@ fn add_frozen() -> Result<()> {
     ----- stderr -----
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3188,7 +3188,7 @@ fn add_no_sync() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3360,7 +3360,7 @@ fn add_lower_bound() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3420,7 +3420,7 @@ fn add_lower_bound_existing() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3479,7 +3479,7 @@ fn add_lower_bound_raw() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3538,7 +3538,7 @@ fn add_lower_bound_dev() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3600,7 +3600,7 @@ fn add_lower_bound_optional() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3625,7 +3625,7 @@ fn add_lower_bound_optional() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3720,7 +3720,7 @@ fn add_lower_bound_local() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3742,7 +3742,7 @@ fn add_lower_bound_local() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3825,7 +3825,7 @@ fn add_non_project() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3842,7 +3842,7 @@ fn add_non_project() -> Result<()> {
         );
     });
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3906,7 +3906,7 @@ fn add_repeat() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3938,7 +3938,7 @@ fn add_repeat() -> Result<()> {
     Audited 4 packages in [TIME]
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4007,7 +4007,7 @@ fn add_requirements_file() -> Result<()> {
      + werkzeug==3.0.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4093,7 +4093,7 @@ fn add_script() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4152,7 +4152,7 @@ fn add_script_relative_path() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4199,7 +4199,7 @@ fn add_script_without_metadata_table() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4250,7 +4250,7 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4306,7 +4306,7 @@ fn add_script_with_metadata_table_and_shebang() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4358,7 +4358,7 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4418,7 +4418,7 @@ fn remove_script() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4476,7 +4476,7 @@ fn remove_last_dep_script() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4533,7 +4533,7 @@ fn add_git_to_script() -> Result<()> {
     Updated `script.py`
     "###);
 
-    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+    let script_content = context.read("script.py");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4594,10 +4594,9 @@ fn fail_to_add_revert_project() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: pytorch==1.0.2
-      Caused by: Build backend failed to build wheel through `build_wheel()` with exit status: 1
-    --- stdout:
+      Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
-    --- stderr:
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 11, in <module>
       File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 410, in build_wheel
@@ -4611,10 +4610,10 @@ fn fail_to_add_revert_project() -> Result<()> {
         exec(code, locals())
       File "<string>", line 15, in <module>
     Exception: You tried to install "pytorch". The package named for PyTorch is "torch"
-    ---
+
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4679,7 +4678,75 @@ fn sorted_dependencies() -> Result<()> {
      + urllib3==2.2.1
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=4.3.0",
+            "CacheControl[filecache]>=0.14,<0.15",
+            "iniconfig",
+            "typing-extensions>=4.10.0",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+/// Ensure that the added dependencies are case sensitive sorted if the dependency list was already
+/// case sensitive sorted prior to the operation.
+#[test]
+fn case_sensitive_sorted_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    description = "Add your description here"
+    requires-python = ">=3.12"
+    dependencies = [
+        "CacheControl[filecache]>=0.14,<0.15",
+        "PyYAML",
+        "iniconfig",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "anyio"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 14 packages in [TIME]
+    Prepared 13 packages in [TIME]
+    Installed 13 packages in [TIME]
+     + anyio==4.3.0
+     + cachecontrol==0.14.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + filelock==3.13.1
+     + idna==3.6
+     + iniconfig==2.0.0
+     + msgpack==1.0.8
+     + pyyaml==6.0.1
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4693,6 +4760,7 @@ fn sorted_dependencies() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "CacheControl[filecache]>=0.14,<0.15",
+            "PyYAML",
             "anyio>=4.3.0",
             "iniconfig",
             "typing-extensions>=4.10.0",
@@ -4733,7 +4801,7 @@ fn custom_dependencies() -> Result<()> {
     ----- stderr -----
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4788,7 +4856,7 @@ fn update_offset() -> Result<()> {
      + typing-extensions==4.10.0
     "###);
 
-    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -4806,6 +4874,7 @@ fn update_offset() -> Result<()> {
         "###
         );
     });
+
     Ok(())
 }
 
@@ -4862,6 +4931,143 @@ fn add_shadowed_name() -> Result<()> {
           hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "###);
+
+    Ok(())
+}
+
+/// Accidentally add a dependency on the project itself.
+#[test]
+fn add_self() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requirement name `anyio` matches project name `anyio`, but self-dependencies are not permitted without the `--dev` or `--optional` flags. If your project name (`anyio`) is shadowing that of a third-party dependency, consider renaming the project.
+    "###);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        types = ["typing-extensions>=4"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    // However, recursive extras are fine.
+    uv_snapshot!(context.filters(), context.add().arg("anyio[types]").arg("--optional").arg("all"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==0.1.0 (from file://[TEMP_DIR]/)
+     + typing-extensions==4.10.0
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        types = ["typing-extensions>=4"]
+        all = [
+            "anyio[types]",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        anyio = { workspace = true }
+        "###
+        );
+    });
+
+    // And recursive development dependencies
+    uv_snapshot!(context.filters(), context.add().arg("anyio[types]").arg("--dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ anyio==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        types = ["typing-extensions>=4"]
+        all = [
+            "anyio[types]",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv]
+        dev-dependencies = [
+            "anyio[types]",
+        ]
+
+        [tool.uv.sources]
+        anyio = { workspace = true }
+        "###
+        );
+    });
 
     Ok(())
 }

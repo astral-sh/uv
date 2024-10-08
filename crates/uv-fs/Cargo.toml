@@ -29,6 +29,12 @@ tempfile = { workspace = true }
 tracing = { workspace = true }
 urlencoding = { workspace = true }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+winsafe = { workspace = true }
+
+[target.'cfg(any(unix, target_os = "wasi", target_os = "redox"))'.dependencies]
+rustix = { workspace = true }
+
 [target.'cfg(windows)'.dependencies]
 junction = { workspace = true }
 

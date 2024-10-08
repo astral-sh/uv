@@ -11,6 +11,314 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 13,
             patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("7bc4b23590a1e4b41b21b6aae6f92046c1d16d09bc0c1ab81272aa81b55221d1")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("d6bc769002842147150a561502a23b57d5a8aa1ba643a6a0abf589bfe834e642")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("1bfc058821199c4313ae67bb6c105df2c9dd3515bca955ff96724976acf64462")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("ae89ef85195386ce232de29e0f62e7544f80a6923119ed85af40d09a6468bf30")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("030974b9e1826513001c94cea4ef9248940fecc6efca034715770f7be232942a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Powerpc64le),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("894014ceb5374d1c43a2e297126e588fd5fc60d93e57b76e1bba16430b80e3f3")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::S390x),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("85e05e27c31cd7267cb17c4c16b729969dd586cd715287f923334db20a51ce67")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("aa876c2660a802d0df8ef46f9c4b1c952e63c65d16e103663c22b9468dad40b7")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("9606d04c867ba034b901ef1a63c5b5efcb6951e4a6e2cce9703d0ff98d96f579")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("fc96cb6a3e70bfcee13f7c5d08d30ecbe1738d934f885674d57f3b07b4291e5f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("c82b440476fe04e80228791350a451b65e8080ff01b7168f1c4a5eb9645371f3")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc3"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("685ef71882f16eabab0bc838094727978370f0ad95c29f7f5c244ffa31316aeb")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc3"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("0f5f9fcf82093c428b80c552165544439f4adcdbe5129ecf721d619e532e9b5e")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc3"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("1414c6b37f37e8fd9d14e48d81e313eb9c965cb0330747d5d2d689dd7e0c7043")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc3"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("11befeaf4768c2ebbb258f5b07f94b7700f16424f858d6d2c250b434e99ce07c")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc3"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("b7180d5ea5fda2f397d04e2e6e11a2a7e0d732542bf54c484afb81d087a7b927")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc3"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Powerpc64le),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("59a2a81991d78bd658742d69b577a2b4c0734628ed42bff68615686eaf96f2ab")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc3"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::S390x),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("2769182e58b0dddec15222bfeecbd4b12fde61c38f23a90aa942514f3545fb9b")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc3"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("445156c61e1cc167f7b8777ad08cc36e5598e12cd27e07453f6e6dc0f62e421e")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc3"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("4df6b7665c735a728d72e6f49034f1a6b7d9a54b0fbc472dc2ca525eb3dd513f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc3"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("873905b3e5e8cba700126e8d6ed28ad3aef0dd102f730f8ca196018477dd2da6")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc3"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("b59317828ef88f138ee122d420b60f2705bc72ae846ff69562e79e6c5cbc3177")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
             prerelease: Cow::Borrowed("rc2"),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
@@ -19,6 +327,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-aarch64-apple-darwin-install_only_stripped.tar.gz",
         sha256: Some("9e17f9fcc314a5dd489089a7502a525c4dd08af862f9cf33b52161a752f2a5b7")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc2"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("971668ac7f3168efc4d2b589e9d36247ab8ca9f9525c56c8aa7bfd374060105b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -69,20 +391,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 0,
             prerelease: Cow::Borrowed("rc2"),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("759f600b27a6a0ef2638cb02e8bbcc6de726dd1c896759f78da3e412f6c992e9")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: Cow::Borrowed("rc2"),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Powerpc64le),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -103,20 +411,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("50a2080e30d1504e76e5471e46830f0b4974c66b538ed8ec7df416975133ff89")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: Cow::Borrowed("rc2"),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("971668ac7f3168efc4d2b589e9d36247ab8ca9f9525c56c8aa7bfd374060105b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -153,12 +447,180 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 0,
             prerelease: Cow::Borrowed("rc2"),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("759f600b27a6a0ef2638cb02e8bbcc6de726dd1c896759f78da3e412f6c992e9")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: Cow::Borrowed("rc2"),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
         sha256: Some("c883205751c714bd0519592673a88f160a55d34344cc1368353ad34a679eb94a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.12.7%2B20241008-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("dc1f4d80c9b4ae40ba2c725e310e61446f8f778a7bea4efa56e4b1b4446e0a1a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.12.7%2B20241008-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("7091bd9ce844bcbceb8f3466a9c9583a139f79edd3b0cbed82f7423d333b2d4b")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.12.7%2B20241008-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("e254373827bde6b389ed17b8bb8aa8ac7b3659cf56d36e084a53ed1d04a02210")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.12.7%2B20241008-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("b05298a85d7494a7e1220c4948a357da0ff40d8a6e470cd9b00515203200136c")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.12.7%2B20241008-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("88a642de18a1baa044916eb2cebbf2d534b1c5d03c98c8f4ccc8f451a7526535")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Powerpc64le),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.12.7%2B20241008-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("1ff1e843d78f70fd2834e522ebd5a63193c67b47a31d40fa5e97d96ac0d64aaf")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::S390x),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.12.7%2B20241008-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("5a4128fc5523a8888b12767a275c8240c33d0ee96fdcf1a8c6c6cec9696d0f09")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.12.7%2B20241008-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("11091cd2eb8b7f4551665ba8f9f5b83aa3d09fc0e17f1649d76d5f4f75254bf8")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.12.7%2B20241008-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("b4396fc04d77cd991ebfc21312790acf2a82da5140a7becf47d3173f07131905")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.12.7%2B20241008-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("291de4fc77b3788b43a2b6b5c4587d106793754399e0fcb8a08db8ba993c65a5")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.12.7%2B20241008-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("480688c69be99f1fb9974c8a50f1efd214aaa3440ab5c8653a68d8a3d4ce1179")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -173,6 +635,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-aarch64-apple-darwin-install_only_stripped.tar.gz",
         sha256: Some("0419bafa4444a5aa0c554197bce0679e7cc0f28edc7ee8cfbe0ccea860bdb904")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 6,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("b10d19eb5548a3b3b0a5e6f9109834d7ecfc139bc15754f81a94d39eaa5bdd26")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -223,20 +699,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 6,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("d87275e613632ab738528fe20a94a7193e824e91ba7f1e7845e7fcfc1f114900")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 6,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Powerpc64le),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -257,20 +719,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("89be19666ecb7cdbbfd596e462d690a78a380f1fe5c2967b25a1779b0cec9339")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 6,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("b10d19eb5548a3b3b0a5e6f9109834d7ecfc139bc15754f81a94d39eaa5bdd26")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -307,6 +755,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 6,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("d87275e613632ab738528fe20a94a7193e824e91ba7f1e7845e7fcfc1f114900")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 6,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -327,6 +789,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-aarch64-apple-darwin-install_only_stripped.tar.gz",
         sha256: Some("90715cdab075e5a2680acf2695572d165b6269bdb5d1942ab577491478aea55f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 5,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("49a9f7ad41d62e0ece9e664ca5ae95f022e7b68eef48e8a6f11620ec9247c686")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -377,20 +853,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 5,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("b1009d46b87330c099d02411ca5e9e333f13305c5abdbe20810a7c467cedb051")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 5,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Powerpc64le),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -411,20 +873,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("2b6ea3a5242de99574191ee42df864756eca6d7cb1dbd4cd7ab2850ba8b828f8")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 5,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("49a9f7ad41d62e0ece9e664ca5ae95f022e7b68eef48e8a6f11620ec9247c686")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -461,6 +909,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 5,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("b1009d46b87330c099d02411ca5e9e333f13305c5abdbe20810a7c467cedb051")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 5,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -481,6 +943,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-aarch64-apple-darwin-install_only_stripped.tar.gz",
         sha256: Some("ef6948e836f531bd7a58ffbe602803ff1c83c65f99d1da19be369ea61f136c93")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 4,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("9d68cbdd12d1d6f98d35cc76add232c12db75c6b7f49733bffc88e7b1c025a79")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -531,20 +1007,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 4,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("ff0fab24f38c22130e45b90b7ec10dc4ce9677b545d9fb9109a72d2ffbab7b02")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 4,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Powerpc64le),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -565,20 +1027,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("b2fd015ab3689e024de6fbb34a4942acdb54c2184d1963e22829aafa1d81ba2c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 4,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("9d68cbdd12d1d6f98d35cc76add232c12db75c6b7f49733bffc88e7b1c025a79")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -615,6 +1063,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 4,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("ff0fab24f38c22130e45b90b7ec10dc4ce9677b545d9fb9109a72d2ffbab7b02")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 4,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -635,6 +1097,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-aarch64-apple-darwin-install_only.tar.gz",
         sha256: Some("ccc40e5af329ef2af81350db2a88bbd6c17b56676e82d62048c15d548401519e")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 3,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("c37a22fca8f57d4471e3708de6d13097668c5f160067f264bb2b18f524c890c8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -685,20 +1161,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 3,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-i686-pc-windows-msvc-install_only.tar.gz",
-        sha256: Some("bd723ad1aa05551627715a428660250f0e74db0f1421b03f399235772057ef55")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 3,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Powerpc64le),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -719,20 +1181,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-s390x-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("872fc321363b8cdd826fd2cb1adfd1ceb813bc1281f9d410c1c2c4e177e8df86")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 3,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("c37a22fca8f57d4471e3708de6d13097668c5f160067f264bb2b18f524c890c8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -769,6 +1217,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 3,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-i686-pc-windows-msvc-install_only.tar.gz",
+        sha256: Some("bd723ad1aa05551627715a428660250f0e74db0f1421b03f399235772057ef55")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 3,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -797,12 +1259,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 2,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-aarch64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("e52550379e7c4ac27a87de832d172658bc04150e4e27d4e858e6d8cbb96fd709")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("a53a6670a202c96fec0b8c55ccc780ea3af5307eb89268d5b41a9775b109c094")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -811,12 +1273,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 2,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("1e919365f3e04eb111283f7a45d32eac2f327287ab7bf46720d5629e144cbff9")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-aarch64-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("e52550379e7c4ac27a87de832d172658bc04150e4e27d4e858e6d8cbb96fd709")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -854,20 +1316,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("a53a6670a202c96fec0b8c55ccc780ea3af5307eb89268d5b41a9775b109c094")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 2,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -887,6 +1335,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("b428b4151c70b85339ac2659e5f69f7e47142d34a506e05ecd095efe2e3dec81")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 2,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("1e919365f3e04eb111283f7a45d32eac2f327287ab7bf46720d5629e144cbff9")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -923,12 +1385,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 1,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("236533ef20e665007a111c2f36efb59c87ae195ad7dca223b6dc03fb07064f0b")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("eca96158c1568dedd9a0b3425375637a83764d1fa74446438293089a8bfac1f8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -937,12 +1399,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 1,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("13c8a6f337a4e1ef043ffb8ea3c218ab2073afe0d3be36fcdf8ceb6f757210e8")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("236533ef20e665007a111c2f36efb59c87ae195ad7dca223b6dc03fb07064f0b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -980,20 +1442,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("eca96158c1568dedd9a0b3425375637a83764d1fa74446438293089a8bfac1f8")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 1,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -1013,6 +1461,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("876389f071d62ee9a4bdd7ce31e69c3cdd256fe498e4dd6bb2b80e674e7351fe")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 1,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("13c8a6f337a4e1ef043ffb8ea3c218ab2073afe0d3be36fcdf8ceb6f757210e8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1049,12 +1511,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 0,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-aarch64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("bccfe67cf5465a3dfb0336f053966e2613a9bc85a6588c2fcf1366ef930c4f88")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("5a9e88c8aa52b609d556777b52ebde464ae4b4f77e4aac4eb693af57395c9abf")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1063,12 +1525,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 0,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("6e4f30a998245cfaef00d1b87f8fd5f6c250bd222f933f8f38f124d4f03227f9")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-aarch64-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("bccfe67cf5465a3dfb0336f053966e2613a9bc85a6588c2fcf1366ef930c4f88")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1106,20 +1568,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("5a9e88c8aa52b609d556777b52ebde464ae4b4f77e4aac4eb693af57395c9abf")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 0,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -1147,6 +1595,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 0,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("6e4f30a998245cfaef00d1b87f8fd5f6c250bd222f933f8f38f124d4f03227f9")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 12,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -1165,92 +1627,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-aarch64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("74a9e2921aefecf22f79d633fd436dd2e756a075fff45d52c55f55e62b90a4e0")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 10,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("7ac6ef4209153a1de211ab112ed318b4d702d6ca2655829ad6695d9523eaf47d")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 10,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
-        sha256: Some("71a30c207475cff54cd87054befc9ab9100c4f0e7f95a27c54fcd72b42d855ed")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 10,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
-        sha256: Some("248790e6e393159b05701b14eb66b96fcccee1c33497b98f671a9202a1da9efa")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 10,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("7c3ffac7aec9c554dcdb822e4154e83629d0c7ab453c2c47e6bbf9b63c912f73")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 10,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Powerpc64le),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("01bcf87fa9cea97604a199e3a2a0b43c67368be9e0e4ba8d0e044e853a5b398b")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 10,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::S390x),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("6800797c7c3c7899c1b703e556c0552d459df96a1aac93c57d8fb25d6b80ed6c")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.11.10%2B20241008-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("fd187c5c12813e27261768d37ad46f08bc182f346d6ca9f3f87b57442ef9ed56")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1263,8 +1641,78 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("46c5dd0fc5f2963541ac6748671d04e01217f6b4f55dcdf7022e74ccb4452683")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.11.10%2B20241008-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("ecd44a6309939d6d06db2b9b3a9b40361dc1e248b4956bd635671a1475ee3f17")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.11.10%2B20241008-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("4cc6a85666586732a08f456616e234e3a49f0c85e28df4703064118a465b32be")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.11.10%2B20241008-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("83eadb32a80e4871066a0fbb2bad1b9642e5432225343d654aa0c7cbbf6e4c71")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.11.10%2B20241008-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("30b071a9dd9dc34a77a510907210f74ad40620a1209fd936a852d4a038a5ebea")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Powerpc64le),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.11.10%2B20241008-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("03dd50143a9b95dbfc524e1e51e45205f2dc3d77bb75e51073f5645bd30f6263")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::S390x),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.11.10%2B20241008-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("f67968330a66c2d9e6313e400b27fe848b038be0b67380e8a28e1e982af9f9a8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1277,8 +1725,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("2f8fdc87e8aab1f9f166575e3379d36abd0f7a87ea6c66c5e97e3aaadedd291d")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.11.10%2B20241008-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("d025f46c2ff20dd5ad8ff4628f65e691be73ca314b53b4145a691d9237601534")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1291,8 +1739,22 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Musl),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("cf7cd0a08aa43e5919483a9e3251b6496049a157ce02fa03ff0cde27b4338fbd")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.11.10%2B20241008-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("1d7d18d74cb572181d8f6401a6d172a47c3d782116b947ab5c18258f9dce9e0a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 10,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.11.10%2B20241008-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("13f259e764ec76f02c2dbbe118d78ce465b1692c824a7b3f28af132705491ee8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1305,8 +1767,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.11.10%2B20240909-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("2f0648ac8f7cddd2fecc9983120e53063cb6180ebbf62fb4f4c16255d090b67e")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.11.10%2B20241008-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("7d591a66f9118ee7aa8a6ea990619bcc61aa737bd7a79cc47336d4be4addcd91")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1321,6 +1783,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-aarch64-apple-darwin-install_only_stripped.tar.gz",
         sha256: Some("c4e2f7774421bcb381245945e132419b529399dfa4a56059acda1493751fa377")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 9,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("c8680f90137e36b54b3631271ccdfe5de363e7d563d8df87c53e11b956a00e04")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1371,20 +1847,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 9,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("091c99a210f4f401a305231f3f218ee3d5714658b8d3aac344d34efc716dff85")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 9,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Powerpc64le),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -1405,20 +1867,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("30c71053e9360471b7f350f1562ff4e42eb91ad2ca61b391295b5dea8b2b9efd")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 9,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("c8680f90137e36b54b3631271ccdfe5de363e7d563d8df87c53e11b956a00e04")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1455,6 +1903,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 9,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("091c99a210f4f401a305231f3f218ee3d5714658b8d3aac344d34efc716dff85")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 9,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -1483,12 +1945,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 8,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-aarch64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("389b9005fb78dd5a6f68df5ea45ab7b30d9a4b3222af96999e94fd20d4ad0c6a")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("097f467b0c36706bfec13f199a2eaf924e668f70c6e2bd1f1366806962f7e86e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1497,12 +1959,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 8,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("75039951f8f94d7304bc17b674af1668b9e1ea6d6c9ba1da28e90c0ad8030e3c")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-aarch64-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("389b9005fb78dd5a6f68df5ea45ab7b30d9a4b3222af96999e94fd20d4ad0c6a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1540,20 +2002,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("097f467b0c36706bfec13f199a2eaf924e668f70c6e2bd1f1366806962f7e86e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 8,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -1573,6 +2021,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("08e1ebf51b5965e23f8e68664d17274c1cdabb5b2d7509a2003920e5d58172c7")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 8,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("75039951f8f94d7304bc17b674af1668b9e1ea6d6c9ba1da28e90c0ad8030e3c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1609,12 +2071,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 7,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-aarch64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("b102eaf865eb715aa98a8a2ef19037b6cc3ae7dfd4a632802650f29de635aa13")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("a0e615eef1fafdc742da0008425a9030b7ea68a4ae4e73ac557ef27b112836d4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1623,12 +2085,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 7,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("f5a6ca1280749d8ceaf8851585ef6b0cd2f1f76e801a77c1d744019554eef2f0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-aarch64-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("b102eaf865eb715aa98a8a2ef19037b6cc3ae7dfd4a632802650f29de635aa13")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1666,20 +2128,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("a0e615eef1fafdc742da0008425a9030b7ea68a4ae4e73ac557ef27b112836d4")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 7,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -1699,6 +2147,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("1a919a35172eb9419eba841eeb0ec9879dbc2b006b284ee5c454c08197b50f74")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("f5a6ca1280749d8ceaf8851585ef6b0cd2f1f76e801a77c1d744019554eef2f0")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1735,12 +2197,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 6,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-aarch64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("3e26a672df17708c4dc928475a5974c3fb3a34a9b45c65fb4bd1e50504cc84ec")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("178cb1716c2abc25cb56ae915096c1a083e60abeba57af001996e8bc6ce1a371")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1749,12 +2211,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 6,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("dd48b2cfaae841b4cd9beed23e2ae68b13527a065ef3d271d228735769c4e64d")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-aarch64-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("3e26a672df17708c4dc928475a5974c3fb3a34a9b45c65fb4bd1e50504cc84ec")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1792,20 +2254,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("178cb1716c2abc25cb56ae915096c1a083e60abeba57af001996e8bc6ce1a371")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 6,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -1825,6 +2273,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("c929e5fe676ad20afcf6807a797d21261ae0827e84ec18742031a9582aed0d46")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 6,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("dd48b2cfaae841b4cd9beed23e2ae68b13527a065ef3d271d228735769c4e64d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1861,6 +2323,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 5,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("4a4efa7378c72f1dd8ebcce1afb99b24c01b07023aa6b8fea50eaedb50bf2bfc")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 5,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -1881,20 +2357,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("82de7e2551c015145c017742a5c0411d67a7544595df43c02b5efa4762d5123e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 5,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("936b624c2512a3a3370aae8adf603d6ae71ba8ebd39cc4714a13306891ea36f0")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1932,20 +2394,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("4a4efa7378c72f1dd8ebcce1afb99b24c01b07023aa6b8fea50eaedb50bf2bfc")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 5,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -1965,6 +2413,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("fe09ecd87f69a724acf26ca508d7ead91a951abb2da18dfb98fe22c284454121")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 5,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("936b624c2512a3a3370aae8adf603d6ae71ba8ebd39cc4714a13306891ea36f0")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2001,6 +2463,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 4,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("47e1557d93a42585972772e82661047ca5f608293158acb2778dccf120eabb00")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 4,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -2021,20 +2497,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("abdccc6ec7093f49da99680f5899a96bff0b96fde8f5d73f7aac121e0d05fdd8")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 4,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("e2f4b41c3d89c5ec735e2563d752856cb3c19a0aa712ec7ef341712bafa7e905")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2072,20 +2534,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("47e1557d93a42585972772e82661047ca5f608293158acb2778dccf120eabb00")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 4,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -2105,6 +2553,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("1218ca44595aeaf34271508db64a2abc581c3ee1eb307c1b0537ea746922b806")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 4,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("e2f4b41c3d89c5ec735e2563d752856cb3c19a0aa712ec7ef341712bafa7e905")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2141,6 +2603,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 3,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("f710b8d60621308149c100d5175fec39274ed0b9c99645484fd93d1716ef4310")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 3,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -2169,40 +2645,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 3,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("a6751e6fa5c7c4d4748ed534a7f00ad7f858f62ce73d63d44dd907036ba53985")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 3,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Powerpc64le),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-ppc64le-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("767d24f3570b35fedb945f5ac66224c8983f2d556ab83c5cfaa5f3666e9c212c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 3,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("f710b8d60621308149c100d5175fec39274ed0b9c99645484fd93d1716ef4310")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2239,6 +2687,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 3,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("a6751e6fa5c7c4d4748ed534a7f00ad7f858f62ce73d63d44dd907036ba53985")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 3,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -2259,6 +2721,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-aarch64-apple-darwin-install_only.tar.gz",
         sha256: Some("4918cdf1cab742a90f85318f88b8122aeaa2d04705803c7b6e78e81a3dd40f80")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 1,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("20a4203d069dc9b710f70b09e7da2ce6f473d6b1110f9535fb6f4c469ed54733")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2295,34 +2771,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 1,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("50b250dd261c3cca9ae8d96cb921e4ffbc64f778a198b6f8b8b0a338f77ae486")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 1,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("20a4203d069dc9b710f70b09e7da2ce6f473d6b1110f9535fb6f4c469ed54733")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 1,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -2351,6 +2799,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 1,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("50b250dd261c3cca9ae8d96cb921e4ffbc64f778a198b6f8b8b0a338f77ae486")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 1,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -2369,92 +2831,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-aarch64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("cdf154e4ca6e78d613611ddb6bc67a73f682442c31ca498df4383775e87bd5c8")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 15,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("e3af89047c713b812779aaa576a364b77f9ebbbbe182fd6bda03a52d3166ee14")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 15,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
-        sha256: Some("c600872186409c85937446955e97e86578a98ca4513816c756a15fa9fc2b315d")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 15,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
-        sha256: Some("08312ded535dfaf99d78ef802bbef4eba0961eaf8286fe0a94fc368f238bd8dd")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 15,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("d96824766a2b05cbaa4cf85a79eb76eaf753144f6db54e63d9cdc494d3f29589")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 15,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Powerpc64le),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("9ee250d77a87f356b6d8576d5f57d02fce2cb9982f8272d59dd2f44f24e95cdd")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 15,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::S390x),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("8e816379a299da025de9fecc33f7d1b7384b97c689748875f43dc0d71c2dad50")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.10.15%2B20241008-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("bcd994f136c4568763e2d642f4236c81e19ffc2a3536224598dc1ad0c3e16bf7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2467,8 +2845,78 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("89dc3fd2e8d1a1b6c9eb000cbad85830c06ab776eed891bda369847671f0fb4f")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.10.15%2B20241008-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("c8cc9d58f4c71106472e9b9b2801b702e7939db1922dceabe5b33b5602b490e4")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.10.15%2B20241008-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("4a354407285995b12dc67bd5e99c588699cc0c434fddc38c84a61909381a2e2f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.10.15%2B20241008-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("c7d8880fdecf914dac880a0f5ba78678b24579ae58b531e92a163773a6426df9")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.10.15%2B20241008-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("b68ea12eb0c5941d6fd7158a709d951e87a5fdffc8f8d774bf9ba4498a1a2373")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Powerpc64le),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.10.15%2B20241008-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("211427f42462475671c015ddcbff6d7138b48738faa7239abe4b37418a809fbb")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::S390x),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.10.15%2B20241008-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("46479ecd894fb38def946fee4464a7639f63850afd7692350138910805984e9d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2481,8 +2929,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("816a958735bb9927b2884d55938683770eda823d4c74c38f2b49ef3cc8ce4585")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.10.15%2B20241008-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("bf234c7fa23dfcc70c7248c4a46ea58775b39005f107084e51afd439e67f2baf")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2495,8 +2943,22 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Musl),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("691fbd9da6ff2a18b682d78c4ea9c4fe6fb8f08589a6c82ad3bfef1d8d4df2f3")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.10.15%2B20241008-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("492f5e2d30aa70a1733911f4d3256c3bf2738e53e219f1b4740bf2d8736fdd03")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 15,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.10.15%2B20241008-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("eff2d69f0f19cdb8bf00c2a45addee6d477c4bc20da67337f4115a8b90f92e12")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2509,8 +2971,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.10.15%2B20240909-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("ee0cff039adf2a21481b45274fa10ec59976d901b0afef93346fad07919fe1ce")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.10.15%2B20241008-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("e5dbed3cd4e718081219fd039046779aa4ef808f725f7d19e60196fdf12d39ac")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2525,6 +2987,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-aarch64-apple-darwin-install_only_stripped.tar.gz",
         sha256: Some("f7ca9bffbce433c8d445edd33a5424c405553d735efee65a2fc5d8bbb1c8e137")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 14,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("4404f44ec69c0708d4d88e98f39c2c1fe3bd462dc6a958b60aaf63028550c485")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2575,20 +3051,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 14,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("a84742f13584fd39f4f4b0d9a5865621a3c88cad91b31f17f414186719063364")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 14,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Powerpc64le),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -2609,20 +3071,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("ff1c4f010b1c6f563c71fa30f68293168536e0ed65f7d470a7e8c73252d08653")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 14,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("4404f44ec69c0708d4d88e98f39c2c1fe3bd462dc6a958b60aaf63028550c485")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2659,6 +3107,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 14,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("a84742f13584fd39f4f4b0d9a5865621a3c88cad91b31f17f414186719063364")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 14,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -2687,6 +3149,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 13,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("6378dfd22f58bb553ddb02be28304d739cd730c1f95c15c74955c923a1bc3d6a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 13,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -2707,20 +3183,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.10.13%2B20230826-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("424d239b6df60e40849ad18505de394001233ab3d7470b5280fec6e643208bb9")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 13,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("5365b90f9cba7186d12dd86516ece8b696db7311128e0b49c92234e01a74599f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2758,20 +3220,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("6378dfd22f58bb553ddb02be28304d739cd730c1f95c15c74955c923a1bc3d6a")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 13,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -2791,6 +3239,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("48365ea10aa1b0768a153bfff50d1515a757d42409b02a4af4db354803f2d180")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 13,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("5365b90f9cba7186d12dd86516ece8b696db7311128e0b49c92234e01a74599f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2827,6 +3289,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 12,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("8a6e3ed973a671de468d9c691ed9cb2c3a4858c5defffcf0b08969fba9c1dd04")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 12,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -2847,20 +3323,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("c7a5321a696ef6467791312368a04d36828907a8f5c557b96067fa534c716c18")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 12,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("a5a5f9c9082b6503462a6b134111d3c303052cbc49ff31fff2ade38b39978e5d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2898,20 +3360,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("8a6e3ed973a671de468d9c691ed9cb2c3a4858c5defffcf0b08969fba9c1dd04")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 12,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -2931,6 +3379,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("9080014bee2d4bd1f96bcbebf447d40c35ae9354382246add1160bd0d433ebf7")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 12,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("a5a5f9c9082b6503462a6b134111d3c303052cbc49ff31fff2ade38b39978e5d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2967,6 +3429,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 11,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("bd3fc6e4da6f4033ebf19d66704e73b0804c22641ddae10bbe347c48f82374ad")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 11,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -2995,40 +3471,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 11,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("e4ed3414cd0e687017f0a56fed88ff39b3f5dfb24a0d62e9c7ca55854178bcde")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 11,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Powerpc64le),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-ppc64le-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("73a9d4c89ed51be39dd2de4e235078281087283e9fdedef65bec02f503e906ee")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 11,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("bd3fc6e4da6f4033ebf19d66704e73b0804c22641ddae10bbe347c48f82374ad")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3065,6 +3513,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 11,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("e4ed3414cd0e687017f0a56fed88ff39b3f5dfb24a0d62e9c7ca55854178bcde")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 11,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -3085,6 +3547,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-aarch64-apple-darwin-install_only.tar.gz",
         sha256: Some("018d05a779b2de7a476f3b3ff2d10f503d69d14efcedd0774e6dab8c22ef84ff")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 9,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("0e685f98dce0e5bc8da93c7081f4e6c10219792e223e4b5886730fd73a7ba4c6")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3121,34 +3597,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 9,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("c5c51d9a3e8d8cdac67d8f3ad7c4008de169ff1480e17021f154d5c99fcee9e3")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 9,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("0e685f98dce0e5bc8da93c7081f4e6c10219792e223e4b5886730fd73a7ba4c6")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 9,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -3169,6 +3617,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("cf17e6d042777170e423c6b80e096ad8273d9848708875db0d23dd45bdb3d516")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 9,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("c5c51d9a3e8d8cdac67d8f3ad7c4008de169ff1480e17021f154d5c99fcee9e3")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3205,6 +3667,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 8,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("525b79c7ce5de90ab66bd07b0ac1008bafa147ddc8a41bef15ffb7c9c1e9e7c5")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 8,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -3225,34 +3701,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("2deee7cbbd5dad339d713a75ec92239725d2035e833af5b9981b026dee0b9213")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 8,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("94e76273166f72624128e52b5402db244cea041dab4a6bcdc70b304b66e27e95")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 8,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("525b79c7ce5de90ab66bd07b0ac1008bafa147ddc8a41bef15ffb7c9c1e9e7c5")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3289,6 +3737,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 8,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("94e76273166f72624128e52b5402db244cea041dab4a6bcdc70b304b66e27e95")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 8,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -3309,6 +3771,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-aarch64-apple-darwin-install_only.tar.gz",
         sha256: Some("70f6ca1da8e6fce832ad0b7f9fdaba0b84ba0ac0a4c626127acb6d49df4b8f91")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("6101f580434544d28d5590543029a7c6bdf07efa4bcdb5e4cbedb3cd83241922")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3345,34 +3821,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 7,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("384e711dd657c3439be4e50b2485478a7ed7a259a741d4480fc96d82cc09d318")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 7,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("6101f580434544d28d5590543029a7c6bdf07efa4bcdb5e4cbedb3cd83241922")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 7,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -3393,6 +3841,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("3e0cab6e49ad5ef95851049463797ec713eee6e1f2fa1d99e30516d37797c3f0")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("384e711dd657c3439be4e50b2485478a7ed7a259a741d4480fc96d82cc09d318")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3429,6 +3891,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 6,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("7718411adf3ea1480f3f018a643eb0550282aefe39e5ecb3f363a4a566a9398c")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 6,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -3449,34 +3925,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("b152801a2609e6a38f3cc9e7e21d8b6cf5b6f31dacfcaca01e162c514e851ed6")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 6,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("27f22babf29ceebae18b2c2e38e2c48d22de686688c8a31c5f8d7d51541583c1")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 6,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("7718411adf3ea1480f3f018a643eb0550282aefe39e5ecb3f363a4a566a9398c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3513,6 +3961,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 6,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("27f22babf29ceebae18b2c2e38e2c48d22de686688c8a31c5f8d7d51541583c1")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 6,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -3533,6 +3995,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-aarch64-apple-darwin-install_only.tar.gz",
         sha256: Some("19d1aa4a6d9ddb0094fc36961b129de9abe1673bce66c86cd97b582795c496a8")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 5,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("eca0584397d9a3ef6f7bb32b0476318b01c89b7b0a031ef97a0dcaa5ba5127a8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3569,34 +4045,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 5,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("2846e9c7e8484034989ab218022009fdd9dcb12a7bfb4b0329a404552d37e9aa")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 5,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("eca0584397d9a3ef6f7bb32b0476318b01c89b7b0a031ef97a0dcaa5ba5127a8")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 5,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -3617,6 +4065,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("6aad42c7b03989173dd0e4d066e8c1e9f176f4b31d5bde26dbb5297f38f656d0")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 5,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("2846e9c7e8484034989ab218022009fdd9dcb12a7bfb4b0329a404552d37e9aa")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3653,6 +4115,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 4,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("c4a57a13b084d49ce8c2eb5b2662ee45b0c55b08ddd696f473233b0787f03988")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 4,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -3673,34 +4149,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("f3bc0828a0e0a8974e3fe90b4e99549296a7578de2321d791be1bad28191921d")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 4,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("e1dfa5dde910f908cad8bd688b29d28df832f7b150555679c204580d1af0c4a6")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 4,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("c4a57a13b084d49ce8c2eb5b2662ee45b0c55b08ddd696f473233b0787f03988")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3737,6 +4185,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 4,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("e1dfa5dde910f908cad8bd688b29d28df832f7b150555679c204580d1af0c4a6")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 4,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -3757,6 +4219,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-aarch64-apple-darwin-install_only.tar.gz",
         sha256: Some("db46dadfccc407aa1f66ed607eefbf12f781e343adcb1edee0a3883d081292ce")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 3,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("ec2e90b6a589db7ef9f74358b1436558167629f9e4d725c8150496f9cb08a9d4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3793,34 +4269,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 3,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("bb7f2a5143010fa482c5b442cced85516696cfc416ca92c903ef374532401a33")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 3,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("ec2e90b6a589db7ef9f74358b1436558167629f9e4d725c8150496f9cb08a9d4")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 3,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -3841,6 +4289,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("a60b589176879bdd465659660b87e954f969bed072c03c578ec828d6134f4ae1")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 3,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("bb7f2a5143010fa482c5b442cced85516696cfc416ca92c903ef374532401a33")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3877,6 +4339,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 2,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("8146ad4390710ec69b316a5649912df0247d35f4a42e2aa9615bffd87b3e235a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 2,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -3897,34 +4373,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("4fa49dab83bf82409816db431806525ce894280a509ca96c91e3efc9beed1fea")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 2,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("5321f8c2c71239b1e2002d284be8ec825d4a6f95cd921e58db71f259834b7aa1")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 2,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("8146ad4390710ec69b316a5649912df0247d35f4a42e2aa9615bffd87b3e235a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3961,6 +4409,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 2,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("5321f8c2c71239b1e2002d284be8ec825d4a6f95cd921e58db71f259834b7aa1")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 2,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -3980,6 +4442,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-install_only-20211017T1616.tar.gz",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-apple-darwin-install_only-20211017T1616.tar.gz",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4017,34 +4493,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 0,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-i686-pc-windows-msvc-shared-pgo-20211017T1616.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 0,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-apple-darwin-install_only-20211017T1616.tar.gz",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 0,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -4073,6 +4521,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 0,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-i686-pc-windows-msvc-shared-pgo-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -4091,92 +4553,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-aarch64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("80a7fa0a25cf0dbbb4cab9d7dc37b3172efed05cefd0667192690a30cadd85dd")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 20,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("2a78b16be1be07cb514183d09b9e421fea9256e366cca0642639c3161611b6ab")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 20,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
-        sha256: Some("269aeb811b5a32381070811da02a175f9d6abee92da7673884a6b42c91cf9c6e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 20,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
-        sha256: Some("113c727c2231e3c964ee9784e32d8b91effa9e61a2db4dce5166e21975cbc3f1")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 20,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("b47e8d72466e1af94810d9d83b0e0fa8a60773abb31505fc2b8d84bfa16d3b81")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 20,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Powerpc64le),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("fe5d14060530f4d6edb53687f4730d28d71d19f11c64ddaf5bde5db69fc3bd01")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 20,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::S390x),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("4f428e4294d8688b62452152cab1685c88c2b665bfee00125af7676542c1ed52")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.9.20%2B20241008-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("e7551a119bded40bfc268c850110b6a5af1d5fdd63842a56569477490d20e0a6")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4189,8 +4567,78 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("8af628a1786ebc6012689d3f06cd955672bcb75ff37e9518b4028e38d185d2d7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.9.20%2B20241008-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("02a912676153c0b87a2b6127f5bc9ddccf831b5c390e44073b1f45e829e712ca")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.9.20%2B20241008-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("7b3fe4868b127b75c82c7e56815e9ea90d7d5f76676d5d79c4e5901423a0e271")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.9.20%2B20241008-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("8950ba405e3fbf53fec01f5f2b20b3d50c987879b0d9b9ee385916f29e73a434")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.9.20%2B20241008-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("681b2aee6563be3b28370762e4a7c99cf5afeb6789ce7e5ae5646223515da578")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Powerpc64le),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.9.20%2B20241008-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("82bb46cccdfc186e448e433baab343b1ce1e6d7c74e2e3ac4b32b1825583a7dc")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::S390x),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.9.20%2B20241008-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("adecf1aa825d4b73ea42a04c3a4996c19733d1b66a79c5fb0cb77f9589174588")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4203,8 +4651,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("8106a101967d52c78f56603a2fcfa2926c140ca45abfbf5a984cc63b726a0ee9")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.9.20%2B20241008-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("f78ac2daa816647d8de170a1b7296d08d3a1227d1a5b46bde4d0e20834dc9212")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4217,8 +4665,22 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Musl),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("e7e5415db4790ef15bbe2daa9a5d4f8363fd60fd1220692206ef02d534e534c8")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.9.20%2B20241008-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("2c03d1a3b3c2b8a05cd24dad8a0307a3ae464bd7508e637b47c74abf3304e531")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 20,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.9.20%2B20241008-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("95c290f7eef20439b9e962a229608a0f6ea8d7f75de3cefff8298bac91b70cb4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4231,8 +4693,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.9.20%2B20240909-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("81d14af5cc30dd1e6203d2ef51aeeeb68b8e807ca71ce2ab038ff517fa553796")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.9.20%2B20241008-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("980f094ecd84894d2708696f3da641213480893bf0133b4be85ab60723c2f891")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4247,6 +4709,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-aarch64-apple-darwin-install_only_stripped.tar.gz",
         sha256: Some("451582f8a6a8c15ef35a327afcdbf8d03b1ebba7192e90d850d092dac91f91c6")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 19,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("ebaf4336d0cbff4466c994d5bcaa92a38c91d06694d0cd675ec663259d5f37c7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4297,20 +4773,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 19,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("1c78c6dd763e6d583c3c3f917544bc4446d0e9fbe2b6e206042fa801ff9fb9ab")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 19,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Powerpc64le),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -4331,20 +4793,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("b41f834311532ee9dcf76cad3cdeda285d0e283de2182ce9870c37c40970cdd3")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 19,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("ebaf4336d0cbff4466c994d5bcaa92a38c91d06694d0cd675ec663259d5f37c7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4381,6 +4829,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 19,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("1c78c6dd763e6d583c3c3f917544bc4446d0e9fbe2b6e206042fa801ff9fb9ab")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 19,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -4409,6 +4871,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 18,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("171d8b472fce0295be0e28bb702c43d5a2a39feccb3e72efe620ac3843c3e402")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 18,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -4429,20 +4905,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.9.18%2B20230826-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("10c422080317886057e968010495037ba65731ab7653bcaeabadf67a6fa5e99e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 18,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("904ff5d2f6402640e2b7e2b12075af0bd75b3e8685cc5248fd2a3cda3105d2a8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4480,20 +4942,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("171d8b472fce0295be0e28bb702c43d5a2a39feccb3e72efe620ac3843c3e402")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 18,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -4513,6 +4961,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("cb47455810ae63d98501b3bb4fcdfdb9924633fb2e86e62d77e523a3bdee44ba")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 18,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("904ff5d2f6402640e2b7e2b12075af0bd75b3e8685cc5248fd2a3cda3105d2a8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4549,6 +5011,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 17,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("dfe1bea92c94b9cb779288b0b06e39157c5ff7e465cdd24032ac147c2af485c0")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 17,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -4569,20 +5045,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("aed29a64c835444c2f1aff83c55b14123114d74c54d96493a0eabfdd8c6d012c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 17,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("09f9d4bc66be5e0df2dfd1dc4742923e46c271f8f085178696c77073477aa0c1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4620,20 +5082,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("dfe1bea92c94b9cb779288b0b06e39157c5ff7e465cdd24032ac147c2af485c0")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 17,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -4653,6 +5101,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("194316e9cc7add1dd12be3e3eea2908fd4d623799edd7df69e360c6a446b750d")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 17,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("09f9d4bc66be5e0df2dfd1dc4742923e46c271f8f085178696c77073477aa0c1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4689,6 +5151,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 16,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("3abc4d5fbbc80f5f848f280927ac5d13de8dc03aabb6ae65d8247cbb68e6f6bf")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 16,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -4717,40 +5193,12 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 16,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("219532ffa49af88e3b90e9135cf3b6e1fa11cf165b03098fb9776a07af8ca6d0")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 16,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Powerpc64le),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-ppc64le-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("ff3ac35c58f67839aff9b5185a976abd3d1abbe61af02089f7105e876c1fe284")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 16,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("3abc4d5fbbc80f5f848f280927ac5d13de8dc03aabb6ae65d8247cbb68e6f6bf")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4787,6 +5235,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 16,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("219532ffa49af88e3b90e9135cf3b6e1fa11cf165b03098fb9776a07af8ca6d0")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 16,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -4807,6 +5269,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-aarch64-apple-darwin-install_only.tar.gz",
         sha256: Some("64dc7e1013481c9864152c3dd806c41144c79d5e9cd3140e185c6a5060bdc9ab")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 15,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("f2bcade6fc976c472f18f2b3204d67202d43ae55cf6f9e670f95e488f780da08")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4843,34 +5319,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 15,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("0b81089247f258f244e9792daaa03675da6f58597daa6913e82f2679862238dd")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 15,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("f2bcade6fc976c472f18f2b3204d67202d43ae55cf6f9e670f95e488f780da08")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 15,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -4891,6 +5339,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("81b1c76ac789521fcececdcdc643f6de6fc282083b1a36a9973d835fc8a39391")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 15,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("0b81089247f258f244e9792daaa03675da6f58597daa6913e82f2679862238dd")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4927,6 +5389,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 14,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("b7d3a1f4b57e9350571ccee49c82f503133de0d113a2dbaebc8ccf108fb3fe1b")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 14,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -4947,34 +5423,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("3af1c255110c2f42ed0b7957502c92edf8b5c5e6fc5f699a2475bf8a560325c0")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 14,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("f3526e8416be86ff9091750ebc7388d6726acf32cc5ab0e6a60c67c6aacb2569")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 14,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("b7d3a1f4b57e9350571ccee49c82f503133de0d113a2dbaebc8ccf108fb3fe1b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5011,6 +5459,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 14,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("f3526e8416be86ff9091750ebc7388d6726acf32cc5ab0e6a60c67c6aacb2569")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 14,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -5031,6 +5493,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-aarch64-apple-darwin-install_only.tar.gz",
         sha256: Some("d9603edc296a2dcbc59d7ada780fd12527f05c3e0b99f7545112daf11636d6e5")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 13,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("9540a7efb7c8a54a48aff1cb9480e49588d9c0a3f934ad53f5b167338174afa3")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5067,34 +5543,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 13,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("90e3879382f06fea3ba6d477f0c2a434a1e14cd83d174e1c7b87e2f22bc2e748")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 13,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("9540a7efb7c8a54a48aff1cb9480e49588d9c0a3f934ad53f5b167338174afa3")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 13,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -5115,6 +5563,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("766ed7e805e8c7abc4e50f1c94814575e7978ed7bd1f9e9ccec82d66b47b567f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 13,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("90e3879382f06fea3ba6d477f0c2a434a1e14cd83d174e1c7b87e2f22bc2e748")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5151,6 +5613,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 12,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("2453ba7f76b3df3310353b48c881d6cff622ba06e30d2b6ae91588b2bc9e481a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 12,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -5171,34 +5647,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("233e1a9626d9fe13baac8de3689df48401d0ad5da1c2f134ad57d8e3e878a1a5")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 12,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("8b7e440137bfa349a008641a75a2b1fd8ae22d290731778a144878a59a721c51")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 12,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("2453ba7f76b3df3310353b48c881d6cff622ba06e30d2b6ae91588b2bc9e481a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5235,6 +5683,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 12,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("8b7e440137bfa349a008641a75a2b1fd8ae22d290731778a144878a59a721c51")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 12,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -5255,6 +5717,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-aarch64-apple-darwin-install_only.tar.gz",
         sha256: Some("cf92a28f98c8d884df0937bf19d5f1a40caa25a6a211a237b7e9b592b2b71c2b")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 11,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("43889d1a424c84fb155e1619f062adb6984fbde80b6043611790f22bcbeec300")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5291,34 +5767,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 11,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("ceac8729b285a8c8e861176dd2dadd7f8e7e26d8f64cac6c6226a14d2252cd4c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 11,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("43889d1a424c84fb155e1619f062adb6984fbde80b6043611790f22bcbeec300")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 11,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -5339,6 +5787,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("ae8f55d90ae173f96e81f376daa5a9969a77531a6f7b8eacbe8ad90b41bbca1d")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 11,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("ceac8729b285a8c8e861176dd2dadd7f8e7e26d8f64cac6c6226a14d2252cd4c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5375,6 +5837,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 10,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("fdaf594142446029e314a9beb91f1ac75af866320b50b8b968181e592550cd68")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 10,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -5395,34 +5871,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("37ba43845c3df9ba012d69121ad29ea7f21ea2f5994a155007cf1560d74ce503")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 10,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("56c0342a9af0412676e89cdf7b52ac76037031786b3f5c40942b8b82d366c96f")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 10,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("fdaf594142446029e314a9beb91f1ac75af866320b50b8b968181e592550cd68")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5459,6 +5907,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 10,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("56c0342a9af0412676e89cdf7b52ac76037031786b3f5c40942b8b82d366c96f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 10,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -5478,6 +5940,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-aarch64-apple-darwin-install_only-20211017T1616.tar.gz",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-apple-darwin-install_only-20211017T1616.tar.gz",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5515,34 +5991,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 7,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-i686-pc-windows-msvc-shared-pgo-20211017T1616.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 7,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-apple-darwin-install_only-20211017T1616.tar.gz",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 7,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -5562,6 +6010,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-unknown-linux-musl-lto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 7,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-i686-pc-windows-msvc-shared-pgo-20211017T1616.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5599,6 +6061,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 6,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-apple-darwin-install_only-20210724T1424.tar.gz",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 6,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -5618,34 +6094,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-i686-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 6,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-i686-pc-windows-msvc-shared-pgo-20210724T1424.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 6,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-apple-darwin-install_only-20210724T1424.tar.gz",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5683,6 +6131,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 6,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-i686-pc-windows-msvc-shared-pgo-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 6,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -5711,39 +6173,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 5,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-i686-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 5,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-i686-pc-windows-msvc-shared-pgo-20210506T0943.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 5,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-apple-darwin-pgo%2Blto-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 5,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-i686-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5781,6 +6229,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 5,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-i686-pc-windows-msvc-shared-pgo-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 5,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -5809,39 +6271,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 4,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-i686-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 4,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-i686-pc-windows-msvc-shared-pgo-20210414T1515.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 4,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-apple-darwin-pgo%2Blto-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 4,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-i686-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5879,6 +6327,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 4,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-i686-pc-windows-msvc-shared-pgo-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 4,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -5898,20 +6360,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20210414/cpython-3.9.3-aarch64-apple-darwin-pgo%2Blto-20210413T2055.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 3,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210414/cpython-3.9.3-i686-pc-windows-msvc-shared-pgo-20210413T2055.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5963,6 +6411,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 3,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210414/cpython-3.9.3-i686-pc-windows-msvc-shared-pgo-20210413T2055.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 3,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -5991,39 +6453,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 2,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-i686-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 2,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-i686-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 2,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-apple-darwin-pgo%2Blto-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 2,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-i686-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -6061,25 +6509,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 2,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-i686-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
             minor: 9,
-            patch: 1,
+            patch: 2,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.9.1-i686-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -6131,25 +6579,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 1,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.9.1-i686-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
             minor: 9,
-            patch: 0,
+            patch: 1,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.9.0-i686-pc-windows-msvc-shared-pgo-20201021T0245.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -6201,6 +6649,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 0,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.9.0-i686-pc-windows-msvc-shared-pgo-20201021T0245.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 0,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -6219,36 +6681,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-aarch64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("ba5e82a768111e58c1c10f452a8c2a352343ade11a726649305b5be9c50e2c4e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 20,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("a0cf896059fa8f323c88342154868cea4cca32314175e246f0ac601b978f0e7a")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 20,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("ac5c88f5bba4a6d7f0e1294eb27b66461912277bd01c78f0641b6ea18f8f5253")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.8.20%2B20241002-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("30ba44af64e599bde7307908393374bdcd99e185bf9b3c9de3f697f3fbe6bf8f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6261,8 +6695,22 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("d1df0f170f65b572e34f2f308578e7803a65ba67adda24faf4c3b91c4c35ca12")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.8.20%2B20241002-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("375b6eead6c852cabbf3ccfd43dc4f6dd4c36381bf74c9a7910acb839fd5c57f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 20,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.8.20%2B20241002-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("75a187ebfab81096e3f3d91d70c1349e64defbdfb0e8a067cb5233d017655e31")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6275,8 +6723,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("07efe55ae8f494356877effdf98e661d21b1de077964e95940ca1a35119d5b28")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.8.20%2B20241002-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("a3a75094545912d4e9413673441b3f0d2e58ce9b264477f910800148801ccf11")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6289,8 +6737,22 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Musl),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("702256dc8f5fbcd2c696d27cfba6eabc52247129b0b92f602daedb06a4ace6ac")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.8.20%2B20241002-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("fcddfd3f1090833e1f3106be021809630008b53026bc96dcaab2986625db27fa")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 20,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.8.20%2B20241002-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("d829105aaf53a1cadf8738e040c6211bc9bef2c6e4757b972954f0f322d57e7d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6303,8 +6765,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.8.20%2B20240909-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("f037f8201f93ba26d6217464c46afac8bf128672b604aedd87724a7824bdf1ff")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.8.20%2B20241002-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("ec2f723dcfbf09581578a716c05cc67823a43d77111e6dd9e0d1557ccc6dcbf3")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6327,40 +6789,26 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 19,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.8.19%2B20240814-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("202211923850303f521146ee1831642aaf357ffeeadbe13a0a91884317227528")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 19,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.8.19%2B20240814-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("73bf0135330b96c48ca79ccd6d2f3287a7466573a5fc1b62d982bcdb1d5f0ab3")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 19,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.8.19%2B20240814-x86_64-apple-darwin-install_only_stripped.tar.gz",
         sha256: Some("1a24263b039c1172bd42d74a5694492f3e3dbe4d3e52a1e7cc2856fee7dbee4a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 19,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.8.19%2B20240814-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("202211923850303f521146ee1831642aaf357ffeeadbe13a0a91884317227528")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6397,6 +6845,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 19,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.8.19%2B20240814-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("73bf0135330b96c48ca79ccd6d2f3287a7466573a5fc1b62d982bcdb1d5f0ab3")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 19,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -6425,40 +6887,26 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 18,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.8.18%2B20240224-aarch64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("6588c9eed93833d9483d01fe40ac8935f691a1af8e583d404ec7666631b52487")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 18,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.8.18%2B20240224-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("c24f9c9e8638cff0ce6aa808a57cc5f22009bc33e3bcf410a726b79d7c5545fe")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 18,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.8.18%2B20240224-x86_64-apple-darwin-install_only.tar.gz",
         sha256: Some("7d2cd8d289d5e3cdd0a8c06c028c7c621d3d00ce44b7e2f08c1724ae0471c626")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 18,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.8.18%2B20240224-aarch64-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("6588c9eed93833d9483d01fe40ac8935f691a1af8e583d404ec7666631b52487")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6495,6 +6943,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 18,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.8.18%2B20240224-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("c24f9c9e8638cff0ce6aa808a57cc5f22009bc33e3bcf410a726b79d7c5545fe")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 18,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -6515,6 +6977,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-aarch64-apple-darwin-install_only.tar.gz",
         sha256: Some("c6f7a130d0044a78e39648f4dae56dcff5a41eba91888a99f6e560507162e6a1")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 17,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("155b06821607bae1a58ecc60a7d036b358c766f19e493b8876190765c883a5c2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6551,34 +7027,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 17,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("cb6af626ba811044e9c5ee09140a6920565d2b1b237a11886b96354a9fcc242e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 17,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("155b06821607bae1a58ecc60a7d036b358c766f19e493b8876190765c883a5c2")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 17,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -6599,6 +7047,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("322b7837cfd8282c62ae3d2f0e98f0843cbe287e4b8c4852b786123f2e13b307")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 17,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("cb6af626ba811044e9c5ee09140a6920565d2b1b237a11886b96354a9fcc242e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6635,6 +7097,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 16,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("28506e509646c11cb2f57a7203bd1b08b6e8e5b159ae308bd5bb93b0d334bdaf")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 16,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -6655,34 +7131,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("1260fd6af34104bbd57489175e6f7bfea76d4bd06a242a0f8e20e390e870b227")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 16,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("77466f93ef5b030cf13d0446067089b0ce0d415cc6d1702655bdbb12a8c18c97")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 16,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("28506e509646c11cb2f57a7203bd1b08b6e8e5b159ae308bd5bb93b0d334bdaf")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6719,6 +7167,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 16,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("77466f93ef5b030cf13d0446067089b0ce0d415cc6d1702655bdbb12a8c18c97")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 16,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -6739,6 +7201,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-aarch64-apple-darwin-install_only.tar.gz",
         sha256: Some("1e0a92d1a4f5e6d4a99f86b1cbf9773d703fe7fd032590f3e9c285c7a5eeb00a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 15,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("70b57f28c2b5e1e3dd89f0d30edd5bc414e8b20195766cf328e1b26bed7890e1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6775,34 +7251,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 15,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("318c059324b84b5d7685bcd0874698799d9e3689b51dbcf596e7a47a39a3d49a")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 15,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("70b57f28c2b5e1e3dd89f0d30edd5bc414e8b20195766cf328e1b26bed7890e1")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 15,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -6823,6 +7271,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("f767d0438eca5b18c1267c5121055a5808a1412ea7668ef17da3dc9bdd24a55f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 15,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("318c059324b84b5d7685bcd0874698799d9e3689b51dbcf596e7a47a39a3d49a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6859,6 +7321,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 14,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("3ed4db8d0308c584196d97c629058ea69bbd8b7f9a034cf8c2c701ebb286c091")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 14,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -6879,34 +7355,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-i686-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("d01d813939ad549ca253c52e5b8361b4490cc5c8cbda00ab6e0c524565153e2b")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 14,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("a0730f3a9e60581f02bdb852953fbb52cf98e8431259fa39cb668a060bd002a0")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 14,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("3ed4db8d0308c584196d97c629058ea69bbd8b7f9a034cf8c2c701ebb286c091")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6943,6 +7391,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 14,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("a0730f3a9e60581f02bdb852953fbb52cf98e8431259fa39cb668a060bd002a0")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 14,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -6963,6 +7425,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-aarch64-apple-darwin-install_only.tar.gz",
         sha256: Some("ae4131253d890b013171cb5f7b03cadc585ae263719506f7b7e063a7cf6fde76")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 13,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-x86_64-apple-darwin-install_only.tar.gz",
+        sha256: Some("cd6e7c0a27daf7df00f6882eaba01490dd963f698e99aeee9706877333e0df69")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6999,34 +7475,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 13,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("a50668d4c5fbcb374d3ca93ee18db910bc3b462693db073669f31e6da993abf9")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 13,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-x86_64-apple-darwin-install_only.tar.gz",
-        sha256: Some("cd6e7c0a27daf7df00f6882eaba01490dd963f698e99aeee9706877333e0df69")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 13,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -7047,6 +7495,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-x86_64-unknown-linux-musl-install_only.tar.gz",
         sha256: Some("2c90a0d048caf146d4c33560d6eead1428a225219018d364b1af77f23c492984")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 13,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("a50668d4c5fbcb374d3ca93ee18db910bc3b462693db073669f31e6da993abf9")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -7083,40 +7545,26 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 12,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.8.12%2B20220227-i686-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("fcb2033f01a2b10a51be68c9a1b4c7d7759b582f58a503371fe67ab59987b418")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 12,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.8.12%2B20220227-i686-pc-windows-msvc-shared-install_only.tar.gz",
-        sha256: Some("aaa75b9115af73dc3daf7db050ed4f60fd67d2a23ebab30670f18fb8cfa71f33")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 12,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.8.12%2B20220227-x86_64-apple-darwin-install_only.tar.gz",
         sha256: Some("f323fbc558035c13a85ce2267d0fad9e89282268ecb810e364fff1d0a079d525")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 12,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.8.12%2B20220227-i686-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("fcb2033f01a2b10a51be68c9a1b4c7d7759b582f58a503371fe67ab59987b418")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -7153,6 +7601,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 12,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.8.12%2B20220227-i686-pc-windows-msvc-shared-install_only.tar.gz",
+        sha256: Some("aaa75b9115af73dc3daf7db050ed4f60fd67d2a23ebab30670f18fb8cfa71f33")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 12,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -7167,39 +7629,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 11,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-i686-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 11,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-i686-pc-windows-msvc-shared-pgo-20210724T1424.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 11,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-apple-darwin-pgo%2Blto-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 11,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-i686-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -7237,6 +7685,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 11,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-i686-pc-windows-msvc-shared-pgo-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 11,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -7251,39 +7713,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 10,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-i686-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 10,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-i686-pc-windows-msvc-shared-pgo-20210506T0943.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 10,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-apple-darwin-pgo%2Blto-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 10,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-i686-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -7321,6 +7769,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 10,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-i686-pc-windows-msvc-shared-pgo-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 10,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -7335,39 +7797,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 9,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-i686-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 9,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-i686-pc-windows-msvc-shared-pgo-20210414T1515.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 9,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-apple-darwin-pgo%2Blto-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 9,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-i686-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -7405,6 +7853,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 9,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-i686-pc-windows-msvc-shared-pgo-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 9,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -7419,39 +7881,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 8,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-i686-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 8,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-i686-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 8,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-apple-darwin-pgo%2Blto-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 8,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-i686-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -7489,25 +7937,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 8,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-i686-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
             minor: 8,
-            patch: 7,
+            patch: 8,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.8.7-i686-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -7559,25 +8007,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 7,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.8.7-i686-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
             minor: 8,
-            patch: 6,
+            patch: 7,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.8.6-i686-pc-windows-msvc-shared-pgo-20201021T0233.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -7629,25 +8077,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 6,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-pc-windows-msvc-shared-pgo-20201021T0232.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.8.6-i686-pc-windows-msvc-shared-pgo-20201021T0233.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
             minor: 8,
-            patch: 5,
+            patch: 6,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200830/cpython-3.8.5-i686-pc-windows-msvc-shared-pgo-20200830T2311.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-pc-windows-msvc-shared-pgo-20201021T0232.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -7699,25 +8147,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 5,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200830/cpython-3.8.5-x86_64-pc-windows-msvc-shared-pgo-20200830T2254.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200830/cpython-3.8.5-i686-pc-windows-msvc-shared-pgo-20200830T2311.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
             minor: 8,
-            patch: 3,
+            patch: 5,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.8.3-i686-pc-windows-msvc-shared-pgo-20200518T0154.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200830/cpython-3.8.5-x86_64-pc-windows-msvc-shared-pgo-20200830T2254.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -7769,25 +8217,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 3,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.8.3-x86_64-pc-windows-msvc-shared-pgo-20200517T2207.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.8.3-i686-pc-windows-msvc-shared-pgo-20200518T0154.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
             minor: 8,
-            patch: 2,
+            patch: 3,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200418/cpython-3.8.2-i686-pc-windows-msvc-shared-pgo-20200418T2315.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.8.3-x86_64-pc-windows-msvc-shared-pgo-20200517T2207.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -7825,25 +8273,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 2,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-pc-windows-msvc-shared-pgo-20200418T2315.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200418/cpython-3.8.2-i686-pc-windows-msvc-shared-pgo-20200418T2315.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
-            minor: 7,
-            patch: 9,
+            minor: 8,
+            patch: 2,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.7.9-i686-pc-windows-msvc-shared-pgo-20200823T0159.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-pc-windows-msvc-shared-pgo-20200418T2315.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -7895,25 +8343,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 9,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.7.9-x86_64-pc-windows-msvc-shared-pgo-20200823T0118.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.7.9-i686-pc-windows-msvc-shared-pgo-20200823T0159.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
             minor: 7,
-            patch: 7,
+            patch: 9,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.7.7-i686-pc-windows-msvc-shared-pgo-20200517T2153.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.7.9-x86_64-pc-windows-msvc-shared-pgo-20200823T0118.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -7965,25 +8413,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 7,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.7.7-x86_64-pc-windows-msvc-shared-pgo-20200517T2128.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.7.7-i686-pc-windows-msvc-shared-pgo-20200517T2153.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
             minor: 7,
-            patch: 6,
+            patch: 7,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200216/cpython-3.7.6-windows-x86-shared-pgo-20200217T0110.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.7.7-x86_64-pc-windows-msvc-shared-pgo-20200517T2128.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -8035,25 +8483,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 6,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200216/cpython-3.7.6-windows-amd64-shared-pgo-20200217T0022.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200216/cpython-3.7.6-windows-x86-shared-pgo-20200217T0110.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
             minor: 7,
-            patch: 5,
+            patch: 6,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20191025/cpython-3.7.5-windows-x86-20191025T0549.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200216/cpython-3.7.6-windows-amd64-shared-pgo-20200217T0022.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -8105,25 +8553,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 5,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20191025/cpython-3.7.5-windows-amd64-20191025T0540.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20191025/cpython-3.7.5-windows-x86-20191025T0549.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
             minor: 7,
-            patch: 4,
+            patch: 5,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20190816/cpython-3.7.4-windows-x86-20190817T0235.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20191025/cpython-3.7.5-windows-amd64-20191025T0540.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -8175,25 +8623,25 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 4,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20190816/cpython-3.7.4-windows-amd64-20190817T0227.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20190816/cpython-3.7.4-windows-x86-20190817T0235.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
             minor: 7,
-            patch: 3,
+            patch: 4,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20190617/cpython-3.7.3-windows-x86-20190709T0348.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20190816/cpython-3.7.4-windows-amd64-20190817T0227.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -8245,6 +8693,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 3,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20190617/cpython-3.7.3-windows-x86-20190709T0348.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 3,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
@@ -8279,6 +8741,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.10-v7.3.17-macos_arm64.tar.bz2",
         sha256: Some("a050e25e8d686853dd5afc363e55625165825dacfb55f8753d8225ebe417cfd2")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 14,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.17-macos_x86_64.tar.bz2",
+        sha256: Some("6c2c5f2300d7564e711421b4968abd63243cb96f76e363975dd648ebf4a362ee")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8330,20 +8806,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.17-macos_x86_64.tar.bz2",
-        sha256: Some("6c2c5f2300d7564e711421b4968abd63243cb96f76e363975dd648ebf4a362ee")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 14,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -8377,6 +8839,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.10-v7.3.15-macos_arm64.tar.bz2",
         sha256: Some("d927c5105ea7880f7596fe459183e35cc17c853ef5105678b2ad62a8d000a548")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 13,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.15-macos_x86_64.tar.bz2",
+        sha256: Some("559b61ba7e7c5a5c23cef5370f1fab47ccdb939ac5d2b42b4bef091abe3f6964")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8428,20 +8904,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.15-macos_x86_64.tar.bz2",
-        sha256: Some("559b61ba7e7c5a5c23cef5370f1fab47ccdb939ac5d2b42b4bef091abe3f6964")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 13,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -8475,6 +8937,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.10-v7.3.12-macos_arm64.tar.bz2",
         sha256: Some("45671b1e9437f95ccd790af10dbeb57733cca1ed9661463b727d3c4f5caa7ba0")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 12,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.12-macos_x86_64.tar.bz2",
+        sha256: Some("dbc15d8570560d5f79366883c24bc42231a92855ac19a0f28cb0adeb11242666")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8526,20 +9002,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.12-macos_x86_64.tar.bz2",
-        sha256: Some("dbc15d8570560d5f79366883c24bc42231a92855ac19a0f28cb0adeb11242666")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 12,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -8573,6 +9035,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.9-v7.3.16-macos_arm64.tar.bz2",
         sha256: Some("88f824e7a2d676440d09bc90fc959ae0fd3557d7e2f14bfbbe53d41d159a47fe")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 19,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.16-macos_x86_64.tar.bz2",
+        sha256: Some("fda015431621e7e5aa16359d114f2c45a77ed936992c1efff86302e768a6b21c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8624,20 +9100,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.16-macos_x86_64.tar.bz2",
-        sha256: Some("fda015431621e7e5aa16359d114f2c45a77ed936992c1efff86302e768a6b21c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 19,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -8671,6 +9133,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.9-v7.3.15-macos_arm64.tar.bz2",
         sha256: Some("300541c32125767a91b182b03d9cc4257f04971af32d747ecd4d62549d72acfd")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 18,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.15-macos_x86_64.tar.bz2",
+        sha256: Some("18ad7c9cb91c5e8ef9d40442b2fd1f6392ae113794c5b6b7d3a45e04f19edec6")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8722,20 +9198,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.15-macos_x86_64.tar.bz2",
-        sha256: Some("18ad7c9cb91c5e8ef9d40442b2fd1f6392ae113794c5b6b7d3a45e04f19edec6")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 18,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -8769,6 +9231,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.9-v7.3.12-macos_arm64.tar.bz2",
         sha256: Some("0e8a1a3468b9790c734ac698f5b00cc03fc16899ccc6ce876465fac0b83980e3")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 17,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.12-macos_x86_64.tar.bz2",
+        sha256: Some("64f008ffa070c407e5ef46c8256b2e014de7196ea5d858385861254e7959f4eb")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8820,20 +9296,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.12-macos_x86_64.tar.bz2",
-        sha256: Some("64f008ffa070c407e5ef46c8256b2e014de7196ea5d858385861254e7959f4eb")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 17,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -8867,6 +9329,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.9-v7.3.11-macos_arm64.tar.bz2",
         sha256: Some("91ad7500f1a39531dbefa0b345a3dcff927ff9971654e8d2e9ef7c5ae311f57e")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 16,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.11-macos_x86_64.tar.bz2",
+        sha256: Some("d33f40b207099872585afd71873575ca6ea638a27d823bc621238c5ae82542ed")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8918,20 +9394,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.11-macos_x86_64.tar.bz2",
-        sha256: Some("d33f40b207099872585afd71873575ca6ea638a27d823bc621238c5ae82542ed")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 16,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -8965,6 +9427,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.9-v7.3.10-macos_arm64.tar.bz2",
         sha256: Some("e2a6bec7408e6497c7de8165aa4a1b15e2416aec4a72f2578f793fb06859ccba")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 15,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.10-macos_x86_64.tar.bz2",
+        sha256: Some("f90c8619b41e68ec9ffd7d5e913fe02e60843da43d3735b1c1bc75bcfe638d97")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9016,20 +9492,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.10-macos_x86_64.tar.bz2",
-        sha256: Some("f90c8619b41e68ec9ffd7d5e913fe02e60843da43d3735b1c1bc75bcfe638d97")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 15,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -9049,6 +9511,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.9-v7.3.10-win64.zip",
         sha256: Some("07e18b7b24c74af9730dfaab16e24b22ef94ea9a4b64cbb2c0d80610a381192a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 12,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.9-osx64.tar.bz2",
+        sha256: Some("59c8852168b2b1ba1f0211ff043c678760380d2f9faf2f95042a8878554dbc25")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9100,20 +9576,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.9-osx64.tar.bz2",
-        sha256: Some("59c8852168b2b1ba1f0211ff043c678760380d2f9faf2f95042a8878554dbc25")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 12,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -9133,6 +9595,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.9-v7.3.9-win64.zip",
         sha256: Some("be48ab42f95c402543a7042c999c9433b17e55477c847612c8733a583ca6dff5")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 10,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.8-osx64.tar.bz2",
+        sha256: Some("95bd88ac8d6372cd5b7b5393de7b7d5c615a0c6e42fdb1eb67f2d2d510965aee")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9184,20 +9660,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.9-v7.3.8-osx64.tar.bz2",
-        sha256: Some("95bd88ac8d6372cd5b7b5393de7b7d5c615a0c6e42fdb1eb67f2d2d510965aee")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 10,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -9231,6 +9693,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.8-v7.3.11-macos_arm64.tar.bz2",
         sha256: Some("78cdc79ff964c4bfd13eb45a7d43a011cbe8d8b513323d204891f703fdc4fa1a")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 16,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.8-v7.3.11-macos_x86_64.tar.bz2",
+        sha256: Some("194ca0b4d91ae409a9cb1a59eb7572d7affa8a451ea3daf26539aa515443433a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9282,20 +9758,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.8-v7.3.11-macos_x86_64.tar.bz2",
-        sha256: Some("194ca0b4d91ae409a9cb1a59eb7572d7affa8a451ea3daf26539aa515443433a")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 16,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -9329,6 +9791,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.8-v7.3.10-macos_arm64.tar.bz2",
         sha256: Some("6cb1429371e4854b718148a509d80143f801e3abfc72fef58d88aeeee1e98f9e")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 15,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.8-v7.3.10-macos_x86_64.tar.bz2",
+        sha256: Some("399eb1ce4c65f62f6a096b7c273536601b7695e3c0dc0457393a659b95b7615b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9380,20 +9856,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.8-v7.3.10-macos_x86_64.tar.bz2",
-        sha256: Some("399eb1ce4c65f62f6a096b7c273536601b7695e3c0dc0457393a659b95b7615b")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 15,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -9413,6 +9875,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.8-v7.3.10-win64.zip",
         sha256: Some("362dd624d95bd64743190ea2539b97452ecb3d53ea92ceb2fbe9f48dc60e6b8f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 13,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.8-v7.3.9-osx64.tar.bz2",
+        sha256: Some("91a5c2c1facd5a4931a8682b7d792f7cf4f2ba25cd2e7e44e982139a6d5e4840")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9464,20 +9940,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.8-v7.3.9-osx64.tar.bz2",
-        sha256: Some("91a5c2c1facd5a4931a8682b7d792f7cf4f2ba25cd2e7e44e982139a6d5e4840")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 13,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -9497,6 +9959,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.8-v7.3.9-win64.zip",
         sha256: Some("05022baaa55db2b60880f2422312d9e4025e1267303ac57f33e8253559d0be88")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 12,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.8-v7.3.8-osx64.tar.bz2",
+        sha256: Some("de1b283ff112d76395c0162a1cf11528e192bdc230ee3f1b237f7694c7518dee")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9548,20 +10024,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.8-v7.3.8-osx64.tar.bz2",
-        sha256: Some("de1b283ff112d76395c0162a1cf11528e192bdc230ee3f1b237f7694c7518dee")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 12,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -9581,6 +10043,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.8-v7.3.8-win64.zip",
         sha256: Some("0894c468e7de758c509a602a28ef0ba4fbf197ccdf946c7853a7283d9bb2a345")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 13,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.7-v7.3.9-osx64.tar.bz2",
+        sha256: Some("12d92f578a200d50959e55074b20f29f93c538943e9a6e6522df1a1cc9cef542")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9632,20 +10108,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.7-v7.3.9-osx64.tar.bz2",
-        sha256: Some("12d92f578a200d50959e55074b20f29f93c538943e9a6e6522df1a1cc9cef542")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 7,
-            patch: 13,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -9665,6 +10127,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.7-v7.3.9-win64.zip",
         sha256: Some("8acb184b48fb3c854de0662e4d23a66b90e73b1ab73a86695022c12c745d8b00")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 12,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.7-v7.3.8-osx64.tar.bz2",
+        sha256: Some("76b8eef5b059a7e478f525615482d2a6e9feb83375e3f63c16381d80521a693f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9716,20 +10192,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.7-v7.3.8-osx64.tar.bz2",
-        sha256: Some("76b8eef5b059a7e478f525615482d2a6e9feb83375e3f63c16381d80521a693f")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 7,
-            patch: 12,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -9749,6 +10211,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.7-v7.3.8-win64.zip",
         sha256: Some("96df67492bc8d62b2e71dddf5f6c58965a26cac9799c5f4081401af0494b3bcc")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 10,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.7-v7.3.5-osx64.tar.bz2",
+        sha256: Some("b3a7d3099ad83de7c267bb79ae609d5ce73b01800578ffd91ba7e221b13f80db")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9800,20 +10276,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.7-v7.3.5-osx64.tar.bz2",
-        sha256: Some("b3a7d3099ad83de7c267bb79ae609d5ce73b01800578ffd91ba7e221b13f80db")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 7,
-            patch: 10,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
@@ -9833,6 +10295,20 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://downloads.python.org/pypy/pypy3.7-v7.3.5-win64.zip",
         sha256: Some("072bd22427178dc4e65d961f50281bd2f56e11c4e4d9f16311c703f69f46ae24")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 9,
+            prerelease: Cow::Borrowed(""),
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+        },
+        url: "https://downloads.python.org/pypy/pypy3.7-v7.3.3-osx64.tar.bz2",
+        sha256: Some("d72b27d5bb60813273f14f07378a08822186a66e216c5d1a768ad295b582438d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9869,20 +10345,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 9,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
-        },
-        url: "https://downloads.python.org/pypy/pypy3.7-v7.3.3-win32.zip",
-        sha256: Some("a282ce40aa4f853e877a5dbb38f0a586a29e563ae9ba82fd50c7e5dc465fb649")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 7,
-            patch: 9,
-            prerelease: Cow::Borrowed(""),
-            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::S390x),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
@@ -9898,11 +10360,11 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://downloads.python.org/pypy/pypy3.7-v7.3.3-osx64.tar.bz2",
-        sha256: Some("d72b27d5bb60813273f14f07378a08822186a66e216c5d1a768ad295b582438d")
+        url: "https://downloads.python.org/pypy/pypy3.7-v7.3.3-linux64.tar.bz2",
+        sha256: Some("37e2804c4661c86c857d709d28c7de716b000d31e89766599fdf5a98928b7096")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9911,11 +10373,11 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 9,
             prerelease: Cow::Borrowed(""),
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
         },
-        url: "https://downloads.python.org/pypy/pypy3.7-v7.3.3-linux64.tar.bz2",
-        sha256: Some("37e2804c4661c86c857d709d28c7de716b000d31e89766599fdf5a98928b7096")
+        url: "https://downloads.python.org/pypy/pypy3.7-v7.3.3-win32.zip",
+        sha256: Some("a282ce40aa4f853e877a5dbb38f0a586a29e563ae9ba82fd50c7e5dc465fb649")
     },
 ];

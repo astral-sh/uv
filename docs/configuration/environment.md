@@ -6,6 +6,8 @@ uv accepts the following command-line arguments as environment variables:
   URL as the base index for searching for packages.
 - `UV_EXTRA_INDEX_URL`: Equivalent to the `--extra-index-url` command-line argument. If set, uv will
   use this space-separated list of URLs as additional indexes when searching for packages.
+- `UV_FIND_LINKS`: Equivalent to the `--find-links` command-line argument. If set, uv will use this
+  space-separated list of additional locations to search for packages.
 - `UV_CACHE_DIR`: Equivalent to the `--cache-dir` command-line argument. If set, uv will use this
   directory for caching instead of the default cache directory.
 - `UV_NO_CACHE`: Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
@@ -71,6 +73,8 @@ uv accepts the following command-line arguments as environment variables:
   set, uv will use this username for publishing.
 - `UV_PUBLISH_PASSWORD`: Equivalent to the `--password` command-line argument in `uv publish`. If
   set, uv will use this password for publishing.
+- `UV_NO_SYNC`: Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
+  the environment.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 

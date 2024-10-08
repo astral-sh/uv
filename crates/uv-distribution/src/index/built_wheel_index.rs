@@ -1,14 +1,15 @@
 use crate::index::cached_wheel::CachedWheel;
 use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LOCAL_REVISION};
 use crate::Error;
-use distribution_types::{
-    DirectUrlSourceDist, DirectorySourceDist, GitSourceDist, Hashed, PathSourceDist,
-};
-use platform_tags::Tags;
 use uv_cache::{Cache, CacheBucket, CacheShard, WheelCache};
 use uv_cache_info::CacheInfo;
+use uv_cache_key::cache_digest;
 use uv_configuration::ConfigSettings;
+use uv_distribution_types::{
+    DirectUrlSourceDist, DirectorySourceDist, GitSourceDist, Hashed, PathSourceDist,
+};
 use uv_fs::symlinks;
+use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
 /// A local index of built distributions for a specific source distribution.
@@ -65,7 +66,7 @@ impl<'a> BuiltWheelIndex<'a> {
         let cache_shard = if self.build_configuration.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(self.build_configuration))
+            cache_shard.shard(cache_digest(self.build_configuration))
         };
 
         Ok(self.find(&cache_shard))
@@ -102,7 +103,7 @@ impl<'a> BuiltWheelIndex<'a> {
         let cache_shard = if self.build_configuration.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(self.build_configuration))
+            cache_shard.shard(cache_digest(self.build_configuration))
         };
 
         Ok(self
@@ -150,7 +151,7 @@ impl<'a> BuiltWheelIndex<'a> {
         let cache_shard = if self.build_configuration.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(self.build_configuration))
+            cache_shard.shard(cache_digest(self.build_configuration))
         };
 
         Ok(self
@@ -176,7 +177,7 @@ impl<'a> BuiltWheelIndex<'a> {
         let cache_shard = if self.build_configuration.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(self.build_configuration))
+            cache_shard.shard(cache_digest(self.build_configuration))
         };
 
         self.find(&cache_shard)

@@ -3,10 +3,10 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use pep440_rs::{Version, VersionSpecifiers};
-use pypi_types::{HashDigest, ResolutionMetadata};
 use uv_configuration::SourceStrategy;
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep440::{Version, VersionSpecifiers};
+use uv_pypi_types::{HashDigest, ResolutionMetadata};
 use uv_workspace::WorkspaceError;
 
 pub use crate::metadata::lowering::LoweredRequirement;
@@ -22,6 +22,8 @@ pub enum MetadataError {
     Workspace(#[from] WorkspaceError),
     #[error("Failed to parse entry for: `{0}`")]
     LoweringError(PackageName, #[source] LoweringError),
+    #[error(transparent)]
+    Lower(#[from] LoweringError),
 }
 
 #[derive(Debug, Clone)]
@@ -30,10 +32,10 @@ pub struct Metadata {
     pub name: PackageName,
     pub version: Version,
     // Optional fields
-    pub requires_dist: Vec<pypi_types::Requirement>,
+    pub requires_dist: Vec<uv_pypi_types::Requirement>,
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extras: Vec<ExtraName>,
-    pub dev_dependencies: BTreeMap<GroupName, Vec<pypi_types::Requirement>>,
+    pub dev_dependencies: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
 }
 
 impl Metadata {
@@ -46,7 +48,7 @@ impl Metadata {
             requires_dist: metadata
                 .requires_dist
                 .into_iter()
-                .map(pypi_types::Requirement::from)
+                .map(uv_pypi_types::Requirement::from)
                 .collect(),
             requires_python: metadata.requires_python,
             provides_extras: metadata.provides_extras,
@@ -68,7 +70,7 @@ impl Metadata {
             provides_extras,
             dev_dependencies,
         } = RequiresDist::from_project_maybe_workspace(
-            pypi_types::RequiresDist {
+            uv_pypi_types::RequiresDist {
                 name: metadata.name,
                 requires_dist: metadata.requires_dist,
                 provides_extras: metadata.provides_extras,

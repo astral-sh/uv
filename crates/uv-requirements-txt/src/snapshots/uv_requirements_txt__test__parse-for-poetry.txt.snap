@@ -1,0 +1,129 @@
+---
+source: crates/uv-requirements-txt/src/lib.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [
+        RequirementEntry {
+            requirement: Named(
+                Requirement {
+                    name: PackageName(
+                        "inflection",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "0.5.1",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Named(
+                Requirement {
+                    name: PackageName(
+                        "upsidedown",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "0.4",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Named(
+                Requirement {
+                    name: PackageName(
+                        "numpy",
+                    ),
+                    extras: [],
+                    version_or_url: None,
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Named(
+                Requirement {
+                    name: PackageName(
+                        "pandas",
+                    ),
+                    extras: [
+                        ExtraName(
+                            "tabulate",
+                        ),
+                    ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: GreaterThanEqual,
+                                        version: "1",
+                                    },
+                                    VersionSpecifier {
+                                        operator: LessThan,
+                                        version: "2",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/for-poetry.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+    ],
+    constraints: [],
+    editables: [],
+    index_url: None,
+    extra_index_urls: [],
+    find_links: [],
+    no_index: false,
+    no_binary: None,
+    only_binary: None,
+}

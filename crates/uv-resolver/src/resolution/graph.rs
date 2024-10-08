@@ -1,23 +1,23 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
-use distribution_types::{
-    Dist, DistributionMetadata, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
-    VersionOrUrlRef,
-};
 use indexmap::IndexSet;
-use pep440_rs::{Version, VersionSpecifier};
-use pep508_rs::{MarkerEnvironment, MarkerTree, MarkerTreeKind, VerbatimUrl};
 use petgraph::{
     graph::{Graph, NodeIndex},
     Directed, Direction,
 };
-use pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
+use uv_distribution_types::{
+    Dist, DistributionMetadata, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
+    VersionOrUrlRef,
+};
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep440::{Version, VersionSpecifier};
+use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind, VerbatimUrl};
+use uv_pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 
 use crate::graph_ops::marker_reachability;
 use crate::pins::FilePins;
@@ -246,6 +246,8 @@ impl ResolutionGraph {
             options,
             fork_markers,
         };
+
+        #[allow(unused_mut, reason = "Used in debug_assertions below")]
         let mut conflicting = graph.find_conflicting_distributions();
         if !conflicting.is_empty() {
             tracing::warn!(
@@ -570,7 +572,7 @@ impl ResolutionGraph {
         index: &InMemoryIndex,
         marker_env: &MarkerEnvironment,
     ) -> Result<MarkerTree, Box<ParsedUrlError>> {
-        use pep508_rs::{
+        use uv_pep508::{
             MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
         };
 
@@ -785,7 +787,7 @@ impl std::fmt::Display for ConflictingDistributionError {
     }
 }
 
-impl From<ResolutionGraph> for distribution_types::Resolution {
+impl From<ResolutionGraph> for uv_distribution_types::Resolution {
     fn from(graph: ResolutionGraph) -> Self {
         Self::new(
             graph

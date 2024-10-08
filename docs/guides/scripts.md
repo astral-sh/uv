@@ -246,13 +246,13 @@ print(".".join(map(str, sys.version_info[:3])))
 ```console
 $ # Use the default Python version, may differ on your machine
 $ uv run example.py
-3.12.1
+3.12.6
 ```
 
 ```console
 $ # Use a specific Python version
 $ uv run --python 3.10 example.py
-3.10.13
+3.10.15
 ```
 
 See the [Python version request](../concepts/python-versions.md#requesting-a-version) documentation

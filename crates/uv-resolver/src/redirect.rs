@@ -1,8 +1,8 @@
 use url::Url;
 
-use pep508_rs::VerbatimUrl;
-use pypi_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
 use uv_git::{GitReference, GitResolver};
+use uv_pep508::VerbatimUrl;
+use uv_pypi_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
 
 /// Map a URL to a precise URL, if possible.
 pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> VerbatimParsedUrl {
@@ -89,7 +89,7 @@ fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
 mod tests {
     use url::Url;
 
-    use pep508_rs::VerbatimUrl;
+    use uv_pep508::VerbatimUrl;
 
     use crate::redirect::apply_redirect;
 

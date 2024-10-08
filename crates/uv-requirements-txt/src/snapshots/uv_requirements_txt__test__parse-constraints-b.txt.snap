@@ -1,0 +1,74 @@
+---
+source: crates/uv-requirements-txt/src/lib.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [
+        RequirementEntry {
+            requirement: Named(
+                Requirement {
+                    name: PackageName(
+                        "django",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "2.1.15",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/constraints-b.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Named(
+                Requirement {
+                    name: PackageName(
+                        "pytz",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "2023.3",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/constraints-b.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+    ],
+    constraints: [],
+    editables: [],
+    index_url: None,
+    extra_index_urls: [],
+    find_links: [],
+    no_index: false,
+    no_binary: None,
+    only_binary: None,
+}

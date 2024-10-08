@@ -1,19 +1,15 @@
-use std::collections::hash_map::Entry;
-use std::fmt::Write;
-use std::path::{Path, PathBuf};
-
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
+use std::collections::hash_map::Entry;
+use std::fmt::Write;
+use std::path::{Path, PathBuf};
 use tracing::debug;
 
-use cache_key::RepositoryUrl;
-use distribution_types::UnresolvedRequirement;
-use pep508_rs::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
-use pypi_types::{redact_git_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
+use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevMode, EditableMode, ExtrasSpecification, InstallOptions,
@@ -21,12 +17,15 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
+use uv_distribution_types::UnresolvedRequirement;
 use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
+use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
+use uv_pypi_types::{redact_git_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
@@ -44,7 +43,7 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
 use crate::commands::project::{script_python_requirement, ProjectError};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{pip, project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 
@@ -159,7 +158,10 @@ pub(crate) async fn add(
                 .requires_python
                 .clone()
                 .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python, false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        requires_python,
+                        PythonVariant::Default,
+                    ))
                 })
         };
 
@@ -338,6 +340,24 @@ pub(crate) async fn add(
         requirements
     };
 
+    // If any of the requirements are self-dependencies, bail.
+    if matches!(dependency_type, DependencyType::Production) {
+        if let Target::Project(project, _) = &target {
+            if let Some(project_name) = project.project_name() {
+                for requirement in &requirements {
+                    if requirement.name == *project_name {
+                        bail!(
+                            "Requirement name `{}` matches project name `{}`, but self-dependencies are not permitted without the `--dev` or `--optional` flags. If your project name (`{}`) is shadowing that of a third-party dependency, consider renaming the project.",
+                            requirement.name.cyan(),
+                            project_name.cyan(),
+                            project_name.cyan(),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     // Add the requirements to the `pyproject.toml` or script.
     let mut toml = match &target {
         Target::Script(script, _) => {
@@ -357,7 +377,7 @@ pub(crate) async fn add(
 
         let (requirement, source) = match target {
             Target::Script(_, _) | Target::Project(_, _) if raw_sources => {
-                (pep508_rs::Requirement::from(requirement), None)
+                (uv_pep508::Requirement::from(requirement), None)
             }
             Target::Script(ref script, _) => {
                 let script_path = std::path::absolute(&script.path)?;
@@ -401,6 +421,7 @@ pub(crate) async fn add(
                 rev,
                 tag,
                 branch,
+                marker,
             }) => {
                 let credentials = Credentials::from_url(&git);
                 if let Some(credentials) = credentials {
@@ -416,6 +437,7 @@ pub(crate) async fn add(
                     rev,
                     tag,
                     branch,
+                    marker,
                 })
             }
             _ => source,
@@ -551,26 +573,39 @@ pub(crate) async fn add(
     .await
     {
         Ok(()) => Ok(ExitStatus::Success),
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            let header = err.header();
-            let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.") });
-            anstream::eprint!("{report:?}");
-
-            // Revert the changes to the `pyproject.toml`, if necessary.
-            if modified {
-                fs_err::write(root.join("pyproject.toml"), &existing)?;
-            }
-
-            Ok(ExitStatus::Failure)
-        }
         Err(err) => {
             // Revert the changes to the `pyproject.toml`, if necessary.
             if modified {
                 fs_err::write(root.join("pyproject.toml"), &existing)?;
             }
-            Err(err.into())
+
+            match err {
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::NoSolution(err),
+                )) => {
+                    diagnostics::no_solution_hint(err, format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()));
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::FetchAndBuild(dist, err),
+                )) => {
+                    diagnostics::fetch_and_build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::Build(dist, err),
+                )) => {
+                    diagnostics::build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                err => {
+                    // Revert the changes to the `pyproject.toml`, if necessary.
+                    if modified {
+                        fs_err::write(root.join("pyproject.toml"), &existing)?;
+                    }
+                    Err(err.into())
+                }
+            }
         }
     }
 }
@@ -768,7 +803,7 @@ fn augment_requirement(
 ) -> UnresolvedRequirement {
     match requirement {
         UnresolvedRequirement::Named(requirement) => {
-            UnresolvedRequirement::Named(pypi_types::Requirement {
+            UnresolvedRequirement::Named(uv_pypi_types::Requirement {
                 source: match requirement.source {
                     RequirementSource::Git {
                         repository,
@@ -828,7 +863,7 @@ fn augment_requirement(
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.
 fn resolve_requirement(
-    requirement: pypi_types::Requirement,
+    requirement: uv_pypi_types::Requirement,
     workspace: bool,
     editable: Option<bool>,
     rev: Option<String>,
@@ -859,7 +894,7 @@ fn resolve_requirement(
     };
 
     // Ignore the PEP 508 source by clearing the URL.
-    let mut processed_requirement = pep508_rs::Requirement::from(requirement);
+    let mut processed_requirement = uv_pep508::Requirement::from(requirement);
     processed_requirement.clear_url();
 
     Ok((processed_requirement, source))
@@ -890,21 +925,4 @@ struct DependencyEdit<'a> {
     requirement: Requirement,
     source: Option<Source>,
     edit: ArrayEdit,
-}
-
-/// Render a [`uv_resolver::NoSolutionError`] with a help message.
-#[derive(Debug, miette::Diagnostic, thiserror::Error)]
-#[error("{header}")]
-#[diagnostic()]
-struct WithHelp {
-    /// The header to render in the error message.
-    header: uv_resolver::NoSolutionHeader,
-
-    /// The underlying error.
-    #[source]
-    cause: uv_resolver::NoSolutionError,
-
-    /// The help message to display.
-    #[help]
-    help: Option<&'static str>,
 }

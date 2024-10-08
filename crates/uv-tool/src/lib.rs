@@ -2,8 +2,8 @@ use core::fmt;
 
 use fs_err as fs;
 
-use pep440_rs::Version;
-use pep508_rs::{InvalidNameError, PackageName};
+use uv_pep440::Version;
+use uv_pep508::{InvalidNameError, PackageName};
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ use fs_err::File;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use install_wheel_rs::read_record_file;
+use uv_install_wheel::read_record_file;
 
 pub use receipt::ToolReceipt;
 pub use tool::{Tool, ToolEntrypoint};
@@ -37,7 +37,7 @@ pub enum Error {
     #[error(transparent)]
     VirtualEnvError(#[from] uv_virtualenv::Error),
     #[error("Failed to read package entry points {0}")]
-    EntrypointRead(#[from] install_wheel_rs::Error),
+    EntrypointRead(#[from] uv_install_wheel::Error),
     #[error("Failed to find dist-info directory `{0}` in environment at {1}")]
     DistInfoMissing(String, PathBuf),
     #[error("Failed to find a directory for executables")]

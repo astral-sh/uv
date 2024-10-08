@@ -5,6 +5,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use uv_cache::Cache;
+use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, Simplified};
 
 use crate::discovery::find_python_installation;
@@ -287,7 +288,7 @@ impl PythonEnvironment {
         } else {
             // Otherwise, use a global lockfile.
             LockedFile::acquire(
-                env::temp_dir().join(format!("uv-{}.lock", cache_key::cache_digest(&self.0.root))),
+                env::temp_dir().join(format!("uv-{}.lock", cache_digest(&self.0.root))),
                 self.0.root.user_display(),
             )
             .await

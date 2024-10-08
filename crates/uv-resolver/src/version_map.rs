@@ -3,17 +3,17 @@ use std::collections::btree_map::{BTreeMap, Entry};
 use std::sync::OnceLock;
 use tracing::instrument;
 
-use distribution_filename::{DistFilename, WheelFilename};
-use distribution_types::{
+use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
+use uv_configuration::BuildOptions;
+use uv_distribution_filename::{DistFilename, WheelFilename};
+use uv_distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
     RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
-use pep440_rs::Version;
-use platform_tags::{IncompatibleTag, TagCompatibility, Tags};
-use pypi_types::{HashDigest, Yanked};
-use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
-use uv_configuration::BuildOptions;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use uv_pypi_types::{HashDigest, Yanked};
 use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 

@@ -8,12 +8,6 @@ use std::fmt::Write;
 use std::path::Path;
 use tracing::debug;
 
-use distribution_types::{
-    DependencyMetadata, IndexLocations, NameRequirementSpecification,
-    UnresolvedRequirementSpecification,
-};
-use pep440_rs::Version;
-use pypi_types::{Requirement, SupportedEnvironments};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -22,8 +16,14 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
+use uv_distribution_types::{
+    DependencyMetadata, IndexLocations, NameRequirementSpecification,
+    UnresolvedRequirementSpecification,
+};
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_pep440::Version;
+use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_resolver::{
@@ -35,8 +35,10 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
-use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
-use crate::commands::{pip, ExitStatus};
+use crate::commands::project::{
+    find_requires_python, ProjectError, ProjectInterpreter, SharedState,
+};
+use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
@@ -84,7 +86,7 @@ pub(crate) async fn lock(
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
-    let interpreter = FoundInterpreter::discover(
+    let interpreter = ProjectInterpreter::discover(
         &workspace,
         python.as_deref().map(PythonRequest::parse),
         python_preference,
@@ -122,10 +124,22 @@ pub(crate) async fn lock(
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report = miette::Report::msg(format!("{err}")).context(err.header());
-            eprint!("{report:?}");
+            diagnostics::no_solution(&err);
             Ok(ExitStatus::Failure)
         }
+        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+            uv_resolver::ResolveError::FetchAndBuild(dist, err),
+        ))) => {
+            diagnostics::fetch_and_build(dist, err);
+            Ok(ExitStatus::Failure)
+        }
+        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+            uv_resolver::ResolveError::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
+            Ok(ExitStatus::Failure)
+        }
+
         Err(err) => Err(err.into()),
     }
 }
@@ -293,15 +307,15 @@ async fn do_lock(
                     let lhs = lhs
                         .contents()
                         .map(|contents| contents.to_string())
-                        .unwrap_or("true".to_string());
+                        .unwrap_or_else(|| "true".to_string());
                     let rhs = rhs
                         .contents()
                         .map(|contents| contents.to_string())
-                        .unwrap_or("true".to_string());
+                        .unwrap_or_else(|| "true".to_string());
                     let hint = hint
                         .contents()
                         .map(|contents| contents.to_string())
-                        .unwrap_or("true".to_string());
+                        .unwrap_or_else(|| "true".to_string());
 
                     return Err(ProjectError::OverlappingMarkers(lhs, rhs, hint));
                 }
@@ -537,6 +551,7 @@ async fn do_lock(
                     .collect(),
                 dev,
                 source_trees,
+                // The root is always null in workspaces, it "depends on" the projects
                 None,
                 Some(workspace.packages().keys().cloned().collect()),
                 &extras,
@@ -672,25 +687,6 @@ impl ValidatedLock {
             }
         }
 
-        // If the set of supported environments has changed, we have to perform a clean resolution.
-        if lock.simplified_supported_environments()
-            != environments
-                .map(SupportedEnvironments::as_markers)
-                .unwrap_or_default()
-        {
-            return Ok(Self::Versions(lock));
-        }
-
-        // If the Requires-Python bound has changed, we have to perform a clean resolution, since
-        // the set of `resolution-markers` may no longer cover the entire supported Python range.
-        if lock.requires_python().range() != requires_python.range() {
-            return if lock.fork_markers().is_empty() {
-                Ok(Self::Preferable(lock))
-            } else {
-                Ok(Self::Versions(lock))
-            };
-        }
-
         match upgrade {
             Upgrade::None => {}
             Upgrade::All => {
@@ -701,8 +697,41 @@ impl ValidatedLock {
             Upgrade::Packages(_) => {
                 // If the user specified `--upgrade-package`, then at best we can prefer some of
                 // the existing versions.
+                debug!("Ignoring existing lockfile due to `--upgrade-package`");
                 return Ok(Self::Preferable(lock));
             }
+        }
+
+        // If the Requires-Python bound has changed, we have to perform a clean resolution, since
+        // the set of `resolution-markers` may no longer cover the entire supported Python range.
+        if lock.requires_python().range() != requires_python.range() {
+            debug!(
+                "Ignoring existing lockfile due to change in Python requirement: `{}` vs. `{}`",
+                lock.requires_python(),
+                requires_python,
+            );
+            return if lock.fork_markers().is_empty() {
+                Ok(Self::Preferable(lock))
+            } else {
+                Ok(Self::Versions(lock))
+            };
+        }
+
+        // If the set of supported environments has changed, we have to perform a clean resolution.
+        let expected = lock.simplified_supported_environments();
+        let actual = environments
+            .map(SupportedEnvironments::as_markers)
+            .unwrap_or_default()
+            .iter()
+            .cloned()
+            .map(|marker| lock.simplify_environment(marker))
+            .collect::<Vec<_>>();
+        if expected != actual {
+            debug!(
+                "Ignoring existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
+                expected, actual
+            );
+            return Ok(Self::Versions(lock));
         }
 
         // If the user provided at least one index URL (from the command line, or from a configuration

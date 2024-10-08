@@ -1,0 +1,6 @@
+./scripts/packages/black_editable
+./scripts/packages/black_editable[dev]
+file:///scripts/packages/black_editable
+./scripts/packages/black editable
+./scripts/packages/black editable ; python_version >= "3.9"
+./scripts/packages/black editable # comment

@@ -60,7 +60,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -202,7 +202,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -345,7 +345,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -520,7 +520,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -664,7 +664,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -794,7 +794,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -961,7 +961,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -1128,7 +1128,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -1340,7 +1340,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -1506,7 +1506,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -1642,7 +1642,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -1806,7 +1806,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -1994,7 +1994,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -2120,7 +2120,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -2246,7 +2246,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -2374,7 +2374,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -2521,7 +2521,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -2678,7 +2678,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -2832,7 +2832,7 @@ fn resolve_both() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -3001,7 +3001,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -3245,7 +3245,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -3374,7 +3374,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }
@@ -3511,7 +3511,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
-        python_preference: OnlySystem,
+        python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
     }

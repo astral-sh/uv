@@ -11,6 +11,7 @@ use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
+use tokio::task::spawn_blocking;
 use tracing::{debug, instrument};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
@@ -131,8 +132,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     // Parse the external command, if necessary.
     let run_command = if let Commands::Project(command) = &*cli.command {
-        if let ProjectCommand::Run(uv_cli::RunArgs { command, .. }) = &**command {
-            Some(RunCommand::try_from(command)?)
+        if let ProjectCommand::Run(uv_cli::RunArgs {
+            command: Some(command),
+            module,
+            script,
+            ..
+        }) = &**command
+        {
+            Some(RunCommand::from_args(command, *module, *script)?)
         } else {
             None
         }
@@ -679,13 +686,15 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
 
-            commands::build(
+            commands::build_frontend(
                 &project_dir,
                 args.src,
                 args.package,
+                args.all,
                 args.out_dir,
                 args.sdist,
                 args.wheel,
+                args.build_logs,
                 build_constraints,
                 args.hash_checking,
                 args.python,
@@ -1105,7 +1114,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::BuildBackend { command } => match command {
+        Commands::BuildBackend { command } => spawn_blocking(move || match command {
             BuildBackendCommand::BuildSdist { sdist_directory } => {
                 commands::build_backend::build_sdist(&sdist_directory)
             }
@@ -1138,7 +1147,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             BuildBackendCommand::PrepareMetadataForBuildEditable { wheel_directory } => {
                 commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory)
             }
-        },
+        })
+        .await
+        .expect("tokio threadpool exited unexpectedly"),
     }
 }
 
@@ -1187,6 +1198,7 @@ async fn run_project(
                 args.kind,
                 args.vcs,
                 args.no_readme,
+                args.author_from,
                 args.no_pin_python,
                 args.python,
                 args.no_workspace,
@@ -1226,9 +1238,6 @@ async fn run_project(
                         .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Vec<_>>();
-
-            // Given `ProjectCommand::Run`, we always expect a `RunCommand` to be present.
-            let command = command.expect("run command is required");
 
             Box::pin(commands::run(
                 project_dir,

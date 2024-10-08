@@ -65,7 +65,7 @@ Arguments following the command (or script) are not interpreted as arguments to 
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv run [OPTIONS] <COMMAND>
+uv run [OPTIONS] [COMMAND]
 ```
 
 <h3 class="cli-reference">Options</h3>
@@ -148,6 +148,7 @@ uv run [OPTIONS] <COMMAND>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--frozen</code></dt><dd><p>Run without updating the <code>uv.lock</code> file.</p>
 
 <p>Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the source of truth. If the lockfile is missing, uv will exit with an error. If the <code>pyproject.toml</code> includes changes to dependencies that have not been included in the lockfile yet, they will not be present in the environment.</p>
@@ -217,6 +218,10 @@ uv run [OPTIONS] <COMMAND>
 
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
+</dd><dt><code>--module</code>, <code>-m</code></dt><dd><p>Run a Python module.</p>
+
+<p>Equivalent to <code>python -m &lt;module&gt;</code>.</p>
+
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -279,6 +284,7 @@ uv run [OPTIONS] <COMMAND>
 
 <p>Implies <code>--frozen</code>, as the project dependencies will be ignored (i.e., the lockfile will not be updated, since the environment will not be synced regardless).</p>
 
+<p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -366,6 +372,10 @@ uv run [OPTIONS] <COMMAND>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
+</dd><dt><code>--script</code>, <code>-s</code></dt><dd><p>Run the given path as a Python script.</p>
+
+<p>Using <code>--script</code> will attempt to parse the path as a PEP 723 script, irrespective of its extension.</p>
+
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -380,7 +390,7 @@ uv run [OPTIONS] <COMMAND>
 
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 
-</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed as editables</p>
+</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed as editables.</p>
 
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 
@@ -430,6 +440,19 @@ uv init [OPTIONS] [PATH]
 
 <p>By default, an application is not intended to be built and distributed as a Python package. The <code>--package</code> option can be used to create an application that is distributable, e.g., if you want to distribute a command-line interface via PyPI.</p>
 
+</dd><dt><code>--author-from</code> <i>author-from</i></dt><dd><p>Fill in the <code>authors</code> field in the <code>pyproject.toml</code>.</p>
+
+<p>By default, uv will attempt to infer the author information from some sources (e.g., Git) (<code>auto</code>). Use <code>--author-from git</code> to only infer from Git configuration. Use <code>--author-from none</code> to avoid inferring the author information.</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Fetch the author information from some sources (e.g., Git) automatically</li>
+
+<li><code>git</code>:  Fetch the author information from Git configuration only</li>
+
+<li><code>none</code>:  Do not infer the author information</li>
+</ul>
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
@@ -683,6 +706,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--frozen</code></dt><dd><p>Add dependencies without re-locking the project.</p>
 
 <p>The project environment will not be synced.</p>
@@ -792,6 +816,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 </dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment</p>
 
+<p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -999,6 +1024,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--frozen</code></dt><dd><p>Remove dependencies without re-locking the project.</p>
 
 <p>The project environment will not be synced.</p>
@@ -1108,6 +1134,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 </dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
 
+<p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -1303,6 +1330,7 @@ uv sync [OPTIONS]
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--frozen</code></dt><dd><p>Sync without updating the <code>uv.lock</code> file.</p>
 
 <p>Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the source of truth. If the lockfile is missing, uv will exit with an error. If the <code>pyproject.toml</code> includes changes to dependencies that have not been included in the lockfile yet, they will not be present in the environment.</p>
@@ -1606,6 +1634,7 @@ uv lock [OPTIONS]
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--frozen</code></dt><dd><p>Assert that a <code>uv.lock</code> exists, without updating it</p>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -1885,6 +1914,7 @@ uv export [OPTIONS]
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--format</code> <i>format</i></dt><dd><p>The format to which <code>uv.lock</code> should be exported.</p>
 
 <p>At present, only <code>requirements-txt</code> is supported.</p>
@@ -2193,6 +2223,7 @@ uv tree [OPTIONS]
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--frozen</code></dt><dd><p>Display the requirements without locking the project.</p>
 
 <p>If the lockfile is missing, uv will exit with an error.</p>
@@ -2564,6 +2595,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--from</code> <i>from</i></dt><dd><p>Use the given package to provide the command.</p>
 
 <p>By default, the package name is assumed to match the command name.</p>
@@ -2852,6 +2884,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--force</code></dt><dd><p>Force installation of the tool.</p>
 
 <p>Will replace any existing entry points with the same name in the executable directory.</p>
@@ -3136,6 +3169,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -4700,6 +4734,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--generate-hashes</code></dt><dd><p>Include distribution hashes in the output file</p>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -5088,6 +5123,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -5430,6 +5466,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -6599,6 +6636,7 @@ uv venv [OPTIONS] [PATH]
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -6778,7 +6816,13 @@ uv build [OPTIONS] [SRC]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<dl class="cli-reference"><dt><code>--all</code></dt><dd><p>Builds all packages in the workspace.</p>
+
+<p>The workspace will be discovered from the provided source directory, or the current directory if no source directory is provided.</p>
+
+<p>If the workspace member does not exist, uv will exit with an error.</p>
+
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
 
@@ -6840,6 +6884,7 @@ uv build [OPTIONS] [SRC]
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -7169,9 +7214,9 @@ uv publish [OPTIONS] [FILES]...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint.</p>
+</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint (not the index URL).</p>
 
-<p>Note that this typically differs from the index URL.</p>
+<p>Note that there are typically different URLs for index access (e.g., <code>https:://.../simple</code>) and index upload.</p>
 
 <p>Defaults to PyPI&#8217;s publish URL (&lt;https://upload.pypi.org/legacy/&gt;).</p>
 

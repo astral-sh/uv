@@ -3,9 +3,9 @@ use std::borrow::Cow;
 use either::Either;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use pep508_rs::MarkerTree;
-use pypi_types::Requirement;
 use uv_normalize::PackageName;
+use uv_pep508::MarkerTree;
+use uv_pypi_types::Requirement;
 
 /// A set of overrides for a set of requirements.
 #[derive(Debug, Default, Clone)]
