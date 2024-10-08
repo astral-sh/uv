@@ -7214,9 +7214,9 @@ uv publish [OPTIONS] [FILES]...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint.</p>
+</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint (not the index URL).</p>
 
-<p>Note that this typically differs from the index URL.</p>
+<p>Note that there are typically different URLs for index access (e.g., <code>https:://.../simple</code>) and index upload.</p>
 
 <p>Defaults to PyPI&#8217;s publish URL (&lt;https://upload.pypi.org/legacy/&gt;).</p>
 
