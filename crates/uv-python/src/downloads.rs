@@ -270,7 +270,7 @@ impl PythonDownloadRequest {
             }
         }
         // If we don't allow pre-releases, don't match a key with a pre-release tag
-        if !self.allows_prereleases() && !key.prerelease.is_empty() {
+        if !self.allows_prereleases() && key.prerelease.is_some() {
             return false;
         }
         true
