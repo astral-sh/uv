@@ -69,7 +69,7 @@ def prepare_prerelease(prerelease: str) -> str:
     if not (match := PRERELEASE_PATTERN.match(prerelease)):
         raise ValueError(f"Invalid prerelease: {prerelease!r}")
     kind, number = match.groups()
-    return f"Some(Prerelease {{ kind: PrereleaseKind::{kind.capitalize()},  number: {number} }})"
+    return f"Some(Prerelease {{ kind: PrereleaseKind::{kind.capitalize()}, number: {number} }})"
 
 
 def prepare_value(value: dict) -> dict:
