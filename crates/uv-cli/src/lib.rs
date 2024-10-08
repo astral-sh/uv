@@ -3263,7 +3263,7 @@ pub enum ToolCommand {
     /// Packages are installed into an ephemeral virtual environment in the uv
     /// cache directory.
     #[command(
-        after_help = "You can also use `uvx` as an alias for `uv tool run`. \n\
+        after_help = "Use `uvx` as a shortcut for `uv tool run`.\n\n\
         Use `uv help tool run` for more details.",
         after_long_help = ""
     )]
