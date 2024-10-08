@@ -1,17 +1,9 @@
 use std::fmt::Write;
 
-use anstream::eprint;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
-use distribution_types::{
-    DependencyMetadata, IndexLocations, NameRequirementSpecification, Resolution,
-    UnresolvedRequirementSpecification,
-};
-use install_wheel_rs::linker::LinkMode;
-use pep508_rs::PackageName;
-use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -21,8 +13,15 @@ use uv_configuration::{
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
+use uv_distribution_types::{
+    DependencyMetadata, IndexLocations, NameRequirementSpecification, Resolution,
+    UnresolvedRequirementSpecification,
+};
 use uv_fs::Simplified;
+use uv_install_wheel::linker::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
+use uv_pep508::PackageName;
+use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
 };
@@ -34,9 +33,10 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, HashStrategy};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
+use crate::commands::pip::operations::report_target_environment;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
-use crate::commands::{ExitStatus, SharedState};
+use crate::commands::{diagnostics, ExitStatus, SharedState};
 use crate::printer::Printer;
 
 /// Install packages into the current environment.
@@ -148,11 +148,7 @@ pub(crate) async fn pip_install(
         &cache,
     )?;
 
-    debug!(
-        "Using Python {} environment at {}",
-        environment.interpreter().python_version(),
-        environment.python_executable().user_display().cyan()
-    );
+    report_target_environment(&environment, &cache, printer)?;
 
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
@@ -394,8 +390,15 @@ pub(crate) async fn pip_install(
     {
         Ok(resolution) => Resolution::from(resolution),
         Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            let report = miette::Report::msg(format!("{err}")).context(err.header());
-            eprint!("{report:?}");
+            diagnostics::no_solution(&err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(operations::Error::Resolve(uv_resolver::ResolveError::FetchAndBuild(dist, err))) => {
+            diagnostics::fetch_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err))) => {
+            diagnostics::build(dist, err);
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),
@@ -413,7 +416,6 @@ pub(crate) async fn pip_install(
         &index_locations,
         config_settings,
         &hasher,
-        &markers,
         &tags,
         &client,
         &state.in_flight,

@@ -4,9 +4,9 @@ use std::str::FromStr;
 
 use tracing::{debug, info};
 
-use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_pep440::Version;
 
 use crate::discovery::{
     find_best_python_installation, find_python_installation, EnvironmentPreference, PythonRequest,

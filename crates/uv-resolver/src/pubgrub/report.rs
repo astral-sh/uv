@@ -8,10 +8,10 @@ use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
-use distribution_types::{IndexLocations, IndexUrl};
-use pep440_rs::Version;
 use uv_configuration::IndexStrategy;
+use uv_distribution_types::{IndexLocations, IndexUrl};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ErrorTree;

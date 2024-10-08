@@ -7,16 +7,16 @@ use anyhow::{anyhow, Result};
 use clap::builder::styling::{AnsiColor, Effects, Style};
 use clap::builder::Styles;
 use clap::{Args, Parser, Subcommand};
-use distribution_types::{FlatIndexLocation, IndexUrl};
-use pep508_rs::Requirement;
-use pypi_types::VerbatimParsedUrl;
 use url::Url;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
     TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
+use uv_distribution_types::{FlatIndexLocation, IndexUrl};
 use uv_normalize::{ExtraName, PackageName};
+use uv_pep508::Requirement;
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
@@ -779,6 +779,18 @@ fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
     }
 }
 
+/// Parse a string into an [`FlatIndexLocation`], mapping the empty string to `None`.
+fn parse_flat_index(input: &str) -> Result<Maybe<FlatIndexLocation>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match FlatIndexLocation::from_str(input) {
+            Ok(url) => Ok(Maybe::Some(url)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
 /// Parse a string into an [`Url`], mapping the empty string to `None`.
 fn parse_insecure_host(input: &str) -> Result<Maybe<TrustedHost>, String> {
     if input.is_empty() {
@@ -812,6 +824,16 @@ fn parse_maybe_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
         Ok(Maybe::None)
     } else {
         parse_file_path(input).map(Maybe::Some)
+    }
+}
+
+// Parse a string, mapping the empty string to `None`.
+#[allow(clippy::unnecessary_wraps)]
+fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        Ok(Maybe::Some(input.to_string()))
     }
 }
 
@@ -955,8 +977,8 @@ pub struct PipCompileArgs {
     ///
     /// See `uv help python` for details on Python discovery and supported
     /// request formats.
-    #[arg(long, verbatim_doc_comment, help_heading = "Python options")]
-    pub python: Option<String>,
+    #[arg(long, verbatim_doc_comment, help_heading = "Python options", value_parser = parse_maybe_string)]
+    pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
     ///
@@ -1209,9 +1231,10 @@ pub struct PipSyncArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
     ///
@@ -1491,9 +1514,10 @@ pub struct PipInstallArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
     ///
@@ -1656,9 +1680,10 @@ pub struct PipUninstallArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Attempt to use `keyring` for authentication for remote requirements files.
     ///
@@ -1764,9 +1789,10 @@ pub struct PipFreezeArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// List packages in the system Python environment.
     ///
@@ -1828,9 +1854,10 @@ pub struct PipListArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// List packages in the system Python environment.
     ///
@@ -1868,9 +1895,10 @@ pub struct PipCheckArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Check packages in the system Python environment.
     ///
@@ -1916,9 +1944,10 @@ pub struct PipShowArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Show a package in the system Python environment.
     ///
@@ -1971,9 +2000,10 @@ pub struct PipTreeArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// List packages in the system Python environment.
     ///
@@ -2106,9 +2136,10 @@ pub struct BuildArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     #[command(flatten)]
     pub resolver: ResolverArgs,
@@ -2135,9 +2166,10 @@ pub struct VenvArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Ignore virtual environments when searching for the Python interpreter.
     ///
@@ -2283,7 +2315,7 @@ pub struct VenvArgs {
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
     #[arg(long, value_enum, env = "UV_LINK_MODE")]
-    pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
+    pub link_mode: Option<uv_install_wheel::linker::LinkMode>,
 
     #[command(flatten)]
     pub compat_args: compat::VenvCompatArgs,
@@ -2312,6 +2344,17 @@ impl ExternalCommand {
             [cmd, args @ ..] => (Some(cmd), args),
         }
     }
+}
+
+#[derive(Debug, Default, Copy, Clone, clap::ValueEnum)]
+pub enum AuthorFrom {
+    /// Fetch the author information from some sources (e.g., Git) automatically.
+    #[default]
+    Auto,
+    /// Fetch the author information from Git configuration only.
+    Git,
+    /// Do not infer the author information.
+    None,
 }
 
 #[derive(Args)]
@@ -2400,6 +2443,14 @@ pub struct InitArgs {
     #[arg(long)]
     pub no_readme: bool,
 
+    /// Fill in the `authors` field in the `pyproject.toml`.
+    ///
+    /// By default, uv will attempt to infer the author information from some sources (e.g., Git) (`auto`).
+    /// Use `--author-from git` to only infer from Git configuration.
+    /// Use `--author-from none` to avoid inferring the author information.
+    #[arg(long, value_enum)]
+    pub author_from: Option<AuthorFrom>,
+
     /// Do not create a `.python-version` file for the project.
     ///
     /// By default, uv will create a `.python-version` file containing the minor version of
@@ -2423,9 +2474,10 @@ pub struct InitArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -2469,6 +2521,12 @@ pub struct RunArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
+    /// Run a Python module.
+    ///
+    /// Equivalent to `python -m <module>`.
+    #[arg(short, long, conflicts_with = "script")]
+    pub module: bool,
+
     /// Omit non-development dependencies.
     ///
     /// The project itself will also be omitted.
@@ -2495,7 +2553,7 @@ pub struct RunArgs {
     #[arg(long)]
     pub with: Vec<String>,
 
-    /// Run with the given packages installed as editables
+    /// Run with the given packages installed as editables.
     ///
     /// When used in a project, these dependencies will be layered on top of
     /// the project environment in a separate, ephemeral environment. These
@@ -2528,7 +2586,7 @@ pub struct RunArgs {
     ///
     /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
     /// be updated, since the environment will not be synced regardless).
-    #[arg(long, conflicts_with = "frozen")]
+    #[arg(long, env = "UV_NO_SYNC", value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
@@ -2547,6 +2605,13 @@ pub struct RunArgs {
     /// not be present in the environment.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
+
+    /// Run the given path as a Python script.
+    ///
+    /// Using `--script` will attempt to parse the path as a PEP 723 script,
+    /// irrespective of its extension.
+    #[arg(long, short, conflicts_with = "module")]
+    pub script: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -2585,9 +2650,10 @@ pub struct RunArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Whether to show resolver and installer output from any environment modifications.
     ///
@@ -2727,9 +2793,10 @@ pub struct SyncArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -2770,9 +2837,10 @@ pub struct LockArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -2844,7 +2912,7 @@ pub struct AddArgs {
     pub extra: Option<Vec<ExtraName>>,
 
     /// Avoid syncing the virtual environment.
-    #[arg(long, conflicts_with = "frozen")]
+    #[arg(long, env = "UV_NO_SYNC", value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
@@ -2892,9 +2960,10 @@ pub struct AddArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -2913,7 +2982,7 @@ pub struct RemoveArgs {
     pub optional: Option<ExtraName>,
 
     /// Avoid syncing the virtual environment after re-locking the project.
-    #[arg(long, conflicts_with = "frozen")]
+    #[arg(long, env = "UV_NO_SYNC", value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
@@ -2958,9 +3027,10 @@ pub struct RemoveArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -3032,9 +3102,10 @@ pub struct TreeArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -3156,9 +3227,10 @@ pub struct ExportArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -3305,9 +3377,10 @@ pub struct ToolRunArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     /// Whether to show resolver and installer output from any environment modifications.
     ///
@@ -3366,9 +3439,10 @@ pub struct ToolInstallArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -3442,9 +3516,10 @@ pub struct ToolUpgradeArgs {
         short,
         env = "UV_PYTHON",
         verbatim_doc_comment,
-        help_heading = "Python options"
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
     )]
-    pub python: Option<String>,
+    pub python: Option<Maybe<String>>,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -3717,8 +3792,15 @@ pub struct IndexArgs {
     ///
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.
-    #[arg(long, short, help_heading = "Index options")]
-    pub find_links: Option<Vec<FlatIndexLocation>>,
+    #[arg(
+        long,
+        short,
+        env = "UV_FIND_LINKS",
+        value_delimiter = ' ',
+        value_parser = parse_flat_index,
+        help_heading = "Index options"
+    )]
+    pub find_links: Option<Vec<Maybe<FlatIndexLocation>>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// provided via `--find-links`.
@@ -3919,7 +4001,7 @@ pub struct InstallerArgs {
         env = "UV_LINK_MODE",
         help_heading = "Installer options"
     )]
-    pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
+    pub link_mode: Option<uv_install_wheel::linker::LinkMode>,
 
     /// Compile Python files to bytecode after installation.
     ///
@@ -4117,7 +4199,7 @@ pub struct ResolverArgs {
         env = "UV_LINK_MODE",
         help_heading = "Installer options"
     )]
-    pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
+    pub link_mode: Option<uv_install_wheel::linker::LinkMode>,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any local or Git
@@ -4307,7 +4389,7 @@ pub struct ResolverInstallerArgs {
         env = "UV_LINK_MODE",
         help_heading = "Installer options"
     )]
-    pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
+    pub link_mode: Option<uv_install_wheel::linker::LinkMode>,
 
     /// Compile Python files to bytecode after installation.
     ///

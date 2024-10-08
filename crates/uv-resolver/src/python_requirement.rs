@@ -1,5 +1,5 @@
-use pep440_rs::Version;
-use pep508_rs::MarkerTree;
+use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_python::{Interpreter, PythonVersion};
 
 use crate::{RequiresPython, RequiresPythonRange};

@@ -3,6 +3,7 @@
 use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::prelude::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
@@ -14,7 +15,7 @@ mod common;
 
 /// See [`init_application`] and [`init_library`] for more coverage.
 #[test]
-fn init() -> Result<()> {
+fn init() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo"), @r###"
@@ -26,8 +27,8 @@ fn init() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("foo/pyproject.toml"))?;
-    let _ = fs_err::read_to_string(context.temp_dir.join("foo/README.md")).unwrap();
+    let pyproject = context.read("foo/pyproject.toml");
+    let _ = context.read("foo/README.md");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -56,8 +57,7 @@ fn init() -> Result<()> {
     Resolved 1 package in [TIME]
     "###);
 
-    let python_version =
-        fs_err::read_to_string(context.temp_dir.join("foo").join(".python-version"))?;
+    let python_version = context.read("foo/.python-version");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -65,8 +65,6 @@ fn init() -> Result<()> {
             python_version, @"3.12"
         );
     });
-
-    Ok(())
 }
 
 /// Run `uv init --app` to create an application project
@@ -282,7 +280,7 @@ fn init_application_package() -> Result<()> {
         dependencies = []
 
         [project.scripts]
-        hello = "foo:hello"
+        foo = "foo:main"
 
         [build-system]
         requires = ["hatchling"]
@@ -297,13 +295,13 @@ fn init_application_package() -> Result<()> {
     }, {
         assert_snapshot!(
             init, @r###"
-        def hello() -> None:
+        def main() -> None:
             print("Hello from foo!")
         "###
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("hello"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -677,7 +675,7 @@ fn init_cache() -> Result<()> {
 }
 
 #[test]
-fn init_no_readme() -> Result<()> {
+fn init_no_readme() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-readme"), @r###"
@@ -689,7 +687,7 @@ fn init_no_readme() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("foo/pyproject.toml"))?;
+    let pyproject = context.read("foo/pyproject.toml");
     let _ = fs_err::read_to_string(context.temp_dir.join("foo/README.md")).unwrap_err();
 
     insta::with_settings!({
@@ -706,12 +704,10 @@ fn init_no_readme() -> Result<()> {
         "###
         );
     });
-
-    Ok(())
 }
 
 #[test]
-fn init_no_pin_python() -> Result<()> {
+fn init_no_pin_python() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-pin-python"), @r###"
@@ -723,7 +719,7 @@ fn init_no_pin_python() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("foo/pyproject.toml"))?;
+    let pyproject = context.read("foo/pyproject.toml");
     let _ = fs_err::read_to_string(context.temp_dir.join("foo/.python-version")).unwrap_err();
 
     insta::with_settings!({
@@ -741,7 +737,6 @@ fn init_no_pin_python() -> Result<()> {
         "###
         );
     });
-    Ok(())
 }
 
 #[test]
@@ -1002,7 +997,7 @@ fn init_workspace() -> Result<()> {
         );
     });
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1096,7 +1091,7 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         );
     });
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1191,7 +1186,7 @@ fn init_workspace_outside() -> Result<()> {
         );
     });
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1334,7 +1329,7 @@ fn init_isolated() -> Result<()> {
     Initialized project `foo`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1383,7 +1378,7 @@ fn init_no_workspace() -> Result<()> {
     "###);
 
     // Ensure that the workspace was not modified.
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1416,7 +1411,7 @@ fn init_no_workspace() -> Result<()> {
     Initialized project `bar`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1431,7 +1426,7 @@ fn init_no_workspace() -> Result<()> {
 
 /// Warn if the user provides `--no-workspace` outside of a workspace.
 #[test]
-fn init_no_workspace_warning() -> Result<()> {
+fn init_no_workspace_warning() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("--no-workspace").arg("--name").arg("project"), @r###"
@@ -1443,7 +1438,7 @@ fn init_no_workspace_warning() -> Result<()> {
     Initialized project `project`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1460,8 +1455,6 @@ fn init_no_workspace_warning() -> Result<()> {
         "###
         );
     });
-
-    Ok(())
 }
 
 #[test]
@@ -1567,7 +1560,7 @@ fn init_explicit_workspace() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1621,7 +1614,7 @@ fn init_virtual_project() -> Result<()> {
         dependencies = []
 
         [project.scripts]
-        hello = "foo:hello"
+        foo = "foo:main"
 
         [build-system]
         requires = ["hatchling"]
@@ -1655,7 +1648,7 @@ fn init_virtual_project() -> Result<()> {
         dependencies = []
 
         [project.scripts]
-        hello = "foo:hello"
+        foo = "foo:main"
 
         [build-system]
         requires = ["hatchling"]
@@ -1735,7 +1728,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("foo").join("pyproject.toml"))?;
+    let pyproject = context.read("foo/pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1750,7 +1743,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
         dependencies = []
 
         [project.scripts]
-        hello = "foo:hello"
+        foo = "foo:main"
 
         [build-system]
         requires = ["hatchling"]
@@ -1759,7 +1752,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
         );
     });
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1803,7 +1796,7 @@ fn init_matches_members() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/packages/foo`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1845,7 +1838,7 @@ fn init_matches_exclude() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/packages/foo`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -2058,7 +2051,7 @@ fn init_unmanaged() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    let workspace = context.read("pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -2115,7 +2108,7 @@ fn init_failure() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let workspace = fs_err::read_to_string(context.temp_dir.join("foo").join("pyproject.toml"))?;
+    let workspace = context.read("foo/pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -2196,13 +2189,14 @@ fn init_vcs_none() {
 
 /// Run `uv init` from within a Git repository. Do not try to reinitialize one.
 #[test]
-fn init_inside_git_repo() -> Result<()> {
+fn init_inside_git_repo() {
     let context = TestContext::new("3.12");
 
     Command::new("git")
         .arg("init")
         .current_dir(&context.temp_dir)
-        .status()?;
+        .assert()
+        .success();
 
     let child = context.temp_dir.child("foo");
 
@@ -2228,8 +2222,6 @@ fn init_inside_git_repo() -> Result<()> {
     "###);
 
     child.child(".gitignore").assert(predicate::path::missing());
-
-    Ok(())
 }
 
 #[test]
@@ -2259,4 +2251,135 @@ fn init_git_not_installed() {
     ----- stderr -----
     error: Attempted to initialize a Git repository, but `git` was not found in PATH
     "###);
+}
+
+#[test]
+fn init_with_author() {
+    let context = TestContext::new("3.12");
+
+    // Create a Git repository and set the author.
+    Command::new("git")
+        .arg("init")
+        .current_dir(&context.temp_dir)
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("config")
+        .arg("--local")
+        .arg("user.name")
+        .arg("Alice")
+        .current_dir(&context.temp_dir)
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("config")
+        .arg("--local")
+        .arg("user.email")
+        .arg("alice@example.com")
+        .current_dir(&context.temp_dir)
+        .assert()
+        .success();
+
+    // `authors` is not filled for non-package application by default,
+    context.init().arg("foo").assert().success();
+    let pyproject = context.read("foo/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        );
+    });
+
+    // use `--author-from auto` to explicitly fill it.
+    context
+        .init()
+        .arg("bar")
+        .arg("--author-from")
+        .arg("auto")
+        .assert()
+        .success();
+    let pyproject = context.read("bar/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        authors = [
+            { name = "Alice", email = "alice@example.com" } 
+        ]
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        );
+    });
+
+    // Fill `authors` for library by default,
+    context.init().arg("baz").arg("--lib").assert().success();
+    let pyproject = context.read("baz/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "baz"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        authors = [
+            { name = "Alice", email = "alice@example.com" } 
+        ]
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+        );
+    });
+
+    // use `--authors-from none` to prevent it.
+    context
+        .init()
+        .arg("qux")
+        .arg("--lib")
+        .arg("--author-from")
+        .arg("none")
+        .assert()
+        .success();
+    let pyproject = context.read("qux/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "qux"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+        );
+    });
 }

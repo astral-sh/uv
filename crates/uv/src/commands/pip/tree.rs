@@ -4,19 +4,16 @@ use anyhow::Result;
 use indexmap::IndexMap;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
-use tracing::debug;
 
-use distribution_types::{Diagnostic, Name};
-use pypi_types::{RequirementSource, ResolverMarkerEnvironment};
 use uv_cache::Cache;
 use uv_distribution::Metadata;
-use uv_fs::Simplified;
+use uv_distribution_types::{Diagnostic, Name};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_python::EnvironmentPreference;
-use uv_python::PythonEnvironment;
-use uv_python::PythonRequest;
+use uv_pypi_types::{RequirementSource, ResolverMarkerEnvironment};
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
+use crate::commands::pip::operations::report_target_environment;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
@@ -42,11 +39,7 @@ pub(crate) fn pip_tree(
         cache,
     )?;
 
-    debug!(
-        "Using Python {} environment at {}",
-        environment.interpreter().python_version(),
-        environment.python_executable().user_display().cyan()
-    );
+    report_target_environment(&environment, cache, printer)?;
 
     // Read packages from the virtual environment.
     let site_packages = SitePackages::from_environment(&environment)?;

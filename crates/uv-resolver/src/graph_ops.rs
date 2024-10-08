@@ -1,9 +1,9 @@
-use pep508_rs::MarkerTree;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::hash_map::Entry;
+use uv_pep508::MarkerTree;
 
 /// Determine the markers under which a package is reachable in the dependency tree.
 ///

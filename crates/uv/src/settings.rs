@@ -4,15 +4,11 @@ use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
 
-use distribution_types::{DependencyMetadata, IndexLocations};
-use install_wheel_rs::linker::LinkMode;
-use pep508_rs::{ExtraName, RequirementOrigin};
-use pypi_types::{Requirement, SupportedEnvironments};
 use url::Url;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::{
     options::{flag, resolver_installer_options, resolver_options},
-    BuildArgs, ExportArgs, PublishArgs, ToolUpgradeArgs,
+    AuthorFrom, BuildArgs, ExportArgs, PublishArgs, ToolUpgradeArgs,
 };
 use uv_cli::{
     AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
@@ -28,7 +24,11 @@ use uv_configuration::{
     NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost,
     TrustedPublishing, Upgrade, VersionControlSystem,
 };
+use uv_distribution_types::{DependencyMetadata, IndexLocations};
+use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
+use uv_pep508::{ExtraName, RequirementOrigin};
+use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_settings::{
@@ -120,7 +120,7 @@ impl GlobalSettings {
             python_preference: args
                 .python_preference
                 .combine(workspace.and_then(|workspace| workspace.globals.python_preference))
-                .unwrap_or_else(PythonPreference::default_from_env),
+                .unwrap_or_default(),
             python_downloads: flag(args.allow_python_downloads, args.no_python_downloads)
                 .map(PythonDownloads::from)
                 .combine(env(env::UV_PYTHON_DOWNLOADS))
@@ -164,6 +164,7 @@ pub(crate) struct InitSettings {
     pub(crate) kind: InitKind,
     pub(crate) vcs: Option<VersionControlSystem>,
     pub(crate) no_readme: bool,
+    pub(crate) author_from: Option<AuthorFrom>,
     pub(crate) no_pin_python: bool,
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
@@ -184,6 +185,7 @@ impl InitSettings {
             script,
             vcs,
             no_readme,
+            author_from,
             no_pin_python,
             no_workspace,
             python,
@@ -206,9 +208,10 @@ impl InitSettings {
             kind,
             vcs,
             no_readme,
+            author_from,
             no_pin_python,
             no_workspace,
-            python,
+            python: python.and_then(Maybe::into_option),
         }
     }
 }
@@ -245,8 +248,10 @@ impl RunSettings {
             no_all_extras,
             dev,
             no_dev,
+            module: _,
             only_dev,
             no_editable,
+            script: _,
             command: _,
             with,
             with_editable,
@@ -284,7 +289,7 @@ impl RunSettings {
             package,
             no_project,
             no_sync,
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
@@ -362,7 +367,7 @@ impl ToolRunSettings {
                 .collect(),
             isolated,
             show_resolution,
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
@@ -422,7 +427,7 @@ impl ToolInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            python,
+            python: python.and_then(Maybe::into_option),
             force,
             editable,
             refresh: Refresh::from(refresh),
@@ -470,7 +475,7 @@ impl ToolUpgradeSettings {
 
         Self {
             name: if all { vec![] } else { name },
-            python,
+            python: python.and_then(Maybe::into_option),
             args,
             filesystem,
         }
@@ -742,7 +747,7 @@ impl SyncSettings {
                 Modifications::Sufficient
             },
             package,
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings,
         }
@@ -776,7 +781,7 @@ impl LockSettings {
         Self {
             locked,
             frozen,
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
@@ -854,7 +859,7 @@ impl AddSettings {
             branch,
             package,
             script,
-            python,
+            python: python.and_then(Maybe::into_option),
             editable: flag(editable, no_editable),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
@@ -917,7 +922,7 @@ impl RemoveSettings {
             dependency_type,
             package,
             script,
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
@@ -971,7 +976,7 @@ impl TreeSettings {
             invert: tree.invert,
             python_version,
             python_platform,
-            python,
+            python: python.and_then(Maybe::into_option),
             resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
     }
@@ -1042,7 +1047,7 @@ impl ExportSettings {
             output_file,
             locked,
             frozen,
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
@@ -1171,7 +1176,7 @@ impl PipCompileSettings {
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     no_build: flag(no_build, build),
                     no_binary,
@@ -1264,7 +1269,7 @@ impl PipSyncSettings {
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
@@ -1396,7 +1401,7 @@ impl PipInstallSettings {
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
@@ -1452,7 +1457,7 @@ impl PipUninstallSettings {
             requirement,
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
                     target,
@@ -1497,7 +1502,7 @@ impl PipFreezeSettings {
             exclude_editable,
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
@@ -1540,7 +1545,7 @@ impl PipListSettings {
             format,
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
@@ -1576,7 +1581,7 @@ impl PipShowSettings {
             package,
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
@@ -1625,7 +1630,7 @@ impl PipTreeSettings {
             // Shared settings.
             shared: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
                     ..PipOptions::default()
@@ -1655,7 +1660,7 @@ impl PipCheckSettings {
         Self {
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     ..PipOptions::default()
                 },
@@ -1722,7 +1727,7 @@ impl BuildSettings {
                 flag(require_hashes, no_require_hashes).unwrap_or_default(),
                 flag(verify_hashes, no_verify_hashes).unwrap_or_default(),
             ),
-            python,
+            python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
@@ -1776,7 +1781,7 @@ impl VenvSettings {
             relocatable,
             settings: PipSettings::combine(
                 PipOptions {
-                    python,
+                    python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     index_strategy,
                     keyring_provider,

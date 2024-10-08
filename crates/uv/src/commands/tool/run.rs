@@ -10,17 +10,17 @@ use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
 
-use distribution_types::{Name, UnresolvedRequirementSpecification};
-use pep440_rs::{VersionSpecifier, VersionSpecifiers};
-use pep508_rs::MarkerTree;
-use pypi_types::{Requirement, RequirementSource};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Concurrency;
+use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
+use uv_pep440::{VersionSpecifier, VersionSpecifiers};
+use uv_pep508::MarkerTree;
+use uv_pypi_types::{Requirement, RequirementSource};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
@@ -36,7 +36,9 @@ use crate::commands::pip::operations;
 use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::Target;
-use crate::commands::{project::environment::CachedEnvironment, tool::common::matching_packages};
+use crate::commands::{
+    diagnostics, project::environment::CachedEnvironment, tool::common::matching_packages,
+};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -77,13 +79,11 @@ pub(crate) async fn run(
     cache: Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    // Treat empty command similar to `uv tool list`, list available tools.
     let Some(command) = command else {
-        match list_available_tools(invocation_source, &cache, printer).await {
-            // It is a failure because user misses a required tool name.
-            Ok(()) => return Ok(ExitStatus::Error),
-            Err(err) => return Err(err),
-        };
+        // When a command isn't provided, we'll show a brief help including available tools
+        show_help(invocation_source, &cache, printer).await?;
+        // Exit as Clap would after displaying help
+        return Ok(ExitStatus::Error);
     };
 
     let (target, args) = command.split();
@@ -127,9 +127,7 @@ pub(crate) async fn run(
         Err(ProjectError::Operation(operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report =
-                miette::Report::msg(format!("{err}")).context(err.header().with_context("tool"));
-            eprint!("{report:?}");
+            diagnostics::no_solution_context(&err, "tool");
             return Ok(ExitStatus::Failure);
         }
         Err(ProjectError::NamedRequirements(err)) => {
@@ -267,71 +265,65 @@ fn get_entrypoints(
 /// Display a list of tools that provide the executable.
 ///
 /// If there is no package providing the executable, we will display a message to how to install a package.
-async fn list_available_tools(
+async fn show_help(
     invocation_source: ToolRunCommand,
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<()> {
+    let help = format!(
+        "See `{}` for more information.",
+        format!("{invocation_source} --help").bold()
+    );
+
     writeln!(
         printer.stdout(),
-        "Provide a command to invoke with `{invocation_source} <command>` \
-            or `{invocation_source} --from <package> <command>`.\n"
+        "Provide a command to run with `{}`.\n",
+        format!("{invocation_source} <command>").bold()
     )?;
 
     let installed_tools = InstalledTools::from_settings()?;
-    let no_tools_installed_msg =
-        "No tools installed. See `uv tool install --help` for more information.";
     let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
         Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-            writeln!(printer.stdout(), "{no_tools_installed_msg}")?;
+            writeln!(printer.stdout(), "{help}")?;
             return Ok(());
         }
         Err(err) => return Err(err.into()),
     };
 
-    let mut tools = installed_tools.tools()?.into_iter().collect::<Vec<_>>();
-    tools.sort_by_key(|(name, _)| name.clone());
+    let tools = installed_tools
+        .tools()?
+        .into_iter()
+        // Skip invalid tools
+        .filter_map(|(name, tool)| {
+            tool.ok().and_then(|_| {
+                installed_tools
+                    .version(&name, cache)
+                    .ok()
+                    .map(|version| (name, version))
+            })
+        })
+        .sorted_by(|(name1, ..), (name2, ..)| name1.cmp(name2))
+        .collect::<Vec<_>>();
 
+    // No tools installed or they're all malformed
     if tools.is_empty() {
-        writeln!(printer.stdout(), "{no_tools_installed_msg}")?;
+        writeln!(printer.stdout(), "{help}")?;
         return Ok(());
     }
 
-    let mut buf = String::new();
-    for (name, tool) in tools {
-        // Skip invalid tools.
-        let Ok(tool) = tool else {
-            continue;
-        };
-
-        // Output tool name and version.
-        let Ok(version) = installed_tools.version(&name, cache) else {
-            continue;
-        };
-        writeln!(buf, "{}", format!("{name} v{version}").bold())?;
-
-        // Output tool entrypoints.
-        for entrypoint in tool.entrypoints() {
-            writeln!(buf, "- {}", entrypoint.name)?;
-        }
+    // Display the tools
+    writeln!(printer.stdout(), "The following tools are installed:\n")?;
+    for (name, version) in tools {
+        writeln!(
+            printer.stdout(),
+            "- {} v{version}",
+            format!("{name}").bold()
+        )?;
     }
 
-    // Installed tools were malformed or failed fetching versions.
-    if buf.is_empty() {
-        writeln!(printer.stderr(), "{no_tools_installed_msg}")?;
-        return Ok(());
-    }
+    writeln!(printer.stdout(), "\n{help}")?;
 
-    writeln!(
-        printer.stdout(),
-        "The following tools are already installed:\n"
-    )?;
-    writeln!(printer.stdout(), "{buf}")?;
-    writeln!(
-        printer.stdout(),
-        "See `{invocation_source} --help` for more information."
-    )?;
     Ok(())
 }
 
@@ -369,7 +361,7 @@ fn warn_executable_not_provided_by_package(
                 let suggested_command = format!("{invocation_source} --from PKG {executable}");
                 let provided_by = packages
                     .iter()
-                    .map(distribution_types::Name::name)
+                    .map(uv_distribution_types::Name::name)
                     .map(|name| format!("- {}", name.cyan()))
                     .join("\n");
                 warn_user!(

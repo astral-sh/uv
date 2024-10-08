@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use url::Url;
 
-use distribution_types::{BuildableSource, VersionOrUrlRef};
+use uv_distribution_types::{BuildableSource, VersionOrUrlRef};
 use uv_normalize::PackageName;
 
 pub type BuildId = usize;

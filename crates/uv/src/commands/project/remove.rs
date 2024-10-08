@@ -3,11 +3,11 @@ use std::fmt::Write;
 use std::path::Path;
 
 use owo_colors::OwoColorize;
-use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions};
 use uv_fs::Simplified;
+use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::Pep723Script;
 use uv_warnings::{warn_user, warn_user_once};

@@ -13,18 +13,19 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-cache-key = { workspace = true }
-distribution-filename = { workspace = true }
-distribution-types = { workspace = true }
-pep508_rs = { workspace = true }
-pypi-types = { workspace = true }
-requirements-txt = { workspace = true, features = ["http"] }
+uv-cache-key = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
+uv-console = { workspace = true }
 uv-distribution = { workspace = true }
+uv-distribution-filename = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-normalize = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-requirements-txt = { workspace = true, features = ["http"] }
 uv-resolver = { workspace = true, features = ["clap"] }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
@@ -33,7 +34,6 @@ uv-workspace = { workspace = true }
 anyhow = { workspace = true }
 configparser = { workspace = true }
 console = { workspace = true }
-ctrlc = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 rustc-hash = { workspace = true }

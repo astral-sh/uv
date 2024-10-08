@@ -12,28 +12,29 @@ use crate::reporter::Facade;
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::revision::Revision;
 use crate::{Reporter, RequiresDist};
-use distribution_filename::{SourceDistExtension, WheelFilename};
-use distribution_types::{
-    BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
-    PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
-};
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
-use platform_tags::Tags;
-use pypi_types::{HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
 use reqwest::Response;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, warn, Instrument};
 use url::Url;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
+use uv_cache_key::cache_digest;
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
 use uv_configuration::{BuildKind, BuildOutput};
+use uv_distribution_filename::{SourceDistExtension, WheelFilename};
+use uv_distribution_types::{
+    BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
+    PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
+};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
 use uv_metadata::read_archive_metadata;
+use uv_platform_tags::Tags;
+use uv_pypi_types::{HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
 use uv_types::{BuildContext, SourceBuildTrait};
 use zip::ZipArchive;
 
@@ -94,7 +95,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 let url = match &dist.file.url {
                     FileLocation::RelativeUrl(base, url) => {
-                        pypi_types::base_url_join_relative(base, url)?
+                        uv_pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
                 };
@@ -253,7 +254,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 let url = match &dist.file.url {
                     FileLocation::RelativeUrl(base, url) => {
-                        pypi_types::base_url_join_relative(base, url)?
+                        uv_pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
                 };
@@ -432,7 +433,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -566,7 +567,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // Otherwise, we either need to build the metadata.
@@ -727,7 +728,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -858,7 +859,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // Otherwise, we need to build a wheel.
@@ -982,7 +983,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -1113,7 +1114,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // Otherwise, we need to build a wheel.
@@ -1231,7 +1232,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -1365,7 +1366,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // Otherwise, we need to build a wheel.
@@ -1699,10 +1700,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Err(
                 err @ (Error::MissingPyprojectToml
                 | Error::PyprojectToml(
-                    pypi_types::MetadataError::Pep508Error(_)
-                    | pypi_types::MetadataError::DynamicField(_)
-                    | pypi_types::MetadataError::FieldNotFound(_)
-                    | pypi_types::MetadataError::PoetrySyntax,
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::PoetrySyntax,
                 )),
             ) => {
                 debug!("No static `pyproject.toml` available for: {source} ({err:?})");
@@ -1729,10 +1730,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Err(
                 err @ (Error::MissingPkgInfo
                 | Error::PkgInfo(
-                    pypi_types::MetadataError::Pep508Error(_)
-                    | pypi_types::MetadataError::DynamicField(_)
-                    | pypi_types::MetadataError::FieldNotFound(_)
-                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_),
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::UnsupportedMetadataVersion(_),
                 )),
             ) => {
                 debug!("No static `PKG-INFO` available for: {source} ({err:?})");
@@ -1755,14 +1756,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 | Error::MissingRequiresTxt
                 | Error::MissingPkgInfo
                 | Error::RequiresTxt(
-                    pypi_types::MetadataError::Pep508Error(_)
-                    | pypi_types::MetadataError::RequiresTxtContents(_),
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::RequiresTxtContents(_),
                 )
                 | Error::PkgInfo(
-                    pypi_types::MetadataError::Pep508Error(_)
-                    | pypi_types::MetadataError::DynamicField(_)
-                    | pypi_types::MetadataError::FieldNotFound(_)
-                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_),
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::UnsupportedMetadataVersion(_),
                 )),
             ) => {
                 debug!("No static `egg-info` available for: {source} ({err:?})");
@@ -2110,7 +2111,7 @@ async fn read_pyproject_toml(
 }
 
 /// Return the [`pypi_types::RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
-async fn read_requires_dist(project_root: &Path) -> Result<pypi_types::RequiresDist, Error> {
+async fn read_requires_dist(project_root: &Path) -> Result<uv_pypi_types::RequiresDist, Error> {
     // Read the `pyproject.toml` file.
     let pyproject_toml = project_root.join("pyproject.toml");
     let content = match fs::read_to_string(pyproject_toml).await {
@@ -2122,8 +2123,8 @@ async fn read_requires_dist(project_root: &Path) -> Result<pypi_types::RequiresD
     };
 
     // Parse the metadata.
-    let requires_dist =
-        pypi_types::RequiresDist::parse_pyproject_toml(&content).map_err(Error::PyprojectToml)?;
+    let requires_dist = uv_pypi_types::RequiresDist::parse_pyproject_toml(&content)
+        .map_err(Error::PyprojectToml)?;
 
     Ok(requires_dist)
 }

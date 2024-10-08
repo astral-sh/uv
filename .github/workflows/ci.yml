@@ -81,6 +81,17 @@ jobs:
       - name: "Python type check"
         run: uvx mypy
 
+      - name: "Lint shell scripts"
+        uses: ludeeus/action-shellcheck@2.0.0
+        env:
+          # renovate: datasource=github-tags depName=koalaman/shellcheck
+          SHELLCHECK_VERSION: "v0.10.0"
+          SHELLCHECK_OPTS: --shell bash
+        with:
+          version: ${{ env.SHELLCHECK_VERSION }}
+          severity: style
+          check_together: "yes"
+
   cargo-clippy:
     timeout-minutes: 10
     needs: determine_changes
@@ -173,11 +184,9 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
+      - uses: astral-sh/setup-uv@v3
       - name: "Install required Python versions"
-        run: |
-          # astral-sh/setup-uv sets `UV_CACHE_DIR` which disrupts the help message check
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv python install
+        run: uv python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -194,8 +203,8 @@ jobs:
       - name: "Smoke test"
         run: |
           uv="./target/debug/uv"
-          $uv venv
-          $uv pip install ruff
+          $uv venv -v
+          $uv pip install ruff -v
 
       - name: "Smoke test completion"
         run: |
@@ -221,11 +230,9 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
+      - uses: astral-sh/setup-uv@v3
       - name: "Install required Python versions"
-        run: |
-          # astral-sh/setup-uv sets `UV_CACHE_DIR` which disrupts the help message check
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv python install
+        run: uv python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -242,8 +249,8 @@ jobs:
       - name: "Smoke test"
         run: |
           uv="./target/debug/uv"
-          $uv venv
-          $uv pip install ruff
+          $uv venv -v
+          $uv pip install ruff -v
 
   cargo-test-windows:
     timeout-minutes: 15
@@ -300,8 +307,8 @@ jobs:
           UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
-          uv venv
-          uv pip install ruff
+          uv venv -v
+          uv pip install ruff -v
 
       - name: "Smoke test completion"
         working-directory: ${{ env.UV_WORKSPACE }}
@@ -918,7 +925,7 @@ jobs:
     steps:
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.12.7"
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -950,21 +957,21 @@ jobs:
           ./uv add anyio
 
       - name: "Sync to the system Python"
-        run: ./uv sync --python 3.12
+        run: ./uv sync -v --python 3.12
         env:
-          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.6/x64"
+          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.7/x64"
 
       - name: "Attempt to sync to the system Python with an incompatible version"
         run: |
-          ./uv sync --python 3.11 && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
+          ./uv sync -v --python 3.11 && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
         env:
-          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.6/x64"
+          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.7/x64"
 
       - name: "Attempt to sync to a non-Python environment directory"
         run: |
           mkdir -p /home/runner/example
           touch /home/runner/example/some-file
-          ./uv sync && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
+          ./uv sync -v && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
         env:
           UV_PROJECT_ENVIRONMENT: "/home/runner/example"
 
@@ -1366,7 +1373,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-macos-x86_64
     name: "check system | python on macos x86_64"
-    runs-on: macos-12
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
 
@@ -1692,7 +1699,7 @@ jobs:
           cargo run --bin uv -- pip compile scripts/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: cargo codspeed build --profile profiling --features codspeed -p bench
+        run: cargo codspeed build --profile profiling --features codspeed -p uv-bench
 
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@v3

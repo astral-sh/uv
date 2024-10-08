@@ -3,12 +3,10 @@ mod trusted_publishing;
 use crate::trusted_publishing::TrustedPublishingError;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use fs_err::File;
 use futures::TryStreamExt;
 use glob::{glob, GlobError, PatternError};
 use itertools::Itertools;
-use pypi_types::{Metadata23, MetadataError};
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
@@ -24,13 +22,15 @@ use std::{env, fmt, io};
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tokio_util::io::ReaderStream;
-use tracing::{debug, enabled, trace, warn, Level};
+use tracing::{debug, enabled, trace, Level};
 use url::Url;
 use uv_client::UvRetryableStrategy;
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
+use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
-use uv_warnings::warn_user_once;
+use uv_pypi_types::{Metadata23, MetadataError};
+use uv_warnings::{warn_user, warn_user_once};
 
 pub use trusted_publishing::TrustedPublishingToken;
 
@@ -95,7 +95,7 @@ pub trait Reporter: Send + Sync + 'static {
     fn on_progress(&self, name: &str, id: usize);
     fn on_download_start(&self, name: &str, size: Option<u64>) -> usize;
     fn on_download_progress(&self, id: usize, inc: u64);
-    fn on_download_complete(&self);
+    fn on_download_complete(&self, id: usize);
 }
 
 impl PublishSendError {
@@ -210,6 +210,9 @@ pub fn files_for_publishing(
             let Some(filename) = dist.file_name().and_then(|filename| filename.to_str()) else {
                 continue;
             };
+            if filename == ".gitignore" {
+                continue;
+            }
             let filename = DistFilename::try_from_normalized_filename(filename)
                 .ok_or_else(|| PublishError::InvalidFilename(dist.clone()))?;
             files.push((dist, filename));
@@ -295,7 +298,7 @@ pub async fn upload(
     let mut attempt = 0;
     loop {
         attempt += 1;
-        let request = build_request(
+        let (request, idx) = build_request(
             file,
             filename,
             registry,
@@ -309,8 +312,9 @@ pub async fn upload(
         .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
 
         let result = request.send().await;
-        if attempt <= retries && UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
-            warn!("Transient request failure for {}, retrying", registry);
+        if attempt < retries && UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
+            reporter.on_download_complete(idx);
+            warn_user!("Transient request failure for {}, retrying", registry);
             continue;
         }
 
@@ -475,6 +479,9 @@ async fn form_metadata(
     Ok(form_metadata)
 }
 
+/// Build the upload request.
+///
+/// Returns the request and the reporter progress bar id.
 async fn build_request(
     file: &Path,
     filename: &DistFilename,
@@ -484,7 +491,7 @@ async fn build_request(
     password: Option<&str>,
     form_metadata: &[(&'static str, String)],
     reporter: Arc<impl Reporter>,
-) -> Result<RequestBuilder, PublishPrepareError> {
+) -> Result<(RequestBuilder, usize), PublishPrepareError> {
     let mut form = reqwest::multipart::Form::new();
     for (key, value) in form_metadata {
         form = form.text(*key, value.clone());
@@ -531,7 +538,7 @@ async fn build_request(
         let credentials = BASE64_STANDARD.encode(format!("{username}:{password}"));
         request = request.header(AUTHORIZATION, format!("Basic {credentials}"));
     }
-    Ok(request)
+    Ok((request, idx))
 }
 
 /// Returns `true` if the file was newly uploaded and `false` if it already existed.
@@ -617,13 +624,13 @@ async fn handle_response(registry: &Url, response: Response) -> Result<bool, Pub
 #[cfg(test)]
 mod tests {
     use crate::{build_request, form_metadata, Reporter};
-    use distribution_filename::DistFilename;
     use insta::{assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
     use std::path::PathBuf;
     use std::sync::Arc;
     use url::Url;
     use uv_client::BaseClientBuilder;
+    use uv_distribution_filename::DistFilename;
 
     struct DummyReporter;
 
@@ -633,7 +640,7 @@ mod tests {
             0
         }
         fn on_download_progress(&self, _id: usize, _inc: u64) {}
-        fn on_download_complete(&self) {}
+        fn on_download_complete(&self, _id: usize) {}
     }
 
     /// Snapshot the data we send for an upload request for a source distribution.
@@ -697,7 +704,7 @@ mod tests {
         project_urls: Source, https://github.com/unknown/tqdm
         "###);
 
-        let request = build_request(
+        let (request, _) = build_request(
             &file,
             &filename,
             &Url::parse("https://example.org/upload").unwrap(),
@@ -840,7 +847,7 @@ mod tests {
         project_urls: wiki, https://github.com/tqdm/tqdm/wiki
         "###);
 
-        let request = build_request(
+        let (request, _) = build_request(
             &file,
             &filename,
             &Url::parse("https://example.org/upload").unwrap(),

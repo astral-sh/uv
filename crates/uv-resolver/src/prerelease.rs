@@ -1,4 +1,4 @@
-use pypi_types::RequirementSource;
+use uv_pypi_types::RequirementSource;
 
 use uv_normalize::PackageName;
 
@@ -84,7 +84,7 @@ impl PrereleaseStrategy {
 
                     if specifier
                         .iter()
-                        .any(pep440_rs::VersionSpecifier::any_prerelease)
+                        .any(uv_pep440::VersionSpecifier::any_prerelease)
                     {
                         packages.add(&requirement, ());
                     }

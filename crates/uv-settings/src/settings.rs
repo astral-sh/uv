@@ -1,9 +1,5 @@
 use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
 
-use distribution_types::{FlatIndexLocation, IndexUrl, StaticMetadata};
-use install_wheel_rs::linker::LinkMode;
-use pep508_rs::Requirement;
-use pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use serde::{Deserialize, Serialize};
 use url::Url;
 use uv_cache_info::CacheKey;
@@ -11,8 +7,12 @@ use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
     TrustedHost, TrustedPublishing,
 };
+use uv_distribution_types::{FlatIndexLocation, IndexUrl, StaticMetadata};
+use uv_install_wheel::linker::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
+use uv_pep508::Requirement;
+use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
@@ -110,7 +110,6 @@ impl Options {
 }
 
 /// Global settings, relevant to all invocations.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -229,10 +228,7 @@ pub struct GlobalOptions {
 }
 
 /// Settings relevant to all installer operations.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize, CombineOptions)]
-#[serde(rename_all = "kebab-case")]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Default, CombineOptions)]
 pub struct InstallerOptions {
     pub index_url: Option<IndexUrl>,
     pub extra_index_url: Option<Vec<IndexUrl>>,
@@ -256,10 +252,7 @@ pub struct InstallerOptions {
 }
 
 /// Settings relevant to all resolver operations.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize, CombineOptions)]
-#[serde(rename_all = "kebab-case")]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Default, CombineOptions)]
 pub struct ResolverOptions {
     pub index_url: Option<IndexUrl>,
     pub extra_index_url: Option<Vec<IndexUrl>>,
@@ -287,10 +280,7 @@ pub struct ResolverOptions {
 
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
 /// union of [`InstallerOptions`] and [`ResolverOptions`].
-#[allow(dead_code)]
-#[derive(
-    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata,
-)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ResolverInstallerOptions {
@@ -624,7 +614,6 @@ pub struct ResolverInstallerOptions {
 ///
 /// These values will be ignored when running commands outside the `uv pip` namespace (e.g.,
 /// `uv lock`, `uvx`).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]

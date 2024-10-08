@@ -5,7 +5,7 @@ use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
 use url::Url;
 
-use distribution_filename::{WheelFilename, WheelFilenameError};
+use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_normalize::PackageName;
 
 use crate::html;
@@ -140,7 +140,7 @@ pub enum ErrorKind {
     UrlParse(#[from] url::ParseError),
 
     #[error(transparent)]
-    JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
+    JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
 
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(Url),
@@ -170,7 +170,7 @@ pub enum ErrorKind {
     MetadataParseError(
         WheelFilename,
         String,
-        #[source] Box<pypi_types::MetadataError>,
+        #[source] Box<uv_pypi_types::MetadataError>,
     ),
 
     /// The metadata file was not found in the wheel.

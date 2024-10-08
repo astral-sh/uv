@@ -14,27 +14,27 @@ use std::sync::LazyLock;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
-use cache_key::RepositoryUrl;
-use distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
-use distribution_types::{
+use uv_cache_key::RepositoryUrl;
+use uv_configuration::{BuildOptions, DevSpecification, ExtrasSpecification, InstallOptions};
+use uv_distribution::DistributionDatabase;
+use uv_distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
+use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
     IndexLocations, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
     RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, StaticMetadata,
     ToUrlError, UrlString,
 };
-use pep440_rs::Version;
-use pep508_rs::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
-use platform_tags::{TagCompatibility, TagPriority, Tags};
-use pypi_types::{
-    redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
-    RequirementSource, ResolverMarkerEnvironment,
-};
-use uv_configuration::{BuildOptions, DevSpecification, ExtrasSpecification, InstallOptions};
-use uv_distribution::DistributionDatabase;
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep440::Version;
+use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
+use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
+use uv_pypi_types::{
+    redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
+    RequirementSource, ResolverMarkerEnvironment,
+};
 use uv_types::BuildContext;
 use uv_workspace::{InstallTarget, Workspace};
 
@@ -524,8 +524,15 @@ impl Lock {
     pub fn simplified_supported_environments(&self) -> Vec<MarkerTree> {
         self.supported_environments()
             .iter()
-            .map(|marker| self.requires_python.simplify_markers(marker.clone()))
+            .cloned()
+            .map(|marker| self.simplify_environment(marker))
             .collect()
+    }
+
+    /// Simplify the given marker environment with respect to the lockfile's
+    /// `requires-python` setting.
+    pub fn simplify_environment(&self, marker: MarkerTree) -> MarkerTree {
+        self.requires_python.simplify_markers(marker)
     }
 
     /// If this lockfile was built from a forking resolution with non-identical forks, return the
@@ -1766,7 +1773,7 @@ impl Package {
     fn to_source_dist(
         &self,
         workspace_root: &Path,
-    ) -> Result<Option<distribution_types::SourceDist>, LockError> {
+    ) -> Result<Option<uv_distribution_types::SourceDist>, LockError> {
         let sdist = match &self.id.source {
             Source::Path(path) => {
                 // A direct path source can also be a wheel, so validate the extension.
@@ -1779,7 +1786,7 @@ impl Package {
                     install_path: workspace_root.join(path),
                     ext,
                 };
-                distribution_types::SourceDist::Path(path_dist)
+                uv_distribution_types::SourceDist::Path(path_dist)
             }
             Source::Directory(path) => {
                 let dir_dist = DirectorySourceDist {
@@ -1789,7 +1796,7 @@ impl Package {
                     editable: false,
                     r#virtual: false,
                 };
-                distribution_types::SourceDist::Directory(dir_dist)
+                uv_distribution_types::SourceDist::Directory(dir_dist)
             }
             Source::Editable(path) => {
                 let dir_dist = DirectorySourceDist {
@@ -1799,7 +1806,7 @@ impl Package {
                     editable: true,
                     r#virtual: false,
                 };
-                distribution_types::SourceDist::Directory(dir_dist)
+                uv_distribution_types::SourceDist::Directory(dir_dist)
             }
             Source::Virtual(path) => {
                 let dir_dist = DirectorySourceDist {
@@ -1809,7 +1816,7 @@ impl Package {
                     editable: false,
                     r#virtual: true,
                 };
-                distribution_types::SourceDist::Directory(dir_dist)
+                uv_distribution_types::SourceDist::Directory(dir_dist)
             }
             Source::Git(url, git) => {
                 // Remove the fragment and query from the URL; they're already present in the
@@ -1837,7 +1844,7 @@ impl Package {
                     git: Box::new(git_url),
                     subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
                 };
-                distribution_types::SourceDist::Git(git_dist)
+                uv_distribution_types::SourceDist::Git(git_dist)
             }
             Source::Direct(url, direct) => {
                 // A direct URL source can also be a wheel, so validate the extension.
@@ -1857,7 +1864,7 @@ impl Package {
                     ext,
                     url: VerbatimUrl::from_url(url),
                 };
-                distribution_types::SourceDist::DirectUrl(direct_dist)
+                uv_distribution_types::SourceDist::DirectUrl(direct_dist)
             }
             Source::Registry(RegistrySource::Url(url)) => {
                 let Some(ref sdist) = self.sdist else {
@@ -1874,7 +1881,7 @@ impl Package {
                         id: self.id.clone(),
                     })?;
                 let ext = SourceDistExtension::from_path(filename.as_ref())?;
-                let file = Box::new(distribution_types::File {
+                let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
                     hashes: sdist
@@ -1897,7 +1904,7 @@ impl Package {
                     index,
                     wheels: vec![],
                 };
-                distribution_types::SourceDist::Registry(reg_dist)
+                uv_distribution_types::SourceDist::Registry(reg_dist)
             }
             Source::Registry(RegistrySource::Path(path)) => {
                 let Some(ref sdist) = self.sdist else {
@@ -1916,7 +1923,7 @@ impl Package {
                         id: self.id.clone(),
                     })?;
                 let ext = SourceDistExtension::from_path(filename.as_ref())?;
-                let file = Box::new(distribution_types::File {
+                let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
                     hashes: sdist
@@ -1942,7 +1949,7 @@ impl Package {
                     index,
                     wheels: vec![],
                 };
-                distribution_types::SourceDist::Registry(reg_dist)
+                uv_distribution_types::SourceDist::Registry(reg_dist)
             }
         };
 
@@ -2376,23 +2383,23 @@ impl Source {
     }
 
     fn from_source_dist(
-        source_dist: &distribution_types::SourceDist,
+        source_dist: &uv_distribution_types::SourceDist,
         root: &Path,
     ) -> Result<Source, LockError> {
         match *source_dist {
-            distribution_types::SourceDist::Registry(ref reg_dist) => {
+            uv_distribution_types::SourceDist::Registry(ref reg_dist) => {
                 Source::from_registry_source_dist(reg_dist, root)
             }
-            distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
+            uv_distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
                 Ok(Source::from_direct_source_dist(direct_dist))
             }
-            distribution_types::SourceDist::Git(ref git_dist) => {
+            uv_distribution_types::SourceDist::Git(ref git_dist) => {
                 Ok(Source::from_git_dist(git_dist))
             }
-            distribution_types::SourceDist::Path(ref path_dist) => {
+            uv_distribution_types::SourceDist::Path(ref path_dist) => {
                 Source::from_path_source_dist(path_dist, root)
             }
-            distribution_types::SourceDist::Directory(ref directory) => {
+            uv_distribution_types::SourceDist::Directory(ref directory) => {
                 Source::from_directory_source_dist(directory, root)
             }
         }
@@ -2914,23 +2921,23 @@ impl SourceDist {
 
     fn from_source_dist(
         id: &PackageId,
-        source_dist: &distribution_types::SourceDist,
+        source_dist: &uv_distribution_types::SourceDist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
     ) -> Result<Option<SourceDist>, LockError> {
         match *source_dist {
-            distribution_types::SourceDist::Registry(ref reg_dist) => {
+            uv_distribution_types::SourceDist::Registry(ref reg_dist) => {
                 SourceDist::from_registry_dist(reg_dist, index)
             }
-            distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
+            uv_distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
                 SourceDist::from_direct_dist(id, direct_dist, hashes).map(Some)
             }
             // An actual sdist entry in the lockfile is only required when
             // it's from a registry or a direct URL. Otherwise, it's strictly
             // redundant with the information in all other kinds of `source`.
-            distribution_types::SourceDist::Git(_)
-            | distribution_types::SourceDist::Path(_)
-            | distribution_types::SourceDist::Directory(_) => Ok(None),
+            uv_distribution_types::SourceDist::Git(_)
+            | uv_distribution_types::SourceDist::Path(_)
+            | uv_distribution_types::SourceDist::Directory(_) => Ok(None),
         }
     }
 
@@ -3175,16 +3182,18 @@ impl Wheel {
     ) -> Result<Vec<Wheel>, LockError> {
         match *dist {
             Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist, hashes, index),
-            Dist::Source(distribution_types::SourceDist::Registry(ref source_dist)) => source_dist
-                .wheels
-                .iter()
-                .filter(|wheel| {
-                    // Reject distributions from registries that don't match the index URL, as can occur with
-                    // `--find-links`.
-                    index.is_some_and(|index| *index == wheel.index)
-                })
-                .map(Wheel::from_registry_wheel)
-                .collect(),
+            Dist::Source(uv_distribution_types::SourceDist::Registry(ref source_dist)) => {
+                source_dist
+                    .wheels
+                    .iter()
+                    .filter(|wheel| {
+                        // Reject distributions from registries that don't match the index URL, as can occur with
+                        // `--find-links`.
+                        index.is_some_and(|index| *index == wheel.index)
+                    })
+                    .map(Wheel::from_registry_wheel)
+                    .collect()
+            }
             Dist::Source(_) => Ok(vec![]),
         }
     }
@@ -3298,7 +3307,7 @@ impl Wheel {
                         .into())
                     }
                 };
-                let file = Box::new(distribution_types::File {
+                let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
@@ -3328,7 +3337,7 @@ impl Wheel {
                 };
                 let file_url = Url::from_file_path(root.join(index_path).join(file_path))
                     .map_err(|()| LockErrorKind::PathToUrl)?;
-                let file = Box::new(distribution_types::File {
+                let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),

@@ -194,14 +194,19 @@ impl From<IndexArgs> for PipOptions {
 
         Self {
             index_url: index_url.and_then(Maybe::into_option),
-            extra_index_url: extra_index_url.map(|extra_index_urls| {
-                extra_index_urls
+            extra_index_url: extra_index_url.map(|extra_index_url| {
+                extra_index_url
                     .into_iter()
                     .filter_map(Maybe::into_option)
                     .collect()
             }),
             no_index: if no_index { Some(true) } else { None },
-            find_links,
+            find_links: find_links.map(|find_links| {
+                find_links
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
             ..PipOptions::default()
         }
     }
@@ -243,8 +248,8 @@ pub fn resolver_options(
 
     ResolverOptions {
         index_url: index_args.index_url.and_then(Maybe::into_option),
-        extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-            extra_index_urls
+        extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
+            extra_index_url
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect()
@@ -254,7 +259,12 @@ pub fn resolver_options(
         } else {
             None
         },
-        find_links: index_args.find_links,
+        find_links: index_args.find_links.map(|find_links| {
+            find_links
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect()
+        }),
         upgrade: flag(upgrade, no_upgrade),
         upgrade_package: Some(upgrade_package),
         index_strategy,
@@ -327,8 +337,8 @@ pub fn resolver_installer_options(
 
     ResolverInstallerOptions {
         index_url: index_args.index_url.and_then(Maybe::into_option),
-        extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-            extra_index_urls
+        extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
+            extra_index_url
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect()
@@ -338,7 +348,12 @@ pub fn resolver_installer_options(
         } else {
             None
         },
-        find_links: index_args.find_links,
+        find_links: index_args.find_links.map(|find_links| {
+            find_links
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect()
+        }),
         upgrade: flag(upgrade, no_upgrade),
         upgrade_package: if upgrade_package.is_empty() {
             None

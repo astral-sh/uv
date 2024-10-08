@@ -46,6 +46,8 @@ impl FromStr for Libc {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "gnu" => Ok(Self::Some(target_lexicon::Environment::Gnu)),
+            "gnueabi" => Ok(Self::Some(target_lexicon::Environment::Gnueabi)),
+            "gnueabihf" => Ok(Self::Some(target_lexicon::Environment::Gnueabihf)),
             "musl" => Ok(Self::Some(target_lexicon::Environment::Musl)),
             "none" => Ok(Self::None),
             _ => Err(Error::UnknownLibc(s.to_string())),
@@ -144,53 +146,55 @@ impl Deref for Os {
     }
 }
 
-impl From<&platform_tags::Arch> for Arch {
-    fn from(value: &platform_tags::Arch) -> Self {
+impl From<&uv_platform_tags::Arch> for Arch {
+    fn from(value: &uv_platform_tags::Arch) -> Self {
         match value {
-            platform_tags::Arch::Aarch64 => Self(target_lexicon::Architecture::Aarch64(
+            uv_platform_tags::Arch::Aarch64 => Self(target_lexicon::Architecture::Aarch64(
                 target_lexicon::Aarch64Architecture::Aarch64,
             )),
-            platform_tags::Arch::Armv6L => Self(target_lexicon::Architecture::Arm(
+            uv_platform_tags::Arch::Armv6L => Self(target_lexicon::Architecture::Arm(
                 target_lexicon::ArmArchitecture::Armv6,
             )),
-            platform_tags::Arch::Armv7L => Self(target_lexicon::Architecture::Arm(
+            uv_platform_tags::Arch::Armv7L => Self(target_lexicon::Architecture::Arm(
                 target_lexicon::ArmArchitecture::Armv7,
             )),
-            platform_tags::Arch::S390X => Self(target_lexicon::Architecture::S390x),
-            platform_tags::Arch::Powerpc64 => Self(target_lexicon::Architecture::Powerpc64),
-            platform_tags::Arch::Powerpc64Le => Self(target_lexicon::Architecture::Powerpc64le),
-            platform_tags::Arch::X86 => Self(target_lexicon::Architecture::X86_32(
+            uv_platform_tags::Arch::S390X => Self(target_lexicon::Architecture::S390x),
+            uv_platform_tags::Arch::Powerpc64 => Self(target_lexicon::Architecture::Powerpc64),
+            uv_platform_tags::Arch::Powerpc64Le => Self(target_lexicon::Architecture::Powerpc64le),
+            uv_platform_tags::Arch::X86 => Self(target_lexicon::Architecture::X86_32(
                 target_lexicon::X86_32Architecture::I686,
             )),
-            platform_tags::Arch::X86_64 => Self(target_lexicon::Architecture::X86_64),
+            uv_platform_tags::Arch::X86_64 => Self(target_lexicon::Architecture::X86_64),
         }
     }
 }
 
-impl From<&platform_tags::Os> for Libc {
-    fn from(value: &platform_tags::Os) -> Self {
+impl From<&uv_platform_tags::Os> for Libc {
+    fn from(value: &uv_platform_tags::Os) -> Self {
         match value {
-            platform_tags::Os::Manylinux { .. } => Self::Some(target_lexicon::Environment::Gnu),
-            platform_tags::Os::Musllinux { .. } => Self::Some(target_lexicon::Environment::Musl),
+            uv_platform_tags::Os::Manylinux { .. } => Self::Some(target_lexicon::Environment::Gnu),
+            uv_platform_tags::Os::Musllinux { .. } => Self::Some(target_lexicon::Environment::Musl),
             _ => Self::None,
         }
     }
 }
 
-impl From<&platform_tags::Os> for Os {
-    fn from(value: &platform_tags::Os) -> Self {
+impl From<&uv_platform_tags::Os> for Os {
+    fn from(value: &uv_platform_tags::Os) -> Self {
         match value {
-            platform_tags::Os::Dragonfly { .. } => Self(target_lexicon::OperatingSystem::Dragonfly),
-            platform_tags::Os::FreeBsd { .. } => Self(target_lexicon::OperatingSystem::Freebsd),
-            platform_tags::Os::Haiku { .. } => Self(target_lexicon::OperatingSystem::Haiku),
-            platform_tags::Os::Illumos { .. } => Self(target_lexicon::OperatingSystem::Illumos),
-            platform_tags::Os::Macos { .. } => Self(target_lexicon::OperatingSystem::Darwin),
-            platform_tags::Os::Manylinux { .. } | platform_tags::Os::Musllinux { .. } => {
+            uv_platform_tags::Os::Dragonfly { .. } => {
+                Self(target_lexicon::OperatingSystem::Dragonfly)
+            }
+            uv_platform_tags::Os::FreeBsd { .. } => Self(target_lexicon::OperatingSystem::Freebsd),
+            uv_platform_tags::Os::Haiku { .. } => Self(target_lexicon::OperatingSystem::Haiku),
+            uv_platform_tags::Os::Illumos { .. } => Self(target_lexicon::OperatingSystem::Illumos),
+            uv_platform_tags::Os::Macos { .. } => Self(target_lexicon::OperatingSystem::Darwin),
+            uv_platform_tags::Os::Manylinux { .. } | uv_platform_tags::Os::Musllinux { .. } => {
                 Self(target_lexicon::OperatingSystem::Linux)
             }
-            platform_tags::Os::NetBsd { .. } => Self(target_lexicon::OperatingSystem::Netbsd),
-            platform_tags::Os::OpenBsd { .. } => Self(target_lexicon::OperatingSystem::Openbsd),
-            platform_tags::Os::Windows => Self(target_lexicon::OperatingSystem::Windows),
+            uv_platform_tags::Os::NetBsd { .. } => Self(target_lexicon::OperatingSystem::Netbsd),
+            uv_platform_tags::Os::OpenBsd { .. } => Self(target_lexicon::OperatingSystem::Openbsd),
+            uv_platform_tags::Os::Windows => Self(target_lexicon::OperatingSystem::Windows),
         }
     }
 }

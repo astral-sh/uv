@@ -2,13 +2,17 @@
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   dependencyDashboard: true,
   suppressNotifications: ["prEditedNotification"],
-  extends: ["config:recommended"],
+  extends: [
+    "config:recommended",
+    // For tool versions defined in GitHub Actions:
+    "customManagers:githubActionsVersions",
+  ],
   labels: ["internal"],
   schedule: ["before 4am on Monday"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
   prHourlyLimit: 10,
-  enabledManagers: ["github-actions", "pre-commit", "cargo"],
+  enabledManagers: ["github-actions", "pre-commit", "cargo", "regex"],
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",

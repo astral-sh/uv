@@ -1,0 +1,26 @@
+[package]
+name = "uv-distribution-filename"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-platform-tags = { workspace = true }
+
+rkyv = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+insta = { version = "1.40.0" }

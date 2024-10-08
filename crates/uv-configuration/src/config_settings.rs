@@ -1,8 +1,8 @@
-use cache_key::CacheKeyHasher;
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     str::FromStr,
 };
+use uv_cache_key::CacheKeyHasher;
 
 #[derive(Debug, Clone)]
 pub struct ConfigSettingEntry {
@@ -161,7 +161,7 @@ impl ConfigSettings {
     }
 }
 
-impl cache_key::CacheKey for ConfigSettings {
+impl uv_cache_key::CacheKey for ConfigSettings {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         for (key, value) in &self.0 {
             key.cache_key(state);

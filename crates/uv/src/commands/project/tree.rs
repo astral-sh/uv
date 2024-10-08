@@ -2,17 +2,17 @@ use anyhow::Result;
 use std::fmt::Write;
 use std::path::Path;
 
-use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, TargetTriple};
+use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::FoundInterpreter;
+use crate::commands::project::ProjectInterpreter;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
@@ -45,7 +45,7 @@ pub(crate) async fn tree(
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
-    let interpreter = FoundInterpreter::discover(
+    let interpreter = ProjectInterpreter::discover(
         &workspace,
         python.as_deref().map(PythonRequest::parse),
         python_preference,

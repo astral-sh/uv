@@ -1,0 +1,63 @@
+---
+source: crates/uv-requirements-txt/src/lib.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [
+        RequirementEntry {
+            requirement: Named(
+                Requirement {
+                    name: PackageName(
+                        "tomli",
+                    ),
+                    extras: [],
+                    version_or_url: None,
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/include-b.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Named(
+                Requirement {
+                    name: PackageName(
+                        "numpy",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "1.24.2",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/include-a.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+    ],
+    constraints: [],
+    editables: [],
+    index_url: None,
+    extra_index_urls: [],
+    find_links: [],
+    no_index: false,
+    no_binary: None,
+    only_binary: None,
+}

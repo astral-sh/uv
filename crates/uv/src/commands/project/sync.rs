@@ -1,17 +1,13 @@
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
+use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::do_safe_lock;
 use crate::commands::project::{ProjectError, SharedState};
-use crate::commands::{pip, project, ExitStatus};
+use crate::commands::{diagnostics, pip, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 use anyhow::{Context, Result};
-use distribution_types::{DirectorySourceDist, Dist, ResolvedDist, SourceDist};
 use itertools::Itertools;
-use pep508_rs::{MarkerTree, Requirement, VersionOrUrl};
-use pypi_types::{
-    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
-};
 use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
@@ -22,13 +18,18 @@ use uv_configuration::{
     HashCheckingMode, InstallOptions,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution_types::{DirectorySourceDist, Dist, ResolvedDist, SourceDist};
 use uv_installer::SitePackages;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
+use uv_pypi_types::{
+    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
+};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::{Source, ToolUvSources};
+use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
 
 /// Sync the project environment.
@@ -118,11 +119,22 @@ pub(crate) async fn sync(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+        Err(ProjectError::Operation(operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report = miette::Report::msg(format!("{err}")).context(err.header());
-            anstream::eprint!("{report:?}");
+            diagnostics::no_solution(&err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Resolve(
+            uv_resolver::ResolveError::FetchAndBuild(dist, err),
+        ))) => {
+            diagnostics::fetch_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Resolve(
+            uv_resolver::ResolveError::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),
@@ -336,7 +348,6 @@ pub(super) async fn do_sync(
         index_locations,
         config_setting,
         &hasher,
-        &markers,
         tags,
         &client,
         &state.in_flight,
@@ -355,8 +366,8 @@ pub(super) async fn do_sync(
 
 /// Filter out any virtual workspace members.
 fn apply_no_virtual_project(
-    resolution: distribution_types::Resolution,
-) -> distribution_types::Resolution {
+    resolution: uv_distribution_types::Resolution,
+) -> uv_distribution_types::Resolution {
     resolution.filter(|dist| {
         let ResolvedDist::Installable(dist) = dist else {
             return true;
@@ -376,9 +387,9 @@ fn apply_no_virtual_project(
 
 /// If necessary, convert any editable requirements to non-editable.
 fn apply_editable_mode(
-    resolution: distribution_types::Resolution,
+    resolution: uv_distribution_types::Resolution,
     editable: EditableMode,
-) -> distribution_types::Resolution {
+) -> uv_distribution_types::Resolution {
     match editable {
         // No modifications are necessary for editable mode; retain any editable distributions.
         EditableMode::Editable => resolution,
@@ -426,7 +437,7 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
             .and_then(|uv| uv.sources.as_ref())
             .map(ToolUvSources::inner)
             .iter()
-            .flat_map(|sources| sources.values())
+            .flat_map(|sources| sources.values().flat_map(Sources::iter))
         {
             match source {
                 Source::Git { git, .. } => {

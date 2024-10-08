@@ -6,13 +6,13 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
-use distribution_types::{InstalledDist, Name};
-use pep508_rs::PackageName;
-use pypi_types::Requirement;
+use uv_distribution_types::{InstalledDist, Name};
 #[cfg(unix)]
 use uv_fs::replace_symlink;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
+use uv_pep508::PackageName;
+use uv_pypi_types::Requirement;
 use uv_python::PythonEnvironment;
 use uv_settings::ToolOptions;
 use uv_shell::Shell;

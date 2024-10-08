@@ -1,29 +1,29 @@
-use std::collections::BTreeMap;
-use std::fmt::Debug;
-use std::path::PathBuf;
-use std::str::FromStr;
-
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
 use reqwest::{Client, Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
+use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::time::Duration;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
-use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
-use distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexUrl, IndexUrls, Name,
-};
-use pep440_rs::Version;
-use pep508_rs::MarkerEnvironment;
-use platform_tags::Platform;
-use pypi_types::{ResolutionMetadata, SimpleJson};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
+use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
+use uv_distribution_types::{
+    BuiltDist, File, FileLocation, IndexCapabilities, IndexUrl, IndexUrls, Name,
+};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pep508::MarkerEnvironment;
+use uv_platform_tags::Platform;
+use uv_pypi_types::{ResolutionMetadata, SimpleJson};
 
 use crate::base_client::BaseClientBuilder;
 use crate::cached_client::CacheControl;
@@ -171,7 +171,7 @@ pub struct RegistryClient {
     /// The connectivity mode to use.
     connectivity: Connectivity,
     /// Configured client timeout, in seconds.
-    timeout: u64,
+    timeout: Duration,
 }
 
 impl RegistryClient {
@@ -191,7 +191,7 @@ impl RegistryClient {
     }
 
     /// Return the timeout this client is configured with, in seconds.
-    pub fn timeout(&self) -> u64 {
+    pub fn timeout(&self) -> Duration {
         self.timeout
     }
 
@@ -419,7 +419,7 @@ impl RegistryClient {
 
                 let location = match &wheel.file.url {
                     FileLocation::RelativeUrl(base, url) => {
-                        let url = pypi_types::base_url_join_relative(base, url)
+                        let url = uv_pypi_types::base_url_join_relative(base, url)
                             .map_err(ErrorKind::JoinRelativeUrl)?;
                         if url.scheme() == "file" {
                             let path = url
@@ -713,7 +713,7 @@ impl RegistryClient {
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.timeout()
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.timeout().as_secs()
                 ),
             )
         } else {
@@ -783,7 +783,7 @@ impl SimpleMetadata {
         self.0.iter()
     }
 
-    fn from_files(files: Vec<pypi_types::File>, package_name: &PackageName, base: &Url) -> Self {
+    fn from_files(files: Vec<uv_pypi_types::File>, package_name: &PackageName, base: &Url) -> Self {
         let mut map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 
         // Group the distributions by version and kind
@@ -906,8 +906,8 @@ mod tests {
 
     use url::Url;
 
-    use pypi_types::{JoinRelativeError, SimpleJson};
     use uv_normalize::PackageName;
+    use uv_pypi_types::{JoinRelativeError, SimpleJson};
 
     use crate::{html::SimpleHtml, SimpleMetadata, SimpleMetadatum};
 
@@ -991,7 +991,7 @@ mod tests {
         // Test parsing of the file urls
         let urls = files
             .iter()
-            .map(|file| pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
+            .map(|file| uv_pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
             .collect::<Result<Vec<_>, JoinRelativeError>>()?;
         let urls = urls.iter().map(reqwest::Url::as_str).collect::<Vec<_>>();
         insta::assert_debug_snapshot!(urls, @r###"

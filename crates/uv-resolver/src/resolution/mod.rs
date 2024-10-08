@@ -1,14 +1,14 @@
 use std::fmt::Display;
 
-use distribution_types::{
+use uv_distribution::Metadata;
+use uv_distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IndexUrl, Name, ResolvedDist, SourceDist,
     VersionOrUrlRef,
 };
-use pep440_rs::Version;
-use pep508_rs::MarkerTree;
-use pypi_types::HashDigest;
-use uv_distribution::Metadata;
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep440::Version;
+use uv_pep508::MarkerTree;
+use uv_pypi_types::HashDigest;
 
 pub use crate::resolution::display::{AnnotationStyle, DisplayResolutionGraph};
 pub(crate) use crate::resolution::graph::ResolutionGraphNode;

@@ -2,7 +2,7 @@ use std::convert::Infallible;
 
 use pubgrub::{Dependencies, DependencyProvider, Range};
 
-use pep440_rs::Version;
+use uv_pep440::Version;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPriority};
 use crate::resolver::UnavailableReason;

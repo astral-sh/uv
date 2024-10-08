@@ -75,6 +75,7 @@ fn help() {
 #[test]
 fn help_flag() {
     let context = TestContext::new_with_versions(&[]);
+
     uv_snapshot!(context.filters(), context.command().arg("--help"), @r###"
     success: true
     exit_code: 0
@@ -141,6 +142,7 @@ fn help_flag() {
 #[test]
 fn help_short_flag() {
     let context = TestContext::new_with_versions(&[]);
+
     uv_snapshot!(context.filters(), context.command().arg("-h"), @r###"
     success: true
     exit_code: 0

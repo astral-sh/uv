@@ -1,0 +1,39 @@
+[package]
+name = "uv-distribution-types"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-cache-info = { workspace = true }
+uv-cache-key = { workspace = true }
+uv-distribution-filename = { workspace = true }
+uv-fs = { workspace = true }
+uv-git = { workspace = true }
+uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true, features = ["serde"] }
+uv-platform-tags = { workspace = true }
+uv-pypi-types = { workspace = true }
+
+anyhow = { workspace = true }
+fs-err = { workspace = true }
+itertools = { workspace = true }
+jiff = { workspace = true }
+rkyv = { workspace = true }
+rustc-hash = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+urlencoding = { workspace = true }

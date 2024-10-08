@@ -10,7 +10,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, instrument};
 use url::Url;
 
-use cache_key::{cache_digest, RepositoryUrl};
+use uv_cache_key::{cache_digest, RepositoryUrl};
 
 use crate::git::GitRemote;
 use crate::{GitOid, GitSha, GitUrl, GIT_STORE};

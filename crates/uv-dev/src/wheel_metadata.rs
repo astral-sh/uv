@@ -4,12 +4,12 @@ use anstream::println;
 use anyhow::{bail, Result};
 use clap::Parser;
 
-use distribution_filename::WheelFilename;
-use distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities, RemoteSource};
-use pep508_rs::VerbatimUrl;
-use pypi_types::ParsedUrl;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
+use uv_distribution_filename::WheelFilename;
+use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities, RemoteSource};
+use uv_pep508::VerbatimUrl;
+use uv_pypi_types::ParsedUrl;
 
 #[derive(Parser)]
 pub(crate) struct WheelMetadataArgs {

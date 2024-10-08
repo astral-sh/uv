@@ -12,13 +12,11 @@ use crate::common::{get_bin, venv_to_interpreter, TestContext};
 mod common;
 
 #[test]
-fn no_arguments() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-
+fn no_arguments() {
     uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
-        .current_dir(&temp_dir), @r###"
+        .env_clear(), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -32,8 +30,6 @@ fn no_arguments() -> Result<()> {
     For more information, try '--help'.
     "###
     );
-
-    Ok(())
 }
 
 #[test]

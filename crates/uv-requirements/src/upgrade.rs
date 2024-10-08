@@ -2,11 +2,11 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use requirements_txt::RequirementsTxt;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Upgrade;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
+use uv_requirements_txt::RequirementsTxt;
 use uv_resolver::{Lock, Preference, PreferenceError};
 
 #[derive(Debug, Default)]
