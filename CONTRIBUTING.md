@@ -71,9 +71,6 @@ To run and review a specific snapshot test:
 ```shell
 cargo test --package <package> --test <test> -- <test_name> -- --exact
 cargo insta review
-
-# or combined into one command:
-cargo insta test --review --package <package> --test <test> -- <test_name> -- --exact
 ```
 
 ### Local testing
