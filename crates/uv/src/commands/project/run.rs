@@ -807,7 +807,10 @@ pub(crate) async fn run(
             .collect_vec();
 
         if !commands.is_empty() {
-            writeln!(printer.stdout(), "The following commands are available:\n")?;
+            writeln!(
+                printer.stdout(),
+                "The following commands are available in the environment:\n"
+            )?;
             for command in commands {
                 writeln!(printer.stdout(), "- {command}")?;
             }
