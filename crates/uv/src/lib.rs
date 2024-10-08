@@ -1197,6 +1197,7 @@ async fn run_project(
                 args.package,
                 args.kind,
                 args.vcs,
+                args.build_backend,
                 args.no_readme,
                 args.no_pin_python,
                 args.python,
