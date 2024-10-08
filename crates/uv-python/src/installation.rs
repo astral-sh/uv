@@ -278,7 +278,12 @@ impl PythonInstallationKey {
     pub fn version(&self) -> PythonVersion {
         PythonVersion::from_str(&format!(
             "{}.{}.{}{}",
-            self.major, self.minor, self.patch, self.prerelease.map(|pre| pre.to_string()).unwrap_or_default()
+            self.major,
+            self.minor,
+            self.patch,
+            self.prerelease
+                .map(|pre| pre.to_string())
+                .unwrap_or_default()
         ))
         .expect("Python installation keys must have valid Python versions")
     }
@@ -305,7 +310,9 @@ impl fmt::Display for PythonInstallationKey {
             self.major,
             self.minor,
             self.patch,
-            self.prerelease.map(|pre| pre.to_string()).unwrap_or_default(),
+            self.prerelease
+                .map(|pre| pre.to_string())
+                .unwrap_or_default(),
             self.os,
             self.arch,
             self.libc
