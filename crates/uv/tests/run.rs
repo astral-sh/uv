@@ -248,7 +248,7 @@ fn run_no_args() -> Result<()> {
     ----- stdout -----
     Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 
-    The following commands are available:
+    The following commands are available in the environment:
     
     - pydoc
     - python
