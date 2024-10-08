@@ -430,19 +430,24 @@ impl PyProjectToml {
     /// to an `entry_points.txt`.
     ///
     /// <https://packaging.python.org/en/latest/specifications/entry-points/>
-    pub(crate) fn to_entry_points(&self) -> Result<String, ValidationError> {
+    ///
+    /// Returns `None` if no entrypoints were defined.
+    pub(crate) fn to_entry_points(&self) -> Result<Option<String>, ValidationError> {
         let mut writer = String::new();
 
-        Self::write_group(
-            &mut writer,
-            "console_scripts",
-            self.project.scripts.iter().flatten(),
-        )?;
-        Self::write_group(
-            &mut writer,
-            "gui_scripts",
-            self.project.gui_scripts.iter().flatten(),
-        )?;
+        if self.project.scripts.is_none()
+            && self.project.gui_scripts.is_none()
+            && self.project.entry_points.is_none()
+        {
+            return Ok(None);
+        }
+
+        if let Some(scripts) = &self.project.scripts {
+            Self::write_group(&mut writer, "console_scripts", scripts)?;
+        }
+        if let Some(gui_scripts) = &self.project.gui_scripts {
+            Self::write_group(&mut writer, "gui_scripts", gui_scripts)?;
+        }
         for (group, entries) in self.project.entry_points.iter().flatten() {
             if group == "console_scripts" {
                 return Err(ValidationError::ReservedScripts);
@@ -450,16 +455,16 @@ impl PyProjectToml {
             if group == "gui_scripts" {
                 return Err(ValidationError::ReservedGuiScripts);
             }
-            Self::write_group(&mut writer, group, entries.iter())?;
+            Self::write_group(&mut writer, group, entries)?;
         }
-        Ok(writer)
+        Ok(Some(writer))
     }
 
     /// Write a group to `entry_points.txt`.
     fn write_group<'a>(
         writer: &mut String,
         group: &str,
-        entries: impl Iterator<Item = (&'a String, &'a String)>,
+        entries: impl IntoIterator<Item = (&'a String, &'a String)>,
     ) -> Result<(), ValidationError> {
         if !group
             .chars()
@@ -761,7 +766,7 @@ mod tests {
         This is the foo library.
         "###);
 
-        assert_snapshot!(pyproject_toml.to_entry_points().unwrap(), @r###"
+        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
         [console_scripts]
         foo = foo.cli:__main__
 

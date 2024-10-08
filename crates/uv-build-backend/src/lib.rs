@@ -8,9 +8,9 @@ use glob::{GlobError, PatternError};
 use itertools::Itertools;
 use sha2::{Digest, Sha256};
 use std::fs::FileType;
-use std::io;
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf, StripPrefixError};
+use std::{io, mem};
 use thiserror::Error;
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
@@ -60,7 +60,7 @@ trait DirectoryWriter {
     /// Add a file with the given content.
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error>;
 
-    /// Add file with the given name and return a writer for it.
+    /// Add a file with the given name and return a writer for it.
     fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error>;
 
     /// Add a local file.
@@ -110,12 +110,10 @@ impl DirectoryWriter for ZipDirectoryWriter {
         self.writer.start_file(path, options)?;
         self.writer.write_all(bytes)?;
 
-        let mut hasher = Sha256::new();
-        hasher.update(bytes);
-
+        let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
             path: path.to_string(),
-            hash: format!("{:x}", hasher.finalize()),
+            hash,
             size: bytes.len(),
         });
 
@@ -132,37 +130,11 @@ impl DirectoryWriter for ZipDirectoryWriter {
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
-        let mut write = self.new_writer(path)?;
-
         let mut reader = BufReader::new(File::open(file)?);
-        let mut hasher = Sha256::new();
-        let mut size = 0;
-
-        // Manually tee-ing the reader since there is no sync `InspectReader` or std tee function.
-
-        // 8KB is the default defined in `std::sys_common::io`.
-        let mut buffer = vec![0; 8 * 1024];
-        loop {
-            let read = match reader.read(&mut buffer) {
-                Ok(read) => read,
-                Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
-                Err(err) => return Err(err.into()),
-            };
-            if read == 0 {
-                // End of file
-                break;
-            }
-            hasher.update(&buffer[..read]);
-            write.write_all(&buffer[..read])?;
-            size += read;
-        }
-        drop(write);
-
-        self.record.push(RecordEntry {
-            path: path.to_string(),
-            hash: format!("{:x}", hasher.finalize()),
-            size,
-        });
+        let mut writer = self.new_writer(path)?;
+        let record = write_hashed(path, &mut reader, &mut writer)?;
+        drop(writer);
+        self.record.push(record);
         Ok(())
     }
 
@@ -173,8 +145,7 @@ impl DirectoryWriter for ZipDirectoryWriter {
 
     /// Write the `RECORD` file and the central directory.
     fn close(mut self, dist_info_dir: &str) -> Result<(), Error> {
-        let record = self.record;
-        self.record = Vec::new();
+        let record = mem::take(&mut self.record);
         write_record(
             &mut self.new_writer(&format!("{dist_info_dir}/RECORD"))?,
             dist_info_dir,
@@ -205,15 +176,26 @@ impl FilesystemWrite {
 /// File system writer.
 impl DirectoryWriter for FilesystemWrite {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
-        Ok(fs_err::write(path, bytes)?)
+        let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
+        self.record.push(RecordEntry {
+            path: path.to_string(),
+            hash,
+            size: bytes.len(),
+        });
+
+        Ok(fs_err::write(self.root.join(path), bytes)?)
     }
 
     fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
-        Ok(Box::new(File::create(path)?))
+        Ok(Box::new(File::create(self.root.join(path))?))
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
-        fs_err::copy(file, self.root.join(path))?;
+        let mut reader = BufReader::new(File::open(file)?);
+        let mut writer = self.new_writer(path)?;
+        let record = write_hashed(path, &mut reader, &mut writer)?;
+        drop(writer);
+        self.record.push(record);
         Ok(())
     }
 
@@ -223,8 +205,7 @@ impl DirectoryWriter for FilesystemWrite {
 
     /// Write the `RECORD` file.
     fn close(mut self, dist_info_dir: &str) -> Result<(), Error> {
-        let record = self.record;
-        self.record = Vec::new();
+        let record = mem::take(&mut self.record);
         write_record(
             &mut self.new_writer(&format!("{dist_info_dir}/RECORD"))?,
             dist_info_dir,
@@ -247,6 +228,40 @@ struct RecordEntry {
     hash: String,
     /// The size of the file in bytes.
     size: usize,
+}
+
+/// Read the input file and write it both to the hasher and the target file.
+///
+/// We're implementing this tee-ing manually since there is no sync `InspectReader` or std tee
+/// function.
+fn write_hashed(
+    path: &str,
+    reader: &mut dyn Read,
+    writer: &mut dyn Write,
+) -> Result<RecordEntry, io::Error> {
+    let mut hasher = Sha256::new();
+    let mut size = 0;
+    // 8KB is the default defined in `std::sys_common::io`.
+    let mut buffer = vec![0; 8 * 1024];
+    loop {
+        let read = match reader.read(&mut buffer) {
+            Ok(read) => read,
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err),
+        };
+        if read == 0 {
+            // End of file
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        writer.write_all(&buffer[..read])?;
+        size += read;
+    }
+    Ok(RecordEntry {
+        path: path.to_string(),
+        hash: format!("{:x}", hasher.finalize()),
+        size,
+    })
 }
 
 /// Build a wheel from the source tree and place it in the output directory.
@@ -343,11 +358,12 @@ fn write_dist_info(
     writer.write_bytes(&format!("{dist_info_dir}/WHEEL"), wheel_info.as_bytes())?;
 
     // Add `entry_points.txt`.
-    let entrypoint = pyproject_toml.to_entry_points()?;
-    writer.write_bytes(
-        &format!("{dist_info_dir}/entry_points.txt"),
-        entrypoint.as_bytes(),
-    )?;
+    if let Some(entrypoint) = pyproject_toml.to_entry_points()? {
+        writer.write_bytes(
+            &format!("{dist_info_dir}/entry_points.txt"),
+            entrypoint.as_bytes(),
+        )?;
+    }
 
     // Add `METADATA`.
     let metadata = pyproject_toml.to_metadata(root)?.core_metadata_format();
@@ -477,5 +493,67 @@ mod tests {
             fs_err::read(temp1.path().join(wheel_filename)).unwrap(),
             fs_err::read(temp2.path().join(wheel_filename)).unwrap()
         );
+    }
+
+    /// Snapshot all files from the prepare metadata hook.
+    #[test]
+    fn test_prepare_metadata() {
+        let metadata_dir = TempDir::new().unwrap();
+        let uv_backend = Path::new("../../scripts/packages/uv_backend");
+        metadata(uv_backend, metadata_dir.path()).unwrap();
+
+        let mut files: Vec<_> = WalkDir::new(metadata_dir.path())
+            .into_iter()
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .strip_prefix(metadata_dir.path())
+                    .unwrap()
+                    .portable_display()
+                    .to_string()
+            })
+            .filter(|path| !path.is_empty())
+            .collect();
+        files.sort();
+        assert_snapshot!(files.join("\n"), @r"
+        uv_backend-0.1.0.dist-info
+        uv_backend-0.1.0.dist-info/METADATA
+        uv_backend-0.1.0.dist-info/RECORD
+        uv_backend-0.1.0.dist-info/WHEEL
+        ");
+
+        let metadata_file = metadata_dir
+            .path()
+            .join("uv_backend-0.1.0.dist-info/METADATA");
+        assert_snapshot!(fs_err::read_to_string(metadata_file).unwrap(), @r###"
+        Metadata-Version: 2.3
+        Name: uv-backend
+        Version: 0.1.0
+        Summary: Add your description here
+        Requires-Python: >=3.12
+        Description-Content-Type: text/markdown
+
+        # uv_backend
+
+        A simple package to be built with the uv build backend.
+        "###);
+
+        let record_file = metadata_dir
+            .path()
+            .join("uv_backend-0.1.0.dist-info/RECORD");
+        assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
+        uv_backend-0.1.0.dist-info/WHEEL,sha256=ceadf23bfd935cd041de3c60b6349f8ee52b8832338222497e809a923d3cba0a,79
+        uv_backend-0.1.0.dist-info/METADATA,sha256=e4a0d390317d7182f65ea978254c71ed283e0a4242150cf1c99a694b113ff68d,224
+        uv_backend-0.1.0.dist-info/RECORD,,
+        "###);
+
+        let wheel_file = metadata_dir.path().join("uv_backend-0.1.0.dist-info/WHEEL");
+        assert_snapshot!(fs_err::read_to_string(wheel_file).unwrap(), @r###"
+        Wheel-Version: 1.0
+        Generator: uv 0.4.18
+        Root-Is-Purelib: true
+        Tag: py3-none-any
+        "###);
     }
 }
