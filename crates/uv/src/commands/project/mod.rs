@@ -525,24 +525,40 @@ pub(crate) async fn get_or_init_environment(
             let venv = workspace.venv();
 
             // Avoid removing things that are not virtual environments
-            if venv.exists() && !venv.join("pyvenv.cfg").exists() {
-                return Err(ProjectError::InvalidProjectEnvironmentDir(
-                    venv,
-                    "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
-                ));
-            }
+            let should_remove = match (venv.try_exists(), venv.join("pyvenv.cfg").try_exists()) {
+                // It's a virtual environment we can remove it
+                (_, Ok(true)) => true,
+                // It doesn't exist at all, we should use it without deleting it to avoid TOCTOU bugs
+                (Ok(false), Ok(false)) => false,
+                // If it's not a virtual environment, bail
+                (Ok(true), Ok(false)) => {
+                    return Err(ProjectError::InvalidProjectEnvironmentDir(
+                        venv,
+                        "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                    ));
+                }
+                // Similarly, if we can't _tell_ if it exists we should bail
+                (_, Err(err)) | (Err(err), _) => {
+                    return Err(ProjectError::InvalidProjectEnvironmentDir(
+                        venv,
+                        format!("it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"),
+                    ));
+                }
+            };
 
             // Remove the existing virtual environment if it doesn't meet the requirements.
-            match fs_err::remove_dir_all(&venv) {
-                Ok(()) => {
-                    writeln!(
-                        printer.stderr(),
-                        "Removed virtual environment at: {}",
-                        venv.user_display().cyan()
-                    )?;
+            if should_remove {
+                match fs_err::remove_dir_all(&venv) {
+                    Ok(()) => {
+                        writeln!(
+                            printer.stderr(),
+                            "Removed virtual environment at: {}",
+                            venv.user_display().cyan()
+                        )?;
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.into()),
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e.into()),
             }
 
             writeln!(
