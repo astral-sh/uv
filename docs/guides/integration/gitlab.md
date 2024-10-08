@@ -14,7 +14,7 @@ variables:
 stages:
   - analysis
 
-UV:
+uv:
   stage: analysis
   image:
     name: ghcr.io/astral-sh/uv:$UV_VERSION-python$PYTHON_VERSION-$BASE_LAYER
@@ -27,7 +27,7 @@ UV:
 Persisting the uv cache between workflow runs can improve performance.
 
 ```yaml
-UV Install:
+uv-install:
   variables:
     UV_CACHE_DIR: .uv-cache
   cache:
