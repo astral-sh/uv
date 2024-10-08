@@ -8,7 +8,7 @@ use url::Url;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::{
     options::{flag, resolver_installer_options, resolver_options},
-    BuildArgs, ExportArgs, PublishArgs, ToolUpgradeArgs,
+    AuthorFrom, BuildArgs, ExportArgs, PublishArgs, ToolUpgradeArgs,
 };
 use uv_cli::{
     AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
@@ -164,6 +164,7 @@ pub(crate) struct InitSettings {
     pub(crate) kind: InitKind,
     pub(crate) vcs: Option<VersionControlSystem>,
     pub(crate) no_readme: bool,
+    pub(crate) author_from: Option<AuthorFrom>,
     pub(crate) no_pin_python: bool,
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
@@ -184,6 +185,7 @@ impl InitSettings {
             script,
             vcs,
             no_readme,
+            author_from,
             no_pin_python,
             no_workspace,
             python,
@@ -206,6 +208,7 @@ impl InitSettings {
             kind,
             vcs,
             no_readme,
+            author_from,
             no_pin_python,
             no_workspace,
             python: python.and_then(Maybe::into_option),
