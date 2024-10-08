@@ -8,7 +8,7 @@
 - Python 3.13 is the default version for `uv python install` ([#8010](https://github.com/astral-sh/uv/pull/8010))
 - Hint at wrong endpoint in `uv publish` failures ([#7872](https://github.com/astral-sh/uv/pull/7872))
 - List available scripts when a command is not specified for `uv run` ([#7687](https://github.com/astral-sh/uv/pull/7687))
-- Fill in `authors` filed during `uv init` ([#7756](https://github.com/astral-sh/uv/pull/7756))
+- Fill in `authors` field during `uv init` ([#7756](https://github.com/astral-sh/uv/pull/7756))
 
 ### Documentation
 
@@ -47,10 +47,10 @@
 ### Documentation
 
 - Add 3.13 support to the platform reference ([#7971](https://github.com/astral-sh/uv/pull/7971))
-- Clarify project environment creation a little ([#7941](https://github.com/astral-sh/uv/pull/7941))
+- Clarify project environment creation ([#7941](https://github.com/astral-sh/uv/pull/7941))
 - Fix code block title in Gitlab integration docs ([#7861](https://github.com/astral-sh/uv/pull/7861))
-- Fix documentation (projects guide) regarding adding a git dependency ([#7916](https://github.com/astral-sh/uv/pull/7916))
-- Fix uninstallation command for windows on documentation ([#7944](https://github.com/astral-sh/uv/pull/7944))
+- Fix project guide section on adding a Git dependency ([#7916](https://github.com/astral-sh/uv/pull/7916))
+- Fix uninstallation command for Windows ([#7944](https://github.com/astral-sh/uv/pull/7944))
 - Clearly specify the minimum supported Windows Server version ([#7946](https://github.com/astral-sh/uv/pull/7946))
 
 ### Rust API
