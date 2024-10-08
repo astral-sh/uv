@@ -10,9 +10,10 @@ pub(crate) fn build_sdist(_sdist_directory: &Path) -> Result<ExitStatus> {
 }
 pub(crate) fn build_wheel(
     wheel_directory: &Path,
-    _metadata_directory: Option<&Path>,
+    metadata_directory: Option<&Path>,
 ) -> Result<ExitStatus> {
-    let filename = uv_build_backend::build(&env::current_dir()?, wheel_directory)?;
+    let filename =
+        uv_build_backend::build(&env::current_dir()?, wheel_directory, metadata_directory)?;
     println!("{filename}");
     Ok(ExitStatus::Success)
 }

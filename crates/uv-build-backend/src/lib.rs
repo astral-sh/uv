@@ -51,6 +51,8 @@ pub enum Error {
     Csv(#[from] csv::Error),
     #[error("Expected a Python module with an `__init__.py` at: `{}`", _0.user_display())]
     MissingModule(PathBuf),
+    #[error("Inconsistent metadata between prepare and build step: `{0}`")]
+    InconsistentSteps(&'static str),
 }
 
 /// Allow dispatching between writing to a directory, writing to zip and writing to a `.tar.gz`.
@@ -274,10 +276,16 @@ fn write_hashed(
 }
 
 /// Build a wheel from the source tree and place it in the output directory.
-pub fn build(source_tree: &Path, wheel_dir: &Path) -> Result<WheelFilename, Error> {
+pub fn build(
+    source_tree: &Path,
+    wheel_dir: &Path,
+    metadata_directory: Option<&Path>,
+) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
     pyproject_toml.check_build_system();
+
+    check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
     let filename = WheelFilename {
         name: pyproject_toml.name().clone(),
@@ -353,6 +361,54 @@ pub fn metadata(source_tree: &Path, metadata_directory: &Path) -> Result<String,
     wheel_writer.close(&dist_info_dir)?;
 
     Ok(dist_info_dir)
+}
+
+/// PEP 517 requires that the metadata directory from the prepare metadata call is identical to the
+/// build wheel call. This method performs a prudence check that `METADATA` and `entry_points.txt`
+/// match.
+fn check_metadata_directory(
+    source_tree: &Path,
+    metadata_directory: Option<&Path>,
+    pyproject_toml: &PyProjectToml,
+) -> Result<(), Error> {
+    let Some(metadata_directory) = metadata_directory else {
+        return Ok(());
+    };
+
+    let dist_info_dir = format!(
+        "{}-{}.dist-info",
+        pyproject_toml.name().as_dist_info_name(),
+        pyproject_toml.version()
+    );
+
+    // `METADATA` is a mandatory file.
+    let current = pyproject_toml
+        .to_metadata(source_tree)?
+        .core_metadata_format();
+    let previous =
+        fs_err::read_to_string(metadata_directory.join(&dist_info_dir).join("METADATA"))?;
+    if previous != current {
+        return Err(Error::InconsistentSteps("METADATA"));
+    }
+
+    // `entry_points.txt` is not written if it would be empty.
+    let entrypoints_path = metadata_directory
+        .join(&dist_info_dir)
+        .join("entry_points.txt");
+    match pyproject_toml.to_entry_points()? {
+        None => {
+            if entrypoints_path.is_file() {
+                return Err(Error::InconsistentSteps("entry_points.txt"));
+            }
+        }
+        Some(entrypoints) => {
+            if fs_err::read_to_string(&entrypoints_path)? != entrypoints {
+                return Err(Error::InconsistentSteps("entry_points.txt"));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Add `METADATA` and `entry_points.txt` to the dist-info directory.
@@ -495,7 +551,7 @@ mod tests {
     fn test_determinism() {
         let temp1 = TempDir::new().unwrap();
         let uv_backend = Path::new("../../scripts/packages/uv_backend");
-        build(uv_backend, temp1.path()).unwrap();
+        build(uv_backend, temp1.path(), None).unwrap();
 
         // Touch the file to check that we don't serialize the last modified date.
         fs_err::write(
@@ -505,7 +561,7 @@ mod tests {
         .unwrap();
 
         let temp2 = TempDir::new().unwrap();
-        build(uv_backend, temp2.path()).unwrap();
+        build(uv_backend, temp2.path(), None).unwrap();
 
         let wheel_filename = "uv_backend-0.1.0-py3-none-any.whl";
         assert_eq!(
