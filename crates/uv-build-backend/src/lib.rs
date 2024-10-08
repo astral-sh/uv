@@ -381,14 +381,17 @@ fn check_metadata_directory(
         pyproject_toml.version()
     );
 
-    let metadata = pyproject_toml
+    // `METADATA` is a mandatory file.
+    let current = pyproject_toml
         .to_metadata(source_tree)?
         .core_metadata_format();
-    if fs_err::read_to_string(metadata_directory.join(&dist_info_dir).join("METADATA"))? != metadata
-    {
+    let previous =
+        fs_err::read_to_string(metadata_directory.join(&dist_info_dir).join("METADATA"))?;
+    if previous != current {
         return Err(Error::InconsistentSteps("METADATA"));
     }
 
+    // `entry_points.txt` is not written if it would be empty.
     let entrypoints_path = metadata_directory
         .join(&dist_info_dir)
         .join("entry_points.txt");
