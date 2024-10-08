@@ -132,6 +132,7 @@ nav:
       - Benchmarks: reference/benchmarks.md
       - Versioning: reference/versioning.md
       - Platform support: reference/platforms.md
+      - Changelog: https://github.com/astral-sh/uv/blob/main/CHANGELOG.md
 validation:
   omitted_files: warn
   absolute_links: warn
