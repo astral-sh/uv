@@ -18,8 +18,8 @@ UV:
   stage: analysis
   image:
     name: ghcr.io/astral-sh/uv:$UV_VERSION-python$PYTHON_VERSION-$BASE_LAYER
-  script: >
-    cd $CI_PROJECT_DIR
+  script:
+    - cd $CI_PROJECT_DIR
     # your `uv` commands
 ```
 
@@ -37,9 +37,9 @@ UV Install:
           - uv.lock
       paths:
         - $UV_CACHE_DIR
-  script: >
-    # Your uv commands
-    uv cache prune --ci
+  script:
+    # Your `uv` commands
+    - uv cache prune --ci
 ```
 
 See the [GitLab caching documentation](https://docs.gitlab.com/ee/ci/caching/) for more details on
