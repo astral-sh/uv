@@ -77,7 +77,20 @@ impl RequiresPython {
             // Convert to PubGrub range and perform an intersection.
             let requires_python =
                 crate::pubgrub::PubGrubSpecifier::from_release_specifiers(specifier)?;
+
             if let Some((lower, upper)) = requires_python.bounding_range() {
+                // Create ranges for performing subset comparisons
+                let new_range: pubgrub::Range<Version> =
+                    Range::from_range_bounds((lower.cloned(), upper.cloned()));
+                let existing_range: pubgrub::Range<Version> =
+                    Range::from_range_bounds(((*lower_bound).clone(), (*upper_bound).clone()));
+
+                // If this specifier is a subset of the current bounds, clear the set because the
+                // existing specifiers are redundant
+                if new_range.subset_of(&existing_range) {
+                    combined.clear();
+                }
+
                 let lower = LowerBound(lower.cloned());
                 let upper = UpperBound(upper.cloned());
                 if lower > lower_bound {
@@ -85,6 +98,12 @@ impl RequiresPython {
                 }
                 if upper < upper_bound {
                     upper_bound = upper;
+                }
+
+                // If the current bounds are a subset of this specifier, do not add this specifier
+                // to the set because it is redundant.
+                if existing_range.subset_of(&new_range) {
+                    continue;
                 }
             }
 
