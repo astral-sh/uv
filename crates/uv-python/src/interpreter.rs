@@ -157,10 +157,7 @@ impl Interpreter {
             self.python_major(),
             self.python_minor(),
             self.python_patch(),
-            self.python_version()
-                .pre()
-                .map(|pre| pre.to_string())
-                .unwrap_or_default(),
+            self.python_version().pre(),
             self.os(),
             self.arch(),
             self.libc(),

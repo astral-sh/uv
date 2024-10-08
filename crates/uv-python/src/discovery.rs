@@ -1869,7 +1869,13 @@ impl VersionRequest {
         }
     }
 
-    pub(crate) fn matches_major_minor_patch(&self, major: u8, minor: u8, patch: u8) -> bool {
+    pub(crate) fn matches_major_minor_patch_prerelease(
+        &self,
+        major: u8,
+        minor: u8,
+        patch: u8,
+        prerelease: Option<Prerelease>,
+    ) -> bool {
         match self {
             Self::Any | Self::Default => true,
             Self::Major(self_major, _) => *self_major == major,
@@ -1879,14 +1885,14 @@ impl VersionRequest {
             Self::MajorMinorPatch(self_major, self_minor, self_patch, _) => {
                 (*self_major, *self_minor, *self_patch) == (major, minor, patch)
             }
-            Self::Range(specifiers, _) => specifiers.contains(&Version::new([
-                u64::from(major),
-                u64::from(minor),
-                u64::from(patch),
-            ])),
-            Self::MajorMinorPrerelease(self_major, self_minor, _, _) => {
+            Self::Range(specifiers, _) => specifiers.contains(
+                &Version::new([u64::from(major), u64::from(minor), u64::from(patch)])
+                    .with_pre(prerelease),
+            ),
+            Self::MajorMinorPrerelease(self_major, self_minor, self_prerelease, _) => {
                 // Pre-releases of Python versions are always for the zero patch version
                 (*self_major, *self_minor, 0) == (major, minor, patch)
+                    && prerelease.map_or(true, |pre| *self_prerelease == pre)
             }
         }
     }
