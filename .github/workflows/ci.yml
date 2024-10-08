@@ -914,7 +914,7 @@ jobs:
     steps:
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.12.7"
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -948,13 +948,13 @@ jobs:
       - name: "Sync to the system Python"
         run: ./uv sync -v --python 3.12
         env:
-          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.6/x64"
+          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.7/x64"
 
       - name: "Attempt to sync to the system Python with an incompatible version"
         run: |
           ./uv sync -v --python 3.11 && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
         env:
-          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.6/x64"
+          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.7/x64"
 
       - name: "Attempt to sync to a non-Python environment directory"
         run: |
