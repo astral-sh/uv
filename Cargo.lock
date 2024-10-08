@@ -2974,8 +2974,7 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 [[package]]
 name = "rust-netrc"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32662f97cbfdbad9d5f78f1338116f06871e7dae4fd37e9f59a0f57cf2044868"
+source = "git+https://github.com/gribouille/netrc?rev=544f3890b621f0dc30fcefb4f804269c160ce2e9#544f3890b621f0dc30fcefb4f804269c160ce2e9"
 dependencies = [
  "thiserror",
 ]
