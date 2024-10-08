@@ -37,9 +37,9 @@ UV Install:
           - uv.lock
       paths:
         - $UV_CACHE_DIR
-  steps: >
+  script: >
     # Your uv commands
-    run: uv cache prune --ci
+    uv cache prune --ci
 ```
 
 See the [GitLab caching documentation](https://docs.gitlab.com/ee/ci/caching/) for more details on
