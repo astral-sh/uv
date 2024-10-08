@@ -31,8 +31,6 @@ This can be used when you must use an existing Python interpreter, not the virtu
 
 def _activate_this():
 
-    from __future__ import annotations
-
     import os
     import site
     import sys
@@ -63,6 +61,7 @@ def _activate_this():
 
     sys.real_prefix = sys.prefix
     sys.prefix = base
+
 
 _activate_this()
 del _activate_this
