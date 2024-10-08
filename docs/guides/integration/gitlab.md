@@ -19,7 +19,6 @@ UV:
   image:
     name: ghcr.io/astral-sh/uv:$UV_VERSION-python$PYTHON_VERSION-$BASE_LAYER
   script:
-    - cd $CI_PROJECT_DIR
     # your `uv` commands
 ```
 
