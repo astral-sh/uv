@@ -29,7 +29,7 @@ Persisting the uv cache between workflow runs can improve performance.
 ```yaml
 UV Install:
   variables:
-    UV_CACHE_DIR: /tmp/.uv-cache
+    UV_CACHE_DIR: .uv-cache
   cache:
     - key:
         files:
