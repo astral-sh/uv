@@ -361,9 +361,9 @@ dependencies = [
 
 [[package]]
 name = "boxcar"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "510a90332002c1af3317ef6b712f0dab697f30bbe809b86965eac2923c0bca8e"
+checksum = "fba19c552ee63cb6646b75e1166d1bdb8a6d34a6d19e319dec88c8adadff2db3"
 
 [[package]]
 name = "bstr"
@@ -4134,7 +4134,7 @@ checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
 
 [[package]]
 name = "uv"
-version = "0.4.18"
+version = "0.4.20"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4679,12 +4679,14 @@ dependencies = [
  "fs2",
  "junction",
  "path-slash",
+ "rustix",
  "schemars",
  "serde",
  "tempfile",
  "tokio",
  "tracing",
  "urlencoding",
+ "winsafe 0.0.22",
 ]
 
 [[package]]
@@ -4982,7 +4984,6 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "rmp-serde",
- "rustix",
  "same-file",
  "schemars",
  "serde",
@@ -5014,7 +5015,6 @@ dependencies = [
  "windows-registry",
  "windows-result 0.2.0",
  "windows-sys 0.59.0",
- "winsafe 0.0.22",
 ]
 
 [[package]]
@@ -5248,7 +5248,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.4.18"
+version = "0.4.20"
 
 [[package]]
 name = "uv-virtualenv"

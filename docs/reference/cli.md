@@ -65,7 +65,7 @@ Arguments following the command (or script) are not interpreted as arguments to 
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv run [OPTIONS] <COMMAND>
+uv run [OPTIONS] [COMMAND]
 ```
 
 <h3 class="cli-reference">Options</h3>
@@ -440,6 +440,19 @@ uv init [OPTIONS] [PATH]
 
 <p>By default, an application is not intended to be built and distributed as a Python package. The <code>--package</code> option can be used to create an application that is distributable, e.g., if you want to distribute a command-line interface via PyPI.</p>
 
+</dd><dt><code>--author-from</code> <i>author-from</i></dt><dd><p>Fill in the <code>authors</code> field in the <code>pyproject.toml</code>.</p>
+
+<p>By default, uv will attempt to infer the author information from some sources (e.g., Git) (<code>auto</code>). Use <code>--author-from git</code> to only infer from Git configuration. Use <code>--author-from none</code> to avoid inferring the author information.</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Fetch the author information from some sources (e.g., Git) automatically</li>
+
+<li><code>git</code>:  Fetch the author information from Git configuration only</li>
+
+<li><code>none</code>:  Do not infer the author information</li>
+</ul>
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
@@ -7201,9 +7214,9 @@ uv publish [OPTIONS] [FILES]...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint.</p>
+</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint (not the index URL).</p>
 
-<p>Note that this typically differs from the index URL.</p>
+<p>Note that there are typically different URLs for index access (e.g., <code>https:://.../simple</code>) and index upload.</p>
 
 <p>Defaults to PyPI&#8217;s publish URL (&lt;https://upload.pypi.org/legacy/&gt;).</p>
 

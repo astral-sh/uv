@@ -198,6 +198,74 @@ fn run_args() -> Result<()> {
     Ok(())
 }
 
+/// Run without specifying any argunments.
+/// This should list the available scripts.
+#[test]
+fn run_no_args() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+
+    // Run without specifying any argunments.
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.run(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+    Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
+
+    The following commands are available in the environment:
+
+    - python
+    - python3
+    - python3.12
+
+    See `uv run --help` for more information.
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.run(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+    Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
+
+    The following commands are available in the environment:
+    
+    - pydoc
+    - python
+    - pythonw
+
+    See `uv run --help` for more information.
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
 /// Run a PEP 723-compatible script. The script should take precedence over the workspace
 /// dependencies.
 #[test]

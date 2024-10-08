@@ -3347,18 +3347,10 @@ fn lock_requires_python() -> Result<()> {
     });
 
     // Validate that attempting to install with an unsupported Python version raises an error.
-    let context38 = TestContext::new("3.8");
+    let context38 = TestContext::new("3.8").with_filtered_python_sources();
 
     fs_err::copy(pyproject_toml, context38.temp_dir.join("pyproject.toml"))?;
     fs_err::copy(&lockfile, context38.temp_dir.join("uv.lock"))?;
-
-    let filters: Vec<_> = context38
-        .filters()
-        .into_iter()
-        .chain(context.filters())
-        // Platform independent message for the missing Python installation
-        .chain([(" or `py` launcher", "")])
-        .collect();
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
@@ -3372,13 +3364,13 @@ fn lock_requires_python() -> Result<()> {
 
     // Install from the lockfile.
     // Note we need to disable Python fetches or we'll just download 3.12
-    uv_snapshot!(filters, context38.sync().arg("--frozen").arg("--no-python-downloads"), @r###"
+    uv_snapshot!(context38.filters(), context38.sync().arg("--frozen").arg("--no-python-downloads"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python >=3.12 in system path
+    error: No interpreter found for Python >=3.12 in [PYTHON SOURCES]
     "###);
 
     Ok(())

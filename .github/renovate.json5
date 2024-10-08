@@ -2,7 +2,11 @@
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   dependencyDashboard: true,
   suppressNotifications: ["prEditedNotification"],
-  extends: ["config:recommended"],
+  extends: [
+    "config:recommended",
+    // For tool versions defined in GitHub Actions:
+    "customManagers:githubActionsVersions",
+  ],
   labels: ["internal"],
   schedule: ["before 4am on Monday"],
   semanticCommits: "disabled",

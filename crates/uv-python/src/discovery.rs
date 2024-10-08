@@ -10,6 +10,7 @@ use tracing::{debug, instrument, trace};
 use which::{which, which_all};
 
 use uv_cache::Cache;
+use uv_fs::which::is_executable;
 use uv_fs::Simplified;
 use uv_pep440::{Prerelease, Version, VersionSpecifier, VersionSpecifiers};
 use uv_warnings::warn_user_once;
@@ -27,7 +28,6 @@ use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable,
 };
-use crate::which::is_executable;
 use crate::{Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
@@ -328,7 +328,7 @@ fn python_executables_from_installed<'a>(
     })
     .flatten();
 
-    let from_windows = std::iter::once_with(move || {
+    let from_windows_registry = std::iter::once_with(move || {
         #[cfg(windows)]
         {
             // Skip interpreter probing if we already know the version doesn't match.
@@ -376,14 +376,14 @@ fn python_executables_from_installed<'a>(
         PythonPreference::Managed => Box::new(
             from_managed_installations
                 .chain(from_search_path)
-                .chain(from_windows),
+                .chain(from_windows_registry),
         ),
         PythonPreference::System => Box::new(
             from_search_path
-                .chain(from_windows)
+                .chain(from_windows_registry)
                 .chain(from_managed_installations),
         ),
-        PythonPreference::OnlySystem => Box::new(from_search_path.chain(from_windows)),
+        PythonPreference::OnlySystem => Box::new(from_search_path.chain(from_windows_registry)),
     }
 }
 
@@ -1519,15 +1519,6 @@ impl PythonPreference {
             PythonPreference::OnlySystem => {
                 matches!(source, PythonSource::SearchPath | PythonSource::Registry)
             }
-        }
-    }
-
-    /// Return the default [`PythonPreference`], respecting the `UV_TEST_PYTHON_PATH` variable.
-    pub fn default_from_env() -> Self {
-        if env::var_os("UV_TEST_PYTHON_PATH").is_some() {
-            Self::OnlySystem
-        } else {
-            Self::default()
         }
     }
 

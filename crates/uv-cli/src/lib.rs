@@ -2346,6 +2346,17 @@ impl ExternalCommand {
     }
 }
 
+#[derive(Debug, Default, Copy, Clone, clap::ValueEnum)]
+pub enum AuthorFrom {
+    /// Fetch the author information from some sources (e.g., Git) automatically.
+    #[default]
+    Auto,
+    /// Fetch the author information from Git configuration only.
+    Git,
+    /// Do not infer the author information.
+    None,
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct InitArgs {
@@ -2431,6 +2442,14 @@ pub struct InitArgs {
     /// Do not create a `README.md` file.
     #[arg(long)]
     pub no_readme: bool,
+
+    /// Fill in the `authors` field in the `pyproject.toml`.
+    ///
+    /// By default, uv will attempt to infer the author information from some sources (e.g., Git) (`auto`).
+    /// Use `--author-from git` to only infer from Git configuration.
+    /// Use `--author-from none` to avoid inferring the author information.
+    #[arg(long, value_enum)]
+    pub author_from: Option<AuthorFrom>,
 
     /// Do not create a `.python-version` file for the project.
     ///
@@ -2524,7 +2543,7 @@ pub struct RunArgs {
     /// If the path to a Python script (i.e., ending in `.py`), it will be
     /// executed with the Python interpreter.
     #[command(subcommand)]
-    pub command: ExternalCommand,
+    pub command: Option<ExternalCommand>,
 
     /// Run with the given packages installed.
     ///
@@ -4430,7 +4449,8 @@ pub struct DisplayTreeArgs {
     #[arg(long)]
     pub no_dedupe: bool,
 
-    /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
+    /// Show the reverse dependencies for the given package. This flag will invert the tree and
+    /// display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
 }
@@ -4444,9 +4464,10 @@ pub struct PublishArgs {
     #[arg(default_value = "dist/*")]
     pub files: Vec<String>,
 
-    /// The URL of the upload endpoint.
+    /// The URL of the upload endpoint (not the index URL).
     ///
-    /// Note that this typically differs from the index URL.
+    /// Note that there are typically different URLs for index access (e.g., `https:://.../simple`)
+    /// and index upload.
     ///
     /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
     ///

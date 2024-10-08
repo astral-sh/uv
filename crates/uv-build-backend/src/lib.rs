@@ -8,10 +8,11 @@ use glob::{GlobError, PatternError};
 use itertools::Itertools;
 use sha2::{Digest, Sha256};
 use std::fs::FileType;
-use std::io;
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf, StripPrefixError};
+use std::{io, mem};
 use thiserror::Error;
+use tracing::{debug, trace};
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use walkdir::WalkDir;
@@ -38,7 +39,7 @@ pub enum Error {
         #[source]
         err: walkdir::Error,
     },
-    #[error("Non-UTF-8 paths are not supported: {}", _0.user_display())]
+    #[error("Non-UTF-8 paths are not supported: `{}`", _0.user_display())]
     NotUtf8Path(PathBuf),
     #[error("Failed to walk source tree")]
     StripPrefix(#[from] StripPrefixError),
@@ -48,6 +49,10 @@ pub enum Error {
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
+    #[error("Expected a Python module with an `__init__.py` at: `{}`", _0.user_display())]
+    MissingModule(PathBuf),
+    #[error("Inconsistent metadata between prepare and build step: `{0}`")]
+    InconsistentSteps(&'static str),
 }
 
 /// Allow dispatching between writing to a directory, writing to zip and writing to a `.tar.gz`.
@@ -60,7 +65,7 @@ trait DirectoryWriter {
     /// Add a file with the given content.
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error>;
 
-    /// Add file with the given name and return a writer for it.
+    /// Add a file with the given name and return a writer for it.
     fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error>;
 
     /// Add a local file.
@@ -106,16 +111,15 @@ impl ZipDirectoryWriter {
 
 impl DirectoryWriter for ZipDirectoryWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
+        trace!("Adding {}", path);
         let options = zip::write::FileOptions::default().compression_method(self.compression);
         self.writer.start_file(path, options)?;
         self.writer.write_all(bytes)?;
 
-        let mut hasher = Sha256::new();
-        hasher.update(bytes);
-
+        let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
             path: path.to_string(),
-            hash: format!("{:x}", hasher.finalize()),
+            hash,
             size: bytes.len(),
         });
 
@@ -132,55 +136,29 @@ impl DirectoryWriter for ZipDirectoryWriter {
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
-        let mut write = self.new_writer(path)?;
-
+        trace!("Adding {} from {}", path, file.user_display());
         let mut reader = BufReader::new(File::open(file)?);
-        let mut hasher = Sha256::new();
-        let mut size = 0;
-
-        // Manually tee-ing the reader since there is no sync `InspectReader` or std tee function.
-
-        // 8KB is the default defined in `std::sys_common::io`.
-        let mut buffer = vec![0; 8 * 1024];
-        loop {
-            let read = match reader.read(&mut buffer) {
-                Ok(read) => read,
-                Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
-                Err(err) => return Err(err.into()),
-            };
-            if read == 0 {
-                // End of file
-                break;
-            }
-            hasher.update(&buffer[..read]);
-            write.write_all(&buffer[..read])?;
-            size += read;
-        }
-        drop(write);
-
-        self.record.push(RecordEntry {
-            path: path.to_string(),
-            hash: format!("{:x}", hasher.finalize()),
-            size,
-        });
+        let mut writer = self.new_writer(path)?;
+        let record = write_hashed(path, &mut reader, &mut writer)?;
+        drop(writer);
+        self.record.push(record);
         Ok(())
     }
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
+        trace!("Adding directory {}", directory);
         let options = zip::write::FileOptions::default().compression_method(self.compression);
         Ok(self.writer.add_directory(directory, options)?)
     }
 
     /// Write the `RECORD` file and the central directory.
     fn close(mut self, dist_info_dir: &str) -> Result<(), Error> {
-        let record = self.record;
-        self.record = Vec::new();
-        write_record(
-            &mut self.new_writer(&format!("{dist_info_dir}/RECORD"))?,
-            dist_info_dir,
-            record,
-        )?;
+        let record_path = format!("{dist_info_dir}/RECORD");
+        trace!("Adding {record_path}");
+        let record = mem::take(&mut self.record);
+        write_record(&mut self.new_writer(&record_path)?, dist_info_dir, record)?;
 
+        trace!("Adding central directory");
         self.writer.finish()?;
         Ok(())
     }
@@ -205,26 +183,40 @@ impl FilesystemWrite {
 /// File system writer.
 impl DirectoryWriter for FilesystemWrite {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
-        Ok(fs_err::write(path, bytes)?)
+        trace!("Adding {}", path);
+        let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
+        self.record.push(RecordEntry {
+            path: path.to_string(),
+            hash,
+            size: bytes.len(),
+        });
+
+        Ok(fs_err::write(self.root.join(path), bytes)?)
     }
 
     fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
-        Ok(Box::new(File::create(path)?))
+        trace!("Adding {}", path);
+        Ok(Box::new(File::create(self.root.join(path))?))
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
-        fs_err::copy(file, self.root.join(path))?;
+        trace!("Adding {} from {}", path, file.user_display());
+        let mut reader = BufReader::new(File::open(file)?);
+        let mut writer = self.new_writer(path)?;
+        let record = write_hashed(path, &mut reader, &mut writer)?;
+        drop(writer);
+        self.record.push(record);
         Ok(())
     }
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
+        trace!("Adding directory {}", directory);
         Ok(fs_err::create_dir(self.root.join(directory))?)
     }
 
     /// Write the `RECORD` file.
     fn close(mut self, dist_info_dir: &str) -> Result<(), Error> {
-        let record = self.record;
-        self.record = Vec::new();
+        let record = mem::take(&mut self.record);
         write_record(
             &mut self.new_writer(&format!("{dist_info_dir}/RECORD"))?,
             dist_info_dir,
@@ -249,11 +241,51 @@ struct RecordEntry {
     size: usize,
 }
 
+/// Read the input file and write it both to the hasher and the target file.
+///
+/// We're implementing this tee-ing manually since there is no sync `InspectReader` or std tee
+/// function.
+fn write_hashed(
+    path: &str,
+    reader: &mut dyn Read,
+    writer: &mut dyn Write,
+) -> Result<RecordEntry, io::Error> {
+    let mut hasher = Sha256::new();
+    let mut size = 0;
+    // 8KB is the default defined in `std::sys_common::io`.
+    let mut buffer = vec![0; 8 * 1024];
+    loop {
+        let read = match reader.read(&mut buffer) {
+            Ok(read) => read,
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err),
+        };
+        if read == 0 {
+            // End of file
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        writer.write_all(&buffer[..read])?;
+        size += read;
+    }
+    Ok(RecordEntry {
+        path: path.to_string(),
+        hash: format!("{:x}", hasher.finalize()),
+        size,
+    })
+}
+
 /// Build a wheel from the source tree and place it in the output directory.
-pub fn build(source_tree: &Path, wheel_dir: &Path) -> Result<WheelFilename, Error> {
+pub fn build(
+    source_tree: &Path,
+    wheel_dir: &Path,
+    metadata_directory: Option<&Path>,
+) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
     pyproject_toml.check_build_system();
+
+    check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
     let filename = WheelFilename {
         name: pyproject_toml.name().clone(),
@@ -264,11 +296,16 @@ pub fn build(source_tree: &Path, wheel_dir: &Path) -> Result<WheelFilename, Erro
         platform_tag: vec!["any".to_string()],
     };
 
-    let mut wheel_writer =
-        ZipDirectoryWriter::new_wheel(File::create(wheel_dir.join(filename.to_string()))?);
+    let wheel_path = wheel_dir.join(filename.to_string());
+    debug!("Writing wheel at {}", wheel_path.user_display());
+    let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
+    debug!("Adding content files to {}", wheel_path.user_display());
     let strip_root = source_tree.join("src");
     let module_root = strip_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
+    if !module_root.join("__init__.py").is_file() {
+        return Err(Error::MissingModule(module_root));
+    }
     for entry in WalkDir::new(module_root) {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: source_tree.to_path_buf(),
@@ -291,6 +328,7 @@ pub fn build(source_tree: &Path, wheel_dir: &Path) -> Result<WheelFilename, Erro
         entry.path();
     }
 
+    debug!("Adding metadata files to {}", wheel_path.user_display());
     let dist_info_dir =
         write_dist_info(&mut wheel_writer, &pyproject_toml, &filename, source_tree)?;
     wheel_writer.close(&dist_info_dir)?;
@@ -313,12 +351,64 @@ pub fn metadata(source_tree: &Path, metadata_directory: &Path) -> Result<String,
         platform_tag: vec!["any".to_string()],
     };
 
+    debug!(
+        "Writing metadata files to {}",
+        metadata_directory.user_display()
+    );
     let mut wheel_writer = FilesystemWrite::new(metadata_directory);
     let dist_info_dir =
         write_dist_info(&mut wheel_writer, &pyproject_toml, &filename, source_tree)?;
     wheel_writer.close(&dist_info_dir)?;
 
     Ok(dist_info_dir)
+}
+
+/// PEP 517 requires that the metadata directory from the prepare metadata call is identical to the
+/// build wheel call. This method performs a prudence check that `METADATA` and `entry_points.txt`
+/// match.
+fn check_metadata_directory(
+    source_tree: &Path,
+    metadata_directory: Option<&Path>,
+    pyproject_toml: &PyProjectToml,
+) -> Result<(), Error> {
+    let Some(metadata_directory) = metadata_directory else {
+        return Ok(());
+    };
+
+    let dist_info_dir = format!(
+        "{}-{}.dist-info",
+        pyproject_toml.name().as_dist_info_name(),
+        pyproject_toml.version()
+    );
+
+    // `METADATA` is a mandatory file.
+    let current = pyproject_toml
+        .to_metadata(source_tree)?
+        .core_metadata_format();
+    let previous =
+        fs_err::read_to_string(metadata_directory.join(&dist_info_dir).join("METADATA"))?;
+    if previous != current {
+        return Err(Error::InconsistentSteps("METADATA"));
+    }
+
+    // `entry_points.txt` is not written if it would be empty.
+    let entrypoints_path = metadata_directory
+        .join(&dist_info_dir)
+        .join("entry_points.txt");
+    match pyproject_toml.to_entry_points()? {
+        None => {
+            if entrypoints_path.is_file() {
+                return Err(Error::InconsistentSteps("entry_points.txt"));
+            }
+        }
+        Some(entrypoints) => {
+            if fs_err::read_to_string(&entrypoints_path)? != entrypoints {
+                return Err(Error::InconsistentSteps("entry_points.txt"));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Add `METADATA` and `entry_points.txt` to the dist-info directory.
@@ -343,11 +433,12 @@ fn write_dist_info(
     writer.write_bytes(&format!("{dist_info_dir}/WHEEL"), wheel_info.as_bytes())?;
 
     // Add `entry_points.txt`.
-    let entrypoint = pyproject_toml.to_entry_points()?;
-    writer.write_bytes(
-        &format!("{dist_info_dir}/entry_points.txt"),
-        entrypoint.as_bytes(),
-    )?;
+    if let Some(entrypoint) = pyproject_toml.to_entry_points()? {
+        writer.write_bytes(
+            &format!("{dist_info_dir}/entry_points.txt"),
+            entrypoint.as_bytes(),
+        )?;
+    }
 
     // Add `METADATA`.
     let metadata = pyproject_toml.to_metadata(root)?.core_metadata_format();
@@ -460,7 +551,7 @@ mod tests {
     fn test_determinism() {
         let temp1 = TempDir::new().unwrap();
         let uv_backend = Path::new("../../scripts/packages/uv_backend");
-        build(uv_backend, temp1.path()).unwrap();
+        build(uv_backend, temp1.path(), None).unwrap();
 
         // Touch the file to check that we don't serialize the last modified date.
         fs_err::write(
@@ -470,12 +561,79 @@ mod tests {
         .unwrap();
 
         let temp2 = TempDir::new().unwrap();
-        build(uv_backend, temp2.path()).unwrap();
+        build(uv_backend, temp2.path(), None).unwrap();
 
         let wheel_filename = "uv_backend-0.1.0-py3-none-any.whl";
         assert_eq!(
             fs_err::read(temp1.path().join(wheel_filename)).unwrap(),
             fs_err::read(temp2.path().join(wheel_filename)).unwrap()
         );
+    }
+
+    /// Snapshot all files from the prepare metadata hook.
+    #[test]
+    fn test_prepare_metadata() {
+        let metadata_dir = TempDir::new().unwrap();
+        let uv_backend = Path::new("../../scripts/packages/uv_backend");
+        metadata(uv_backend, metadata_dir.path()).unwrap();
+
+        let mut files: Vec<_> = WalkDir::new(metadata_dir.path())
+            .into_iter()
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .strip_prefix(metadata_dir.path())
+                    .unwrap()
+                    .portable_display()
+                    .to_string()
+            })
+            .filter(|path| !path.is_empty())
+            .collect();
+        files.sort();
+        assert_snapshot!(files.join("\n"), @r"
+        uv_backend-0.1.0.dist-info
+        uv_backend-0.1.0.dist-info/METADATA
+        uv_backend-0.1.0.dist-info/RECORD
+        uv_backend-0.1.0.dist-info/WHEEL
+        ");
+
+        let metadata_file = metadata_dir
+            .path()
+            .join("uv_backend-0.1.0.dist-info/METADATA");
+        assert_snapshot!(fs_err::read_to_string(metadata_file).unwrap(), @r###"
+        Metadata-Version: 2.3
+        Name: uv-backend
+        Version: 0.1.0
+        Summary: Add your description here
+        Requires-Python: >=3.12
+        Description-Content-Type: text/markdown
+
+        # uv_backend
+
+        A simple package to be built with the uv build backend.
+        "###);
+
+        let record_file = metadata_dir
+            .path()
+            .join("uv_backend-0.1.0.dist-info/RECORD");
+        assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
+        uv_backend-0.1.0.dist-info/WHEEL,sha256=70ce44709b6a53e0d0c5a6755b0290179697020f1f867e794f26154fe4825738,79
+        uv_backend-0.1.0.dist-info/METADATA,sha256=e4a0d390317d7182f65ea978254c71ed283e0a4242150cf1c99a694b113ff68d,224
+        uv_backend-0.1.0.dist-info/RECORD,,
+        "###);
+
+        let wheel_file = metadata_dir.path().join("uv_backend-0.1.0.dist-info/WHEEL");
+        let filters = vec![(uv_version::version(), "[VERSION]")];
+        with_settings!({
+            filters => filters
+        }, {
+            assert_snapshot!(fs_err::read_to_string(wheel_file).unwrap(), @r###"
+                Wheel-Version: 1.0
+                Generator: uv [VERSION]
+                Root-Is-Purelib: true
+                Tag: py3-none-any
+            "###);
+        });
     }
 }
