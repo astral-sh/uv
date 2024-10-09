@@ -5444,9 +5444,9 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 </dd><dt><code>--editable</code>, <code>-e</code> <i>editable</i></dt><dd><p>Install the editable package based on the provided local file path</p>
 
-</dd><dt><code>--exact</code></dt><dd><p>Remove extraneous packages present in the environment.</p>
+</dd><dt><code>--exact</code></dt><dd><p>Perform an exact sync, removing extraneous packages.</p>
 
-<p>When enabled, uv will remove any extraneous packages from the environment</p>
+<p>By default, installing will make the minimum necessary changes to satisfy the requirements. When enabled, uv will update the environment to exactly match the requirements, removing packages that are not included in the requirements.</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 

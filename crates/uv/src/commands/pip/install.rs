@@ -67,6 +67,7 @@ pub(crate) async fn pip_install(
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
+    modifications: Modifications,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     strict: bool,
@@ -81,7 +82,6 @@ pub(crate) async fn pip_install(
     native_tls: bool,
     cache: Cache,
     dry_run: bool,
-    exact: bool,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -403,12 +403,6 @@ pub(crate) async fn pip_install(
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),
-    };
-
-    let modifications = if exact {
-        Modifications::Exact
-    } else {
-        Modifications::Sufficient
     };
 
     // Sync the environment.

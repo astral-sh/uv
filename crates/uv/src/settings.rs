@@ -1307,9 +1307,9 @@ pub(crate) struct PipInstallSettings {
     pub(crate) dry_run: bool,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) modifications: Modifications,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
-    pub(crate) exact: bool,
 }
 
 impl PipInstallSettings {
@@ -1321,16 +1321,16 @@ impl PipInstallSettings {
             editable,
             constraint,
             r#override,
+            build_constraint,
             extra,
             all_extras,
             no_all_extras,
-            build_constraint,
+            installer,
             refresh,
             no_deps,
             deps,
             require_hashes,
             no_require_hashes,
-            installer,
             verify_hashes,
             no_verify_hashes,
             python,
@@ -1346,11 +1346,12 @@ impl PipInstallSettings {
             only_binary,
             python_version,
             python_platform,
+            inexact,
+            exact,
             strict,
             no_strict,
             dry_run,
             compat_args: _,
-            exact,
         } = args;
 
         let constraints_from_workspace = if let Some(configuration) = &filesystem {
@@ -1400,7 +1401,11 @@ impl PipInstallSettings {
             dry_run,
             constraints_from_workspace,
             overrides_from_workspace,
-            exact,
+            modifications: if flag(exact, inexact).unwrap_or(true) {
+                Modifications::Exact
+            } else {
+                Modifications::Sufficient
+            },
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
