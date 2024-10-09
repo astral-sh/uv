@@ -3813,7 +3813,6 @@ pub struct IndexArgs {
         long,
         short,
         env = "UV_FIND_LINKS",
-        value_delimiter = ' ',
         value_parser = parse_flat_index,
         help_heading = "Index options"
     )]
