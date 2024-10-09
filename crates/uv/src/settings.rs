@@ -1401,7 +1401,7 @@ impl PipInstallSettings {
             dry_run,
             constraints_from_workspace,
             overrides_from_workspace,
-            modifications: if flag(exact, inexact).unwrap_or(true) {
+            modifications: if flag(exact, inexact).unwrap_or(false) {
                 Modifications::Exact
             } else {
                 Modifications::Sufficient
