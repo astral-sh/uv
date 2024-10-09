@@ -494,6 +494,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.no_build_isolation,
                 args.settings.no_build_isolation_package,
                 args.settings.build_options,
+                args.modifications,
                 args.settings.python_version,
                 args.settings.python_platform,
                 args.settings.strict,

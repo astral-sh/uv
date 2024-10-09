@@ -67,6 +67,7 @@ pub(crate) async fn pip_install(
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
+    modifications: Modifications,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     strict: bool,
@@ -408,7 +409,7 @@ pub(crate) async fn pip_install(
     operations::install(
         &resolution,
         site_packages,
-        Modifications::Sufficient,
+        modifications,
         &reinstall,
         &build_options,
         link_mode,

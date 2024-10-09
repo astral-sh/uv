@@ -1637,6 +1637,18 @@ pub struct PipInstallArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
+    /// Do not remove extraneous packages present in the environment.
+    #[arg(long, overrides_with("exact"), alias = "no-exact", hide = true)]
+    pub inexact: bool,
+
+    /// Perform an exact sync, removing extraneous packages.
+    ///
+    /// By default, installing will make the minimum necessary changes to satisfy the requirements.
+    /// When enabled, uv will update the environment to exactly match the requirements, removing
+    /// packages that are not included in the requirements.
+    #[arg(long, overrides_with("inexact"))]
+    pub exact: bool,
+
     /// Validate the Python environment after completing the installation, to detect and with
     /// missing dependencies or other issues.
     #[arg(long, overrides_with("no_strict"))]
