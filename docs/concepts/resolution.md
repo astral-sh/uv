@@ -298,9 +298,9 @@ as if they do not exist.
 
 !!! note
 
-    The `--exclude-newer` option is only applied to packages read from a registry and will not downgrade
-    previously installed packages unless the `--reinstall` flag is provided, in which case uv will
-    perform a new resolution.
+    The `--exclude-newer` option is only applied to packages that are read from a registry (as opposed to, e.g., Git
+    dependencies). Further, when using the `uv pip` interface, uv will not downgrade previously installed packages
+    unless the `--reinstall` flag is provided, in which case uv will perform a new resolution.
 
 ## Learn more
 
