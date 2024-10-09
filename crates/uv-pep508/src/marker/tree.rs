@@ -1238,6 +1238,15 @@ impl MarkerTree {
         MarkerTreeDebugGraph { marker: self }
     }
 
+    /// Formats a [`MarkerTree`] in its "raw" representation.
+    ///
+    /// This is useful for debugging when one wants to look at a
+    /// representation of a `MarkerTree` that is precisely identical
+    /// to its internal representation.
+    pub fn debug_raw(&self) -> MarkerTreeDebugRaw<'_> {
+        MarkerTreeDebugRaw { marker: self }
+    }
+
     fn fmt_graph(&self, f: &mut fmt::Formatter<'_>, level: usize) -> fmt::Result {
         match self.kind() {
             MarkerTreeKind::True => return write!(f, "true"),
@@ -1338,6 +1347,24 @@ pub struct MarkerTreeDebugGraph<'a> {
 impl<'a> fmt::Debug for MarkerTreeDebugGraph<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.marker.fmt_graph(f, 0)
+    }
+}
+
+/// Formats a [`MarkerTree`] using its raw internals.
+///
+/// This is very verbose and likely only useful if you're working
+/// on the internals of this crate.
+///
+/// This type is created by the [`MarkerTree::debug_raw`] routine.
+#[derive(Clone)]
+pub struct MarkerTreeDebugRaw<'a> {
+    marker: &'a MarkerTree,
+}
+
+impl<'a> fmt::Debug for MarkerTreeDebugRaw<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let node = INTERNER.shared.node(self.marker.0);
+        f.debug_tuple("MarkerTreeDebugRaw").field(node).finish()
     }
 }
 
