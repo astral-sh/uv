@@ -860,8 +860,8 @@ impl Edges {
                     low: right_low,
                 },
             ) => Edges::Boolean {
-                high: apply(high.negate(parent), right_high.negate(parent)),
-                low: apply(low.negate(parent), right_low.negate(parent)),
+                high: apply(high.negate(parent), right_high.negate(right_parent)),
+                low: apply(low.negate(parent), right_low.negate(right_parent)),
             },
             _ => unreachable!("cannot merge two `Edges` of different types"),
         }
@@ -959,8 +959,8 @@ impl Edges {
                     low: right_low,
                 },
             ) => {
-                interner.is_disjoint(high.negate(parent), right_high.negate(parent))
-                    && interner.is_disjoint(low.negate(parent), right_low.negate(parent))
+                interner.is_disjoint(high.negate(parent), right_high.negate(right_parent))
+                    && interner.is_disjoint(low.negate(parent), right_low.negate(right_parent))
             }
             _ => unreachable!("cannot merge two `Edges` of different types"),
         }

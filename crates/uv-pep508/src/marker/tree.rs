@@ -2720,6 +2720,41 @@ mod test {
         assert!(!is_disjoint("'Windows' in os_name", "'Windows' in os_name"));
         assert!(!is_disjoint("'Linux' in os_name", "os_name not in 'Linux'"));
         assert!(!is_disjoint("'Linux' not in os_name", "os_name in 'Linux'"));
+
+        assert!(!is_disjoint(
+            "os_name == 'Linux' and os_name != 'OSX'",
+            "os_name == 'Linux'"
+        ));
+        assert!(is_disjoint(
+            "os_name == 'Linux' and os_name != 'OSX'",
+            "os_name == 'OSX'"
+        ));
+
+        assert!(!is_disjoint(
+            "extra == 'Linux' and extra != 'OSX'",
+            "extra == 'Linux'"
+        ));
+        assert!(is_disjoint(
+            "extra == 'Linux' and extra != 'OSX'",
+            "extra == 'OSX'"
+        ));
+
+        assert!(!is_disjoint(
+            "extra == 'x1' and extra != 'x2'",
+            "extra == 'x1'"
+        ));
+        assert!(is_disjoint(
+            "extra == 'x1' and extra != 'x2'",
+            "extra == 'x2'"
+        ));
+    }
+
+    #[test]
+    fn is_disjoint_commutative() {
+        let m1 = m("extra == 'Linux' and extra != 'OSX'");
+        let m2 = m("extra == 'Linux'");
+        assert!(!m2.is_disjoint(&m1));
+        assert!(!m1.is_disjoint(&m2));
     }
 
     #[test]
