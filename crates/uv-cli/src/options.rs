@@ -4,7 +4,8 @@ use uv_resolver::PrereleaseMode;
 use uv_settings::{PipOptions, ResolverInstallerOptions, ResolverOptions};
 
 use crate::{
-    BuildArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs, ResolverInstallerArgs,
+    BuildOptionsArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
+    ResolverInstallerArgs,
 };
 
 /// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
@@ -193,21 +194,29 @@ impl From<IndexArgs> for PipOptions {
 
         Self {
             index_url: index_url.and_then(Maybe::into_option),
-            extra_index_url: extra_index_url.map(|extra_index_urls| {
-                extra_index_urls
+            extra_index_url: extra_index_url.map(|extra_index_url| {
+                extra_index_url
                     .into_iter()
                     .filter_map(Maybe::into_option)
                     .collect()
             }),
             no_index: if no_index { Some(true) } else { None },
-            find_links,
+            find_links: find_links.map(|find_links| {
+                find_links
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            }),
             ..PipOptions::default()
         }
     }
 }
 
-/// Construct the [`ResolverOptions`] from the [`ResolverArgs`] and [`BuildArgs`].
-pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> ResolverOptions {
+/// Construct the [`ResolverOptions`] from the [`ResolverArgs`] and [`BuildOptionsArgs`].
+pub fn resolver_options(
+    resolver_args: ResolverArgs,
+    build_args: BuildOptionsArgs,
+) -> ResolverOptions {
     let ResolverArgs {
         index_args,
         upgrade,
@@ -228,7 +237,7 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         no_sources,
     } = resolver_args;
 
-    let BuildArgs {
+    let BuildOptionsArgs {
         no_build,
         build,
         no_build_package,
@@ -239,8 +248,8 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
 
     ResolverOptions {
         index_url: index_args.index_url.and_then(Maybe::into_option),
-        extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-            extra_index_urls
+        extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
+            extra_index_url
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect()
@@ -250,7 +259,12 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         } else {
             None
         },
-        find_links: index_args.find_links,
+        find_links: index_args.find_links.map(|find_links| {
+            find_links
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect()
+        }),
         upgrade: flag(upgrade, no_upgrade),
         upgrade_package: Some(upgrade_package),
         index_strategy,
@@ -267,6 +281,7 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         } else {
             prerelease
         },
+        dependency_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
         no_build_isolation: flag(no_build_isolation, build_isolation),
@@ -281,10 +296,10 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
     }
 }
 
-/// Construct the [`ResolverInstallerOptions`] from the [`ResolverInstallerArgs`] and [`BuildArgs`].
+/// Construct the [`ResolverInstallerOptions`] from the [`ResolverInstallerArgs`] and [`BuildOptionsArgs`].
 pub fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
-    build_args: BuildArgs,
+    build_args: BuildOptionsArgs,
 ) -> ResolverInstallerOptions {
     let ResolverInstallerArgs {
         index_args,
@@ -311,7 +326,7 @@ pub fn resolver_installer_options(
         no_sources,
     } = resolver_installer_args;
 
-    let BuildArgs {
+    let BuildOptionsArgs {
         no_build,
         build,
         no_build_package,
@@ -322,8 +337,8 @@ pub fn resolver_installer_options(
 
     ResolverInstallerOptions {
         index_url: index_args.index_url.and_then(Maybe::into_option),
-        extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-            extra_index_urls
+        extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
+            extra_index_url
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect()
@@ -333,7 +348,12 @@ pub fn resolver_installer_options(
         } else {
             None
         },
-        find_links: index_args.find_links,
+        find_links: index_args.find_links.map(|find_links| {
+            find_links
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect()
+        }),
         upgrade: flag(upgrade, no_upgrade),
         upgrade_package: if upgrade_package.is_empty() {
             None
@@ -360,6 +380,7 @@ pub fn resolver_installer_options(
         } else {
             prerelease
         },
+        dependency_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
         no_build_isolation: flag(no_build_isolation, build_isolation),

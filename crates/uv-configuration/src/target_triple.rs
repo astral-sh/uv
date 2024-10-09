@@ -1,7 +1,7 @@
 use tracing::debug;
 
-use pep508_rs::MarkerEnvironment;
-use platform_tags::{Arch, Os, Platform};
+use uv_pep508::MarkerEnvironment;
+use uv_platform_tags::{Arch, Os, Platform};
 
 /// The supported target triples. Each triple consists of an architecture, vendor, and operating
 /// system.

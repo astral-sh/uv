@@ -5,19 +5,20 @@ use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
-use pep508_rs::UnnamedRequirement;
-use pypi_types::Requirement;
-use pypi_types::VerbatimParsedUrl;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{KeyringProviderType, TrustedHost};
+use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use uv_fs::Simplified;
+use uv_pep508::UnnamedRequirement;
+use uv_pypi_types::Requirement;
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::EnvironmentPreference;
 use uv_python::PythonRequest;
 use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
+use crate::commands::pip::operations::report_target_environment;
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
@@ -57,11 +58,7 @@ pub(crate) async fn pip_uninstall(
         &cache,
     )?;
 
-    debug!(
-        "Using Python {} environment at {}",
-        environment.interpreter().python_version(),
-        environment.python_executable().user_display().cyan(),
-    );
+    report_target_environment(&environment, &cache, printer)?;
 
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
@@ -100,7 +97,7 @@ pub(crate) async fn pip_uninstall(
         }
     }
 
-    let _lock = environment.lock()?;
+    let _lock = environment.lock().await?;
 
     // Index the current `site-packages` directory.
     let site_packages = uv_installer::SitePackages::from_environment(&environment)?;

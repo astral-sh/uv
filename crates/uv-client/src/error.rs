@@ -5,7 +5,7 @@ use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
 use url::Url;
 
-use distribution_filename::{WheelFilename, WheelFilenameError};
+use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_normalize::PackageName;
 
 use crate::html;
@@ -140,7 +140,7 @@ pub enum ErrorKind {
     UrlParse(#[from] url::ParseError),
 
     #[error(transparent)]
-    JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
+    JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
 
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(Url),
@@ -148,8 +148,8 @@ pub enum ErrorKind {
     #[error("Expected an index URL, but received non-base URL: {0}")]
     CannotBeABase(Url),
 
-    #[error(transparent)]
-    DistInfo(#[from] install_wheel_rs::Error),
+    #[error("Failed to read metadata: `{0}`")]
+    Metadata(String, #[source] uv_metadata::Error),
 
     #[error("{0} isn't available locally, but making network requests to registries was banned")]
     NoIndex(String),
@@ -170,7 +170,7 @@ pub enum ErrorKind {
     MetadataParseError(
         WheelFilename,
         String,
-        #[source] Box<pypi_types::MetadataError>,
+        #[source] Box<uv_pypi_types::MetadataError>,
     ),
 
     /// The metadata file was not found in the wheel.
@@ -227,7 +227,7 @@ pub enum ErrorKind {
     ArchiveRead(String),
 
     #[error("Writing to cache archive failed: {0}")]
-    ArchiveWrite(#[source] crate::rkyvutil::SerializerError),
+    ArchiveWrite(String),
 
     #[error("Network connectivity is disabled, but the requested data wasn't found in the cache for: `{0}`")]
     Offline(String),

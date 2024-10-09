@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use tracing::debug;
 
-use cache_key::RepositoryUrl;
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
 use fs_err::tokio as fs;
 use reqwest_middleware::ClientWithMiddleware;
+use uv_cache_key::{cache_digest, RepositoryUrl};
 use uv_fs::LockedFile;
 
 use crate::{Fetch, GitReference, GitSha, GitSource, GitUrl, Reporter};
@@ -65,9 +65,10 @@ impl GitResolver {
         fs::create_dir_all(&lock_dir).await?;
         let repository_url = RepositoryUrl::new(url.repository());
         let _lock = LockedFile::acquire(
-            lock_dir.join(cache_key::cache_digest(&repository_url)),
+            lock_dir.join(cache_digest(&repository_url)),
             &repository_url,
-        )?;
+        )
+        .await?;
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {

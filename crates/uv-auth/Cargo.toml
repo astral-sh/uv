@@ -7,12 +7,13 @@ edition = "2021"
 workspace = true
 
 [dependencies]
+uv-once-map = { workspace = true }
+
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
-once-map = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rust-netrc = { workspace = true }
@@ -26,5 +27,5 @@ urlencoding = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 wiremock = { workspace = true }
-insta = { version = "1.36.1" }
-test-log = { version = "0.2.15", features = ["trace"], default-features = false }
+insta = { version = "1.40.0" }
+test-log = { version = "0.2.16", features = ["trace"], default-features = false }

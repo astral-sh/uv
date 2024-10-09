@@ -7,7 +7,7 @@ in the nearest parent directory.
 
 !!! note
 
-    For `tool` commands, which operate the user level, local configuration
+    For `tool` commands, which operate at the user level, local configuration
     files will be ignored. Instead, uv will exclusively read from user-level configuration
     (e.g., `~/.config/uv/uv.toml`).
 
@@ -15,23 +15,29 @@ In workspaces, uv will begin its search at the workspace root, ignoring any conf
 workspace members. Since the workspace is locked as a single unit, configuration is shared across
 all members.
 
-If a `pyproject.toml` file is found, uv will read configuration from the `[tool.uv.pip]` table. For
+If a `pyproject.toml` file is found, uv will read configuration from the `[tool.uv]` table. For
 example, to set a persistent index URL, add the following to a `pyproject.toml`:
 
 ```toml title="pyproject.toml"
-[tool.uv.pip]
+[tool.uv]
 index-url = "https://test.pypi.org/simple"
 ```
 
 (If there is no such table, the `pyproject.toml` file will be ignored, and uv will continue
 searching in the directory hierarchy.)
 
-If a `uv.toml` file is found, uv will read from the `[pip]` table. For example:
+uv will also search for `uv.toml` files, which follow an identical structure, but omit the
+`[tool.uv]` prefix. For example:
 
 ```toml title="uv.toml"
-[pip]
 index-url = "https://test.pypi.org/simple"
 ```
+
+!!! note
+
+    `uv.toml` files take precedence over `pyproject.toml` files, so if both `uv.toml` and
+    `pyproject.toml` files are present in a directory, configuration will be read from `uv.toml`, and
+    `[tool.uv]` section in the accompanying `pyproject.toml` will be ignored.
 
 uv will also discover user-level configuration at `~/.config/uv/uv.toml` (or
 `$XDG_CONFIG_HOME/uv/uv.toml`) on macOS and Linux, or `%APPDATA%\uv\uv.toml` on Windows. User-level
@@ -60,12 +66,21 @@ See the [settings reference](../reference/settings.md) for an enumeration of the
 
 ## Configuring the pip interface
 
-A dedicated [`[uv.pip]`](../reference/settings.md#pip) section is provided for configuring _just_
-the `uv pip` command line interface. Settings in this section will not apply to `uv` commands
-outside of the `uv pip` namespace. However, many of the settings in this section have corollaries in
+A dedicated [`[tool.uv.pip]`](../reference/settings.md#pip) section is provided for configuring
+_just_ the `uv pip` command line interface. Settings in this section will not apply to `uv` commands
+outside the `uv pip` namespace. However, many of the settings in this section have corollaries in
 the top-level namespace which _do_ apply to the `uv pip` interface unless they are overridden by a
 value in the `uv.pip` section.
 
 The `uv.pip` settings are designed to adhere closely to pip's interface and are declared separately
 to retain compatibility while allowing the global settings to use alternate designs (e.g.,
 `--no-build`).
+
+As an example, setting the `index-url` under `[tool.uv.pip]`, as in the following `pyproject.toml`,
+would only affect the `uv pip` subcommands (e.g., `uv pip install`, but not `uv sync`, `uv lock`, or
+`uv run`):
+
+```toml title="pyproject.toml"
+[tool.uv.pip]
+index-url = "https://test.pypi.org/simple"
+```

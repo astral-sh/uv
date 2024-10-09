@@ -64,7 +64,7 @@ jobs:
 
   macos-x86_64:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: macos-12
+    runs-on: macos-13-large
     steps:
       - uses: actions/checkout@v4
         with:
@@ -352,8 +352,7 @@ jobs:
             *.tar.gz
             *.sha256
 
-  # Like `linux-arm`, but use `--no-default-features --features flate2/rust_backend` when
-  # building uv.
+  # Like `linux-arm`, but use `--no-default-features` when building uv.
   linux-s390x:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
@@ -378,7 +377,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --release --locked --out dist --no-default-features --features flate2/rust_backend --features self-update
+          args: --release --locked --out dist --no-default-features --features self-update
       - uses: uraimo/run-on-arch-action@v2
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
@@ -421,8 +420,8 @@ jobs:
             *.tar.gz
             *.sha256
 
-  # Like `linux-arm`, but use `--no-default-features --features flate2/rust_backend` when
-  # building uv, and install the `gcc-powerpc64-linux-gnu` package.
+  # Like `linux-arm`, but use `--no-default-features` when building uv,
+  # and install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
@@ -431,8 +430,12 @@ jobs:
         platform:
           - target: powerpc64le-unknown-linux-gnu
             arch: ppc64le
+            # see https://github.com/astral-sh/uv/issues/6528
+            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: powerpc64-unknown-linux-gnu
             arch: ppc64
+            # see https://github.com/astral-sh/uv/issues/6528
+            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
 
     steps:
       - uses: actions/checkout@v4
@@ -449,7 +452,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --release --locked --out dist --no-default-features --features flate2/rust_backend --features self-update
+          args: --release --locked --out dist --no-default-features --features self-update
           before-script-linux: |
             if command -v yum &> /dev/null; then
                 yum update -y
@@ -576,6 +579,8 @@ jobs:
             arch: armv7
           - target: powerpc64le-unknown-linux-musl
             arch: ppc64le
+            # see https://github.com/astral-sh/uv/issues/6528
+            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
             toolchain: nightly
       fail-fast: false
 
@@ -595,7 +600,7 @@ jobs:
           manylinux: musllinux_1_1
           args: ${{ matrix.platform.arch == 'ppc64le' && '--profile release-no-lto' || '--release'}} --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
-          rust-toolchain: ${{ matrix.platform.toolchain || 'stable' }}
+          rust-toolchain: ${{ matrix.platform.toolchain || null }}
       - uses: uraimo/run-on-arch-action@v2
         name: Test wheel
         with:

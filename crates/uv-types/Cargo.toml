@@ -13,16 +13,16 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-types = { workspace = true }
-once-map = { workspace = true }
-pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
-pypi-types = { workspace = true }
 uv-cache = { workspace = true }
 uv-configuration = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-git = { workspace = true }
-uv-python = { workspace = true }
 uv-normalize = { workspace = true }
+uv-once-map = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-python = { workspace = true }
 
 anyhow = { workspace = true }
 rustc-hash = { workspace = true }

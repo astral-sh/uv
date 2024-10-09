@@ -40,11 +40,13 @@ jobs:
               - "!**/*.md"
               - "!bin/**"
               - "!assets/**"
-              # Generated markdown files are checked during test runs
+              # Generated markdown and JSON files are checked during test runs
               - "docs/reference/cli.md"
               - "docs/reference/settings.md"
-  cargo-fmt:
-    name: "cargo fmt"
+              - "uv.schema.json"
+  lint:
+    timeout-minutes: 10
+    name: "lint"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +57,9 @@ jobs:
 
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v3
 
       - name: "rustfmt"
         run: cargo fmt --all --check
@@ -67,26 +72,28 @@ jobs:
       - name: "README check"
         run: python scripts/transform_readme.py --target pypi
 
-  python-lint:
-    name: "Python lint"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: "Python format"
+        run: uvx ruff format --diff .
 
-      - uses: actions/setup-python@v5
+      - name: "Python lint"
+        run: uvx ruff check .
+
+      - name: "Python type check"
+        run: uvx mypy
+
+      - name: "Lint shell scripts"
+        uses: ludeeus/action-shellcheck@2.0.0
+        env:
+          # renovate: datasource=github-tags depName=koalaman/shellcheck
+          SHELLCHECK_VERSION: "v0.10.0"
+          SHELLCHECK_OPTS: --shell bash
         with:
-          python-version: 3.12
-
-      - name: "Ruff format"
-        run: pipx run ruff format --diff .
-
-      - name: "Ruff check"
-        run: pipx run ruff check .
-
-      - name: "Mypy check"
-        run: pipx run --python 3.12 mypy
+          version: ${{ env.SHELLCHECK_VERSION }}
+          severity: style
+          check_together: "yes"
 
   cargo-clippy:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
@@ -102,6 +109,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-clippy-xwin:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
@@ -131,7 +139,22 @@ jobs:
           XWIN_ARCH: "x86_64"
           XWIN_CACHE_DIR: "${{ github.workspace}}/.xwin"
 
+  cargo-dev-generate-all:
+    timeout-minutes: 10
+    needs: determine_changes
+    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on: ubuntu-latest
+    name: "cargo dev generate-all"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Generate all"
+        run: cargo dev generate-all --mode check
+
   cargo-shear:
+    timeout-minutes: 10
     name: "cargo shear"
     runs-on: ubuntu-latest
     steps:
@@ -145,6 +168,7 @@ jobs:
   # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
 
   cargo-test-linux:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
@@ -160,10 +184,9 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
+      - uses: astral-sh/setup-uv@v3
       - name: "Install required Python versions"
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv python install
+        run: uv python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -180,10 +203,18 @@ jobs:
       - name: "Smoke test"
         run: |
           uv="./target/debug/uv"
-          $uv venv
-          $uv pip install ruff
+          $uv venv -v
+          $uv pip install ruff -v
+
+      - name: "Smoke test completion"
+        run: |
+          uv="./target/debug/uv"
+          uvx="./target/debug/uvx"
+          eval "$($uv generate-shell-completion bash)"
+          eval "$($uvx --generate-shell-completion bash)"
 
   cargo-test-macos:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
@@ -199,10 +230,9 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
+      - uses: astral-sh/setup-uv@v3
       - name: "Install required Python versions"
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv python install
+        run: uv python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -219,32 +249,26 @@ jobs:
       - name: "Smoke test"
         run: |
           uv="./target/debug/uv"
-          $uv venv
-          $uv pip install ruff
+          $uv venv -v
+          $uv pip install ruff -v
 
   cargo-test-windows:
+    timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: "windows-latest-xlarge"
     name: "cargo test | windows"
     steps:
-      - name: Create Dev Drive using ReFS
-        run: |
-          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 20GB |
-                    Mount-VHD -Passthru |
-                    Initialize-Disk -Passthru |
-                    New-Partition -AssignDriveLetter -UseMaximumSize |
-                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
-          Write-Output $Volume
-          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
-
       - uses: actions/checkout@v4
+
+      - name: Create Dev Drive using ReFS
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
       # We do not test with Python patch versions on Windows
       # so we can use `setup-python` instead of our bootstrapping code
@@ -260,48 +284,47 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+          workspaces: ${{ env.UV_WORKSPACE }}
 
       - name: "Install Rust toolchain"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+        working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup show
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
 
       - name: "Cargo test"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+        working-directory: ${{ env.UV_WORKSPACE }}
         run: |
           cargo nextest run --no-default-features --features python,pypi --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
       - name: "Smoke test"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
+        working-directory: ${{ env.UV_WORKSPACE }}
         env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
           # Avoid debug build stack overflows.
           UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
-          uv venv
-          uv pip install ruff
+          uv venv -v
+          uv pip install ruff -v
+
+      - name: "Smoke test completion"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        shell: powershell
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 2000000
+        run: |
+          Set-Alias -Name uv -Value ./target/debug/uv
+          Set-Alias -Name uvx -Value ./target/debug/uvx
+          (& uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+          (& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
@@ -342,7 +365,7 @@ jobs:
       - name: "Clippy"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
         if: matrix.target-arch == 'x86_64'
-        run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
+        run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
         env:
           XWIN_ARCH: "x86_64"
           XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
@@ -360,6 +383,7 @@ jobs:
 
   # Separate jobs for the nightly crate
   windows-trampoline-test:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: windows-latest
@@ -396,9 +420,9 @@ jobs:
       - uses: crate-ci/typos@master
 
   docs:
+    timeout-minutes: 10
     name: "mkdocs"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     env:
       MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
     steps:
@@ -423,6 +447,7 @@ jobs:
         run: mkdocs build --strict -f mkdocs.insiders.yml
 
   build-binary-linux:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
@@ -450,6 +475,7 @@ jobs:
           retention-days: 1
 
   build-binary-macos-aarch64:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
@@ -472,6 +498,7 @@ jobs:
           retention-days: 1
 
   build-binary-macos-x86_64:
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
@@ -495,52 +522,39 @@ jobs:
 
   build-binary-windows:
     needs: determine_changes
+    timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: windows-latest-large
     name: "build binary | windows"
     steps:
-      - name: Create Dev Drive using ReFS
-        run: |
-          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
-                    Mount-VHD -Passthru |
-                    Initialize-Disk -Passthru |
-                    New-Partition -AssignDriveLetter -UseMaximumSize |
-                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
-          Write-Output $Volume
-          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
-
       - uses: actions/checkout@v4
+
+      - name: Create Dev Drive using ReFS
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
-
-      - uses: rui314/setup-mold@v1
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+          workspaces: ${{ env.UV_WORKSPACE }}
 
       - name: "Build"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+        working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo build
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-windows-${{ github.sha }}
-          path: ${{ env.DEV_DRIVE }}/uv/target/debug/uv.exe
+          path: ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
           retention-days: 1
 
   ecosystem-test:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "ecosystem test | ${{ matrix.repo }}"
     runs-on: ubuntu-latest
@@ -577,6 +591,7 @@ jobs:
           ./${{ matrix.command }}
 
   integration-test-conda:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "integration test | conda on ubuntu"
     runs-on: ubuntu-latest
@@ -606,7 +621,44 @@ jobs:
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
 
+  integration-test-free-threaded-linux:
+    timeout-minutes: 5
+    needs: build-binary-linux
+    name: "integration test | free-threaded on linux"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "install python3.13-nogil"
+        run: |
+          sudo add-apt-repository ppa:deadsnakes
+          sudo apt-get update
+          sudo apt-get install python3.13-nogil
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create a virtual environment"
+        run: |
+          ./uv venv -p 3.13t --python-preference only-system
+
+      - name: "Check version"
+        run: |
+          .venv/bin/python --version
+
+      - name: "Check is free-threaded"
+        run: |
+          .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install anyio
+
   integration-test-pypy-linux:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "integration test | pypy on ubuntu"
     runs-on: ubuntu-latest
@@ -670,6 +722,7 @@ jobs:
           ./uv pip install anyio
 
   integration-test-pypy-windows:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "integration test | pypy on windows"
     runs-on: windows-latest
@@ -732,6 +785,7 @@ jobs:
           .\uv.exe pip install anyio
 
   integration-test-graalpy-linux:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "integration test | graalpy on ubuntu"
     runs-on: ubuntu-latest
@@ -801,6 +855,7 @@ jobs:
           ./uv pip install anyio
 
   integration-test-graalpy-windows:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "integration test | graalpy on windows"
     runs-on: windows-latest
@@ -863,14 +918,14 @@ jobs:
           .\uv.exe pip install anyio
 
   integration-test-github-actions:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "integration test | github actions"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.12.7"
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -891,11 +946,109 @@ jobs:
       - name: Configure uv to use the system Python by default
         run: echo "UV_SYSTEM_PYTHON=1" >> $GITHUB_ENV
 
-      - name: "Install a package with environment system opt-in"
+      - name: "Install a package with system opt-in via the environment"
         run: |
           ./uv pip install anyio --reinstall
 
+      - name: "Create a project"
+        run: |
+          # Use Python 3.11 as the minimum required version
+          ./uv init --python 3.11
+          ./uv add anyio
+
+      - name: "Sync to the system Python"
+        run: ./uv sync -v --python 3.12
+        env:
+          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.7/x64"
+
+      - name: "Attempt to sync to the system Python with an incompatible version"
+        run: |
+          ./uv sync -v --python 3.11 && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
+        env:
+          UV_PROJECT_ENVIRONMENT: "/opt/hostedtoolcache/Python/3.12.7/x64"
+
+      - name: "Attempt to sync to a non-Python environment directory"
+        run: |
+          mkdir -p /home/runner/example
+          touch /home/runner/example/some-file
+          ./uv sync -v && { echo "ci: Error; should not succeed"; exit 1; } || { echo "ci: Ok; expected failure"; exit 0; }
+        env:
+          UV_PROJECT_ENVIRONMENT: "/home/runner/example"
+
+  integration-test-publish-changed:
+    timeout-minutes: 10
+    needs: build-binary-linux
+    name: "integration test | determine publish changes"
+    runs-on: ubuntu-latest
+    outputs:
+      # Flag that is raised when any code is changed
+      code: ${{ steps.changed.outputs.code_any_changed }}
+    # Only the main repository is a trusted publisher
+    if: github.repository == 'astral-sh/uv'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Only publish a new release if the publishing code changed
+      - uses: tj-actions/changed-files@v45
+        id: changed
+        with:
+          files_yaml: |
+            code:
+              - "crates/uv-publish/**/*"
+              - "scripts/publish/**/*"
+
+  integration-test-publish:
+    timeout-minutes: 10
+    needs: integration-test-publish-changed
+    name: "integration test | uv publish"
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'astral-sh/uv' && (needs.integration-test-publish-changed.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    environment: uv-test-publish
+    env:
+      # No dbus in GitHub Actions
+      PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+    permissions:
+      # For trusted publishing
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Add password to keyring"
+        run: |
+          # `keyrings.alt` contains the plaintext keyring
+          ./uv tool install --with keyrings.alt "keyring<25.4.0" # TODO(konsti): Remove upper bound once fix is released
+          echo $UV_TEST_PUBLISH_KEYRING | keyring set https://test.pypi.org/legacy/?astral-test-keyring __token__
+        env:
+          UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
+
+      - name: "Publish test packages"
+        # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
+        run: ./uv run -p 3.12 scripts/publish/test_publish.py --uv ./uv all
+        env:
+          RUST_LOG: uv=debug,uv_publish=trace
+          UV_TEST_PUBLISH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_TOKEN }}
+          UV_TEST_PUBLISH_PASSWORD: ${{ secrets.UV_TEST_PUBLISH_PASSWORD }}
+          UV_TEST_PUBLISH_GITLAB_PAT: ${{ secrets.UV_TEST_PUBLISH_GITLAB_PAT }}
+          UV_TEST_PUBLISH_CODEBERG_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CODEBERG_TOKEN }}
+
   cache-test-ubuntu:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check cache | ubuntu"
     runs-on: ubuntu-latest
@@ -921,6 +1074,7 @@ jobs:
         run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-x86_64-unknown-linux-gnu/uv
 
   cache-test-macos-aarch64:
+    timeout-minutes: 10
     needs: build-binary-macos-aarch64
     name: "check cache | macos aarch64"
     runs-on: macos-14
@@ -942,6 +1096,7 @@ jobs:
         run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-aarch64-apple-darwin/uv
 
   system-test-debian:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | python on debian"
     runs-on: ubuntu-latest
@@ -967,10 +1122,11 @@ jobs:
         run: python3.11 scripts/check_system_python.py --uv ./uv --externally-managed
 
   system-test-fedora:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | python on fedora"
     runs-on: ubuntu-latest
-    container: fedora:41
+    container: fedora:42
     steps:
       - uses: actions/checkout@v4
 
@@ -992,6 +1148,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv
 
   system-test-ubuntu:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | python on ubuntu"
     runs-on: ubuntu-latest
@@ -1017,11 +1174,11 @@ jobs:
         run: python scripts/check_system_python.py --uv ./uv
 
   system-test-opensuse:
+    timeout-minutes: 5
     needs: build-binary-linux
     name: "check system | python on opensuse"
     runs-on: ubuntu-latest
     container: opensuse/tumbleweed
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -1053,6 +1210,7 @@ jobs:
   # rockylinux mimics centos but with added maintenance stability
   # and avoids issues with centos stream uptime concerns
   system-test-rocky-linux:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | python on rocky linux ${{ matrix.rocky-version }}"
     runs-on: ubuntu-latest
@@ -1089,6 +1247,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv
 
   system-test-pypy:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | pypy on ubuntu"
     runs-on: ubuntu-latest
@@ -1114,6 +1273,7 @@ jobs:
         run: pypy scripts/check_system_python.py --uv ./uv
 
   system-test-pyston:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | pyston"
     runs-on: ubuntu-latest
@@ -1136,6 +1296,7 @@ jobs:
         run: pyston scripts/check_system_python.py --uv ./uv
 
   system-test-alpine:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | alpine"
     runs-on: ubuntu-latest
@@ -1161,6 +1322,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
 
   system-test-macos-aarch64:
+    timeout-minutes: 10
     needs: build-binary-macos-aarch64
     name: "check system | python on macos aarch64"
     runs-on: macos-14
@@ -1184,6 +1346,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
 
   system-test-macos-aarch64-homebrew:
+    timeout-minutes: 10
     needs: build-binary-macos-aarch64
     name: "check system | homebrew python on macos aarch64"
     runs-on: macos-14
@@ -1208,9 +1371,10 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
 
   system-test-macos-x86_64:
+    timeout-minutes: 10
     needs: build-binary-macos-x86_64
     name: "check system | python on macos x86_64"
-    runs-on: macos-12
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
 
@@ -1233,6 +1397,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv
 
   system-test-windows-python-310:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "check system | python3.10 on windows"
     runs-on: windows-latest
@@ -1258,6 +1423,7 @@ jobs:
         run: py -3.10 ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-windows-x86-python-310:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "check system | python3.10 on windows x86"
     runs-on: windows-latest
@@ -1284,6 +1450,7 @@ jobs:
         run: python ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-windows-python-313:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "check system | python3.13 on windows"
     runs-on: windows-latest
@@ -1311,6 +1478,7 @@ jobs:
         run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-choco:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "check system | python3.12 via chocolatey"
     runs-on: windows-latest
@@ -1335,8 +1503,9 @@ jobs:
         run: py -3.9 ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-pyenv:
+    timeout-minutes: 10
     needs: build-binary-linux
-    name: "check system | python via pyenv"
+    name: "check system | python3.9 via pyenv"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1360,7 +1529,35 @@ jobs:
       - name: "Validate global Python install"
         run: python3.9 scripts/check_system_python.py --uv ./uv
 
+  system-test-linux-313:
+    timeout-minutes: 10
+    needs: build-binary-linux
+    name: "check system | python3.13"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+          allow-prereleases: true
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3.13)
+
+      - name: "Validate global Python install"
+        run: python3.13 scripts/check_system_python.py --uv ./uv
+
   system-test-conda:
+    timeout-minutes: 10
     needs:
       [build-binary-windows, build-binary-macos-aarch64, build-binary-linux]
     name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }}
@@ -1412,6 +1609,7 @@ jobs:
         run: python ./scripts/check_system_python.py --uv ./uv
 
   system-test-amazonlinux:
+    timeout-minutes: 10
     needs: build-binary-linux
     name: "check system | amazonlinux"
     runs-on: ubuntu-latest
@@ -1440,6 +1638,7 @@ jobs:
         run: python3 scripts/check_system_python.py --uv ./uv
 
   system-test-windows-embedded-python-310:
+    timeout-minutes: 10
     needs: build-binary-windows
     name: "check system | embedded python3.10 on windows"
     runs-on: windows-latest
@@ -1501,7 +1700,7 @@ jobs:
           cargo run --bin uv -- pip compile scripts/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: cargo codspeed build --features codspeed -p bench
+        run: cargo codspeed build --profile profiling --features codspeed -p uv-bench
 
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@v3

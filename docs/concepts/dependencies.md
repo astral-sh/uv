@@ -128,7 +128,8 @@ A `subdirectory` may be specified if the package isn't in the repository root.
 ### URL
 
 To add a URL source, provide a `https://` URL to either a wheel (ending in `.whl`) or a source
-distribution (ending in `.zip` or `.tar.gz`).
+distribution (typically ending in `.tar.gz` or `.zip`; see
+[here](../concepts/resolution.md#source-distribution) for all supported formats).
 
 For example:
 
@@ -149,13 +150,14 @@ httpx = { url = "https://files.pythonhosted.org/packages/5c/2d/3da5bdf4408b8b280
 ```
 
 URL dependencies can also be manually added or edited in the `pyproject.toml` with the
-`{ url = <url> }` syntax. A `subdirectory` may be specified if the if the source distribution isn't
-in the archive root.
+`{ url = <url> }` syntax. A `subdirectory` may be specified if the source distribution isn't in the
+archive root.
 
 ### Path
 
-To add a path source, provide the path of a wheel (ending in `.whl`), a source distribution (ending
-in `.zip` or `.tar.gz`), or a directory containing a `pyproject.toml`.
+To add a path source, provide the path of a wheel (ending in `.whl`), a source distribution
+(typically ending in `.tar.gz` or `.zip`; see [here](../concepts/resolution.md#source-distribution)
+for all supported formats), or a directory containing a `pyproject.toml`.
 
 For example:
 
@@ -218,6 +220,46 @@ mollymawk = { workspace = true }
 [tool.uv.workspace]
 members = [
   "packages/mollymawk"
+]
+```
+
+### Platform-specific sources
+
+You can limit a source to a given platform or Python version by providing
+[PEP 508](https://peps.python.org/pep-0508/#environment-markers)-compatible environment markers for
+the source.
+
+For example, to pull `httpx` from GitHub, but only on macOS, use the following:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = [
+  "httpx",
+]
+
+[tool.uv.sources]
+httpx = { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" }
+```
+
+By specifying the marker on the source, uv will still include `httpx` on all platforms, but will
+download the source from GitHub on macOS, and fall back to PyPI on all other platforms.
+
+### Multiple sources
+
+You can specify multiple sources for a single dependency by providing a list of sources,
+disambiguated by [PEP 508](https://peps.python.org/pep-0508/#environment-markers)-compatible
+environment markers. For example, to pull in different `httpx` commits on macOS vs. Linux:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = [
+  "httpx",
+]
+
+[tool.uv.sources]
+httpx = [
+  { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" },
+  { git = "https://github.com/encode/httpx", tag = "0.24.1", marker = "sys_platform == 'linux'" },
 ]
 ```
 

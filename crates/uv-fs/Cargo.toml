@@ -13,7 +13,6 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-uv-warnings = { workspace = true }
 
 backoff = { workspace = true }
 cachedir = { workspace = true }
@@ -23,14 +22,22 @@ encoding_rs_io = { workspace = true }
 fs-err = { workspace = true }
 fs2 = { workspace = true }
 path-slash = { workspace = true }
+schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true}
 tempfile = { workspace = true }
 tracing = { workspace = true }
 urlencoding = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winsafe = { workspace = true }
+
+[target.'cfg(any(unix, target_os = "wasi", target_os = "redox"))'.dependencies]
+rustix = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 junction = { workspace = true }
 
 [features]
 default = []
-tokio = ["fs-err/tokio", "backoff/tokio"]
+tokio = ["dep:tokio", "fs-err/tokio", "backoff/tokio"]

@@ -2,13 +2,17 @@
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   dependencyDashboard: true,
   suppressNotifications: ["prEditedNotification"],
-  extends: ["config:recommended"],
+  extends: [
+    "config:recommended",
+    // For tool versions defined in GitHub Actions:
+    "customManagers:githubActionsVersions",
+  ],
   labels: ["internal"],
   schedule: ["before 4am on Monday"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
   prHourlyLimit: 10,
-  enabledManagers: ["github-actions", "pre-commit", "cargo"],
+  enabledManagers: ["github-actions", "pre-commit", "cargo", "custom.regex"],
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",
@@ -21,16 +25,24 @@
     {
       // Disable updates of `zip-rs`; intentionally pinned for now due to ownership change
       // See: https://github.com/astral-sh/uv/issues/3642
-      matchPackagePatterns: ["zip"],
+      matchPackageNames: ["/zip/"],
       matchManagers: ["cargo"],
       enabled: false,
+    },
+    {
+      // Create dedicated branches to update references to dependencies in the documentation.
+      matchFileNames: ["docs/**/*.md"],
+      commitMessageTopic: "documentation references to {{{depName}}}",
+      semanticCommitType: "docs",
+      semanticCommitScope: null,
+      additionalBranchPrefix: "docs-",
     },
     {
       // Group upload/download artifact updates, the versions are dependent
       groupName: "Artifact GitHub Actions dependencies",
       matchManagers: ["github-actions"],
       matchDatasources: ["gitea-tags", "github-tags"],
-      matchPackagePatterns: ["actions/.*-artifact"],
+      matchPackageNames: ["/actions/.*-artifact/"],
       description: "Weekly update of artifact-related GitHub Actions dependencies",
     },
     {
@@ -59,9 +71,21 @@
       // of the PEP 440 and PEP 508 crates, which we vendored and forked.
       groupName: "pyo3",
       matchManagers: ["cargo"],
-      matchPackagePatterns: ["pyo3"],
+      matchPackageNames: ["/pyo3/"],
       description: "Weekly update of pyo3 dependencies",
       enabled: false,
+    },
+  ],
+  customManagers: [
+    // Update major GitHub actions references in documentation.
+    {
+      customType: "regex",
+      fileMatch: ["^docs/.*\\.md$"],
+      matchStrings: [
+        "\\suses: (?<depName>[\\w-]+/[\\w-]+)(?<path>/.*)?@(?<currentValue>.+?)\\s",
+      ],
+      datasourceTemplate: "github-tags",
+      versioningTemplate: "regex:^v(?<major>\\d+)$",
     },
   ],
   vulnerabilityAlerts: {

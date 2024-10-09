@@ -1,12 +1,12 @@
 use anyhow::{Context, Error, Result};
-use install_wheel_rs::{linker::LinkMode, Layout};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::convert;
 use tokio::sync::oneshot;
 use tracing::instrument;
+use uv_install_wheel::{linker::LinkMode, Layout};
 
-use distribution_types::CachedDist;
 use uv_cache::Cache;
+use uv_distribution_types::CachedDist;
 use uv_python::PythonEnvironment;
 
 pub struct Installer<'a> {
@@ -29,7 +29,7 @@ impl<'a> Installer<'a> {
         }
     }
 
-    /// Set the [`LinkMode`][`install_wheel_rs::linker::LinkMode`] to use for this installer.
+    /// Set the [`LinkMode`][`uv_install_wheel::linker::LinkMode`] to use for this installer.
     #[must_use]
     pub fn with_link_mode(self, link_mode: LinkMode) -> Self {
         Self { link_mode, ..self }
@@ -136,9 +136,9 @@ fn install(
     reporter: Option<Box<dyn Reporter>>,
     relocatable: bool,
 ) -> Result<Vec<CachedDist>> {
-    let locks = install_wheel_rs::linker::Locks::default();
+    let locks = uv_install_wheel::linker::Locks::default();
     wheels.par_iter().try_for_each(|wheel| {
-        install_wheel_rs::linker::install_wheel(
+        uv_install_wheel::linker::install_wheel(
             &layout,
             relocatable,
             wheel.path(),
@@ -146,9 +146,14 @@ fn install(
             wheel
                 .parsed_url()?
                 .as_ref()
-                .map(pypi_types::DirectUrl::try_from)
+                .map(uv_pypi_types::DirectUrl::try_from)
                 .transpose()?
                 .as_ref(),
+            if wheel.cache_info().is_empty() {
+                None
+            } else {
+                Some(wheel.cache_info())
+            },
             installer_name.as_deref(),
             link_mode,
             &locks,

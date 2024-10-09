@@ -7,13 +7,14 @@ use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
-use distribution_types::{
-    Diagnostic, InstalledDist, Name, UnresolvedRequirement, UnresolvedRequirementSpecification,
+use uv_distribution_types::{
+    Diagnostic, InstalledDist, Name, NameRequirementSpecification, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
-use pep440_rs::{Version, VersionSpecifiers};
-use pypi_types::{Requirement, ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
+use uv_pep440::{Version, VersionSpecifiers};
+use uv_pypi_types::{Requirement, ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::InstalledPackagesProvider;
 use uv_warnings::warn_user;
@@ -249,10 +250,10 @@ impl SitePackages {
                         }
                         [installed] => {
                             match &dependency.version_or_url {
-                                None | Some(pep508_rs::VersionOrUrl::Url(_)) => {
+                                None | Some(uv_pep508::VersionOrUrl::Url(_)) => {
                                     // Nothing to do (accept any installed version).
                                 }
-                                Some(pep508_rs::VersionOrUrl::VersionSpecifier(
+                                Some(uv_pep508::VersionOrUrl::VersionSpecifier(
                                     version_specifier,
                                 )) => {
                                     // The installed version doesn't satisfy the requirement.
@@ -283,18 +284,18 @@ impl SitePackages {
     pub fn satisfies(
         &self,
         requirements: &[UnresolvedRequirementSpecification],
-        constraints: &[Requirement],
+        constraints: &[NameRequirementSpecification],
         markers: &ResolverMarkerEnvironment,
     ) -> Result<SatisfiesResult> {
         // Collect the constraints.
         let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
             constraints
                 .iter()
-                .fold(FxHashMap::default(), |mut constraints, requirement| {
+                .fold(FxHashMap::default(), |mut constraints, constraint| {
                     constraints
-                        .entry(&requirement.name)
+                        .entry(&constraint.requirement.name)
                         .or_default()
-                        .push(requirement);
+                        .push(&constraint.requirement);
                     constraints
                 });
 
@@ -422,7 +423,7 @@ pub enum SitePackagesDiagnostic {
         /// The package that is missing a dependency.
         package: PackageName,
         /// The dependency that is missing.
-        requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
     },
     IncompatibleDependency {
         /// The package that has an incompatible dependency.
@@ -430,7 +431,7 @@ pub enum SitePackagesDiagnostic {
         /// The version of the package that is installed.
         version: Version,
         /// The dependency that is incompatible.
-        requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
     },
     DuplicatePackage {
         /// The package that has multiple installed distributions.

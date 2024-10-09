@@ -2,7 +2,7 @@
 
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use common::{uv_snapshot, TestContext};
+use common::{copy_dir_all, uv_snapshot, TestContext};
 use indoc::indoc;
 
 mod common;
@@ -258,7 +258,7 @@ fn tool_run_warn_executable_not_in_from() {
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
@@ -750,12 +750,14 @@ fn tool_run_list_installed() {
     uv_snapshot!(context.filters(), context.tool_run()
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
+    Provide a command to run with `uv tool run <command>`.
+
+    See `uv tool run --help` for more information.
 
     ----- stderr -----
-    No tools installed
     "###);
 
     // Install `black`.
@@ -771,12 +773,16 @@ fn tool_run_list_installed() {
     uv_snapshot!(context.filters(), context.tool_run()
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    black v24.2.0
-    - black
-    - blackd
+    Provide a command to run with `uv tool run <command>`.
+
+    The following tools are installed:
+
+    - black v24.2.0
+
+    See `uv tool run --help` for more information.
 
     ----- stderr -----
     "###);
@@ -821,6 +827,144 @@ fn tool_run_without_output() {
 
     ----- stderr -----
     "###);
+}
+
+#[test]
+fn tool_run_with_editable() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let anyio_local = context.temp_dir.child("src").child("anyio_local");
+    copy_dir_all(
+        context.workspace_root.join("scripts/packages/anyio_local"),
+        &anyio_local,
+    )?;
+
+    let black_editable = context.temp_dir.child("src").child("black_editable");
+    copy_dir_all(
+        context
+            .workspace_root
+            .join("scripts/packages/black_editable"),
+        &black_editable,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio", "sniffio==1.3.1"]
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import sniffio
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-editable")
+        .arg("./src/black_editable")
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("flask")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==0.1.0 (from file://[TEMP_DIR]/src/black_editable)
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + iniconfig==2.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###);
+
+    // Requesting an editable requirement should install it in a layer, even if it satisfied
+    uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg("./src/anyio_local").arg("flask").arg("--version").env("UV_TOOL_DIR", tool_dir.as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str()),
+    @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###);
+
+    // Requesting the project itself should use a new environment.
+    uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg(".").arg("flask").arg("--version").env("UV_TOOL_DIR", tool_dir.as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + sniffio==1.3.1
+     + werkzeug==3.0.1
+    "###);
+
+    // If invalid, we should reference `--with`.
+    uv_snapshot!(context.filters(), context
+        .tool_run()
+        .arg("--with")
+        .arg("./foo")
+        .arg("flask")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir
+        .as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Invalid `--with` requirement
+      ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
+    "###);
+
+    Ok(())
 }
 
 #[test]

@@ -3,11 +3,11 @@ use std::str::FromStr;
 use anyhow::Result;
 use url::Url;
 
-use distribution_filename::WheelFilename;
-use distribution_types::{BuiltDist, DirectUrlBuiltDist};
-use pep508_rs::VerbatimUrl;
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
+use uv_distribution_filename::WheelFilename;
+use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities};
+use uv_pep508::VerbatimUrl;
 
 #[tokio::test]
 async fn remote_metadata_with_and_without_cache() -> Result<()> {
@@ -24,7 +24,8 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
             location: Url::parse(url).unwrap(),
             url: VerbatimUrl::from_str(url).unwrap(),
         });
-        let metadata = client.wheel_metadata(&dist).await.unwrap();
+        let capabilities = IndexCapabilities::default();
+        let metadata = client.wheel_metadata(&dist, &capabilities).await.unwrap();
         assert_eq!(metadata.version.to_string(), "4.66.1");
     }
 

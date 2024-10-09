@@ -73,8 +73,8 @@ def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
 
 
 class PlatformTriple(NamedTuple):
-    arch: str
     platform: str
+    arch: str
     libc: str
 
 
@@ -82,14 +82,23 @@ class Version(NamedTuple):
     major: int
     minor: int
     patch: int
+    prerelease: str = ""
 
     @classmethod
     def from_str(cls, version: str) -> Self:
         major, minor, patch = version.split(".", 3)
-        return cls(int(major), int(minor), int(patch))
+        prerelease = ""
+        for prerelease_kind in ("a", "b", "rc"):
+            parts = patch.split(prerelease_kind, 1)
+            if len(parts) == 2:
+                patch = parts[0]
+                prerelease = prerelease_kind + parts[1]
+                break
+
+        return cls(int(major), int(minor), int(patch), prerelease)
 
     def __str__(self) -> str:
-        return f"{self.major}.{self.minor}.{self.patch}"
+        return f"{self.major}.{self.minor}.{self.patch}{self.prerelease}"
 
 
 class ImplementationName(StrEnum):
@@ -158,7 +167,7 @@ class CPythonFinder(Finder):
     _filename_re = re.compile(
         r"""(?x)
         ^
-            cpython-(?P<ver>\d+\.\d+\.\d+?)
+            cpython-(?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)
             (?:\+\d+)?
             -(?P<triple>.*?)
             (?:-[\dT]+)?\.tar\.(?:gz|zst)
@@ -326,7 +335,7 @@ class CPythonFinder(Finder):
             logging.debug("Skipping %r: unknown triple", triple)
             return None
 
-        return PlatformTriple(arch, operating_system, libc)
+        return PlatformTriple(operating_system, arch, libc)
 
     def _normalize_arch(self, arch: str) -> str:
         arch = self.ARCH_MAP.get(arch, arch)
@@ -401,8 +410,8 @@ class PyPyFinder(Finder):
                 download = PythonDownload(
                     version=python_version,
                     triple=PlatformTriple(
-                        arch=arch,
                         platform=platform,
+                        arch=arch,
                         libc=libc,
                     ),
                     flavor="",
@@ -439,14 +448,26 @@ class PyPyFinder(Finder):
 def render(downloads: list[PythonDownload]) -> None:
     """Render `download-metadata.json`."""
 
+    def prerelease_sort_key(prerelease: str) -> tuple[int, int]:
+        if prerelease.startswith("a"):
+            return 0, int(prerelease[1:])
+        if prerelease.startswith("b"):
+            return 1, int(prerelease[1:])
+        if prerelease.startswith("rc"):
+            return 2, int(prerelease[2:])
+        return 3, 0
+
     def sort_key(download: PythonDownload) -> tuple:
         # Sort by implementation, version (latest first), and then by triple.
         impl_order = [ImplementationName.CPYTHON, ImplementationName.PYPY]
+        prerelease = prerelease_sort_key(download.version.prerelease)
         return (
             impl_order.index(download.implementation),
             -download.version.major,
             -download.version.minor,
             -download.version.patch,
+            -prerelease[0],
+            -prerelease[1],
             download.triple,
         )
 
@@ -455,7 +476,9 @@ def render(downloads: list[PythonDownload]) -> None:
     results = {}
     for download in downloads:
         key = download.key()
-        logging.info("Found %s (%s)", key, download.flavor)
+        logging.info(
+            "Found %s%s", key, (" (%s)" % download.flavor) if download.flavor else ""
+        )
         results[key] = {
             "name": download.implementation,
             "arch": download.triple.arch,
@@ -464,6 +487,7 @@ def render(downloads: list[PythonDownload]) -> None:
             "major": download.version.major,
             "minor": download.version.minor,
             "patch": download.version.patch,
+            "prerelease": download.version.prerelease,
             "url": download.url,
             "sha256": download.sha256,
         }

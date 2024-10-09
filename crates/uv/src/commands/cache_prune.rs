@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 
-use uv_cache::Cache;
+use uv_cache::{Cache, Removal};
 use uv_fs::Simplified;
 
 use crate::commands::{human_readable_bytes, ExitStatus};
@@ -26,7 +26,14 @@ pub(crate) fn cache_prune(ci: bool, cache: &Cache, printer: Printer) -> Result<E
         cache.root().user_display().cyan()
     )?;
 
-    let summary = cache
+    let mut summary = Removal::default();
+
+    // Prune the source distribution cache, which is tightly coupled to the builder crate.
+    summary += uv_distribution::prune(cache)
+        .with_context(|| format!("Failed to prune cache at: {}", cache.root().user_display()))?;
+
+    // Prune the remaining cache buckets.
+    summary += cache
         .prune(ci)
         .with_context(|| format!("Failed to prune cache at: {}", cache.root().user_display()))?;
 

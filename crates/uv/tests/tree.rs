@@ -44,7 +44,7 @@ fn nested_dependencies() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -144,7 +144,7 @@ fn frozen() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     // Update the project dependencies.
@@ -252,8 +252,54 @@ fn platform_dependencies() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn platform_dependencies_inverted() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "click"
+        ]
+    "#,
+    )?;
+
+    // When `--universal` is _not_ provided, `colorama` should _not_ be included.
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.tree().arg("--invert"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    click v8.1.7
+    └── project v0.1.0
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    // Unless `--python-platform` is set to `windows`, in which case it should be included.
+    uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--python-platform").arg("windows"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    colorama v0.4.6
+    └── click v8.1.7
+        └── project v0.1.0
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
 
     Ok(())
 }
@@ -297,7 +343,7 @@ fn repeated_dependencies() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -371,7 +417,7 @@ fn repeated_version() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -412,7 +458,7 @@ fn dev_dependencies() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -455,7 +501,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -506,7 +552,7 @@ fn optional_dependencies() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())
@@ -565,7 +611,7 @@ fn optional_dependencies_inverted() -> Result<()> {
     );
 
     // `uv tree` should update the lockfile
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
 
     Ok(())

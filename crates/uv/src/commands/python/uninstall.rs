@@ -23,7 +23,7 @@ pub(crate) async fn uninstall(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let installations = ManagedPythonInstallations::from_settings()?.init()?;
-    let _lock = installations.acquire_lock()?;
+    let _lock = installations.lock().await?;
 
     // Perform the uninstallation.
     do_uninstall(&installations, targets, all, printer).await?;
@@ -59,7 +59,7 @@ async fn do_uninstall(
     let start = std::time::Instant::now();
 
     let requests = if all {
-        vec![PythonRequest::Any]
+        vec![PythonRequest::Default]
     } else {
         let targets = targets.into_iter().collect::<BTreeSet<_>>();
         targets
@@ -75,12 +75,14 @@ async fn do_uninstall(
                 anyhow::anyhow!("Cannot uninstall managed Python for request: {request}")
             })
         })
+        // Always include pre-releases in uninstalls
+        .map(|result| result.map(|request| request.with_prereleases(true)))
         .collect::<Result<Vec<_>>>()?;
 
     let installed_installations: Vec<_> = installations.find_all()?.collect();
     let mut matching_installations = BTreeSet::default();
     for (request, download_request) in requests.iter().zip(download_requests) {
-        if matches!(requests.as_slice(), [PythonRequest::Any]) {
+        if matches!(requests.as_slice(), [PythonRequest::Default]) {
             writeln!(printer.stderr(), "Searching for Python installations")?;
         } else {
             writeln!(
@@ -98,7 +100,7 @@ async fn do_uninstall(
             matching_installations.insert(installation.clone());
         }
         if !found {
-            if matches!(requests.as_slice(), [PythonRequest::Any]) {
+            if matches!(requests.as_slice(), [PythonRequest::Default]) {
                 writeln!(printer.stderr(), "No Python installations found")?;
                 return Ok(ExitStatus::Failure);
             }

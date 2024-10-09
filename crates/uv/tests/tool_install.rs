@@ -1385,6 +1385,69 @@ fn tool_install_no_entrypoints() {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
+
+    // Ensure the tool environment is not created.
+    tool_dir
+        .child("iniconfig")
+        .assert(predicate::path::missing());
+    bin_dir
+        .child("iniconfig")
+        .assert(predicate::path::missing());
+}
+
+/// Test installing a package that can't be installed.
+#[test]
+fn tool_install_uninstallable() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
+            (r"\\\.", ""),
+            (r"#+", "#"),
+        ])
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.tool_install()
+        .arg("pyenv")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r##"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: pyenv==0.0.1
+      Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+
+    [stdout]
+    running bdist_wheel
+    running build
+    installing to build/bdist.linux-x86_64/wheel
+    running install
+
+    [stderr]
+    # NOTE #
+    We are sorry, but this package is not installable with pip.
+
+    Please read the installation instructions at:
+     
+    https://github.com/pyenv/pyenv#installation
+    #
+
+
+    "##);
+
+    // Ensure the tool environment is not created.
+    tool_dir.child("pyenv").assert(predicate::path::missing());
+    bin_dir.child("pyenv").assert(predicate::path::missing());
 }
 
 /// Test installing a tool with a bare URL requirement.
@@ -2074,7 +2137,7 @@ fn tool_install_upgrade() {
 
 /// Test reinstalling tools with varying `--python` requests.
 #[test]
-fn tool_install_python_request() {
+fn tool_install_python_requests() {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -2122,7 +2185,7 @@ fn tool_install_python_request() {
     `black` is already installed
     "###);
 
-    // Install with Python 3.11 (incompatible).
+    // // Install with Python 3.11 (incompatible).
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("-p")
         .arg("3.11")
@@ -2135,7 +2198,7 @@ fn tool_install_python_request() {
     ----- stdout -----
 
     ----- stderr -----
-    Existing environment for `black` does not satisfy the requested Python interpreter
+    Ignoring existing environment for `black`: the requested Python interpreter does not match the environment interpreter
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -2146,6 +2209,150 @@ fn tool_install_python_request() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
+    "###);
+}
+
+/// Test reinstalling tools with varying `--python` and
+/// `--python-preference` parameters.
+#[ignore = "https://github.com/astral-sh/uv/issues/7473"]
+#[test]
+fn tool_install_python_preference() {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-p")
+        .arg("3.12")
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    // Install with Python 3.12 (compatible).
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-p")
+        .arg("3.12")
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `black` is already installed
+    "###);
+
+    // Install with system Python 3.11 (different version, incompatible).
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-p")
+        .arg("3.11")
+        .arg("--python-preference")
+        .arg("only-system")
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing environment for `black`: the requested Python interpreter does not match the environment interpreter
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    // Install with system Python 3.11 (compatible).
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-p")
+        .arg("3.11")
+        .arg("--python-preference")
+        .arg("only-system")
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `black` is already installed
+    "###);
+
+    // Install with managed Python 3.11 (different source, incompatible).
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-p")
+        .arg("3.11")
+        .arg("--python-preference")
+        .arg("only-managed")
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing environment for `black`: the requested Python interpreter does not match the environment interpreter
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    // Install with managed Python 3.11 (compatible).
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-p")
+        .arg("3.11")
+        .arg("--python-preference")
+        .arg("only-managed")
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `black` is already installed
     "###);
 }
 
@@ -2537,6 +2744,328 @@ fn tool_install_settings() {
 
         [tool.options]
         resolution = "highest"
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+}
+
+/// Test installing a tool with `uv tool install {package}@{version}`.
+#[test]
+fn tool_install_at_version() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` at `24.1.0`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black@24.1.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.1.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black", specifier = "==24.1.0" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+
+    // Combining `{package}@{version}` with a `--from` should fail (even if they're ultimately
+    // compatible).
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black@24.1.0")
+        .arg("--from")
+        .arg("black==24.1.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package requirement (`black==24.1.0`) provided with `--from` conflicts with install request (`black@24.1.0`)
+    "###);
+}
+
+/// Test installing a tool with `uv tool install {package}@latest`.
+#[test]
+fn tool_install_at_latest() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` at latest.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black@latest")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+}
+
+/// Test installing a tool with `uv tool install {package} --from {package}@latest`.
+#[test]
+fn tool_install_from_at_latest() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pybabel")
+        .arg("--from")
+        .arg("babel@latest")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.14.0
+    Installed 1 executable: pybabel
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("babel").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "babel" }]
+        entrypoints = [
+            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+}
+
+/// Test installing a tool with `uv tool install {package} --from {package}@{version}`.
+#[test]
+fn tool_install_from_at_version() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("pybabel")
+        .arg("--from")
+        .arg("babel@2.13.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.13.0
+    Installed 1 executable: pybabel
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("babel").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "babel", specifier = "==2.13.0" }]
+        entrypoints = [
+            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+}
+
+/// Test upgrading an already installed tool via `{package}@{latest}`.
+#[test]
+fn tool_install_at_latest_upgrade() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black==24.1.1")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.1.1
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black", specifier = "==24.1.1" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+
+    // Install without the constraint. It should be replaced, but the package shouldn't be installed
+    // since it's already satisfied in the environment.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+
+    // Install with `{package}@{latest}`. `black` should be reinstalled with a more recent version.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black@latest")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - black==24.1.1
+     + black==24.3.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+
+        [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });

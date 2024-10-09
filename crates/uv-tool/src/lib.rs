@@ -2,8 +2,8 @@ use core::fmt;
 
 use fs_err as fs;
 
-use pep440_rs::Version;
-use pep508_rs::{InvalidNameError, PackageName};
+use uv_pep440::Version;
+use uv_pep508::{InvalidNameError, PackageName};
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ use fs_err::File;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use install_wheel_rs::read_record_file;
+use uv_install_wheel::read_record_file;
 
 pub use receipt::ToolReceipt;
 pub use tool::{Tool, ToolEntrypoint};
@@ -37,7 +37,7 @@ pub enum Error {
     #[error(transparent)]
     VirtualEnvError(#[from] uv_virtualenv::Error),
     #[error("Failed to read package entry points {0}")]
-    EntrypointRead(#[from] install_wheel_rs::Error),
+    EntrypointRead(#[from] uv_install_wheel::Error),
     #[error("Failed to find dist-info directory `{0}` in environment at {1}")]
     DistInfoMissing(String, PathBuf),
     #[error("Failed to find a directory for executables")]
@@ -139,12 +139,9 @@ impl InstalledTools {
         }
     }
 
-    /// Lock the tools directory.
-    pub fn acquire_lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(
-            self.root.join(".lock"),
-            self.root.user_display(),
-        )?)
+    /// Grab a file lock for the tools directory to prevent concurrent access across processes.
+    pub async fn lock(&self) -> Result<LockedFile, Error> {
+        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
     }
 
     /// Add a receipt for a tool.
@@ -207,7 +204,7 @@ impl InstalledTools {
         match PythonEnvironment::from_root(&environment_path, cache) {
             Ok(venv) => {
                 debug!(
-                    "Using existing environment for tool `{name}`: {}",
+                    "Found existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
                 Ok(Some(venv))
@@ -216,10 +213,20 @@ impl InstalledTools {
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(
                 interpreter_path,
             ))) => {
-                warn!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
-                    interpreter_path.user_display()
-                );
+                if interpreter_path.is_symlink() {
+                    let target_path = fs_err::read_link(&interpreter_path)?;
+                    warn!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                        interpreter_path.user_display(),
+                        target_path.user_display()
+                    );
+                } else {
+                    warn!(
+                        "Ignoring existing virtual environment with missing Python interpreter: {}",
+                        interpreter_path.user_display()
+                    );
+                }
+
                 Ok(None)
             }
             Err(err) => Err(err.into()),
@@ -258,6 +265,7 @@ impl InstalledTools {
             &environment_path,
             interpreter,
             uv_virtualenv::Prompt::None,
+            false,
             false,
             false,
             false,

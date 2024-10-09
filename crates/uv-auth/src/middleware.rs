@@ -8,7 +8,7 @@ use crate::{
     realm::Realm,
     CredentialsCache, KeyringProvider, CREDENTIALS_CACHE,
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, format_err};
 use netrc::Netrc;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
@@ -22,6 +22,9 @@ pub struct AuthMiddleware {
     netrc: Option<Netrc>,
     keyring: Option<KeyringProvider>,
     cache: Option<CredentialsCache>,
+    /// We know that the endpoint needs authentication, so we don't try to send an unauthenticated
+    /// request, avoiding cloning an uncloneable request.
+    only_authenticated: bool,
 }
 
 impl AuthMiddleware {
@@ -30,6 +33,7 @@ impl AuthMiddleware {
             netrc: Netrc::new().ok(),
             keyring: None,
             cache: None,
+            only_authenticated: false,
         }
     }
 
@@ -53,6 +57,14 @@ impl AuthMiddleware {
     #[must_use]
     pub fn with_cache(mut self, cache: CredentialsCache) -> Self {
         self.cache = Some(cache);
+        self
+    }
+
+    /// We know that the endpoint needs authentication, so we don't try to send an unauthenticated
+    /// request, avoiding cloning an uncloneable request.
+    #[must_use]
+    pub fn with_only_authenticated(mut self, only_authenticated: bool) -> Self {
+        self.only_authenticated = only_authenticated;
         self
     }
 
@@ -198,32 +210,42 @@ impl Middleware for AuthMiddleware {
             .as_ref()
             .is_some_and(|credentials| credentials.username().is_some());
 
-        // Otherwise, attempt an anonymous request
-        trace!("Attempting unauthenticated request for {url}");
+        let (mut retry_request, response) = if self.only_authenticated {
+            // For endpoints where we require the user to provide credentials, we don't try the
+            // unauthenticated request first.
+            trace!("Checking for credentials for {url}");
+            (request, None)
+        } else {
+            // Otherwise, attempt an anonymous request
+            trace!("Attempting unauthenticated request for {url}");
 
-        // <https://github.com/TrueLayer/reqwest-middleware/blob/abdf1844c37092d323683c2396b7eefda1418d3c/reqwest-retry/src/middleware.rs#L141-L149>
-        // Clone the request so we can retry it on authentication failure
-        let mut retry_request = request.try_clone().ok_or_else(|| {
-            Error::Middleware(anyhow!(
-                "Request object is not clonable. Are you passing a streaming body?".to_string()
-            ))
-        })?;
+            // <https://github.com/TrueLayer/reqwest-middleware/blob/abdf1844c37092d323683c2396b7eefda1418d3c/reqwest-retry/src/middleware.rs#L141-L149>
+            // Clone the request so we can retry it on authentication failure
+            let retry_request = request.try_clone().ok_or_else(|| {
+                Error::Middleware(anyhow!(
+                    "Request object is not cloneable. Are you passing a streaming body?"
+                        .to_string()
+                ))
+            })?;
 
-        let response = next.clone().run(request, extensions).await?;
+            let response = next.clone().run(request, extensions).await?;
 
-        // If we don't fail with authorization related codes, return the response
-        if !matches!(
-            response.status(),
-            StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
-        ) {
-            return Ok(response);
-        }
+            // If we don't fail with authorization related codes, return the response
+            if !matches!(
+                response.status(),
+                StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
+            ) {
+                return Ok(response);
+            }
 
-        // Otherwise, search for credentials
-        trace!(
-            "Request for {url} failed with {}, checking for credentials",
-            response.status()
-        );
+            // Otherwise, search for credentials
+            trace!(
+                "Request for {url} failed with {}, checking for credentials",
+                response.status()
+            );
+
+            (retry_request, Some(response))
+        };
 
         // Check in the cache first
         let credentials = self.cache().get_realm(
@@ -265,7 +287,13 @@ impl Middleware for AuthMiddleware {
             }
         }
 
-        Ok(response)
+        if let Some(response) = response {
+            Ok(response)
+        } else {
+            Err(Error::Middleware(format_err!(
+                "Missing credentials for {url}"
+            )))
+        }
     }
 }
 

@@ -4,8 +4,8 @@ use std::{
 };
 
 use fs_err as fs;
-use pypi_types::Scheme;
 use thiserror::Error;
+use uv_pypi_types::Scheme;
 
 /// The layout of a virtual environment.
 #[derive(Debug)]
@@ -23,13 +23,16 @@ pub struct VirtualEnvironment {
 
 /// A parsed `pyvenv.cfg`
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct PyVenvConfiguration {
-    /// If the virtualenv package was used to create the virtual environment.
+    /// Was the virtual environment created with the `virtualenv` package?
     pub(crate) virtualenv: bool,
-    /// If the uv package was used to create the virtual environment.
+    /// Was the virtual environment created with the `uv` package?
     pub(crate) uv: bool,
     /// Is the virtual environment relocatable?
     pub(crate) relocatable: bool,
+    /// Was the virtual environment populated with seed packages?
+    pub(crate) seed: bool,
 }
 
 #[derive(Debug, Error)]
@@ -139,6 +142,7 @@ impl PyVenvConfiguration {
         let mut virtualenv = false;
         let mut uv = false;
         let mut relocatable = false;
+        let mut seed = false;
 
         // Per https://snarky.ca/how-virtual-environments-work/, the `pyvenv.cfg` file is not a
         // valid INI file, and is instead expected to be parsed by partitioning each line on the
@@ -159,6 +163,9 @@ impl PyVenvConfiguration {
                 "relocatable" => {
                     relocatable = value.trim().to_lowercase() == "true";
                 }
+                "seed" => {
+                    seed = value.trim().to_lowercase() == "true";
+                }
                 _ => {}
             }
         }
@@ -167,6 +174,7 @@ impl PyVenvConfiguration {
             virtualenv,
             uv,
             relocatable,
+            seed,
         })
     }
 
@@ -183,5 +191,10 @@ impl PyVenvConfiguration {
     /// Returns true if the virtual environment is relocatable.
     pub fn is_relocatable(&self) -> bool {
         self.relocatable
+    }
+
+    /// Returns true if the virtual environment was populated with seed packages.
+    pub fn is_seed(&self) -> bool {
+        self.seed
     }
 }

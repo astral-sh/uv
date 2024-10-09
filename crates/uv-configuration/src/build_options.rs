@@ -1,15 +1,17 @@
 use std::fmt::{Display, Formatter};
 
-use pep508_rs::PackageName;
+use uv_pep508::PackageName;
 
 use crate::{PackageNameSpecifier, PackageNameSpecifiers};
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum BuildKind {
-    /// A regular PEP 517 wheel build
+    /// A PEP 517 wheel build.
     #[default]
     Wheel,
-    /// A PEP 660 editable installation wheel build
+    /// A PEP 517 source distribution build.
+    Sdist,
+    /// A PEP 660 editable installation wheel build.
     Editable,
 }
 
@@ -17,9 +19,20 @@ impl Display for BuildKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Wheel => f.write_str("wheel"),
+            Self::Sdist => f.write_str("sdist"),
             Self::Editable => f.write_str("editable"),
         }
     }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum BuildOutput {
+    /// Send the build backend output to `stderr`.
+    Stderr,
+    /// Send the build backend output to `tracing`.
+    Debug,
+    /// Do not display the build backend output.
+    Quiet,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

@@ -123,7 +123,7 @@ actually need to make an HTTP request).
 # Additional reading
 
 * Short introduction to `Cache-Control`: <https://csswizardry.com/2019/03/cache-control-for-civilians/>
-* Caching best practcies: <https://jakearchibald.com/2016/caching-best-practices/>
+* Caching best practices: <https://jakearchibald.com/2016/caching-best-practices/>
 * Overview of HTTP caching: <https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching>
 * MDN docs for `Cache-Control`: <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control>
 * The 1997 RFC for HTTP 1.1: <https://www.rfc-editor.org/rfc/rfc2068#section-13>
@@ -137,7 +137,7 @@ actually need to make an HTTP request).
 
 use std::time::{Duration, SystemTime};
 
-use {http::header::HeaderValue, rkyv::bytecheck};
+use http::header::HeaderValue;
 
 use crate::rkyvutil::OwnedArchive;
 
@@ -151,12 +151,19 @@ mod control;
 /// suspect we won't ever need to. We split them out into their own type so
 /// that they can be shared between `CachePolicyBuilder` and `CachePolicy`.
 #[derive(
-    Clone, Debug, Default, rkyv::Archive, rkyv::CheckBytes, rkyv::Deserialize, rkyv::Serialize,
+    Clone,
+    Debug,
+    Default,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Portable,
+    rkyv::Serialize,
+    bytecheck::CheckBytes,
 )]
 // Since `CacheConfig` is so simple, we can use itself as the archived type.
 // But note that this will fall apart if even something like an Option<u8> is
 // added.
-#[archive(as = "Self")]
+#[rkyv(as = Self)]
 #[repr(C)]
 struct CacheConfig {
     shared: bool,
@@ -232,8 +239,7 @@ impl CachePolicyBuilder {
 /// absent from this (among other things that uv probably doesn't care
 /// about it) are proxy cache semantics.
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 pub struct CachePolicy {
     /// The configuration controlling the behavior of the cache.
     config: CacheConfig,
@@ -393,7 +399,7 @@ impl ArchivedCachePolicy {
         if self.is_modified(&new_policy) {
             AfterResponse::Modified(new_policy)
         } else {
-            new_policy.response.status = self.response.status;
+            new_policy.response.status = self.response.status.into();
             AfterResponse::NotModified(new_policy)
         }
     }
@@ -522,7 +528,8 @@ impl ArchivedCachePolicy {
             if let Some(&last_modified_unix_timestamp) =
                 self.response.headers.last_modified_unix_timestamp.as_ref()
             {
-                if let Some(last_modified) = unix_timestamp_to_header(last_modified_unix_timestamp)
+                if let Some(last_modified) =
+                    unix_timestamp_to_header(last_modified_unix_timestamp.into())
                 {
                     request
                         .headers_mut()
@@ -696,7 +703,7 @@ impl ArchivedCachePolicy {
         // ... we don't support any extensions.
         //
         // "a status code that is defined as heuristically cacheable"
-        if HEURISTICALLY_CACHEABLE_STATUS_CODES.contains(&self.response.status) {
+        if HEURISTICALLY_CACHEABLE_STATUS_CODES.contains(&self.response.status.into()) {
             tracing::trace!(
                 "cached request {} is storable because its response has a \
                  heuristically cacheable status code {:?}",
@@ -734,7 +741,7 @@ impl ArchivedCachePolicy {
         let age = self.age(now).as_secs();
 
         // Per RFC 8246, the `immutable` directive means that a reload from an
-        // end user should not result in a revlalidation request. Indeed, the
+        // end user should not result in a revalidation request. Indeed, the
         // `immutable` directive seems to imply that clients should never talk
         // to the origin server until the cached response is stale with respect
         // to its freshness lifetime (as set by the server).
@@ -856,7 +863,7 @@ impl ArchivedCachePolicy {
                 .age(now)
                 .as_secs()
                 .saturating_sub(self.freshness_lifetime().as_secs());
-            if stale_amount <= max_stale {
+            if stale_amount <= max_stale.into() {
                 tracing::trace!(
                     "cached request {} has a cached response that allows staleness \
                      in this case because the stale amount is {} seconds and the \
@@ -894,17 +901,13 @@ impl ArchivedCachePolicy {
     /// [RFC 9111 S4.2.3]: https://www.rfc-editor.org/rfc/rfc9111.html#name-calculating-age
     fn age(&self, now: SystemTime) -> Duration {
         // RFC 9111 S4.2.3
-        let apparent_age = self
-            .response
-            .unix_timestamp
-            .saturating_sub(self.response.header_date());
-        let response_delay = self
-            .response
-            .unix_timestamp
-            .saturating_sub(self.request.unix_timestamp);
+        let apparent_age =
+            u64::from(self.response.unix_timestamp).saturating_sub(self.response.header_date());
+        let response_delay = u64::from(self.response.unix_timestamp)
+            .saturating_sub(self.request.unix_timestamp.into());
         let corrected_age_value = self.response.header_age().saturating_add(response_delay);
         let corrected_initial_age = apparent_age.max(corrected_age_value);
-        let resident_age = unix_timestamp(now).saturating_sub(self.response.unix_timestamp);
+        let resident_age = unix_timestamp(now).saturating_sub(self.response.unix_timestamp.into());
         let current_age = corrected_initial_age + resident_age;
         Duration::from_secs(current_age)
     }
@@ -921,7 +924,7 @@ impl ArchivedCachePolicy {
     fn freshness_lifetime(&self) -> Duration {
         if self.config.shared {
             if let Some(&s_maxage) = self.response.headers.cc.s_maxage_seconds.as_ref() {
-                let duration = Duration::from_secs(s_maxage);
+                let duration = Duration::from_secs(s_maxage.into());
                 tracing::trace!(
                     "freshness lifetime found via shared \
                      cache-control max age setting: {duration:?}"
@@ -930,14 +933,15 @@ impl ArchivedCachePolicy {
             }
         }
         if let Some(&max_age) = self.response.headers.cc.max_age_seconds.as_ref() {
-            let duration = Duration::from_secs(max_age);
+            let duration = Duration::from_secs(max_age.into());
             tracing::trace!(
                 "freshness lifetime found via cache-control max age setting: {duration:?}"
             );
             return duration;
         }
         if let Some(&expires) = self.response.headers.expires_unix_timestamp.as_ref() {
-            let duration = Duration::from_secs(expires.saturating_sub(self.response.header_date()));
+            let duration =
+                Duration::from_secs(u64::from(expires).saturating_sub(self.response.header_date()));
             tracing::trace!("freshness lifetime found via expires header: {duration:?}");
             return duration;
         }
@@ -1019,8 +1023,7 @@ pub enum AfterResponse {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 struct Request {
     uri: String,
     method: Method,
@@ -1040,8 +1043,7 @@ impl<'a> From<&'a reqwest::Request> for Request {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 struct RequestHeaders {
     /// The cache control directives from the `Cache-Control` header.
     cc: CacheControl,
@@ -1065,8 +1067,7 @@ impl<'a> From<&'a http::HeaderMap> for RequestHeaders {
 /// cache. Instead, we treat them as "unrecognized" and consider the responses
 /// not-storable.
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 #[repr(u8)]
 enum Method {
     Get,
@@ -1087,8 +1088,7 @@ impl<'a> From<&'a http::Method> for Method {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 struct Response {
     status: u16,
     headers: ResponseHeaders,
@@ -1105,7 +1105,11 @@ impl ArchivedResponse {
     ///
     /// [RFC 9111 S4.2.3]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.2.3
     fn header_age(&self) -> u64 {
-        self.headers.age_seconds.unwrap_or(0)
+        self.headers
+            .age_seconds
+            .as_ref()
+            .map(u64::from)
+            .unwrap_or(0)
     }
 
     /// Returns the "date" header value on this response, with a fallback to
@@ -1116,6 +1120,7 @@ impl ArchivedResponse {
         self.headers
             .date_unix_timestamp
             .unwrap_or(self.unix_timestamp)
+            .into()
     }
 
     /// Returns true when this response has a status code that is considered
@@ -1138,8 +1143,7 @@ impl<'a> From<&'a reqwest::Response> for Response {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 struct ResponseHeaders {
     /// The directives from the `Cache-Control` header.
     cc: CacheControl,
@@ -1209,8 +1213,7 @@ impl<'a> From<&'a http::HeaderMap> for ResponseHeaders {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 struct ETag {
     /// The actual `ETag` validator value.
     ///
@@ -1267,8 +1270,7 @@ impl ETag {
 /// [RFC 9110 S12.5.5]: https://www.rfc-editor.org/rfc/rfc9110#section-12.5.5
 /// [RFC 9111 S4.1]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.1
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 struct Vary {
     fields: Vec<VaryField>,
 }
@@ -1349,8 +1351,7 @@ impl ArchivedVary {
 ///
 /// [RFC 9111 S4.1]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.1
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[rkyv(derive(Debug))]
 struct VaryField {
     name: String,
     value: Vec<u8>,

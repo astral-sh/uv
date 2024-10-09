@@ -13,13 +13,14 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-filename = { workspace = true }
-pypi-types = { workspace = true }
+uv-distribution-filename = { workspace = true }
+uv-pypi-types = { workspace = true }
 
 async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd", "xz"] }
-async_zip = { workspace = true, features = ["tokio"] }
+async_zip = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+krata-tokio-tar = { workspace = true }
 md-5 = { workspace = true }
 rayon = { workspace = true }
 reqwest = { workspace = true }
@@ -27,11 +28,14 @@ rustc-hash = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-tar = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
-xz2 = { workspace = true, features = ["static"] }
+xz2 = { workspace = true }
 zip = { workspace = true }
+
+[features]
+default = []
+performance = ["xz2/static"]
 
 [package.metadata.cargo-shear]
 ignored = ["xz2"]

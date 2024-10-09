@@ -3,9 +3,9 @@ use thiserror::Error;
 
 pub use crate::discovery::{
     find_python_installations, EnvironmentPreference, Error as DiscoveryError, PythonDownloads,
-    PythonNotFound, PythonPreference, PythonRequest, PythonSource, VersionRequest,
+    PythonNotFound, PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
 };
-pub use crate::environment::PythonEnvironment;
+pub use crate::environment::{InvalidEnvironment, InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::ImplementationName;
 pub use crate::installation::{PythonInstallation, PythonInstallationKey};
 pub use crate::interpreter::{Error as InterpreterError, Interpreter};
@@ -26,15 +26,17 @@ mod installation;
 mod interpreter;
 mod libc;
 pub mod managed;
+#[cfg(windows)]
+mod microsoft_store;
 pub mod platform;
 mod pointer_size;
 mod prefix;
+#[cfg(windows)]
 mod py_launcher;
 mod python_version;
 mod target;
 mod version_files;
 mod virtualenv;
-mod which;
 
 #[cfg(not(test))]
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
@@ -61,9 +63,6 @@ pub enum Error {
     Discovery(#[from] discovery::Error),
 
     #[error(transparent)]
-    PyLauncher(#[from] py_launcher::Error),
-
-    #[error(transparent)]
     ManagedPython(#[from] managed::Error),
 
     #[error(transparent)]
@@ -78,6 +77,9 @@ pub enum Error {
 
     #[error(transparent)]
     MissingEnvironment(#[from] environment::EnvironmentNotFound),
+
+    #[error(transparent)]
+    InvalidEnvironment(#[from] environment::InvalidEnvironment),
 }
 
 // The mock interpreters are not valid on Windows so we don't have unit test coverage there
@@ -198,6 +200,7 @@ mod tests {
             version: &PythonVersion,
             implementation: ImplementationName,
             system: bool,
+            free_threaded: bool,
         ) -> Result<()> {
             let json = indoc! {r##"
                     {
@@ -248,7 +251,7 @@ mod tests {
                             "scripts": "bin"
                         },
                         "pointer_size": "64",
-                        "gil_disabled": true
+                        "gil_disabled": {FREE_THREADED}
                     }
                 "##};
 
@@ -265,6 +268,7 @@ mod tests {
                 )
                 .replace("{FULL_VERSION}", &version.to_string())
                 .replace("{VERSION}", &version.without_patch().to_string())
+                .replace("{FREE_THREADED}", &free_threaded.to_string())
                 .replace("{IMPLEMENTATION}", (&implementation).into());
 
             fs_err::create_dir_all(path.parent().unwrap())?;
@@ -324,6 +328,7 @@ mod tests {
                 &PythonVersion::from_str(version).expect("Test uses valid version"),
                 ImplementationName::default(),
                 true,
+                false,
             )
         }
 
@@ -363,6 +368,7 @@ mod tests {
                     &PythonVersion::from_str(version).unwrap(),
                     *implementation,
                     *system,
+                    false,
                 )?;
             }
             Ok(())
@@ -381,6 +387,7 @@ mod tests {
                 &PythonVersion::from_str(version)
                     .expect("A valid Python version is used for tests"),
                 ImplementationName::default(),
+                false,
                 false,
             )?;
             ChildPath::new(path.as_ref().join("pyvenv.cfg")).touch()?;
@@ -403,6 +410,7 @@ mod tests {
                     .expect("A valid Python version is used for tests"),
                 ImplementationName::default(),
                 true,
+                false,
             )?;
             ChildPath::new(path.as_ref().join("pyvenv.cfg")).touch()?;
             Ok(())
@@ -416,7 +424,7 @@ mod tests {
         context.search_path = Some(vec![]);
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
@@ -430,7 +438,7 @@ mod tests {
         context.search_path = None;
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
@@ -454,7 +462,7 @@ mod tests {
 
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
@@ -478,7 +486,7 @@ mod tests {
 
         let interpreter = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
@@ -534,11 +542,12 @@ mod tests {
             &PythonVersion::from_str("3.12.1").unwrap(),
             ImplementationName::default(),
             true,
+            false,
         )?;
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
@@ -569,7 +578,7 @@ mod tests {
 
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
@@ -601,11 +610,12 @@ mod tests {
             &PythonVersion::from_str("3.12.1").unwrap(),
             ImplementationName::default(),
             true,
+            false,
         )?;
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
@@ -636,7 +646,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -657,7 +667,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -682,7 +692,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -707,7 +717,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -964,13 +974,13 @@ mod tests {
     #[test]
     fn find_python_from_active_python() -> Result<()> {
         let context = TestContext::new()?;
-        let venv = context.tempdir.child(".venv");
+        let venv = context.tempdir.child("some-venv");
         TestContext::mock_venv(&venv, "3.12.0")?;
 
         let python =
             context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
                 find_python_installation(
-                    &PythonRequest::Any,
+                    &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
@@ -979,6 +989,31 @@ mod tests {
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
             "3.12.0",
+            "We should prefer the active environment"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_from_active_python_prerelease() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.12.0"])?;
+        let venv = context.tempdir.child("some-venv");
+        TestContext::mock_venv(&venv, "3.13.0rc1")?;
+
+        let python =
+            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+                find_python_installation(
+                    &PythonRequest::Default,
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            })??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.13.0rc1",
             "We should prefer the active environment"
         );
 
@@ -995,7 +1030,7 @@ mod tests {
             context.run_with_vars(&[("CONDA_PREFIX", Some(condaenv.as_os_str()))], || {
                 // Note this python is not treated as a system interpreter
                 find_python_installation(
-                    &PythonRequest::Any,
+                    &PythonRequest::Default,
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
                     &context.cache,
@@ -1025,7 +1060,7 @@ mod tests {
             ],
             || {
                 find_python_installation(
-                    &PythonRequest::Any,
+                    &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
@@ -1044,7 +1079,7 @@ mod tests {
         let python =
             context.run_with_vars(&[("CONDA_PREFIX", Some(condaenv.as_os_str()))], || {
                 find_python_installation(
-                    &PythonRequest::Any,
+                    &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
@@ -1069,7 +1104,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -1086,7 +1121,7 @@ mod tests {
         context.add_python_versions(&["3.12.1", "3.12.2"])?;
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -1114,7 +1149,7 @@ mod tests {
         let python =
             context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
                 find_python_installation(
-                    &PythonRequest::Any,
+                    &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
@@ -1141,13 +1176,14 @@ mod tests {
             ImplementationName::CPython,
             // Note we mark this as a system interpreter instead of a virtual environment
             true,
+            false,
         )?;
 
         let python = context.run_with_vars(
             &[("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str()))],
             || {
                 find_python_installation(
-                    &PythonRequest::Any,
+                    &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
@@ -1171,7 +1207,7 @@ mod tests {
             ],
             || {
                 find_python_installation(
-                    &PythonRequest::Any,
+                    &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
@@ -1192,7 +1228,7 @@ mod tests {
             ],
             || {
                 find_python_installation(
-                    &PythonRequest::Any,
+                    &PythonRequest::Default,
                     EnvironmentPreference::ExplicitSystem,
                     PythonPreference::OnlySystem,
                     &context.cache,
@@ -1205,6 +1241,27 @@ mod tests {
             "We should prefer the parent interpreter"
         );
 
+        // Test with `EnvironmentPreference::OnlySystem`
+        let python = context.run_with_vars(
+            &[
+                ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
+                ("VIRTUAL_ENV", Some(venv.as_os_str())),
+            ],
+            || {
+                find_python_installation(
+                    &PythonRequest::Default,
+                    EnvironmentPreference::OnlySystem,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            },
+        )??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should prefer the parent interpreter since it's not virtual"
+        );
+
         // Test with `EnvironmentPreference::OnlyVirtual`
         let python = context.run_with_vars(
             &[
@@ -1213,7 +1270,7 @@ mod tests {
             ],
             || {
                 find_python_installation(
-                    &PythonRequest::Any,
+                    &PythonRequest::Default,
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
                     &context.cache,
@@ -1230,6 +1287,40 @@ mod tests {
     }
 
     #[test]
+    fn find_python_from_parent_interpreter_prerelease() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.12.0"])?;
+        let parent = context.tempdir.child("python").to_path_buf();
+        TestContext::create_mock_interpreter(
+            &parent,
+            &PythonVersion::from_str("3.13.0rc2").unwrap(),
+            ImplementationName::CPython,
+            // Note we mark this as a system interpreter instead of a virtual environment
+            true,
+            false,
+        )?;
+
+        let python = context.run_with_vars(
+            &[("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str()))],
+            || {
+                find_python_installation(
+                    &PythonRequest::Default,
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            },
+        )??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.13.0rc2",
+            "We should find the parent interpreter"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn find_python_active_python_skipped_if_system_required() -> Result<()> {
         let mut context = TestContext::new()?;
         let venv = context.tempdir.child(".venv");
@@ -1240,7 +1331,7 @@ mod tests {
         let python =
             context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
                 find_python_installation(
-                    &PythonRequest::Any,
+                    &PythonRequest::Default,
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
                     &context.cache,
@@ -1292,7 +1383,7 @@ mod tests {
 
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::OnlyVirtual,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -1343,7 +1434,7 @@ mod tests {
 
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -1379,6 +1470,7 @@ mod tests {
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
             true,
+            false,
         )?;
 
         let python = context.run(|| {
@@ -1422,6 +1514,7 @@ mod tests {
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
             true,
+            false,
         )?;
 
         let python = context.run(|| {
@@ -1527,6 +1620,7 @@ mod tests {
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
             true,
+            false,
         )?;
         let python = context.run(|| {
             find_python_installation(
@@ -1619,6 +1713,7 @@ mod tests {
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
             true,
+            false,
         )?;
         context.add_to_search_path(context.tempdir.child("foo").to_path_buf());
 
@@ -1658,6 +1753,7 @@ mod tests {
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::default(),
             false, // Not a system interpreter
+            false,
         )?;
         context.add_to_search_path(context.tempdir.child("foo").to_path_buf());
 
@@ -1688,7 +1784,7 @@ mod tests {
         context.add_python_interpreters(&[(true, ImplementationName::PyPy, "pypy", "3.10.0")])?;
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -1696,7 +1792,7 @@ mod tests {
         })?;
         assert!(
             matches!(result, Err(PythonNotFound { .. })),
-            "We should not the pypy interpreter if not named `python` or requested; got {result:?}"
+            "We should not find the pypy interpreter if not named `python` or requested; got {result:?}"
         );
 
         // But we should find it
@@ -1704,7 +1800,7 @@ mod tests {
         context.add_python_interpreters(&[(true, ImplementationName::PyPy, "python", "3.10.1")])?;
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -1757,7 +1853,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -1850,47 +1946,17 @@ mod tests {
     }
 
     #[test]
-    fn find_python_pypy_prefers_executable_with_implementation_name() -> Result<()> {
+    fn find_python_all_minors_prerelease() -> Result<()> {
         let mut context = TestContext::new()?;
-
-        // We should prefer `pypy` executables over `python` executables in the same directory
-        // even if they are both pypy
-        TestContext::create_mock_interpreter(
-            &context.tempdir.join("python"),
-            &PythonVersion::from_str("3.10.0").unwrap(),
-            ImplementationName::PyPy,
-            true,
-        )?;
-        TestContext::create_mock_interpreter(
-            &context.tempdir.join("pypy"),
-            &PythonVersion::from_str("3.10.1").unwrap(),
-            ImplementationName::PyPy,
-            true,
-        )?;
-        context.add_to_search_path(context.tempdir.to_path_buf());
-
-        let python = context.run(|| {
-            find_python_installation(
-                &PythonRequest::parse("pypy@3.10"),
-                EnvironmentPreference::Any,
-                PythonPreference::OnlySystem,
-                &context.cache,
-            )
-        })??;
-        assert_eq!(
-            python.interpreter().python_full_version().to_string(),
-            "3.10.1",
-        );
-
-        // But `python` executables earlier in the search path will take precedence
-        context.reset_search_path();
         context.add_python_interpreters(&[
-            (true, ImplementationName::PyPy, "python", "3.10.2"),
-            (true, ImplementationName::PyPy, "pypy", "3.10.3"),
+            (true, ImplementationName::CPython, "python", "3.10.0"),
+            (true, ImplementationName::CPython, "python3", "3.10.0"),
+            (true, ImplementationName::CPython, "python3.11", "3.11.0b0"),
         ])?;
+
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("pypy@3.10"),
+                &PythonRequest::parse(">= 3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -1898,32 +1964,25 @@ mod tests {
         })??;
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
-            "3.10.2",
+            "3.11.0b0",
+            "We should find the 3.11 prerelease even though >=3.11 would normally exclude prereleases"
         );
 
         Ok(())
     }
 
     #[test]
-    fn find_python_pypy_prefers_executable_with_version() -> Result<()> {
+    fn find_python_all_minors_prerelease_next() -> Result<()> {
         let mut context = TestContext::new()?;
-        TestContext::create_mock_interpreter(
-            &context.tempdir.join("pypy3.10"),
-            &PythonVersion::from_str("3.10.0").unwrap(),
-            ImplementationName::PyPy,
-            true,
-        )?;
-        TestContext::create_mock_interpreter(
-            &context.tempdir.join("pypy"),
-            &PythonVersion::from_str("3.10.1").unwrap(),
-            ImplementationName::PyPy,
-            true,
-        )?;
-        context.add_to_search_path(context.tempdir.to_path_buf());
+        context.add_python_interpreters(&[
+            (true, ImplementationName::CPython, "python", "3.10.0"),
+            (true, ImplementationName::CPython, "python3", "3.10.0"),
+            (true, ImplementationName::CPython, "python3.12", "3.12.0b0"),
+        ])?;
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("pypy@3.10"),
+                &PythonRequest::parse(">= 3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -1931,37 +1990,8 @@ mod tests {
         })??;
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
-            "3.10.0",
-            "We should prefer executables with the version number over those with implementation names"
-        );
-
-        let mut context = TestContext::new()?;
-        TestContext::create_mock_interpreter(
-            &context.tempdir.join("python3.10"),
-            &PythonVersion::from_str("3.10.0").unwrap(),
-            ImplementationName::PyPy,
-            true,
-        )?;
-        TestContext::create_mock_interpreter(
-            &context.tempdir.join("pypy"),
-            &PythonVersion::from_str("3.10.1").unwrap(),
-            ImplementationName::PyPy,
-            true,
-        )?;
-        context.add_to_search_path(context.tempdir.to_path_buf());
-
-        let python = context.run(|| {
-            find_python_installation(
-                &PythonRequest::parse("pypy@3.10"),
-                EnvironmentPreference::Any,
-                PythonPreference::OnlySystem,
-                &context.cache,
-            )
-        })??;
-        assert_eq!(
-            python.interpreter().python_full_version().to_string(),
-            "3.10.1",
-            "We should prefer an implementation name executable over a generic name with a version"
+            "3.12.0b0",
+            "We should find the 3.12 prerelease"
         );
 
         Ok(())
@@ -1979,7 +2009,7 @@ mod tests {
         )])?;
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -2000,7 +2030,7 @@ mod tests {
         )])?;
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -2053,7 +2083,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::Any,
+                &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
@@ -2069,22 +2099,24 @@ mod tests {
     }
 
     #[test]
-    fn find_python_graalpy_prefers_executable_with_implementation_name() -> Result<()> {
+    fn find_python_prefers_generic_executable_over_implementation_name() -> Result<()> {
         let mut context = TestContext::new()?;
 
-        // We should prefer `graalpy` executables over `python` executables in the same directory
-        // even if they are both graalpy
+        // We prefer `python` executables over `graalpy` executables in the same directory
+        // if they are both GraalPy
         TestContext::create_mock_interpreter(
             &context.tempdir.join("python"),
             &PythonVersion::from_str("3.10.0").unwrap(),
             ImplementationName::GraalPy,
             true,
+            false,
         )?;
         TestContext::create_mock_interpreter(
             &context.tempdir.join("graalpy"),
             &PythonVersion::from_str("3.10.1").unwrap(),
             ImplementationName::GraalPy,
             true,
+            false,
         )?;
         context.add_to_search_path(context.tempdir.to_path_buf());
 
@@ -2098,10 +2130,10 @@ mod tests {
         })??;
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
-            "3.10.1",
+            "3.10.0",
         );
 
-        // But `python` executables earlier in the search path will take precedence
+        // And `python` executables earlier in the search path will take precedence
         context.reset_search_path();
         context.add_python_interpreters(&[
             (true, ImplementationName::GraalPy, "python", "3.10.2"),
@@ -2118,6 +2150,196 @@ mod tests {
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
             "3.10.2",
+        );
+
+        // But `graalpy` executables earlier in the search path will take precedence
+        context.reset_search_path();
+        context.add_python_interpreters(&[
+            (true, ImplementationName::GraalPy, "graalpy", "3.10.3"),
+            (true, ImplementationName::GraalPy, "python", "3.10.2"),
+        ])?;
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("graalpy@3.10"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.10.3",
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_prefers_generic_executable_over_one_with_version() -> Result<()> {
+        let mut context = TestContext::new()?;
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("pypy3.10"),
+            &PythonVersion::from_str("3.10.0").unwrap(),
+            ImplementationName::PyPy,
+            true,
+            false,
+        )?;
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("pypy"),
+            &PythonVersion::from_str("3.10.1").unwrap(),
+            ImplementationName::PyPy,
+            true,
+            false,
+        )?;
+        context.add_to_search_path(context.tempdir.to_path_buf());
+
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("pypy@3.10"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.10.1",
+            "We should prefer the generic executable over one with the version number"
+        );
+
+        let mut context = TestContext::new()?;
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("python3.10"),
+            &PythonVersion::from_str("3.10.0").unwrap(),
+            ImplementationName::PyPy,
+            true,
+            false,
+        )?;
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("pypy"),
+            &PythonVersion::from_str("3.10.1").unwrap(),
+            ImplementationName::PyPy,
+            true,
+            false,
+        )?;
+        context.add_to_search_path(context.tempdir.to_path_buf());
+
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("pypy@3.10"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should prefer the generic name with a version over one the implementation name"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_version_free_threaded() -> Result<()> {
+        let mut context = TestContext::new()?;
+
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("python"),
+            &PythonVersion::from_str("3.13.1").unwrap(),
+            ImplementationName::CPython,
+            true,
+            false,
+        )?;
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("python3.13t"),
+            &PythonVersion::from_str("3.13.0").unwrap(),
+            ImplementationName::CPython,
+            true,
+            true,
+        )?;
+        context.add_to_search_path(context.tempdir.to_path_buf());
+
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("3.13t"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
+
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
+            "We should find a python; got {python:?}"
+        );
+        assert_eq!(
+            &python.interpreter().python_full_version().to_string(),
+            "3.13.0",
+            "We should find the correct interpreter for the request"
+        );
+        assert!(
+            &python.interpreter().gil_disabled(),
+            "We should find a python without the GIL"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_version_prefer_non_free_threaded() -> Result<()> {
+        let mut context = TestContext::new()?;
+
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("python"),
+            &PythonVersion::from_str("3.13.0").unwrap(),
+            ImplementationName::CPython,
+            true,
+            false,
+        )?;
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("python3.13t"),
+            &PythonVersion::from_str("3.13.0").unwrap(),
+            ImplementationName::CPython,
+            true,
+            true,
+        )?;
+        context.add_to_search_path(context.tempdir.to_path_buf());
+
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("3.13"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
+
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
+            "We should find a python; got {python:?}"
+        );
+        assert_eq!(
+            &python.interpreter().python_full_version().to_string(),
+            "3.13.0",
+            "We should find the correct interpreter for the request"
+        );
+        assert!(
+            !&python.interpreter().gil_disabled(),
+            "We should prefer a python with the GIL"
         );
 
         Ok(())

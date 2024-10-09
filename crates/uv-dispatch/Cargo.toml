@@ -14,16 +14,16 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-types = { workspace = true }
-install-wheel-rs = { workspace = true }
-pypi-types = { workspace = true }
-uv-build = { workspace = true }
+uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-git = { workspace = true }
+uv-install-wheel = { workspace = true }
 uv-installer = { workspace = true }
+uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }

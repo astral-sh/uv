@@ -13,13 +13,13 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-install-wheel-rs = { workspace = true }
-pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
-pypi-types = { workspace = true }
 uv-cache = { workspace = true }
 uv-fs = { workspace = true }
+uv-install-wheel = { workspace = true }
 uv-installer = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-settings = { workspace = true }
 uv-state = { workspace = true }
@@ -31,5 +31,5 @@ pathdiff = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
-toml_edit = { workspace = true, features = ["serde"] }
+toml_edit = { workspace = true }
 tracing = { workspace = true }

@@ -1,12 +1,12 @@
+use itertools::Itertools;
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
-
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
 use uv_fs::PortablePath;
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 
 use crate::pyproject::{DependencyType, Source};
 
@@ -46,6 +46,14 @@ pub enum ArrayEdit {
     Update(usize),
     /// A new entry was added at the given index (typically, the end of the array).
     Add(usize),
+}
+
+impl ArrayEdit {
+    pub fn index(&self) -> usize {
+        match self {
+            Self::Update(i) | Self::Add(i) => *i,
+        }
+    }
 }
 
 /// Specifies whether dependencies are added to a script file or a `pyproject.toml` file.
@@ -196,7 +204,7 @@ impl PyProjectTomlMut {
             .doc()?
             .entry("optional-dependencies")
             .or_insert(Item::Table(Table::new()))
-            .as_table_mut()
+            .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
         let group = optional_dependencies
@@ -207,6 +215,8 @@ impl PyProjectTomlMut {
 
         let name = req.name.clone();
         let added = add_dependency(req, group, source.is_some())?;
+
+        optional_dependencies.fmt();
 
         if let Some(source) = source {
             self.add_source(&name, source)?;
@@ -295,7 +305,7 @@ impl PyProjectTomlMut {
             .doc()?
             .entry("optional-dependencies")
             .or_insert(Item::Table(Table::new()))
-            .as_table_mut()
+            .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
         let group = optional_dependencies
@@ -348,7 +358,11 @@ impl PyProjectTomlMut {
         let Some(dependencies) = self
             .doc_mut()?
             .and_then(|project| project.get_mut("dependencies"))
-            .map(|dependencies| dependencies.as_array_mut().ok_or(Error::MalformedSources))
+            .map(|dependencies| {
+                dependencies
+                    .as_array_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
             .transpose()?
         else {
             return Ok(Vec::new());
@@ -366,13 +380,17 @@ impl PyProjectTomlMut {
         let Some(dev_dependencies) = self
             .doc
             .get_mut("tool")
-            .map(|tool| tool.as_table_mut().ok_or(Error::MalformedSources))
+            .map(|tool| tool.as_table_mut().ok_or(Error::MalformedDependencies))
             .transpose()?
             .and_then(|tool| tool.get_mut("uv"))
-            .map(|tool_uv| tool_uv.as_table_mut().ok_or(Error::MalformedSources))
+            .map(|tool_uv| tool_uv.as_table_mut().ok_or(Error::MalformedDependencies))
             .transpose()?
             .and_then(|tool_uv| tool_uv.get_mut("dev-dependencies"))
-            .map(|dependencies| dependencies.as_array_mut().ok_or(Error::MalformedSources))
+            .map(|dependencies| {
+                dependencies
+                    .as_array_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
             .transpose()?
         else {
             return Ok(Vec::new());
@@ -394,10 +412,18 @@ impl PyProjectTomlMut {
         let Some(optional_dependencies) = self
             .doc_mut()?
             .and_then(|project| project.get_mut("optional-dependencies"))
-            .map(|extras| extras.as_table_mut().ok_or(Error::MalformedSources))
+            .map(|extras| {
+                extras
+                    .as_table_like_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
             .transpose()?
             .and_then(|extras| extras.get_mut(group.as_ref()))
-            .map(|dependencies| dependencies.as_array_mut().ok_or(Error::MalformedSources))
+            .map(|dependencies| {
+                dependencies
+                    .as_array_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
             .transpose()?
         else {
             return Ok(Vec::new());
@@ -503,13 +529,84 @@ pub fn add_dependency(
     deps: &mut Array,
     has_source: bool,
 ) -> Result<ArrayEdit, Error> {
-    // Find matching dependencies.
     let mut to_replace = find_dependencies(&req.name, Some(&req.marker), deps);
+
     match to_replace.as_slice() {
         [] => {
-            deps.push(req.to_string());
+            #[derive(Debug, Copy, Clone)]
+            enum Sort {
+                /// The list is sorted in a case-sensitive manner.
+                CaseSensitive,
+                /// The list is sorted in a case-insensitive manner.
+                CaseInsensitive,
+                /// The list is unsorted.
+                Unsorted,
+            }
+
+            // Determine if the dependency list is sorted prior to
+            // adding the new dependency; the new dependency list
+            // will be sorted only when the original list is sorted
+            // so that user's custom dependency ordering is preserved.
+            //
+            // Additionally, if the table is invalid (i.e. contains non-string values)
+            // we still treat it as unsorted for the sake of simplicity.
+            //
+            // We account for both case-sensitive and case-insensitive sorting.
+            let sort = deps
+                .iter()
+                .all(Value::is_str)
+                .then(|| {
+                    if deps.iter().tuple_windows().all(|(a, b)| {
+                        a.as_str().map(str::to_lowercase) <= b.as_str().map(str::to_lowercase)
+                    }) {
+                        Some(Sort::CaseInsensitive)
+                    } else if deps
+                        .iter()
+                        .tuple_windows()
+                        .all(|(a, b)| a.as_str() <= b.as_str())
+                    {
+                        Some(Sort::CaseSensitive)
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .unwrap_or(Sort::Unsorted);
+
+            let req_string = req.to_string();
+            let index = match sort {
+                Sort::CaseSensitive => deps
+                    .iter()
+                    .position(|d| d.as_str() > Some(req_string.as_str())),
+                Sort::CaseInsensitive => deps.iter().position(|d| {
+                    d.as_str().map(str::to_lowercase) > Some(req_string.as_str().to_lowercase())
+                }),
+                Sort::Unsorted => None,
+            };
+            let index = index.unwrap_or(deps.len());
+
+            deps.insert(index, req_string);
+            // `reformat_array_multiline` uses the indentation of the first dependency entry.
+            // Therefore, we retrieve the indentation of the first dependency entry and apply it to
+            // the new entry. Note that it is only necessary if the newly added dependency is going
+            // to be the first in the list _and_ the dependency list was not empty prior to adding
+            // the new dependency.
+            if deps.len() > 1 && index == 0 {
+                let prefix = deps
+                    .clone()
+                    .get(index + 1)
+                    .unwrap()
+                    .decor()
+                    .prefix()
+                    .unwrap()
+                    .clone();
+
+                deps.get_mut(index).unwrap().decor_mut().set_prefix(prefix);
+            }
+
             reformat_array_multiline(deps);
-            Ok(ArrayEdit::Add(deps.len() - 1))
+
+            Ok(ArrayEdit::Add(index))
         }
         [_] => {
             let (i, mut old_req) = to_replace.remove(0);
@@ -628,17 +725,18 @@ fn reformat_array_multiline(deps: &mut Array) {
     for item in deps.iter_mut() {
         let decor = item.decor_mut();
         let mut prefix = String::new();
-        // calculating the indentation prefix as the indentation of the first dependency entry
+
+        // Calculate the indentation prefix based on the indentation of the first dependency entry.
         if indentation_prefix.is_none() {
             let decor_prefix = decor
                 .prefix()
                 .and_then(|s| s.as_str())
-                .map(|s| s.split('#').next().unwrap_or("").to_string())
-                .unwrap_or(String::new())
-                .trim_start_matches('\n')
+                .map(|s| s.split('#').next().unwrap_or(""))
+                .unwrap_or_default()
+                .trim_start_matches(['\r', '\n'].as_ref())
                 .to_string();
 
-            // if there is no indentation then apply a default one
+            // If there is no indentation, use four-space.
             indentation_prefix = Some(if decor_prefix.is_empty() {
                 "    ".to_string()
             } else {

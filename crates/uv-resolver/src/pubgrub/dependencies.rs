@@ -4,12 +4,12 @@ use itertools::Itertools;
 use pubgrub::Range;
 use tracing::warn;
 
-use pep440_rs::{Version, VersionSpecifiers};
-use pypi_types::{
+use uv_normalize::{ExtraName, PackageName};
+use uv_pep440::{Version, VersionSpecifiers};
+use uv_pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, Requirement,
     RequirementSource, VerbatimParsedUrl,
 };
-use uv_normalize::{ExtraName, PackageName};
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::{PubGrubSpecifier, ResolveError};
@@ -145,12 +145,14 @@ impl PubGrubRequirement {
             }
             RequirementSource::Directory {
                 editable,
+                r#virtual,
                 url,
                 install_path,
             } => {
                 let parsed_url = ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
                     install_path.clone(),
                     *editable,
+                    *r#virtual,
                     url.to_url(),
                 ));
                 (url, parsed_url)

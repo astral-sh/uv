@@ -2,15 +2,15 @@ use std::path::Path;
 use std::pin::Pin;
 
 use crate::Error;
-use distribution_filename::SourceDistExtension;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
+use uv_distribution_filename::SourceDistExtension;
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
-/// Unzip a `.zip` archive into the target directory, without requiring `Seek`.
+/// Unpack a `.zip` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unzipping files as they're being downloaded. If the archive
 /// is already fully on disk, consider using `unzip_archive`, which can use multiple
@@ -154,7 +154,7 @@ async fn untar_in<'a>(
     Ok(())
 }
 
-/// Unzip a `.tar.gz` archive into the target directory, without requiring `Seek`.
+/// Unpack a `.tar.gz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
 pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
@@ -172,7 +172,7 @@ pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
     Ok(untar_in(archive, target.as_ref()).await?)
 }
 
-/// Unzip a `.tar.bz2` archive into the target directory, without requiring `Seek`.
+/// Unpack a `.tar.bz2` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
 pub async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
@@ -190,7 +190,7 @@ pub async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
     Ok(untar_in(archive, target.as_ref()).await?)
 }
 
-/// Unzip a `.tar.zst` archive into the target directory, without requiring `Seek`.
+/// Unpack a `.tar.zst` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
 pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
@@ -208,7 +208,7 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
     Ok(untar_in(archive, target.as_ref()).await?)
 }
 
-/// Unzip a `.tar.xz` archive into the target directory, without requiring `Seek`.
+/// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
 pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
@@ -227,7 +227,24 @@ pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
     Ok(())
 }
 
-/// Unzip a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
+/// Unpack a `.tar` archive into the target directory, without requiring `Seek`.
+///
+/// This is useful for unpacking files as they're being downloaded.
+pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
+    target: impl AsRef<Path>,
+) -> Result<(), Error> {
+    let mut reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
+
+    let archive =
+        tokio_tar::ArchiveBuilder::new(&mut reader as &mut (dyn tokio::io::AsyncRead + Unpin))
+            .set_preserve_mtime(false)
+            .build();
+    untar_in(archive, target.as_ref()).await?;
+    Ok(())
+}
+
+/// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
 /// without requiring `Seek`.
 pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
@@ -238,13 +255,16 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
         SourceDistExtension::Zip => {
             unzip(reader, target).await?;
         }
+        SourceDistExtension::Tar => {
+            untar(reader, target).await?;
+        }
         SourceDistExtension::TarGz => {
             untar_gz(reader, target).await?;
         }
         SourceDistExtension::TarBz2 => {
             untar_bz2(reader, target).await?;
         }
-        SourceDistExtension::TarXz => {
+        SourceDistExtension::TarXz | SourceDistExtension::TarLzma => {
             untar_xz(reader, target).await?;
         }
         SourceDistExtension::TarZst => {

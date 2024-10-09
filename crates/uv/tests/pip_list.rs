@@ -1,5 +1,3 @@
-use std::process::Command;
-
 use anyhow::Result;
 use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileWriteStr;
@@ -8,22 +6,15 @@ use assert_fs::prelude::*;
 
 use common::uv_snapshot;
 
-use crate::common::{get_bin, TestContext};
+use crate::common::TestContext;
 
 mod common;
-
-fn list_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command.arg("pip").arg("list");
-    context.add_shared_args(&mut command);
-    command
-}
 
 #[test]
 fn list_empty_columns() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(list_command(&context)
+    uv_snapshot!(context.pip_list()
         .arg("--format")
         .arg("columns"), @r###"
     success: true
@@ -39,7 +30,7 @@ fn list_empty_columns() {
 fn list_empty_freeze() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(list_command(&context)
+    uv_snapshot!(context.pip_list()
         .arg("--format")
         .arg("freeze"), @r###"
     success: true
@@ -55,7 +46,7 @@ fn list_empty_freeze() {
 fn list_empty_json() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(list_command(&context)
+    uv_snapshot!(context.pip_list()
         .arg("--format")
         .arg("json"), @r###"
     success: true
@@ -93,7 +84,7 @@ fn list_single_no_editable() -> Result<()> {
 
     context.assert_command("import markupsafe").success();
 
-    uv_snapshot!(list_command(&context), @r###"
+    uv_snapshot!(context.pip_list(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -137,7 +128,7 @@ fn list_editable() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, list_command(&context), @r###"
+    uv_snapshot!(filters, context.pip_list(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -182,7 +173,7 @@ fn list_editable_only() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
         .arg("--editable"), @r###"
     success: true
     exit_code: 0
@@ -195,7 +186,7 @@ fn list_editable_only() {
     "###
     );
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
         .arg("--exclude-editable"), @r###"
     success: true
     exit_code: 0
@@ -210,7 +201,7 @@ fn list_editable_only() {
     "###
     );
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
         .arg("--editable")
         .arg("--exclude-editable"), @r###"
     success: false
@@ -256,7 +247,7 @@ fn list_exclude() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
     .arg("numpy"), @r###"
     success: true
@@ -273,7 +264,7 @@ fn list_exclude() {
     "###
     );
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
     .arg("poetry-editable"), @r###"
     success: true
@@ -289,7 +280,7 @@ fn list_exclude() {
     "###
     );
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
     .arg("numpy")
     .arg("--exclude")
@@ -338,7 +329,7 @@ fn list_format_json() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect();
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=json"), @r###"
     success: true
     exit_code: 0
@@ -349,7 +340,7 @@ fn list_format_json() {
     "###
     );
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=json")
     .arg("--editable"), @r###"
     success: true
@@ -361,7 +352,7 @@ fn list_format_json() {
     "###
     );
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=json")
     .arg("--exclude-editable"), @r###"
     success: true
@@ -404,7 +395,7 @@ fn list_format_freeze() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze"), @r###"
     success: true
     exit_code: 0
@@ -418,7 +409,7 @@ fn list_format_freeze() {
     "###
     );
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--editable"), @r###"
     success: true
@@ -430,7 +421,7 @@ fn list_format_freeze() {
     "###
     );
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--exclude-editable"), @r###"
     success: true
@@ -481,7 +472,7 @@ Version: 0.22.0
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
         .arg("--editable"), @r###"
     success: true
     exit_code: 0
@@ -524,7 +515,7 @@ Version: 0.1-bulbasaur
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, list_command(&context)
+    uv_snapshot!(filters, context.pip_list()
         .arg("--editable"), @r###"
     success: false
     exit_code: 2

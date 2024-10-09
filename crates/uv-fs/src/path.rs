@@ -9,14 +9,6 @@ use path_slash::PathExt;
 pub static CWD: LazyLock<PathBuf> =
     LazyLock::new(|| std::env::current_dir().expect("The current directory must exist"));
 
-/// The current working directory, canonicalized.
-pub static CANONICAL_CWD: LazyLock<PathBuf> = LazyLock::new(|| {
-    std::env::current_dir()
-        .expect("The current directory must exist")
-        .canonicalize()
-        .expect("The current directory must be canonicalized")
-});
-
 pub trait Simplified {
     /// Simplify a [`Path`].
     ///
@@ -30,6 +22,8 @@ pub trait Simplified {
     fn simplified_display(&self) -> impl std::fmt::Display;
 
     /// Canonicalize a path without a `\\?\` prefix on Windows.
+    /// For a path that can't be canonicalized (e.g. on network drive or RAM drive on Windows),
+    /// this will return the absolute path if it exists.
     fn simple_canonicalize(&self) -> std::io::Result<PathBuf>;
 
     /// Render a [`Path`] for user-facing display.
@@ -65,12 +59,14 @@ impl<T: AsRef<Path>> Simplified for T {
     fn user_display(&self) -> impl std::fmt::Display {
         let path = dunce::simplified(self.as_ref());
 
+        // If current working directory is root, display the path as-is.
+        if CWD.ancestors().nth(1).is_none() {
+            return path.display();
+        }
+
         // Attempt to strip the current working directory, then the canonicalized current working
         // directory, in case they differ.
-        let path = path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
-            path.strip_prefix(CANONICAL_CWD.simplified())
-                .unwrap_or(path)
-        });
+        let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
 
         path.display()
     }
@@ -78,14 +74,16 @@ impl<T: AsRef<Path>> Simplified for T {
     fn user_display_from(&self, base: impl AsRef<Path>) -> impl std::fmt::Display {
         let path = dunce::simplified(self.as_ref());
 
+        // If current working directory is root, display the path as-is.
+        if CWD.ancestors().nth(1).is_none() {
+            return path.display();
+        }
+
         // Attempt to strip the base, then the current working directory, then the canonicalized
         // current working directory, in case they differ.
-        let path = path.strip_prefix(base.as_ref()).unwrap_or_else(|_| {
-            path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
-                path.strip_prefix(CANONICAL_CWD.simplified())
-                    .unwrap_or(path)
-            })
-        });
+        let path = path
+            .strip_prefix(base.as_ref())
+            .unwrap_or_else(|_| path.strip_prefix(CWD.simplified()).unwrap_or(path));
 
         path.display()
     }
@@ -95,10 +93,7 @@ impl<T: AsRef<Path>> Simplified for T {
 
         // Attempt to strip the current working directory, then the canonicalized current working
         // directory, in case they differ.
-        let path = path.strip_prefix(CWD.simplified()).unwrap_or_else(|_| {
-            path.strip_prefix(CANONICAL_CWD.simplified())
-                .unwrap_or(path)
-        });
+        let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
 
         // Use a portable representation for relative paths.
         path.to_slash()
@@ -305,6 +300,17 @@ pub struct PortablePath<'a>(&'a Path);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortablePathBuf(PathBuf);
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for PortablePathBuf {
+    fn schema_name() -> String {
+        PathBuf::schema_name()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        PathBuf::json_schema(_gen)
+    }
+}
 
 impl AsRef<Path> for PortablePath<'_> {
     fn as_ref(&self) -> &Path {

@@ -17,10 +17,22 @@ uv provides a standalone installer to download and install uv:
 === "Windows"
 
     ```console
-    $ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
 
-By default, uv is installed to `~/.cargo/bin`.
+Request a specific version by including it in the URL:
+
+=== "macOS and Linux"
+
+    ```console
+    $ curl -LsSf https://astral.sh/uv/0.4.6/install.sh | sh
+    ```
+
+=== "Windows"
+
+    ```console
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.4.6/install.ps1 | iex"
+    ```
 
 !!! tip
 
@@ -40,19 +52,36 @@ By default, uv is installed to `~/.cargo/bin`.
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
 
-Request a specific version by including it in the URL:
+#### Configuring installation
+
+By default, uv is installed to `~/.cargo/bin`. To change the installation path, use
+`UV_INSTALL_DIR`:
 
 === "macOS and Linux"
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.3.5/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/custom/path" sh
     ```
 
 === "Windows"
 
-    ```console
-    $ powershell -c "irm https://astral.sh/uv/0.3.5/install.ps1 | iex"
+    ```powershell
+    $env:UV_INSTALL_DIR = "C:\Custom\Path" powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
+
+The installer will also update your shell profiles to ensure the uv binary is on your `PATH`. To
+disable this behavior, use `INSTALLER_NO_MODIFY_PATH`. For example:
+
+```console
+$ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
+```
+
+Using environment variables is recommended because they are consistent across platforms. However,
+options can be passed directly to the install script. For example, to see the available options:
+
+```console
+$ curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --help
+```
 
 ### PyPI
 
@@ -77,12 +106,29 @@ $ pip install uv
     [contributing setup guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md#setup)
     for details on building uv from source.
 
+### Cargo
+
+uv is available via Cargo, but must be built from Git rather than [crates.io](https://crates.io) due
+to its dependency on unpublished crates.
+
+```console
+$ cargo install --git https://github.com/astral-sh/uv uv
+```
+
 ### Homebrew
 
 uv is available in the core Homebrew packages.
 
 ```console
 $ brew install uv
+```
+
+### Winget
+
+uv is available via [winget](https://winstall.app/apps/astral-sh.uv).
+
+```console
+$ winget install --id=astral-sh.uv  -e
 ```
 
 ### Docker
@@ -107,6 +153,11 @@ When uv is installed via the standalone installer, it can update itself on-deman
 ```console
 $ uv self update
 ```
+
+!!! tip
+
+    Updating uv will re-run the installer and can modify your shell profiles. To disable this
+    behavior, set `INSTALLER_NO_MODIFY_PATH=1`.
 
 When another installation method is used, self-updates are disabled. Use the package manager's
 upgrade method instead. For example, with `pip`:
@@ -135,15 +186,42 @@ To enable shell autocompletion for uv commands, run one of the following:
     Add-Content -Path $PROFILE -Value '(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression'
     ```
 
+To enable shell autocompletion for uvx, run one of the following:
+
+=== "Linux and macOS"
+
+    ```bash
+    # Determine your shell (e.g., with `echo $SHELL`), then run one of:
+    echo 'eval "$(uvx --generate-shell-completion bash)"' >> ~/.bashrc
+    echo 'eval "$(uvx --generate-shell-completion zsh)"' >> ~/.zshrc
+    echo 'uvx --generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    echo 'eval (uvx --generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
+    ```
+
+=== "Windows"
+
+    ```powershell
+    Add-Content -Path $PROFILE -Value '(& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression'
+    ```
+
 Then restart the shell or source the shell config file.
 
 ## Uninstallation
 
 If you need to remove uv from your system, just remove the `uv` and `uvx` binaries:
 
-```console
-$ rm ~/.cargo/bin/uv ~/.cargo/bin/uvx
-```
+=== "macOS and Linux"
+
+    ```console
+    $ rm ~/.cargo/bin/uv ~/.cargo/bin/uvx
+    ```
+
+=== "Windows"
+
+    ```powershell
+    $ rm $HOME\.cargo\bin\uv.exe
+    $ rm $HOME\.cargo\bin\uvx.exe
+    ```
 
 !!! tip
 

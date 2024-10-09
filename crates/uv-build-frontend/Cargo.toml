@@ -1,0 +1,44 @@
+[package]
+name = "uv-build-frontend"
+version = "0.0.1"
+description = "Build wheels from source distributions"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-configuration = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-fs = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-python = { workspace = true }
+uv-types = { workspace = true }
+uv-virtualenv = { workspace = true }
+
+anstream = { workspace = true }
+anyhow = { workspace = true }
+fs-err = { workspace = true }
+indoc = { workspace = true }
+itertools = { workspace = true }
+owo-colors = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+toml_edit = { workspace = true }
+tracing = { workspace = true }
+rustc-hash = { workspace = true }
+
+[dev-dependencies]
+insta = { version = "1.40.0" }

@@ -6,8 +6,8 @@ use rustc_hash::FxHashMap;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
-use distribution_types::{CompatibleDist, DistributionMetadata};
-use pep440_rs::Version;
+use uv_distribution_types::{CompatibleDist, DistributionMetadata, IndexCapabilities};
+use uv_pep440::Version;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
@@ -52,6 +52,7 @@ impl BatchPrefetcher {
         python_requirement: &PythonRequirement,
         request_sink: &Sender<Request>,
         index: &InMemoryIndex,
+        capabilities: &IndexCapabilities,
         selector: &CandidateSelector,
         markers: &ResolverMarkers,
     ) -> anyhow::Result<(), ResolveError> {
@@ -135,8 +136,17 @@ impl BatchPrefetcher {
             };
 
             // Avoid prefetching source distributions, which could be expensive.
-            if !dist.prefetchable() {
+            let Some(wheel) = dist.wheel() else {
                 continue;
+            };
+
+            // Avoid prefetching built distributions that don't support _either_ PEP 658 (`.metadata`)
+            // or range requests.
+            if !(wheel.file.dist_info_metadata
+                || capabilities.supports_range_requests(&wheel.index))
+            {
+                debug!("Abandoning prefetch for {wheel} due to missing registry capabilities");
+                return Ok(());
             }
 
             // Avoid prefetching for distributions that don't satisfy the Python requirement.
@@ -147,12 +157,13 @@ impl BatchPrefetcher {
                     // Source distributions must meet both the _target_ Python version and the
                     // _installed_ Python version (to build successfully).
                     if let Some(requires_python) = sdist.file.requires_python.as_ref() {
-                        if let Some(target) = python_requirement.target() {
-                            if !target.is_compatible_with(requires_python) {
-                                continue;
-                            }
+                        if !python_requirement
+                            .installed()
+                            .is_contained_by(requires_python)
+                        {
+                            continue;
                         }
-                        if !requires_python.contains(python_requirement.installed()) {
+                        if !python_requirement.target().is_contained_by(requires_python) {
                             continue;
                         }
                     }
@@ -160,14 +171,8 @@ impl BatchPrefetcher {
                 CompatibleDist::CompatibleWheel { wheel, .. } => {
                     // Wheels must meet the _target_ Python version.
                     if let Some(requires_python) = wheel.file.requires_python.as_ref() {
-                        if let Some(target) = python_requirement.target() {
-                            if !target.is_compatible_with(requires_python) {
-                                continue;
-                            }
-                        } else {
-                            if !requires_python.contains(python_requirement.installed()) {
-                                continue;
-                            }
+                        if !python_requirement.target().is_contained_by(requires_python) {
+                            continue;
                         }
                     }
                 }

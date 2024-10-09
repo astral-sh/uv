@@ -5,8 +5,6 @@ use console::Term;
 use uv_fs::Simplified;
 use uv_warnings::warn_user;
 
-use crate::confirm;
-
 #[derive(Debug, Clone)]
 pub enum RequirementsSource {
     /// A package was provided on the command line (e.g., `pip install flask`).
@@ -96,7 +94,7 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `-r {name}`?"
                 );
-                let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
+                let confirmation = uv_console::confirm(&prompt, &term, true).unwrap();
                 if confirmation {
                     return Self::from_requirements_file(name.into());
                 }
@@ -113,7 +111,7 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `-r {name}`?"
                 );
-                let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
+                let confirmation = uv_console::confirm(&prompt, &term, true).unwrap();
                 if confirmation {
                     return Self::from_requirements_file(name.into());
                 }

@@ -1,12 +1,12 @@
 use std::str::FromStr;
 
 use tl::HTMLTag;
-use tracing::instrument;
+use tracing::{instrument, warn};
 use url::Url;
 
-use pep440_rs::VersionSpecifiers;
-use pypi_types::LenientVersionSpecifiers;
-use pypi_types::{BaseUrl, CoreMetadata, File, Hashes, Yanked};
+use uv_pep440::VersionSpecifiers;
+use uv_pypi_types::LenientVersionSpecifiers;
+use uv_pypi_types::{BaseUrl, CoreMetadata, File, Hashes, Yanked};
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
@@ -69,68 +69,6 @@ impl SimpleHtml {
         Ok(Some(url))
     }
 
-    /// Parse the hash from a fragment, as in: `sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`
-    fn parse_hash(fragment: &str) -> Result<Hashes, Error> {
-        let mut parts = fragment.split('=');
-
-        // Extract the key and value.
-        let name = parts
-            .next()
-            .ok_or_else(|| Error::FragmentParse(fragment.to_string()))?;
-        let value = parts
-            .next()
-            .ok_or_else(|| Error::FragmentParse(fragment.to_string()))?;
-
-        // Ensure there are no more parts.
-        if parts.next().is_some() {
-            return Err(Error::FragmentParse(fragment.to_string()));
-        }
-
-        match name {
-            "md5" => {
-                let md5 = std::str::from_utf8(value.as_bytes())?;
-                let md5 = md5.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: Some(md5),
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
-                })
-            }
-            "sha256" => {
-                let sha256 = std::str::from_utf8(value.as_bytes())?;
-                let sha256 = sha256.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: Some(sha256),
-                    sha384: None,
-                    sha512: None,
-                })
-            }
-            "sha384" => {
-                let sha384 = std::str::from_utf8(value.as_bytes())?;
-                let sha384 = sha384.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: Some(sha384),
-                    sha512: None,
-                })
-            }
-            "sha512" => {
-                let sha512 = std::str::from_utf8(value.as_bytes())?;
-                let sha512 = sha512.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: Some(sha512),
-                })
-            }
-            _ => Err(Error::UnsupportedHashAlgorithm(fragment.to_string())),
-        }
-    }
-
     /// Parse a [`File`] from an `<a>` tag.
     fn parse_anchor(link: &HTMLTag) -> Result<File, Error> {
         // Extract the href.
@@ -145,14 +83,13 @@ impl SimpleHtml {
         // Extract the hash, which should be in the fragment.
         let decoded = html_escape::decode_html_entities(href);
         let (path, hashes) = if let Some((path, fragment)) = decoded.split_once('#') {
-            let fragment = urlencoding::decode(fragment)
-                .map_err(|_| Error::FragmentParse(fragment.to_string()))?;
+            let fragment = urlencoding::decode(fragment)?;
             (
                 path,
                 if fragment.trim().is_empty() {
                     Hashes::default()
                 } else {
-                    Self::parse_hash(&fragment)?
+                    Hashes::parse_fragment(&fragment)?
                 },
             )
         } else {
@@ -199,7 +136,13 @@ impl SimpleHtml {
             match dist_info_metadata.as_ref() {
                 "true" => Some(CoreMetadata::Bool(true)),
                 "false" => Some(CoreMetadata::Bool(false)),
-                fragment => Some(CoreMetadata::Hashes(Self::parse_hash(fragment)?)),
+                fragment => match Hashes::parse_fragment(fragment) {
+                    Ok(hash) => Some(CoreMetadata::Hashes(hash)),
+                    Err(err) => {
+                        warn!("Failed to parse core metadata value `{fragment}`: {err}");
+                        None
+                    }
+                },
             }
         } else {
             None
@@ -235,6 +178,9 @@ pub enum Error {
     #[error(transparent)]
     Utf8(#[from] std::str::Utf8Error),
 
+    #[error(transparent)]
+    FromUtf8(#[from] std::string::FromUtf8Error),
+
     #[error("Failed to parse URL: {0}")]
     UrlParse(String, #[source] url::ParseError),
 
@@ -253,16 +199,11 @@ pub enum Error {
     #[error("Missing hash attribute on URL: {0}")]
     MissingHash(String),
 
-    #[error("Unexpected fragment (expected `#sha256=...` or similar) on URL: {0}")]
-    FragmentParse(String),
-
-    #[error(
-        "Unsupported hash algorithm (expected `md5`, `sha256`, `sha384`, or `sha512`) on: {0}"
-    )]
-    UnsupportedHashAlgorithm(String),
+    #[error(transparent)]
+    FragmentParse(#[from] uv_pypi_types::HashError),
 
     #[error("Invalid `requires-python` specifier: {0}")]
-    Pep440(#[source] pep440_rs::VersionSpecifiersParseError),
+    Pep440(#[source] uv_pep440::VersionSpecifiersParseError),
 }
 
 #[cfg(test)]
@@ -851,7 +792,7 @@ mod tests {
         "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected `md5`, `sha256`, `sha384`, or `sha512`) on: blake2=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61");
+        insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, or `sha512`) on: `blake2=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`");
     }
 
     #[test]

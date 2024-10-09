@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use url::Url;
 
-use distribution_types::{
+use uv_distribution_types::{
     BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
@@ -143,9 +143,10 @@ impl ProgressReporter {
         );
 
         if size.is_some() {
+            // We're using binary bytes to match `human_readable_bytes`.
             progress.set_style(
                 ProgressStyle::with_template(
-                    "{msg:10.dim} {bar:30.green/dim} {decimal_bytes:>7}/{decimal_total_bytes:7}",
+                    "{msg:10.dim} {bar:30.green/dim} {binary_bytes:>7}/{binary_total_bytes:7}",
                 )
                 .unwrap()
                 .progress_chars("--"),
@@ -482,6 +483,47 @@ impl uv_python::downloads::Reporter for PythonDownloadReporter {
     fn on_download_complete(&self) {
         self.reporter.root.set_message("");
         self.reporter.root.finish_and_clear();
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct PublishReporter {
+    reporter: ProgressReporter,
+}
+
+impl PublishReporter {
+    /// Initialize a [`PublishReporter`] for a single upload.
+    pub(crate) fn single(printer: Printer) -> Self {
+        Self::new(printer, 1)
+    }
+
+    /// Initialize a [`PublishReporter`] for multiple uploads.
+    pub(crate) fn new(printer: Printer, length: u64) -> Self {
+        let multi_progress = MultiProgress::with_draw_target(printer.target());
+        let root = multi_progress.add(ProgressBar::with_draw_target(
+            Some(length),
+            printer.target(),
+        ));
+        let reporter = ProgressReporter::new(root, multi_progress, printer);
+        Self { reporter }
+    }
+}
+
+impl uv_publish::Reporter for PublishReporter {
+    fn on_progress(&self, _name: &str, id: usize) {
+        self.reporter.on_download_complete(id);
+    }
+
+    fn on_download_start(&self, name: &str, size: Option<u64>) -> usize {
+        self.reporter.on_download_start(name.to_string(), size)
+    }
+
+    fn on_download_progress(&self, id: usize, inc: u64) {
+        self.reporter.on_download_progress(id, inc);
+    }
+
+    fn on_download_complete(&self, id: usize) {
+        self.reporter.on_download_complete(id);
     }
 }
 

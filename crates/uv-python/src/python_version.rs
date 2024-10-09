@@ -2,8 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
 
-use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, StringVersion};
+use uv_pep440::Version;
+use uv_pep508::{MarkerEnvironment, StringVersion};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PythonVersion(StringVersion);
@@ -30,12 +30,6 @@ impl FromStr for PythonVersion {
         }
         if version.epoch() != 0 {
             return Err(format!("Python version `{s}` has a non-zero epoch"));
-        }
-        if version.version < Version::new([3, 7]) {
-            return Err(format!("Python version `{s}` must be >= 3.7"));
-        }
-        if version.version >= Version::new([4, 0]) {
-            return Err(format!("Python version `{s}` must be < 4.0"));
         }
 
         Ok(Self(version))
@@ -177,7 +171,7 @@ impl PythonVersion {
 mod tests {
     use std::str::FromStr;
 
-    use pep440_rs::{Prerelease, PrereleaseKind, Version};
+    use uv_pep440::{Prerelease, PrereleaseKind, Version};
 
     use crate::PythonVersion;
 

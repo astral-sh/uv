@@ -1,5 +1,4 @@
 use std::env::current_dir;
-use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
@@ -9,22 +8,15 @@ use indoc::indoc;
 
 use common::uv_snapshot;
 
-use crate::common::{get_bin, TestContext};
+use crate::common::TestContext;
 
 mod common;
-
-fn show_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command.arg("pip").arg("show");
-    context.add_shared_args(&mut command);
-    command
-}
 
 #[test]
 fn show_empty() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(show_command(&context), @r###"
+    uv_snapshot!(context.pip_show(), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -64,7 +56,7 @@ fn show_requires_multiple() -> Result<()> {
     );
 
     context.assert_command("import requests").success();
-    uv_snapshot!(context.filters(), show_command(&context)
+    uv_snapshot!(context.filters(), context.pip_show()
         .arg("requests"), @r###"
     success: true
     exit_code: 0
@@ -115,7 +107,7 @@ fn show_python_version_marker() -> Result<()> {
         filters.push(("Requires: colorama", "Requires:"));
     }
 
-    uv_snapshot!(filters, show_command(&context)
+    uv_snapshot!(filters, context.pip_show()
         .arg("click"), @r###"
     success: true
     exit_code: 0
@@ -159,7 +151,7 @@ fn show_found_single_package() -> Result<()> {
 
     context.assert_command("import markupsafe").success();
 
-    uv_snapshot!(context.filters(), show_command(&context)
+    uv_snapshot!(context.filters(), context.pip_show()
         .arg("markupsafe"), @r###"
     success: true
     exit_code: 0
@@ -208,7 +200,7 @@ fn show_found_multiple_packages() -> Result<()> {
 
     context.assert_command("import markupsafe").success();
 
-    uv_snapshot!(context.filters(), show_command(&context)
+    uv_snapshot!(context.filters(), context.pip_show()
         .arg("markupsafe")
         .arg("pip"), @r###"
     success: true
@@ -264,7 +256,7 @@ fn show_found_one_out_of_three() -> Result<()> {
 
     context.assert_command("import markupsafe").success();
 
-    uv_snapshot!(context.filters(), show_command(&context)
+    uv_snapshot!(context.filters(), context.pip_show()
         .arg("markupsafe")
         .arg("flask")
         .arg("django"), @r###"
@@ -317,7 +309,7 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
     context.assert_command("import markupsafe").success();
 
     // Flask isn't installed, but markupsafe is, so the command should succeed.
-    uv_snapshot!(show_command(&context)
+    uv_snapshot!(context.pip_show()
         .arg("markupsafe")
         .arg("flask")
         .arg("--quiet"), @r###"
@@ -364,7 +356,7 @@ fn show_empty_quiet() -> Result<()> {
     context.assert_command("import markupsafe").success();
 
     // Flask isn't installed, so the command should fail.
-    uv_snapshot!(show_command(&context)
+    uv_snapshot!(context.pip_show()
         .arg("flask")
         .arg("--quiet"), @r###"
     success: false
@@ -395,7 +387,7 @@ fn show_editable() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), show_command(&context)
+    uv_snapshot!(context.filters(), context.pip_show()
         .arg("poetry-editable"), @r###"
     success: true
     exit_code: 0
@@ -451,7 +443,7 @@ fn show_required_by_multiple() -> Result<()> {
     context.assert_command("import requests").success();
 
     // idna is required by anyio and requests
-    uv_snapshot!(context.filters(), show_command(&context)
+    uv_snapshot!(context.filters(), context.pip_show()
         .arg("idna"), @r###"
     success: true
     exit_code: 0

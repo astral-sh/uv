@@ -14,11 +14,12 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-cache-key = { workspace = true }
-distribution-types = { workspace = true }
-pypi-types = { workspace = true }
+uv-cache-info = { workspace = true }
+uv-cache-key = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-normalize = { workspace = true }
+uv-pypi-types = { workspace = true }
 
 clap = { workspace = true, features = ["derive", "env"], optional = true }
 directories = { workspace = true }

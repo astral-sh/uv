@@ -9,7 +9,7 @@ use common::{diff_snapshot, uv_snapshot, TestContext};
 mod common;
 
 #[test]
-fn packse_add_remove_one_package() -> Result<()> {
+fn packse_add_remove_one_package() {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
@@ -22,21 +22,25 @@ fn packse_add_remove_one_package() -> Result<()> {
     Resolved 49 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(lock);
     });
 
-    let diff = context.diff_lock(|context| context.add_no_sync(&["tzdata"]));
+    let diff = context.diff_lock(|context| {
+        let mut add_cmd = context.add();
+        add_cmd.arg("--no-sync").arg("tzdata");
+        add_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -317,20 +317,21 @@
+        @@ -306,20 +306,21 @@
          name = "packse"
          version = "0.0.0"
          source = { editable = "." }
@@ -58,7 +62,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "pypiserver" },
              { name = "watchfiles" },
          ]
-        @@ -345,20 +346,21 @@
+        @@ -334,20 +335,21 @@
          [package.metadata]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
@@ -80,7 +84,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
 
-        @@ -612,20 +614,29 @@
+        @@ -599,20 +601,29 @@
              { name = "rfc3986" },
              { name = "rich" },
              { name = "urllib3" },
@@ -113,14 +117,18 @@ fn packse_add_remove_one_package() -> Result<()> {
         "###);
     });
 
-    let diff = context.diff_lock(|context| context.remove_no_sync(&["tzdata"]));
+    let diff = context.diff_lock(|context| {
+        let mut remove_cmd = context.remove();
+        remove_cmd.arg("--no-sync").arg("tzdata");
+        remove_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -317,21 +317,20 @@
+        @@ -306,21 +306,20 @@
          name = "packse"
          version = "0.0.0"
          source = { editable = "." }
@@ -142,7 +150,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "pypiserver" },
              { name = "watchfiles" },
          ]
-        @@ -346,21 +345,20 @@
+        @@ -335,21 +334,20 @@
          [package.metadata]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
@@ -164,7 +172,7 @@ fn packse_add_remove_one_package() -> Result<()> {
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
 
-        @@ -611,29 +609,20 @@
+        @@ -598,29 +596,20 @@
              { name = "readme-renderer" },
              { name = "requests" },
              { name = "requests-toolbelt" },
@@ -198,19 +206,17 @@ fn packse_add_remove_one_package() -> Result<()> {
     });
 
     // Back to where we started.
-    let new_lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let new_lock = context.read("uv.lock");
     let diff = diff_snapshot(&lock, &new_lock);
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @r###""###);
     });
-
-    Ok(())
 }
 
 #[test]
-fn packse_add_remove_existing_package_noop() -> Result<()> {
+fn packse_add_remove_existing_package_noop() {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
@@ -223,27 +229,29 @@ fn packse_add_remove_existing_package_noop() -> Result<()> {
     Resolved 49 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(lock);
     });
 
-    let diff = context.diff_lock(|context| context.add_no_sync(&["pyyaml"]));
+    let diff = context.diff_lock(|context| {
+        let mut add_cmd = context.add();
+        add_cmd.arg("--no-sync").arg("pyyaml");
+        add_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @"");
     });
-
-    Ok(())
 }
 
 /// This test adds a new direct dependency that was already a
 /// transitive dependency.
 #[test]
-fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
+fn packse_promote_transitive_to_direct_then_remove() {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
@@ -256,21 +264,25 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
     Resolved 49 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(lock);
     });
 
-    let diff = context.diff_lock(|context| context.add_no_sync(&["sniffio"]));
+    let diff = context.diff_lock(|context| {
+        let mut add_cmd = context.add();
+        add_cmd.arg("--no-sync").arg("sniffio");
+        add_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -316,20 +316,21 @@
+        @@ -305,20 +305,21 @@
          [[package]]
          name = "packse"
          version = "0.0.0"
@@ -292,7 +304,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
          serve = [
              { name = "pypiserver" },
              { name = "watchfiles" },
-        @@ -344,20 +345,21 @@
+        @@ -333,20 +334,21 @@
 
          [package.metadata]
          requires-dist = [
@@ -317,14 +329,18 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
         "###);
     });
 
-    let diff = context.diff_lock(|context| context.remove_no_sync(&["sniffio"]));
+    let diff = context.diff_lock(|context| {
+        let mut remove_cmd = context.remove();
+        remove_cmd.arg("--no-sync").arg("sniffio");
+        remove_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -316,21 +316,20 @@
+        @@ -305,21 +305,20 @@
          [[package]]
          name = "packse"
          version = "0.0.0"
@@ -346,7 +362,7 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
          serve = [
              { name = "pypiserver" },
              { name = "watchfiles" },
-        @@ -345,21 +344,20 @@
+        @@ -334,21 +333,20 @@
 
          [package.metadata]
          requires-dist = [
@@ -372,15 +388,13 @@ fn packse_promote_transitive_to_direct_then_remove() -> Result<()> {
     });
 
     // Back to where we started.
-    let new_lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let new_lock = context.read("uv.lock");
     let diff = diff_snapshot(&lock, &new_lock);
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(diff, @r###""###);
     });
-
-    Ok(())
 }
 
 #[test]
@@ -407,14 +421,18 @@ fn jax_instability() -> Result<()> {
     Resolved 8 packages in [TIME]
     "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
         assert_snapshot!(lock);
     });
 
-    let diff = context.diff_lock(|context| context.add_no_sync(&["tzdata"]));
+    let diff = context.diff_lock(|context| {
+        let mut add_cmd = context.add();
+        add_cmd.arg("--no-sync").arg("tzdata");
+        add_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -466,7 +484,7 @@ fn jax_instability() -> Result<()> {
         +[[package]]
          name = "uv-lock-instability"
          version = "0.1.0"
-         source = { editable = "." }
+         source = { virtual = "." }
          dependencies = [
              { name = "jax" },
         +    { name = "tzdata" },
@@ -490,7 +508,11 @@ fn jax_instability() -> Result<()> {
         "###);
     });
 
-    let diff = context.diff_lock(|context| context.remove_no_sync(&["tzdata"]));
+    let diff = context.diff_lock(|context| {
+        let mut remove_cmd = context.remove();
+        remove_cmd.arg("--no-sync").arg("tzdata");
+        remove_cmd
+    });
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -519,7 +541,7 @@ fn jax_instability() -> Result<()> {
         -[[package]]
          name = "uv-lock-instability"
          version = "0.1.0"
-         source = { editable = "." }
+         source = { virtual = "." }
          dependencies = [
              { name = "jax" },
         -    { name = "tzdata" },
@@ -550,7 +572,7 @@ fn jax_instability() -> Result<()> {
     //
     // See: https://github.com/astral-sh/uv/issues/6063
     // See: https://github.com/astral-sh/uv/issues/6158
-    let new_lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let new_lock = context.read("uv.lock");
     let diff = diff_snapshot(&lock, &new_lock);
     insta::with_settings!({
         filters => context.filters(),

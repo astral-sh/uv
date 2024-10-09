@@ -113,7 +113,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
 }
 
 #[test]
-fn invalid_pyproject_toml_schema() -> Result<()> {
+fn invalid_pyproject_toml_project_schema() -> Result<()> {
     let context = TestContext::new("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str("[project]")?;
@@ -133,6 +133,71 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
       | ^^^^^^^^^
     missing field `name`
 
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_pyproject_toml_option_schema() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r"
+        [tool.uv]
+        index-url = true
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 2, column 13
+        |
+      2 | index-url = true
+        |             ^^^^
+      invalid type: boolean `true`, expected a string
+
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.uv]
+        unknown = "field"
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 2, column 1
+        |
+      2 | unknown = "field"
+        | ^^^^^^^
+      unknown field `unknown`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `workspace`, `sources`, `dev-dependencies`, `managed`, `package`
+
+    Resolved in [TIME]
+    Audited in [TIME]
     "###
     );
 
@@ -162,11 +227,9 @@ dependencies = ["flask==1.0.x"]
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("./path_dep")?;
 
-    let filters = [("exit status", "exit code")]
-        .into_iter()
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-
     uv_snapshot!(filters, context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @r###"
@@ -176,8 +239,9 @@ dependencies = ["flask==1.0.x"]
 
     ----- stderr -----
     error: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
-      Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit code: 1
-    --- stdout:
+      Caused by: Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+
+    [stdout]
     configuration error: `project.dependencies[0]` must be pep508
     DESCRIPTION:
         Project dependency specification according to PEP 508
@@ -194,7 +258,8 @@ dependencies = ["flask==1.0.x"]
             "type": "string",
             "format": "pep508"
         }
-    --- stderr:
+
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 14, in <module>
       File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
@@ -212,7 +277,7 @@ dependencies = ["flask==1.0.x"]
                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
       File "[CACHE_DIR]/builds-v0/[TMP]/core.py", line 159, in setup
         dist.parse_config_files()
-      File "[CACHE_DIR]/builds-v0/[TMP]/_virtualenv.py", line 22, in parse_config_files
+      File "[CACHE_DIR]/builds-v0/[TMP]/_virtualenv.py", line 20, in parse_config_files
         result = old_parse_config_files(self, *args, **kwargs)
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
       File "[CACHE_DIR]/builds-v0/[TMP]/dist.py", line 631, in parse_config_files
@@ -226,7 +291,7 @@ dependencies = ["flask==1.0.x"]
         raise ValueError(f"{error}/n{summary}") from None
     ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
     configuration error: `project.dependencies[0]` must be pep508
-    ---
+
     "###
     );
 
@@ -672,11 +737,69 @@ fn reinstall_incomplete() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
-    warning: Failed to uninstall package at [SITE_PACKAGES]/anyio-3.7.0.dist-info due to missing RECORD file. Installation may result in an incomplete environment.
+    warning: Failed to uninstall package at [SITE_PACKAGES]/anyio-3.7.0.dist-info due to missing `RECORD` file. Installation may result in an incomplete environment.
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
      + anyio==4.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn exact_install_removes_extraneous_packages() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Install flask
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("flask"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
+    );
+
+    // Install anyio with exact flag removes flask and flask dependencies.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--exact")
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==3.7.0
+     - blinker==1.7.0
+     - click==8.1.7
+     - flask==3.0.2
+     + idna==3.6
+     - itsdangerous==2.1.2
+     - jinja2==3.1.3
+     - markupsafe==2.1.5
+     + sniffio==1.3.1
+     - werkzeug==3.0.1
     "###
     );
 
@@ -1061,6 +1184,7 @@ fn install_editable_bare_cli() {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1087,6 +1211,7 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1945,6 +2070,66 @@ fn install_only_binary_all_and_no_binary_all() {
     context.assert_command("import anyio").failure();
 }
 
+/// Binary dependencies in the cache should be reused when the user provides `--no-build`.
+#[test]
+fn install_no_binary_cache() {
+    let context = TestContext::new("3.12");
+
+    // Install a binary distribution.
+    uv_snapshot!(
+        context.pip_install().arg("idna"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+
+    // Re-create the virtual environment.
+    context.venv().assert().success();
+
+    // Re-install. The distribution should be installed from the cache.
+    uv_snapshot!(
+        context.pip_install().arg("idna"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+
+    // Re-create the virtual environment.
+    context.venv().assert().success();
+
+    // Install with `--no-binary`. The distribution should be built from source, despite a binary
+    // distribution being available in the cache.
+    uv_snapshot!(
+        context.pip_install().arg("idna").arg("--no-binary").arg(":all:"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+}
+
 /// Respect `--only-binary` flags in `requirements.txt`
 #[test]
 fn only_binary_requirements_txt() {
@@ -2055,6 +2240,63 @@ fn only_binary_editable_setup_py() {
      + idna==3.6
      + setup-py-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/setup_py_editable)
      + sniffio==1.3.1
+    "###
+    );
+}
+
+#[test]
+fn cache_priority() {
+    let context = TestContext::new("3.12");
+
+    // Install a specific `idna` version.
+    uv_snapshot!(
+        context.pip_install().arg("idna==3.6"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+
+    // Install a lower `idna` version.
+    uv_snapshot!(
+        context.pip_install().arg("idna==3.0"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - idna==3.6
+     + idna==3.0
+    "###
+    );
+
+    // Re-create the virtual environment.
+    context.venv().assert().success();
+
+    // Install `idna` without a version specifier.
+    uv_snapshot!(
+        context.pip_install().arg("idna"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
     "###
     );
 }
@@ -2764,9 +3006,37 @@ fn config_settings() {
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
 
-    // Install the editable package with `--editable_mode=compat`.
-    let context = TestContext::new("3.12");
+    // Reinstalling with `--editable_mode=compat` should be a no-op; changes in build configuration
+    // don't invalidate the environment.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/setuptools_editable"))
+        .arg("-C")
+        .arg("editable_mode=compat")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Uninstall the package.
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("setuptools-editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "###);
+
+    // Install the editable package with `--editable_mode=compat`. We should ignore the cached
+    // build configuration and rebuild.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("scripts/packages/setuptools_editable"))
@@ -2779,9 +3049,8 @@ fn config_settings() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + iniconfig==2.0.0
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
     "###
     );
@@ -2926,7 +3195,7 @@ requires-python = ">=3.8"
     "###
     );
 
-    // Re-installing should be a no-op.
+    // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
@@ -2951,7 +3220,7 @@ requires-python = ">=3.8"
 "#,
     )?;
 
-    // Re-installing should update the package.
+    // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
@@ -3015,7 +3284,7 @@ dependencies = {file = ["requirements.txt"]}
     "###
     );
 
-    // Re-installing should not re-install, as we don't special-case dynamic metadata.
+    // Installing again should not re-install, as we don't special-case dynamic metadata.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
@@ -3058,6 +3327,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3068,7 +3338,7 @@ requires-python = ">=3.8"
     "###
     );
 
-    // Re-installing should be a no-op.
+    // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"
@@ -3077,6 +3347,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3093,7 +3364,7 @@ requires-python = ">=3.8"
 "#,
     )?;
 
-    // Re-installing should update the package.
+    // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"
@@ -3102,12 +3373,301 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalidate_path_on_cache_key() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package.
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = ["constraints.txt", { file = "requirements.txt" }]
+"#,
+    )?;
+
+    let requirements_txt = editable_dir.child("requirements.txt");
+    requirements_txt.write_str("idna")?;
+
+    let constraints_txt = editable_dir.child("constraints.txt");
+    constraints_txt.write_str("idna<3.4")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Installing again should be a no-op.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Modify the constraints file.
+    constraints_txt.write_str("idna<3.5")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    // Modify the requirements file.
+    requirements_txt.write_str("flask")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    // Modify the `pyproject.toml` file (but not in a meaningful way).
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ file = "requirements.txt" }, "constraints.txt"]
+"#,
+    )?;
+
+    // Installing again should be a no-op, since `pyproject.toml` was not included as a cache key.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Modify the `pyproject.toml` to use a glob.
+    pyproject_toml.write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ file = "**/*.txt" }]
+"#,
+    )?;
+
+    // Write a new file.
+    editable_dir
+        .child("resources")
+        .child("data.txt")
+        .write_str("data")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    // Write a new file in the current directory.
+    editable_dir.child("data.txt").write_str("data")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalidate_path_on_commit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package.
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
+
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ git = true }]
+        "#,
+    )?;
+
+    // Create a Git repository.
+    context
+        .temp_dir
+        .child(".git")
+        .child("HEAD")
+        .write_str("ref: refs/heads/main")?;
+    context
+        .temp_dir
+        .child(".git")
+        .child("refs")
+        .child("heads")
+        .child("main")
+        .write_str("1b6638fdb424e993d8354e75c55a3e524050c857")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Installing again should be a no-op.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Change the current commit.
+    context
+        .temp_dir
+        .child(".git")
+        .child("refs")
+        .child("heads")
+        .child("main")
+        .write_str("a1a42cbd10d83bafd8600ba81f72bbef6c579385")?;
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );
@@ -3291,7 +3851,7 @@ version = "0.0.0"
 dependencies = [
   "anyio==4.0.0"
 ]
-requires-python = "<=3.8"
+requires-python = ">=3.13"
 "#,
     )?;
 
@@ -3304,7 +3864,7 @@ requires-python = "<=3.8"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
@@ -3333,14 +3893,13 @@ fn no_build_isolation() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
-    --- stdout:
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
-    --- stderr:
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 8, in <module>
     ModuleNotFoundError: No module named 'setuptools'
-    ---
+
     "###
     );
 
@@ -3403,14 +3962,13 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
-    --- stdout:
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
-    --- stderr:
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 8, in <module>
     ModuleNotFoundError: No module named 'setuptools'
-    ---
+
     "###
     );
 
@@ -3459,7 +4017,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 fn install_utf16le_requirements() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli"))?;
+    requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
         .env_remove("UV_EXCLUDE_NEWER")
@@ -3486,7 +4044,7 @@ fn install_utf16le_requirements() -> Result<()> {
 fn install_utf16be_requirements() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli"))?;
+    requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
         .env_remove("UV_EXCLUDE_NEWER")
@@ -3805,7 +4363,7 @@ version = "0.0.0"
 dependencies = [
   "anyio==4.0.0"
 ]
-requires-python = "<=3.8"
+requires-python = ">=3.13"
 "#,
     )?;
 
@@ -3817,7 +4375,7 @@ requires-python = "<=3.8"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
@@ -4203,6 +4761,7 @@ fn deptry_gitignore() {
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.12.[X] environment at [VENV]/
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -5132,14 +5691,14 @@ fn require_hashes_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
     "###
     );
 
     Ok(())
 }
 
-/// If a hash is only included as a constraint, that's not good enough for `--require-hashes`.
+/// If a hash is only included as a constraint, that's good enough for `--require-hashes`.
 #[test]
 fn require_hashes_constraint() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -5155,19 +5714,25 @@ fn require_hashes_constraint() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
+        .arg("--no-deps")
         .arg("--require-hashes")
         .arg("-c")
         .arg(constraints_txt.path()), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: anyio==4.0.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
     "###
     );
 
     // Include the hash in the requirements file, but pin the version in the constraint file.
+    let context = TestContext::new("3.12");
+
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
         "anyio --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
@@ -5180,6 +5745,7 @@ fn require_hashes_constraint() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
+        .arg("--no-deps")
         .arg("--require-hashes")
         .arg("-c")
         .arg(constraints_txt.path()), @r###"
@@ -5188,7 +5754,97 @@ fn require_hashes_constraint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
+    "###
+    );
+
+    // Include an empty intersection. This should fail.
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--no-deps")
+        .arg("--require-hashes")
+        .arg("-c")
+        .arg(constraints_txt.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: anyio==4.0.0
+    "###
+    );
+
+    // Include the right hash in both files.
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--no-deps")
+        .arg("--require-hashes")
+        .arg("-c")
+        .arg(constraints_txt.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
+    "###
+    );
+
+    // Include the right hash in both files, along with an irrelevant, wrong hash.
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--no-deps")
+        .arg("--require-hashes")
+        .arg("-c")
+        .arg(constraints_txt.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
     "###
     );
 
@@ -5306,7 +5962,7 @@ fn require_hashes_override() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: anyio==4.0.0
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: anyio==4.0.0
     "###
     );
 
@@ -5331,7 +5987,7 @@ fn require_hashes_override() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "###
     );
 
@@ -5401,17 +6057,21 @@ fn verify_hashes_missing_version() -> Result<()> {
             # via anyio
     "})?;
 
-    // Raise an error.
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--verify-hashes"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--verify-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -6166,14 +6826,14 @@ fn incompatible_build_constraint() -> Result<()> {
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `requests==1.2.0`
-      Caused by: Failed to install requirements from setup.py build (resolve)
-      Caused by: No solution found when resolving: setuptools>=40.8.0
-      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -6247,14 +6907,13 @@ fn install_build_isolation_package() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
-    --- stdout:
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
-    --- stderr:
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 8, in <module>
     ModuleNotFoundError: No module named 'hatchling'
-    ---
+
     "###
     );
 
@@ -6313,7 +6972,7 @@ fn invalid_extension() {
 
     ----- stderr -----
     error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`
-      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`) to end in a supported file extension: `.whl`, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`
+      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
     ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###);
@@ -6333,7 +6992,7 @@ fn no_extension() {
 
     ----- stderr -----
     error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`
-      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`) to end in a supported file extension: `.whl`, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`
+      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
     ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###);
@@ -6454,4 +7113,80 @@ fn stale_egg_info() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// `suds-community` has an incorrect layout whereby the wheel includes `suds_community.egg-info` at
+/// the top-level. We're then under the impression that `suds` is installed twice, but when we go to
+/// uninstall the second "version", we can't find the `egg-info` directory.
+#[test]
+fn missing_top_level() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("suds-community==0.8.5"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + suds-community==0.8.5
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("suds-community==0.8.5"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    warning: Failed to uninstall package at [SITE_PACKAGES]/suds_community.egg-info due to missing `top-level.txt` file. Installation may result in an incomplete environment.
+    Uninstalled 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     ~ suds-community==0.8.5
+    "###
+    );
+}
+
+/// Show a dedicated error when the user attempts to install `sklearn`.
+#[test]
+fn sklearn() {
+    let context = TestContext::new("3.12");
+
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.pip_install().arg("sklearn"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `sklearn==0.0.post12`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+
+          [stderr]
+          The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
+          rather than 'sklearn' for pip commands. 
+
+          Here is how to fix this error in the main use cases:
+          - use 'pip install scikit-learn' rather than 'pip install sklearn'
+          - replace 'sklearn' by 'scikit-learn' in your pip requirements files
+            (requirements.txt, setup.py, setup.cfg, Pipfile, etc ...)
+          - if the 'sklearn' package is used by one of your dependencies,
+            it would be great if you take some time to track which package uses
+            'sklearn' instead of 'scikit-learn' and report it to their issue tracker
+          - as a last resort, set the environment variable
+            SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True to avoid this error
+
+          More information is available at
+          https://github.com/scikit-learn/sklearn-pypi-package
+
+      help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
+    "###
+    );
 }

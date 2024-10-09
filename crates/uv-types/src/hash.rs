@@ -3,15 +3,15 @@ use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
 
-use distribution_types::{
+use uv_configuration::HashCheckingMode;
+use uv_distribution_types::{
     DistributionMetadata, HashPolicy, Name, Resolution, UnresolvedRequirement, VersionId,
 };
-use pep440_rs::Version;
-use pypi_types::{
-    HashDigest, HashError, Requirement, RequirementSource, ResolverMarkerEnvironment,
-};
-use uv_configuration::HashCheckingMode;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pypi_types::{
+    HashDigest, HashError, Hashes, Requirement, RequirementSource, ResolverMarkerEnvironment,
+};
 
 #[derive(Debug, Default, Clone)]
 pub enum HashStrategy {
@@ -126,13 +126,56 @@ impl HashStrategy {
     /// to "only evaluate marker expressions that reference an extra name.")
     pub fn from_requirements<'a>(
         requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
+        constraints: impl Iterator<Item = (&'a Requirement, &'a [String])>,
         marker_env: Option<&ResolverMarkerEnvironment>,
         mode: HashCheckingMode,
     ) -> Result<Self, HashStrategyError> {
-        let mut hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
+        let mut constraint_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
+
+        // First, index the constraints by name.
+        for (requirement, digests) in constraints {
+            if !requirement
+                .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
+            {
+                continue;
+            }
+
+            // Every constraint must be a pinned version.
+            let Some(id) = Self::pin(requirement) else {
+                if mode.is_require() {
+                    return Err(HashStrategyError::UnpinnedRequirement(
+                        requirement.to_string(),
+                        mode,
+                    ));
+                }
+                continue;
+            };
+
+            let digests = if digests.is_empty() {
+                // If there are no hashes, and the distribution is URL-based, attempt to extract
+                // it from the fragment.
+                requirement
+                    .hashes()
+                    .map(Hashes::into_digests)
+                    .unwrap_or_default()
+            } else {
+                // Parse the hashes.
+                digests
+                    .iter()
+                    .map(|digest| HashDigest::from_str(digest))
+                    .collect::<Result<Vec<_>, _>>()?
+            };
+
+            if digests.is_empty() {
+                continue;
+            }
+
+            constraint_hashes.insert(id, digests);
+        }
 
         // For each requirement, map from name to allowed hashes. We use the last entry for each
         // package.
+        let mut requirement_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
         for (requirement, digests) in requirements {
             if !requirement
                 .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
@@ -143,9 +186,17 @@ impl HashStrategy {
             // Every requirement must be either a pinned version or a direct URL.
             let id = match &requirement {
                 UnresolvedRequirement::Named(requirement) => {
-                    Self::pin(requirement).ok_or_else(|| {
-                        HashStrategyError::UnpinnedRequirement(requirement.to_string(), mode)
-                    })?
+                    if let Some(id) = Self::pin(requirement) {
+                        id
+                    } else {
+                        if mode.is_require() {
+                            return Err(HashStrategyError::UnpinnedRequirement(
+                                requirement.to_string(),
+                                mode,
+                            ));
+                        }
+                        continue;
+                    }
                 }
                 UnresolvedRequirement::Unnamed(requirement) => {
                     // Direct URLs are always allowed.
@@ -153,8 +204,45 @@ impl HashStrategy {
                 }
             };
 
+            let digests = if digests.is_empty() {
+                // If there are no hashes, and the distribution is URL-based, attempt to extract
+                // it from the fragment.
+                requirement
+                    .hashes()
+                    .map(Hashes::into_digests)
+                    .unwrap_or_default()
+            } else {
+                // Parse the hashes.
+                digests
+                    .iter()
+                    .map(|digest| HashDigest::from_str(digest))
+                    .collect::<Result<Vec<_>, _>>()?
+            };
+
+            let digests = if let Some(constraint) = constraint_hashes.remove(&id) {
+                if digests.is_empty() {
+                    // If there are _only_ hashes on the constraints, use them.
+                    constraint
+                } else {
+                    // If there are constraint and requirement hashes, take the intersection.
+                    let intersection: Vec<_> = digests
+                        .into_iter()
+                        .filter(|digest| constraint.contains(digest))
+                        .collect();
+                    if intersection.is_empty() {
+                        return Err(HashStrategyError::NoIntersection(
+                            requirement.to_string(),
+                            mode,
+                        ));
+                    }
+                    intersection
+                }
+            } else {
+                digests
+            };
+
+            // Under `--require-hashes`, every requirement must include a hash.
             if digests.is_empty() {
-                // Under `--require-hashes`, every requirement must include a hash.
                 if mode.is_require() {
                     return Err(HashStrategyError::MissingHashes(
                         requirement.to_string(),
@@ -164,15 +252,15 @@ impl HashStrategy {
                 continue;
             }
 
-            // Parse the hashes.
-            let digests = digests
-                .iter()
-                .map(|digest| HashDigest::from_str(digest))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            hashes.insert(id, digests);
+            requirement_hashes.insert(id, digests);
         }
 
+        // Merge the hashes, preferring requirements over constraints, since overlapping
+        // requirements were already merged.
+        let hashes: FxHashMap<VersionId, Vec<HashDigest>> = constraint_hashes
+            .into_iter()
+            .chain(requirement_hashes)
+            .collect();
         match mode {
             HashCheckingMode::Verify => Ok(Self::Verify(Arc::new(hashes))),
             HashCheckingMode::Require => Ok(Self::Require(Arc::new(hashes))),
@@ -217,7 +305,7 @@ impl HashStrategy {
                 };
 
                 // Must be pinned to a specific version.
-                if *specifier.operator() != pep440_rs::Operator::Equal {
+                if *specifier.operator() != uv_pep440::Operator::Equal {
                     return None;
                 }
 
@@ -239,9 +327,11 @@ pub enum HashStrategyError {
     #[error(transparent)]
     Hash(#[from] HashError),
     #[error(
-        "In `{1}` mode, all requirement must have their versions pinned with `==`, but found: {0}"
+        "In `{1}` mode, all requirements must have their versions pinned with `==`, but found: {0}"
     )]
     UnpinnedRequirement(String, HashCheckingMode),
-    #[error("In `{1}` mode, all requirement must have a hash, but none were provided for: {0}")]
+    #[error("In `{1}` mode, all requirements must have a hash, but none were provided for: {0}")]
     MissingHashes(String, HashCheckingMode),
+    #[error("In `{1}` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: {0}")]
+    NoIntersection(String, HashCheckingMode),
 }

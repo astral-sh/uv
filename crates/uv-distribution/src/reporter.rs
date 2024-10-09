@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use url::Url;
 
-use distribution_types::BuildableSource;
-use pep508_rs::PackageName;
+use uv_distribution_types::BuildableSource;
+use uv_pep508::PackageName;
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a source distribution build is kicked off.

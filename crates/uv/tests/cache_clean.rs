@@ -57,7 +57,7 @@ fn clean_package_pypi() -> Result<()> {
     // Assert that the `.rkyv` file is created for `iniconfig`.
     let rkyv = context
         .cache_dir
-        .child("simple-v12")
+        .child("simple-v13")
         .child("pypi")
         .child("iniconfig.rkyv");
     assert!(
@@ -65,14 +65,27 @@ fn clean_package_pypi() -> Result<()> {
         "Expected the `.rkyv` file to exist for `iniconfig`"
     );
 
-    uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("iniconfig"), @r###"
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([
+            // The cache entry does not have a stable key, so we filter it out
+            (
+                r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
+                "[CACHE_DIR]/$2/[ENTRY]",
+            ),
+        ])
+        .collect();
+
+    uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    Removed 4 files for iniconfig ([SIZE])
+    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
+    Removed 12 files for iniconfig ([SIZE])
     "###);
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.
@@ -80,6 +93,18 @@ fn clean_package_pypi() -> Result<()> {
         !rkyv.exists(),
         "Expected the `.rkyv` file to be removed for `iniconfig`"
     );
+
+    // Running `uv cache prune` should have no effect.
+    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    Pruning cache at: [CACHE_DIR]/
+    No unused entries found
+    "###);
 
     Ok(())
 }
@@ -104,7 +129,7 @@ fn clean_package_index() -> Result<()> {
     // Assert that the `.rkyv` file is created for `iniconfig`.
     let rkyv = context
         .cache_dir
-        .child("simple-v12")
+        .child("simple-v13")
         .child("index")
         .child("e8208120cae3ba69")
         .child("iniconfig.rkyv");
@@ -113,14 +138,27 @@ fn clean_package_index() -> Result<()> {
         "Expected the `.rkyv` file to exist for `iniconfig`"
     );
 
-    uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("iniconfig"), @r###"
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([
+            // The cache entry does not have a stable key, so we filter it out
+            (
+                r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
+                "[CACHE_DIR]/$2/[ENTRY]",
+            ),
+        ])
+        .collect();
+
+    uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    Removed 4 files for iniconfig ([SIZE])
+    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
+    Removed 12 files for iniconfig ([SIZE])
     "###);
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.

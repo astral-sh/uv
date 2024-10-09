@@ -41,7 +41,6 @@ RUN cp target/$(cat rust_target.txt)/release/uv /uv \
 # RUN strip --strip-all /uv
 
 FROM scratch
-COPY --from=build /uv /uv
-COPY --from=build /uvx /uvx
+COPY --from=build /uv /uvx /
 WORKDIR /io
 ENTRYPOINT ["/uv"]

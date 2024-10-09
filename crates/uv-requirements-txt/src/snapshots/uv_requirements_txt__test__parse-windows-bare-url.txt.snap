@@ -1,0 +1,320 @@
+---
+source: crates/requirements-txt/src/lib.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                editable: false,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./scripts/packages/black_editable",
+                            ),
+                        },
+                    },
+                    extras: [],
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/bare-url.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                editable: false,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./scripts/packages/black_editable",
+                            ),
+                        },
+                    },
+                    extras: [
+                        ExtraName(
+                            "dev",
+                        ),
+                    ],
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/bare-url.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                editable: false,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/scripts/packages/black_editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "file:///scripts/packages/black_editable",
+                            ),
+                        },
+                    },
+                    extras: [],
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/bare-url.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/scripts/packages/black%20editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/scripts/packages/black editable",
+                                editable: false,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/scripts/packages/black%20editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./scripts/packages/black editable",
+                            ),
+                        },
+                    },
+                    extras: [],
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/bare-url.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/scripts/packages/black%20editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/scripts/packages/black editable",
+                                editable: false,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/scripts/packages/black%20editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./scripts/packages/black editable",
+                            ),
+                        },
+                    },
+                    extras: [],
+                    marker: python_full_version >= '3.9',
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/bare-url.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/scripts/packages/black%20editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/scripts/packages/black editable",
+                                editable: false,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/scripts/packages/black%20editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./scripts/packages/black editable",
+                            ),
+                        },
+                    },
+                    extras: [],
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/bare-url.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+    ],
+    constraints: [],
+    editables: [],
+    index_url: None,
+    extra_index_urls: [],
+    find_links: [],
+    no_index: false,
+    no_binary: None,
+    only_binary: None,
+}

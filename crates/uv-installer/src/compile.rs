@@ -48,7 +48,9 @@ pub enum CompileError {
         err: Box<Self>,
     },
     #[error("Bytecode timed out ({}s)", _0.as_secs_f32())]
-    Timeout(Duration),
+    CompileTimeout(Duration),
+    #[error("Python startup timed out ({}s)", _0.as_secs_f32())]
+    StartupTimeout(Duration),
 }
 
 /// Bytecode compile all file in `dir` using a pool of Python interpreters running a Python script
@@ -194,7 +196,7 @@ async fn worker(
     let (mut bytecode_compiler, child_stdin, mut child_stdout, mut child_stderr) =
         tokio::time::timeout(COMPILE_TIMEOUT, wait_until_ready)
             .await
-            .map_err(|_| CompileError::Timeout(COMPILE_TIMEOUT))??;
+            .map_err(|_| CompileError::StartupTimeout(COMPILE_TIMEOUT))??;
 
     let stderr_reader = tokio::task::spawn(async move {
         let mut child_stderr_collected: Vec<u8> = Vec::new();
@@ -355,7 +357,7 @@ async fn worker_main_loop(
         // should ever take.
         tokio::time::timeout(COMPILE_TIMEOUT, python_handle)
             .await
-            .map_err(|_| CompileError::Timeout(COMPILE_TIMEOUT))??;
+            .map_err(|_| CompileError::CompileTimeout(COMPILE_TIMEOUT))??;
 
         // This is a sanity check, if we don't get the path back something has gone wrong, e.g.
         // we're not actually running a python interpreter.

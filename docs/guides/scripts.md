@@ -127,11 +127,20 @@ Multiple dependencies can be requested by repeating with `--with` option.
 Note that if `uv run` is used in a _project_, these dependencies will be included _in addition_ to
 the project's dependencies. To opt-out of this behavior, use the `--no-project` flag.
 
-## Declaring script dependencies
+## Creating a Python script
 
 Python recently added a standard format for
 [inline script metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata).
-This allows the dependencies for a script to be declared in the script itself.
+It allows for selecting Python versions and defining dependencies. Use `uv init --script` to
+initialize scripts with the inline metadata:
+
+```console
+$ uv init --script example.py --python 3.12
+```
+
+## Declaring script dependencies
+
+The inline metadata format allows the dependencies for a script to be declared in the script itself.
 
 uv supports adding and updating inline script metadata for you. Use `uv add --script` to declare the
 dependencies for the script:
@@ -201,6 +210,29 @@ print(Point)
 is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
 more details.
 
+## Improving reproducibility
+
+uv supports an `exclude-newer` field in the `tool.uv` section of inline script metadata to limit uv
+to only considering distributions released before a specific date. This is useful for improving the
+reproducibility of your script when run at a later point in time.
+
+The date must be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp
+(e.g., `2006-12-02T02:07:43Z`).
+
+```python title="example.py"
+# /// script
+# dependencies = [
+#   "requests",
+# ]
+# [tool.uv]
+# exclude-newer = "2023-10-16T00:00:00Z"
+# ///
+
+import requests
+
+print(requests.__version__)
+```
+
 ## Using different Python versions
 
 uv allows arbitrary Python versions to be requested on each script invocation, for example:
@@ -214,13 +246,13 @@ print(".".join(map(str, sys.version_info[:3])))
 ```console
 $ # Use the default Python version, may differ on your machine
 $ uv run example.py
-3.12.1
+3.12.6
 ```
 
 ```console
 $ # Use a specific Python version
 $ uv run --python 3.10 example.py
-3.10.13
+3.10.15
 ```
 
 See the [Python version request](../concepts/python-versions.md#requesting-a-version) documentation

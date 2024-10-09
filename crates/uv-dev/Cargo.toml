@@ -16,25 +16,18 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-filename = { workspace = true }
-distribution-types = { workspace = true }
-install-wheel-rs = { workspace = true }
-pep508_rs = { workspace = true }
-pypi-types = { workspace = true }
-uv-build = { workspace = true }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-cli = { workspace = true }
 uv-client = { workspace = true }
-uv-configuration = { workspace = true }
-uv-dispatch = { workspace = true }
-uv-git = { workspace = true }
+uv-distribution-filename = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-installer = { workspace = true }
 uv-macros = { workspace = true }
 uv-options-metadata = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
-uv-resolver = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
-uv-types = { workspace = true }
 uv-workspace = { workspace = true, features = ["schemars"] }
 
 # Any dependencies that are exclusively used in `uv-dev` should be listed as non-workspace
@@ -44,12 +37,11 @@ anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 fs-err = { workspace = true, features = ["tokio"] }
 itertools = { workspace = true }
-markdown = "0.3.0"
+markdown = { version = "0.3.0" }
 owo-colors = { workspace = true }
 poloto = { version = "19.1.2", optional = true }
-pretty_assertions = { version = "1.4.0" }
+pretty_assertions = { version = "1.4.1" }
 resvg = { version = "0.29.0", optional = true }
-rustc-hash = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -60,13 +52,19 @@ tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"] }
 tracing-subscriber = { workspace = true }
 walkdir = { workspace = true }
+uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
 
-[target.'cfg(target_os = "windows")'.dependencies]
-mimalloc = { version = "0.1.39" }
-
-[target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
-tikv-jemallocator = { version = "0.6.0" }
+[[bin]]
+name = "uv-dev"
+# We don't want to build the dev CLI by default, so we skip it by requiring an off-by-default feature
+required-features = ["dev"]
 
 [features]
-default = []
+default = ["performance"]
+# Actually build the dev CLI.
+dev = []
+performance = ["dep:uv-performance-memory-allocator"]
 render = ["poloto", "resvg", "tagu"]
+
+[package.metadata.cargo-shear]
+ignored = ["flate2", "uv-performance-memory-allocator", "uv-performance-flate2-backend"]

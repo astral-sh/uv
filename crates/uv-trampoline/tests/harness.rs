@@ -12,8 +12,6 @@ use which::which;
 use zip::write::FileOptions;
 use zip::ZipWriter;
 
-use uv_fs::Simplified;
-
 const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 
 #[cfg(all(windows, target_arch = "x86"))]
@@ -104,7 +102,7 @@ if __name__ == "__main__":
 /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_vendor/distlib/scripts.py#L136-L165>
 fn format_shebang(executable: impl AsRef<Path>) -> String {
     // Convert the executable to a simplified path.
-    let executable = executable.as_ref().simplified_display().to_string();
+    let executable = executable.as_ref().display().to_string();
     format!("#!{executable}")
 }
 
@@ -173,7 +171,7 @@ fn windows_script_launcher(
     }
 
     let python = python_executable.as_ref();
-    let python_path = python.simplified_display().to_string();
+    let python_path = python.display().to_string();
 
     let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len() + payload.len());
     launcher.extend_from_slice(launcher_bin);
@@ -211,7 +209,7 @@ fn generate_console_launcher() -> Result<()> {
 
     println!(
         "Wrote Console Launcher in {}",
-        console_bin_path.path().simplified_display()
+        console_bin_path.path().display()
     );
 
     let stdout_predicate = "Hello from uv-trampoline-console.exe\r\n";
@@ -260,10 +258,7 @@ fn generate_gui_launcher() -> Result<()> {
     // Create Launcher
     File::create(gui_bin_path.path())?.write_all(gui_launcher.as_ref())?;
 
-    println!(
-        "Wrote GUI Launcher in {}",
-        gui_bin_path.path().simplified_display()
-    );
+    println!("Wrote GUI Launcher in {}", gui_bin_path.path().display());
 
     // Test GUI Launcher
     // NOTICE: This will spawn a GUI and will wait until you close the window.

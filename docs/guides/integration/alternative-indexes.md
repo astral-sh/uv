@@ -4,6 +4,12 @@ While uv uses the official Python Package Index (PyPI) by default, it also suppo
 package indexes. Most alternative indexes require various forms of authentication, which requires
 some initial setup.
 
+!!! important
+
+    Please read the documentation on [using multiple indexes](../../pip/compatibility.md#packages-that-exist-on-multiple-indexes)
+    in uv — the default behavior is different from pip to prevent dependency confusion attacks, but
+    this means that uv may not find the versions of a package as you'd expect.
+
 ## Azure Artifacts
 
 uv can install packages from
@@ -15,7 +21,7 @@ Authenticate to a feed using a
 ### Using a PAT
 
 If there is a PAT available (eg
-[`$(System.AccessToken)` in an Azure pipeline](https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables?view=azure-devops&tabs=yaml#systemaccesstoken)),
+[ `$(System.AccessToken)` in an Azure pipeline](https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables?view=azure-devops&tabs=yaml#systemaccesstoken)),
 credentials can be provided via the "Basic" HTTP authentication scheme. Include the PAT in the
 password field of the URL. A username must be included as well, but can be any string.
 
@@ -56,7 +62,60 @@ $ # Configure the index URL with the username
 $ export UV_EXTRA_INDEX_URL=https://VssSessionToken@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
 ```
 
+## AWS CodeArtifact
+
+uv can install packages from
+[AWS CodeArtifact](https://docs.aws.amazon.com/codeartifact/latest/ug/using-python.html).
+
+The authorization token can be retrieved using the `awscli` tool.
+
+!!! note
+
+    This guide assumes the AWS CLI has previously been authenticated.
+
+First, declare some constants for your CodeArtifact repository:
+
+```bash
+export AWS_DOMAIN="<your-domain>"
+export AWS_ACCOUNT_ID="<your-account-id>"
+export AWS_REGION="<your-region>"
+export AWS_CODEARTIFACT_REPOSITORY="<your-repository>"
+```
+
+Then, retrieve a token from the `awscli`:
+
+```bash
+export AWS_CODEARTIFACT_TOKEN="$(
+    aws codeartifact get-authorization-token \
+    --domain $AWS_DOMAIN \
+    --domain-owner $AWS_ACCOUNT_ID \
+    --query authorizationToken \
+    --output text
+)"
+```
+
+And configure the index URL:
+
+```bash
+export UV_EXTRA_INDEX_URL="https://aws:${AWS_CODEARTIFACT_TOKEN}@${AWS_DOMAIN}-${AWS_ACCOUNT_ID}.d.codeartifact.${AWS_REGION}.amazonaws.com/pypi/${AWS_CODEARTIFACT_REPOSITORY}/simple/"
+```
+
+### Publishing packages
+
+If you also want to publish your own packages to AWS CodeArtifact, you can use `uv publish` as
+described in the [publishing guide](../publish.md). You will need to set `UV_PUBLISH_URL` separately
+from the credentials:
+
+```bash
+# Configure uv to use AWS CodeArtifact
+export UV_PUBLISH_URL="https://${AWS_CODEARTIFACT_TOKEN}@${AWS_DOMAIN}-${AWS_ACCOUNT_ID}.d.codeartifact.${AWS_REGION}.amazonaws.com/pypi/${AWS_CODEARTIFACT_REPOSITORY}/"
+export UV_PUBLISH_USERNAME=aws
+export UV_PUBLISH_PASSWORD="$AWS_CODEARTIFACT_TOKEN"
+
+# Publish the package
+uv publish
+```
+
 ## Other indexes
 
-uv is also known to work with JFrog's Artifactory, the Google Cloud Artifact Registry, and AWS Code
-Artifact.
+uv is also known to work with JFrog's Artifactory and the Google Cloud Artifact Registry.

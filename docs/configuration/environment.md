@@ -6,6 +6,8 @@ uv accepts the following command-line arguments as environment variables:
   URL as the base index for searching for packages.
 - `UV_EXTRA_INDEX_URL`: Equivalent to the `--extra-index-url` command-line argument. If set, uv will
   use this space-separated list of URLs as additional indexes when searching for packages.
+- `UV_FIND_LINKS`: Equivalent to the `--find-links` command-line argument. If set, uv will use this
+  space-separated list of additional locations to search for packages.
 - `UV_CACHE_DIR`: Equivalent to the `--cache-dir` command-line argument. If set, uv will use this
   directory for caching instead of the default cache directory.
 - `UV_NO_CACHE`: Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
@@ -63,6 +65,16 @@ uv accepts the following command-line arguments as environment variables:
   `--no-python-downloads` option. Whether uv should allow Python downloads.
 - `UV_COMPILE_BYTECODE`: Equivalent to the `--compile-bytecode` command-line argument. If set, uv
   will compile Python source files to bytecode after installation.
+- `UV_PUBLISH_URL`: Equivalent to the `--publish-url` command-line argument. The URL of the upload
+  endpoint of the index to use with `uv publish`.
+- `UV_PUBLISH_TOKEN`: Equivalent to the `--token` command-line argument in `uv publish`. If set, uv
+  will use this token (with the username `__token__`) for publishing.
+- `UV_PUBLISH_USERNAME`: Equivalent to the `--username` command-line argument in `uv publish`. If
+  set, uv will use this username for publishing.
+- `UV_PUBLISH_PASSWORD`: Equivalent to the `--password` command-line argument in `uv publish`. If
+  set, uv will use this password for publishing.
+- `UV_NO_SYNC`: Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
+  the environment.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
@@ -76,6 +88,10 @@ In addition, uv respects the following environment variables:
   packages.
 - `UV_TOOL_DIR`: Used to specify the directory where uv will store managed tools.
 - `UV_TOOL_BIN_DIR`: Used to specify the "bin" directory where uv will install tool executables.
+- `UV_PROJECT_ENVIRONMENT`: Use to specify the path to the directory to use for a project virtual
+  environment. See the
+  [project documentation](../concepts/projects.md#configuring-the-project-environment-path) for more
+  details.
 - `UV_PYTHON_INSTALL_DIR`: Used to specify the directory where uv will store managed Python
   installations.
 - `UV_PYTHON_INSTALL_MIRROR`: Managed Python installations are downloaded from
@@ -83,11 +99,13 @@ In addition, uv respects the following environment variables:
   can be set to a mirror URL to use a different source for Python installations. The provided URL
   will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g.,
   `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+  Distributions can be read from a local directory by using the `file://` URL scheme.
 - `UV_PYPY_INSTALL_MIRROR`: Managed PyPy installations are downloaded from
   [python.org](https://downloads.python.org/). This variable can be set to a mirror URL to use a
   different source for PyPy installations. The provided URL will replace
   `https://downloads.python.org/pypy` in, e.g.,
-  `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+  `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`. Distributions can be read from a
+  local directory by using the `file://` URL scheme.
 - `XDG_CONFIG_HOME`: Used to specify the path to uv user-level configuration directory on Unix
   systems.
 - `XDG_CACHE_HOME`: Used to specify the directory where uv stores cache files on Unix systems.
@@ -111,6 +129,8 @@ In addition, uv respects the following environment variables:
 - `VIRTUAL_ENV`: Used to detect an activated virtual environment.
 - `CONDA_PREFIX`: Used to detect an activated Conda environment.
 - `PROMPT`: Used to detect the use of the Windows Command Prompt (as opposed to PowerShell).
+- `VIRTUAL_ENV_DISABLE_PROMPT`: If set to `1` before a virtual environment is activated, then the
+  virtual environment name will not be prepended to the terminal prompt.
 - `NU_VERSION`: Used to detect the use of NuShell.
 - `FISH_VERSION`: Used to detect the use of the Fish shell.
 - `BASH_VERSION`: Used to detect the use of the Bash shell.

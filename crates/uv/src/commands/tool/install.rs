@@ -2,14 +2,17 @@ use std::fmt::Write;
 use std::str::FromStr;
 
 use anyhow::{bail, Result};
-use distribution_types::UnresolvedRequirementSpecification;
 use owo_colors::OwoColorize;
-use tracing::debug;
-
-use uv_cache::Cache;
+use tracing::{debug, trace};
+use uv_cache::{Cache, Refresh};
+use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::Concurrency;
+use uv_configuration::{Concurrency, Upgrade};
+use uv_distribution_types::UnresolvedRequirementSpecification;
 use uv_normalize::PackageName;
+use uv_pep440::{VersionSpecifier, VersionSpecifiers};
+use uv_pep508::MarkerTree;
+use uv_pypi_types::{Requirement, RequirementSource};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -22,8 +25,10 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 
 use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
+    EnvironmentSpecification,
 };
 use crate::commands::tool::common::remove_entrypoints;
+use crate::commands::tool::Target;
 use crate::commands::{reporters::PythonDownloadReporter, tool::common::install_executables};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -44,7 +49,7 @@ pub(crate) async fn install(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
-    cache: &Cache,
+    cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
@@ -58,12 +63,12 @@ pub(crate) async fn install(
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
     // requirements, even if we end up using a different interpreter for the tool install itself.
     let interpreter = PythonInstallation::find_or_download(
-        python_request.clone(),
+        python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
         &client_builder,
-        cache,
+        &cache,
         Some(&reporter),
     )
     .await?
@@ -76,24 +81,28 @@ pub(crate) async fn install(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
-    // Resolve the `from` requirement.
-    let from = if let Some(from) = from {
-        // Parse the positional name. If the user provided more than a package name, it's an error
-        // (e.g., `uv install foo==1.0 --from foo`).
-        let Ok(package) = PackageName::from_str(&package) else {
-            bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{package}`)", from = from.cyan(), package = package.cyan())
-        };
+    // Parse the input requirement.
+    let target = Target::parse(&package, from.as_deref());
 
-        let source = if editable {
-            RequirementsSource::Editable(from)
-        } else {
-            RequirementsSource::Package(from)
-        };
-        let requirements = RequirementsSpecification::from_source(&source, &client_builder)
-            .await?
-            .requirements;
+    // If the user passed, e.g., `ruff@latest`, refresh the cache.
+    let cache = if target.is_latest() {
+        cache.with_refresh(Refresh::All(Timestamp::now()))
+    } else {
+        cache
+    };
 
-        let from_requirement = {
+    // Resolve the `--from` requirement.
+    let from = match target {
+        // Ex) `ruff`
+        Target::Unspecified(name) => {
+            let source = if editable {
+                RequirementsSource::Editable(name.to_string())
+            } else {
+                RequirementsSource::Package(name.to_string())
+            };
+            let requirements = RequirementsSpecification::from_source(&source, &client_builder)
+                .await?
+                .requirements;
             resolve_names(
                 requirements,
                 &interpreter,
@@ -102,49 +111,106 @@ pub(crate) async fn install(
                 connectivity,
                 concurrency,
                 native_tls,
-                cache,
+                &cache,
                 printer,
             )
             .await?
             .pop()
             .unwrap()
-        };
-
-        // Check if the positional name conflicts with `--from`.
-        if from_requirement.name != package {
-            // Determine if it's an entirely different package (e.g., `uv install foo --from bar`).
-            bail!(
-                "Package name (`{}`) provided with `--from` does not match install request (`{}`)",
-                from_requirement.name.cyan(),
-                package.cyan()
-            );
         }
+        // Ex) `ruff@0.6.0`
+        Target::Version(name, ref version) | Target::FromVersion(_, name, ref version) => {
+            if editable {
+                bail!("`--editable` is only supported for local packages");
+            }
 
-        from_requirement
-    } else {
-        let source = if editable {
-            RequirementsSource::Editable(package.clone())
-        } else {
-            RequirementsSource::Package(package.clone())
-        };
-        let requirements = RequirementsSpecification::from_source(&source, &client_builder)
+            Requirement {
+                name: PackageName::from_str(name)?,
+                extras: vec![],
+                marker: MarkerTree::default(),
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
+                        version.clone(),
+                    )),
+                    index: None,
+                },
+                origin: None,
+            }
+        }
+        // Ex) `ruff@latest`
+        Target::Latest(name) | Target::FromLatest(_, name) => {
+            if editable {
+                bail!("`--editable` is only supported for local packages");
+            }
+
+            Requirement {
+                name: PackageName::from_str(name)?,
+                extras: vec![],
+                marker: MarkerTree::default(),
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::empty(),
+                    index: None,
+                },
+                origin: None,
+            }
+        }
+        // Ex) `ruff>=0.6.0`
+        Target::From(package, from) => {
+            // Parse the positional name. If the user provided more than a package name, it's an error
+            // (e.g., `uv install foo==1.0 --from foo`).
+            let Ok(package) = PackageName::from_str(package) else {
+                bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{package}`)", from = from.cyan(), package = package.cyan())
+            };
+
+            let source = if editable {
+                RequirementsSource::Editable(from.to_string())
+            } else {
+                RequirementsSource::Package(from.to_string())
+            };
+            let requirements = RequirementsSpecification::from_source(&source, &client_builder)
+                .await?
+                .requirements;
+
+            // Parse the `--from` requirement.
+            let from_requirement = resolve_names(
+                requirements,
+                &interpreter,
+                &settings,
+                &state,
+                connectivity,
+                concurrency,
+                native_tls,
+                &cache,
+                printer,
+            )
             .await?
-            .requirements;
+            .pop()
+            .unwrap();
 
-        resolve_names(
-            requirements,
-            &interpreter,
-            &settings,
-            &state,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?
-        .pop()
-        .unwrap()
+            // Check if the positional name conflicts with `--from`.
+            if from_requirement.name != package {
+                // Determine if it's an entirely different package (e.g., `uv install foo --from bar`).
+                bail!(
+                    "Package name (`{}`) provided with `--from` does not match install request (`{}`)",
+                    from_requirement.name.cyan(),
+                    package.cyan()
+                );
+            }
+
+            from_requirement
+        }
+    };
+
+    // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
+    let settings = if target.is_latest() {
+        ResolverInstallerSettings {
+            upgrade: settings
+                .upgrade
+                .combine(Upgrade::package(from.name.clone())),
+            ..settings
+        }
+    } else {
+        settings
     };
 
     // Read the `--with` requirements.
@@ -163,7 +229,7 @@ pub(crate) async fn install(
                 connectivity,
                 concurrency,
                 native_tls,
-                cache,
+                &cache,
                 printer,
             )
             .await?,
@@ -175,7 +241,7 @@ pub(crate) async fn install(
     let options = ToolOptions::from(options);
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
-    let _lock = installed_tools.acquire_lock()?;
+    let _lock = installed_tools.lock().await?;
 
     // Find the existing receipt, if it exists. If the receipt is present but malformed, we'll
     // remove the environment and continue with the install.
@@ -209,47 +275,54 @@ pub(crate) async fn install(
 
     let existing_environment =
         installed_tools
-            .get_environment(&from.name, cache)?
+            .get_environment(&from.name, &cache)?
             .filter(|environment| {
-                python_request.as_ref().map_or(true, |python_request| {
-                    if python_request.satisfied(environment.interpreter(), cache) {
-                        debug!("Found existing environment for `{from}`", from = from.name.cyan());
-                        true
-                    } else {
-                        let _ = writeln!(
-                            printer.stderr(),
-                            "Existing environment for `{from}` does not satisfy the requested Python interpreter",
-                            from = from.name.cyan(),
-                        );
-                        false
-                    }
-                })
+                if environment.uses(&interpreter) {
+                    trace!(
+                        "Existing interpreter matches the requested interpreter for `{}`: {}",
+                        from.name,
+                        environment.interpreter().sys_executable().display()
+                    );
+                    true
+                } else {
+                    let _ = writeln!(
+                        printer.stderr(),
+                        "Ignoring existing environment for `{from}`: the requested Python interpreter does not match the environment interpreter",
+                        from = from.name.cyan(),
+                    );
+                    false
+                }
             });
 
     // If the requested and receipt requirements are the same...
-    if existing_environment.is_some() {
+    if existing_environment
+        .as_ref()
+        .filter(|_| {
+            // And the user didn't request a reinstall or upgrade...
+            !force
+                && !target.is_latest()
+                && settings.reinstall.is_none()
+                && settings.upgrade.is_none()
+        })
+        .is_some()
+    {
         if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
             let receipt = tool_receipt.requirements().to_vec();
             if requirements == receipt {
-                // And the user didn't request a reinstall or upgrade...
-                if !force && settings.reinstall.is_none() && settings.upgrade.is_none() {
-                    if *tool_receipt.options() != options {
-                        // ...but the options differ, we need to update the receipt.
-                        installed_tools.add_tool_receipt(
-                            &from.name,
-                            tool_receipt.clone().with_options(options),
-                        )?;
-                    }
-
-                    // We're done, though we might need to update the receipt.
-                    writeln!(
-                        printer.stderr(),
-                        "`{from}` is already installed",
-                        from = from.cyan()
-                    )?;
-
-                    return Ok(ExitStatus::Success);
+                if *tool_receipt.options() != options {
+                    // ...but the options differ, we need to update the receipt.
+                    installed_tools
+                        .add_tool_receipt(&from.name, tool_receipt.clone().with_options(options))?;
                 }
+
+                // We're done, though we might need to update the receipt.
+                writeln!(
+                    printer.stderr(),
+                    "`{from}` is already installed",
+                    from = from.cyan()
+                )?;
+
+                return Ok(ExitStatus::Success);
             }
         }
     }
@@ -279,7 +352,7 @@ pub(crate) async fn install(
             connectivity,
             concurrency,
             native_tls,
-            cache,
+            &cache,
             printer,
         )
         .await?
@@ -296,15 +369,15 @@ pub(crate) async fn install(
         // If we're creating a new environment, ensure that we can resolve the requirements prior
         // to removing any existing tools.
         let resolution = resolve_environment(
+            EnvironmentSpecification::from(spec),
             &interpreter,
-            spec,
             settings.as_ref().into(),
             &state,
             Box::new(DefaultResolveLogger),
             connectivity,
             concurrency,
             native_tls,
-            cache,
+            &cache,
             printer,
         )
         .await?;
@@ -327,10 +400,15 @@ pub(crate) async fn install(
             connectivity,
             concurrency,
             native_tls,
-            cache,
+            &cache,
             printer,
         )
-        .await?
+        .await
+        .inspect_err(|_| {
+            // If we failed to sync, remove the newly created environment.
+            debug!("Failed to sync environment; removing `{}`", from.name);
+            let _ = installed_tools.remove_environment(&from.name);
+        })?
     };
 
     install_executables(

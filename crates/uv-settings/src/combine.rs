@@ -1,10 +1,13 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use url::Url;
 
-use distribution_types::IndexUrl;
-use install_wheel_rs::linker::LinkMode;
-use pypi_types::SupportedEnvironments;
-use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, TargetTriple};
+use uv_configuration::{
+    ConfigSettings, IndexStrategy, KeyringProviderType, TargetTriple, TrustedPublishing,
+};
+use uv_distribution_types::IndexUrl;
+use uv_install_wheel::linker::LinkMode;
+use uv_pypi_types::SupportedEnvironments;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
@@ -71,6 +74,7 @@ impl_combine_or!(AnnotationStyle);
 impl_combine_or!(ExcludeNewer);
 impl_combine_or!(IndexStrategy);
 impl_combine_or!(IndexUrl);
+impl_combine_or!(Url);
 impl_combine_or!(KeyringProviderType);
 impl_combine_or!(LinkMode);
 impl_combine_or!(NonZeroUsize);
@@ -83,6 +87,7 @@ impl_combine_or!(ResolutionMode);
 impl_combine_or!(String);
 impl_combine_or!(SupportedEnvironments);
 impl_combine_or!(TargetTriple);
+impl_combine_or!(TrustedPublishing);
 impl_combine_or!(bool);
 
 impl<T> Combine for Option<Vec<T>> {

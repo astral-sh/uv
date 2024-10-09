@@ -8,10 +8,10 @@ use std::path::Path;
 use fs_err as fs;
 use fs_err::File;
 use itertools::Itertools;
-use tracing::info;
+use tracing::debug;
 
-use pypi_types::Scheme;
 use uv_fs::{cachedir, Simplified, CWD};
+use uv_pypi_types::Scheme;
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_version::version;
 
@@ -43,6 +43,7 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
 }
 
 /// Create a [`VirtualEnvironment`] at the given location.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) fn create(
     location: &Path,
     interpreter: &Interpreter,
@@ -50,6 +51,7 @@ pub(crate) fn create(
     system_site_packages: bool,
     allow_existing: bool,
     relocatable: bool,
+    seed: bool,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment. This is typically the Python executable
@@ -92,21 +94,21 @@ pub(crate) fn create(
                 )));
             } else if metadata.is_dir() {
                 if allow_existing {
-                    info!("Allowing existing directory");
+                    debug!("Allowing existing directory");
                 } else if location.join("pyvenv.cfg").is_file() {
-                    info!("Removing existing directory");
+                    debug!("Removing existing directory");
                     fs::remove_dir_all(location)?;
                     fs::create_dir_all(location)?;
                 } else if location
                     .read_dir()
                     .is_ok_and(|mut dir| dir.next().is_none())
                 {
-                    info!("Ignoring empty directory");
+                    debug!("Ignoring empty directory");
                 } else {
                     return Err(Error::Io(io::Error::new(
                         io::ErrorKind::AlreadyExists,
                         format!(
-                            "The directory `{}` exists, but it's not a virtualenv",
+                            "The directory `{}` exists, but it's not a virtual environment",
                             location.user_display()
                         ),
                     )));
@@ -119,7 +121,7 @@ pub(crate) fn create(
         Err(err) => return Err(Error::Io(err)),
     }
 
-    let location = location.canonicalize()?;
+    let location = std::path::absolute(location)?;
 
     let bin_name = if cfg!(unix) {
         "bin"
@@ -350,15 +352,15 @@ pub(crate) fn create(
                 "false".to_string()
             },
         ),
-        (
-            "relocatable".to_string(),
-            if relocatable {
-                "true".to_string()
-            } else {
-                "false".to_string()
-            },
-        ),
     ];
+
+    if relocatable {
+        pyvenv_cfg_data.push(("relocatable".to_string(), "true".to_string()));
+    }
+
+    if seed {
+        pyvenv_cfg_data.push(("seed".to_string(), "true".to_string()));
+    }
 
     if let Some(prompt) = prompt {
         pyvenv_cfg_data.push(("prompt".to_string(), prompt));
@@ -479,19 +481,20 @@ impl WindowsExecutable {
     }
 
     /// The name of the launcher shim.
-    fn launcher(self) -> &'static str {
+    fn launcher(self, interpreter: &Interpreter) -> &'static str {
         match self {
-            WindowsExecutable::Python => "venvlauncher.exe",
-            WindowsExecutable::PythonMajor => "venvlauncher.exe",
-            WindowsExecutable::PythonMajorMinor => "venvlauncher.exe",
-            WindowsExecutable::Pythonw => "venvwlauncher.exe",
+            Self::Python | Self::PythonMajor | Self::PythonMajorMinor
+                if interpreter.gil_disabled() =>
+            {
+                "venvlaunchert.exe"
+            }
+            Self::Python | Self::PythonMajor | Self::PythonMajorMinor => "venvlauncher.exe",
+            Self::Pythonw if interpreter.gil_disabled() => "venvwlaunchert.exe",
+            Self::Pythonw => "venvwlauncher.exe",
             // From 3.13 on these should replace the `python.exe` and `pythonw.exe` shims.
             // These are not relevant as of now for PyPy as it doesn't yet support Python 3.13.
-            WindowsExecutable::PyPy => "venvlauncher.exe",
-            WindowsExecutable::PyPyMajor => "venvlauncher.exe",
-            WindowsExecutable::PyPyMajorMinor => "venvlauncher.exe",
-            WindowsExecutable::PyPyw => "venvwlauncher.exe",
-            WindowsExecutable::PyPyMajorMinorw => "venvwlauncher.exe",
+            Self::PyPy | Self::PyPyMajor | Self::PyPyMajorMinor => "venvlauncher.exe",
+            Self::PyPyw | Self::PyPyMajorMinorw => "venvwlauncher.exe",
             WindowsExecutable::GraalPy => "venvlauncher.exe",
         }
     }
@@ -532,7 +535,7 @@ fn copy_launcher_windows(
         .join("venv")
         .join("scripts")
         .join("nt")
-        .join(executable.launcher());
+        .join(executable.launcher(interpreter));
     match fs_err::copy(shim, scripts.join(executable.exe(interpreter))) {
         Ok(_) => return Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
@@ -543,7 +546,7 @@ fn copy_launcher_windows(
 
     // Third priority: on Conda at least, we can look for the launcher shim next to
     // the Python executable itself.
-    let shim = base_python.with_file_name(executable.launcher());
+    let shim = base_python.with_file_name(executable.launcher(interpreter));
     match fs_err::copy(shim, scripts.join(executable.exe(interpreter))) {
         Ok(_) => return Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}

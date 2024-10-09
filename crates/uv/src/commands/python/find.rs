@@ -1,11 +1,12 @@
 use anstream::println;
 use anyhow::Result;
+use std::path::Path;
 
 use uv_cache::Cache;
-use uv_fs::{Simplified, CWD};
+use uv_fs::Simplified;
 use uv_python::{
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionRequest,
+    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVariant,
+    PythonVersionFile, VersionRequest,
 };
 use uv_resolver::RequiresPython;
 use uv_warnings::warn_user_once;
@@ -15,6 +16,7 @@ use crate::commands::{project::find_requires_python, ExitStatus};
 
 /// Find a Python interpreter.
 pub(crate) async fn find(
+    project_dir: &Path,
     request: Option<String>,
     no_project: bool,
     no_config: bool,
@@ -33,30 +35,34 @@ pub(crate) async fn find(
 
     // (2) Request from `.python-version`
     if request.is_none() {
-        request = PythonVersionFile::discover(&*CWD, no_config, false)
+        request = PythonVersionFile::discover(project_dir, no_config, false)
             .await?
             .and_then(PythonVersionFile::into_version);
     }
 
     // (3) `Requires-Python` in `pyproject.toml`
     if request.is_none() && !no_project {
-        let project = match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
-            Ok(project) => Some(project),
-            Err(WorkspaceError::MissingProject(_)) => None,
-            Err(WorkspaceError::MissingPyprojectToml) => None,
-            Err(WorkspaceError::NonWorkspace(_)) => None,
-            Err(err) => {
-                warn_user_once!("{err}");
-                None
-            }
-        };
+        let project =
+            match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
+                Ok(project) => Some(project),
+                Err(WorkspaceError::MissingProject(_)) => None,
+                Err(WorkspaceError::MissingPyprojectToml) => None,
+                Err(WorkspaceError::NonWorkspace(_)) => None,
+                Err(err) => {
+                    warn_user_once!("{err}");
+                    None
+                }
+            };
 
         if let Some(project) = project {
             request = find_requires_python(project.workspace())?
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone()))
+                    PythonRequest::Version(VersionRequest::Range(
+                        specifiers.clone(),
+                        PythonVariant::Default,
+                    ))
                 });
         }
     }

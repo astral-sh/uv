@@ -1,15 +1,14 @@
-use std::collections::BTreeSet;
-use std::fmt::Write;
-
 use anyhow::Result;
 use fs_err as fs;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::collections::BTreeSet;
+use std::fmt::Write;
+use std::path::Path;
 
 use uv_client::Connectivity;
-use uv_fs::CWD;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use uv_python::{PythonDownloads, PythonRequest, PythonVersionFile};
@@ -21,6 +20,7 @@ use crate::printer::Printer;
 
 /// Download and install Python versions.
 pub(crate) async fn install(
+    project_dir: &Path,
     targets: Vec<String>,
     reinstall: bool,
     python_downloads: PythonDownloads,
@@ -34,14 +34,14 @@ pub(crate) async fn install(
     let installations = ManagedPythonInstallations::from_settings()?.init()?;
     let installations_dir = installations.root();
     let cache_dir = installations.cache();
-    let _lock = installations.acquire_lock()?;
+    let _lock = installations.lock().await?;
 
     let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {
-        PythonVersionFile::discover(&*CWD, no_config, true)
+        PythonVersionFile::discover(project_dir, no_config, true)
             .await?
-            .map(uv_python::PythonVersionFile::into_versions)
-            .unwrap_or_else(|| vec![PythonRequest::Any])
+            .map(PythonVersionFile::into_versions)
+            .unwrap_or_else(|| vec![PythonRequest::Default])
     } else {
         targets
             .iter()
@@ -62,7 +62,7 @@ pub(crate) async fn install(
     let mut unfilled_requests = Vec::new();
     let mut uninstalled = Vec::new();
     for (request, download_request) in requests.iter().zip(download_requests) {
-        if matches!(requests.as_slice(), [PythonRequest::Any]) {
+        if matches!(requests.as_slice(), [PythonRequest::Default]) {
             writeln!(printer.stderr(), "Searching for Python installations")?;
         } else {
             writeln!(
@@ -75,7 +75,7 @@ pub(crate) async fn install(
             .iter()
             .find(|installation| download_request.satisfied_by_key(installation.key()))
         {
-            if matches!(request, PythonRequest::Any) {
+            if matches!(request, PythonRequest::Default) {
                 writeln!(printer.stderr(), "Found: {}", installation.key().green())?;
             } else {
                 writeln!(
@@ -96,7 +96,7 @@ pub(crate) async fn install(
     }
 
     if unfilled_requests.is_empty() {
-        if matches!(requests.as_slice(), [PythonRequest::Any]) {
+        if matches!(requests.as_slice(), [PythonRequest::Default]) {
             writeln!(
                 printer.stderr(),
                 "Python is already available. Use `uv python install <request>` to install a specific version.",

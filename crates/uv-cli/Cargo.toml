@@ -14,13 +14,13 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-types = { workspace = true }
-install-wheel-rs = { workspace = true, features = ["clap"], default-features = false }
-pep508_rs = { workspace = true }
-pypi-types = { workspace = true }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-configuration = { workspace = true, features = ["clap"] }
+uv-distribution-types = { workspace = true }
+uv-install-wheel = { workspace = true, features = ["clap"], default-features = false }
 uv-normalize = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["clap", "schemars"]}
 uv-resolver = { workspace = true, features = ["clap"] }
 uv-settings = { workspace = true, features = ["schemars"] }
@@ -35,7 +35,7 @@ serde = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.36.1", features = ["filters", "json"] }
+insta = { version = "1.40.0", features = ["filters", "json"] }
 
 [features]
 default = []

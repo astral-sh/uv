@@ -2,14 +2,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
 use std::sync::Arc;
 
+use indexmap::IndexSet;
 use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Range, Reporter};
 use rustc_hash::FxHashMap;
 
-use distribution_types::{BuiltDist, IndexLocations, InstalledDist, SourceDist};
-use pep440_rs::Version;
-use pep508_rs::MarkerTree;
 use tracing::trace;
+use uv_distribution_types::{BuiltDist, IndexLocations, IndexUrl, InstalledDist, SourceDist};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
@@ -18,6 +19,7 @@ use crate::pubgrub::{
     PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, PubGrubSpecifierError,
 };
 use crate::python_requirement::PythonRequirement;
+use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
 
 #[derive(Debug, thiserror::Error)]
@@ -33,12 +35,6 @@ pub enum ResolveError {
 
     #[error("Attempted to wait on an unregistered task: `{_0}`")]
     UnregisteredTask(String),
-
-    #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
-    NameMismatch {
-        given: PackageName,
-        metadata: PackageName,
-    },
 
     #[error(transparent)]
     PubGrubSpecifier(#[from] PubGrubSpecifierError),
@@ -59,14 +55,11 @@ pub enum ResolveError {
     #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
     DisallowedUrl(PackageName, String),
 
-    #[error("There are conflicting editable requirements for package `{0}`:\n- {1}\n- {2}")]
-    ConflictingEditables(PackageName, String, String),
+    #[error(transparent)]
+    DistributionType(#[from] uv_distribution_types::Error),
 
     #[error(transparent)]
-    DistributionType(#[from] distribution_types::Error),
-
-    #[error(transparent)]
-    ParsedUrl(#[from] pypi_types::ParsedUrlError),
+    ParsedUrl(#[from] uv_pypi_types::ParsedUrlError),
 
     #[error("Failed to download `{0}`")]
     Fetch(Box<BuiltDist>, #[source] uv_distribution::Error),
@@ -87,23 +80,17 @@ pub enum ResolveError {
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),
 
-    #[error("{package} {version} depends on itself")]
-    SelfDependency {
-        /// Package whose dependencies we want.
-        package: Box<PubGrubPackage>,
-        /// Version of the package for which we want the dependencies.
-        version: Box<Version>,
-    },
-
     #[error("Attempted to construct an invalid version specifier")]
-    InvalidVersion(#[from] pep440_rs::VersionSpecifierBuildError),
+    InvalidVersion(#[from] uv_pep440::VersionSpecifierBuildError),
 
     #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`")]
     UnhashedPackage(PackageName),
 
-    /// Something unexpected happened.
-    #[error("{0}")]
-    Failure(String),
+    #[error("found conflicting distribution in resolution: {0}")]
+    ConflictingDistribution(ConflictingDistributionError),
+
+    #[error("Package `{0}` is unavailable")]
+    PackageUnavailable(PackageName),
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
@@ -121,6 +108,7 @@ pub(crate) type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, Unava
 pub struct NoSolutionError {
     error: pubgrub::NoSolutionError<UvDependencyProvider>,
     available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
+    available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
     selector: CandidateSelector,
     python_requirement: PythonRequirement,
     index_locations: IndexLocations,
@@ -136,6 +124,7 @@ impl NoSolutionError {
     pub(crate) fn new(
         error: pubgrub::NoSolutionError<UvDependencyProvider>,
         available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
+        available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         selector: CandidateSelector,
         python_requirement: PythonRequirement,
         index_locations: IndexLocations,
@@ -148,6 +137,7 @@ impl NoSolutionError {
         Self {
             error,
             available_versions,
+            available_indexes,
             selector,
             python_requirement,
             index_locations,
@@ -222,6 +212,7 @@ impl std::fmt::Display for NoSolutionError {
 
         // Transform the error tree for reporting
         let mut tree = self.error.clone();
+        simplify_derivation_tree_markers(&self.python_requirement, &mut tree);
         let should_display_tree = std::env::var_os("UV_INTERNAL__SHOW_DERIVATION_TREE").is_some()
             || tracing::enabled!(tracing::Level::TRACE);
 
@@ -247,15 +238,20 @@ impl std::fmt::Display for NoSolutionError {
         write!(f, "{report}")?;
 
         // Include any additional hints.
-        for hint in formatter.hints(
-            &self.error,
+        let mut additional_hints = IndexSet::default();
+        formatter.generate_hints(
+            &tree,
             &self.selector,
             &self.index_locations,
+            &self.available_indexes,
             &self.unavailable_packages,
             &self.incomplete_packages,
             &self.fork_urls,
             &self.markers,
-        ) {
+            &self.workspace_members,
+            &mut additional_hints,
+        );
+        for hint in additional_hints {
             write!(f, "\n\n{hint}")?;
         }
 
@@ -466,6 +462,52 @@ fn collapse_redundant_depends_on_no_versions_inner(
                     collapse_redundant_depends_on_no_versions(Arc::make_mut(&mut derived.cause2));
                 }
             }
+        }
+    }
+}
+
+/// Simplifies the markers on pubgrub packages in the given derivation tree
+/// according to the given Python requirement.
+///
+/// For example, when there's a dependency like `foo ; python_version >=
+/// '3.11'` and `requires-python = '>=3.11'`, this simplification will remove
+/// the `python_version >= '3.11'` marker since it's implied to be true by
+/// the `requires-python` setting. This simplifies error messages by reducing
+/// noise.
+fn simplify_derivation_tree_markers(
+    python_requirement: &PythonRequirement,
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) {
+    match tree {
+        DerivationTree::External(External::NotRoot(ref mut pkg, _)) => {
+            pkg.simplify_markers(python_requirement);
+        }
+        DerivationTree::External(External::NoVersions(ref mut pkg, _)) => {
+            pkg.simplify_markers(python_requirement);
+        }
+        DerivationTree::External(External::FromDependencyOf(ref mut pkg1, _, ref mut pkg2, _)) => {
+            pkg1.simplify_markers(python_requirement);
+            pkg2.simplify_markers(python_requirement);
+        }
+        DerivationTree::External(External::Custom(ref mut pkg, _, _)) => {
+            pkg.simplify_markers(python_requirement);
+        }
+        DerivationTree::Derived(derived) => {
+            derived.terms = std::mem::take(&mut derived.terms)
+                .into_iter()
+                .map(|(mut pkg, term)| {
+                    pkg.simplify_markers(python_requirement);
+                    (pkg, term)
+                })
+                .collect();
+            simplify_derivation_tree_markers(
+                python_requirement,
+                Arc::make_mut(&mut derived.cause1),
+            );
+            simplify_derivation_tree_markers(
+                python_requirement,
+                Arc::make_mut(&mut derived.cause2),
+            );
         }
     }
 }

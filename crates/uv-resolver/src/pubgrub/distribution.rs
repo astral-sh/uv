@@ -1,7 +1,7 @@
-use distribution_types::{DistributionMetadata, Name, VersionOrUrlRef};
-use pep440_rs::Version;
-use pypi_types::VerbatimParsedUrl;
+use uv_distribution_types::{DistributionMetadata, Name, VersionOrUrlRef};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pypi_types::VerbatimParsedUrl;
 
 #[derive(Debug)]
 pub(crate) enum PubGrubDistribution<'a> {

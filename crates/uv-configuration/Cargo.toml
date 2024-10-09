@@ -13,24 +13,27 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-types = { workspace = true }
-pep508_rs = { workspace = true, features = ["schemars"] }
-platform-tags = { workspace = true }
-pypi-types = { workspace = true }
 uv-auth = { workspace = true }
 uv-cache = { workspace = true }
+uv-cache-info = { workspace = true }
+uv-cache-key = { workspace = true }
 uv-normalize = { workspace = true }
-uv-workspace = { workspace = true }
+uv-pep508 = { workspace = true, features = ["schemars"] }
+uv-platform-tags = { workspace = true }
+uv-pypi-types = { workspace = true }
 
 clap = { workspace = true, features = ["derive"], optional = true }
 either = { workspace = true }
+fs-err = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
+serde-untagged = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+which = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

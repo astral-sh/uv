@@ -1,8 +1,8 @@
-use distribution_types::Hashed;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use uv_distribution_types::Hashed;
 
-use pypi_types::HashDigest;
+use uv_pypi_types::HashDigest;
 
 /// The [`Revision`] is a thin wrapper around a unique identifier for the source distribution.
 ///
@@ -62,6 +62,16 @@ impl RevisionId {
     /// Generate a new unique identifier for an archive.
     fn new() -> Self {
         Self(nanoid::nanoid!())
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl AsRef<str> for RevisionId {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
     }
 }
 

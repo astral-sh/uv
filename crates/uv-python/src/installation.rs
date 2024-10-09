@@ -3,9 +3,9 @@ use std::str::FromStr;
 
 use tracing::{debug, info};
 
-use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_pep440::{Prerelease, Version};
 
 use crate::discovery::{
     find_best_python_installation, find_python_installation, EnvironmentPreference, PythonRequest,
@@ -15,7 +15,8 @@ use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::platform::{Arch, Libc, Os};
 use crate::{
-    downloads, Error, Interpreter, PythonDownloads, PythonPreference, PythonSource, PythonVersion,
+    downloads, Error, ImplementationName, Interpreter, PythonDownloads, PythonPreference,
+    PythonSource, PythonVersion,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -78,7 +79,7 @@ impl PythonInstallation {
     ///
     /// Unlike [`PythonInstallation::find`], if the required Python is not installed it will be installed automatically.
     pub async fn find_or_download<'a>(
-        request: Option<PythonRequest>,
+        request: Option<&PythonRequest>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
         python_downloads: PythonDownloads,
@@ -86,10 +87,10 @@ impl PythonInstallation {
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, Error> {
-        let request = request.unwrap_or_default();
+        let request = request.unwrap_or_else(|| &PythonRequest::Default);
 
         // Search for the installation
-        match Self::find(&request, environments, preference, cache) {
+        match Self::find(request, environments, preference, cache) {
             Ok(venv) => Ok(venv),
             // If missing and allowed, perform a fetch
             Err(Error::MissingPython(err))
@@ -97,7 +98,7 @@ impl PythonInstallation {
                     && python_downloads.is_automatic()
                     && client_builder.connectivity.is_online() =>
             {
-                if let Some(request) = PythonDownloadRequest::from_request(&request) {
+                if let Some(request) = PythonDownloadRequest::from_request(request) {
                     debug!("Requested Python not found, checking for available download...");
                     match Self::fetch(request.fill()?, client_builder, cache, reporter).await {
                         Ok(installation) => Ok(installation),
@@ -124,7 +125,7 @@ impl PythonInstallation {
         let installations = ManagedPythonInstallations::from_settings()?.init()?;
         let installations_dir = installations.root();
         let cache_dir = installations.cache();
-        let _lock = installations.acquire_lock()?;
+        let _lock = installations.lock().await?;
 
         let download = ManagedPythonDownload::from_request(&request)?;
         let client = client_builder.build();
@@ -175,6 +176,16 @@ impl PythonInstallation {
         LenientImplementationName::from(self.interpreter.implementation_name())
     }
 
+    /// Whether this is a CPython installation.
+    ///
+    /// Returns false if it is an alternative implementation, e.g., PyPy.
+    pub(crate) fn is_alternative_implementation(&self) -> bool {
+        !matches!(
+            self.implementation(),
+            LenientImplementationName::Known(ImplementationName::CPython)
+        )
+    }
+
     /// Return the [`Arch`] of the Python installation as reported by its interpreter.
     pub fn arch(&self) -> Arch {
         self.interpreter.arch()
@@ -212,6 +223,7 @@ pub struct PythonInstallationKey {
     pub(crate) major: u8,
     pub(crate) minor: u8,
     pub(crate) patch: u8,
+    pub(crate) prerelease: Option<Prerelease>,
     pub(crate) os: Os,
     pub(crate) arch: Arch,
     pub(crate) libc: Libc,
@@ -223,6 +235,7 @@ impl PythonInstallationKey {
         major: u8,
         minor: u8,
         patch: u8,
+        prerelease: Option<Prerelease>,
         os: Os,
         arch: Arch,
         libc: Libc,
@@ -232,6 +245,26 @@ impl PythonInstallationKey {
             major,
             minor,
             patch,
+            prerelease,
+            os,
+            arch,
+            libc,
+        }
+    }
+
+    pub fn new_from_version(
+        implementation: LenientImplementationName,
+        version: &PythonVersion,
+        os: Os,
+        arch: Arch,
+        libc: Libc,
+    ) -> Self {
+        Self {
+            implementation,
+            major: version.major(),
+            minor: version.minor(),
+            patch: version.patch().unwrap_or_default(),
+            prerelease: version.pre(),
             os,
             arch,
             libc,
@@ -243,8 +276,16 @@ impl PythonInstallationKey {
     }
 
     pub fn version(&self) -> PythonVersion {
-        PythonVersion::from_str(&format!("{}.{}.{}", self.major, self.minor, self.patch))
-            .expect("Python installation keys must have valid Python versions")
+        PythonVersion::from_str(&format!(
+            "{}.{}.{}{}",
+            self.major,
+            self.minor,
+            self.patch,
+            self.prerelease
+                .map(|pre| pre.to_string())
+                .unwrap_or_default()
+        ))
+        .expect("Python installation keys must have valid Python versions")
     }
 
     pub fn arch(&self) -> &Arch {
@@ -264,8 +305,17 @@ impl fmt::Display for PythonInstallationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}-{}.{}.{}-{}-{}-{}",
-            self.implementation, self.major, self.minor, self.patch, self.os, self.arch, self.libc
+            "{}-{}.{}.{}{}-{}-{}-{}",
+            self.implementation,
+            self.major,
+            self.minor,
+            self.patch,
+            self.prerelease
+                .map(|pre| pre.to_string())
+                .unwrap_or_default(),
+            self.os,
+            self.arch,
+            self.libc
         )
     }
 }
@@ -299,28 +349,16 @@ impl FromStr for PythonInstallationKey {
             PythonInstallationKeyError::ParseError(key.to_string(), format!("invalid libc: {err}"))
         })?;
 
-        let [major, minor, patch] = version
-            .splitn(3, '.')
-            .map(str::parse::<u8>)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|err| {
-                PythonInstallationKeyError::ParseError(
-                    key.to_string(),
-                    format!("invalid Python version: {err}"),
-                )
-            })?[..]
-        else {
-            return Err(PythonInstallationKeyError::ParseError(
+        let version = PythonVersion::from_str(version).map_err(|err| {
+            PythonInstallationKeyError::ParseError(
                 key.to_string(),
-                "invalid Python version: expected `<major>.<minor>.<patch>`".to_string(),
-            ));
-        };
+                format!("invalid Python version: {err}"),
+            )
+        })?;
 
-        Ok(Self::new(
+        Ok(Self::new_from_version(
             implementation,
-            major,
-            minor,
-            patch,
+            &version,
             os,
             arch,
             libc,

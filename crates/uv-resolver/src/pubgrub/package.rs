@@ -1,12 +1,14 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use pep508_rs::{MarkerTree, MarkerTreeContents};
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep508::{MarkerTree, MarkerTreeContents};
+
+use crate::python_requirement::PythonRequirement;
 
 /// [`Arc`] wrapper around [`PubGrubPackageInner`] to make cloning (inside PubGrub) cheap.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct PubGrubPackage(Arc<PubGrubPackageInner>);
+pub(crate) struct PubGrubPackage(Arc<PubGrubPackageInner>);
 
 impl Deref for PubGrubPackage {
     type Target = PubGrubPackageInner;
@@ -36,7 +38,7 @@ impl From<PubGrubPackageInner> for PubGrubPackage {
 ///    package (e.g., `black[colorama]`), and mark it as a dependency of the real package (e.g.,
 ///    `black`). We then discard the virtual packages at the end of the resolution process.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub enum PubGrubPackageInner {
+pub(crate) enum PubGrubPackageInner {
     /// The root package, which is used to start the resolution process.
     Root(Option<PackageName>),
     /// A Python version.
@@ -85,7 +87,8 @@ pub enum PubGrubPackageInner {
     /// rather than the `Marker` variant.
     Marker {
         name: PackageName,
-        marker: MarkerTreeContents,
+        /// The marker associated with this proxy package.
+        marker: MarkerTree,
     },
 }
 
@@ -101,15 +104,16 @@ impl PubGrubPackage {
         // extras end up having two distinct marker expressions, which in turn
         // makes them two distinct packages. This results in PubGrub being
         // unable to unify version constraints across such packages.
-        let marker = marker.simplify_extras_with(|_| true).contents();
+        let tree = marker.simplify_extras_with(|_| true);
+        let marker = tree.contents();
         if let Some(extra) = extra {
             Self(Arc::new(PubGrubPackageInner::Extra {
                 name,
                 extra,
                 marker,
             }))
-        } else if let Some(marker) = marker {
-            Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
+        } else if marker.is_some() {
+            Self(Arc::new(PubGrubPackageInner::Marker { name, marker: tree }))
         } else {
             Self(Arc::new(PubGrubPackageInner::Package {
                 name,
@@ -158,12 +162,12 @@ impl PubGrubPackage {
             | PubGrubPackageInner::Dev { marker, .. } => {
                 marker.as_ref().map(MarkerTreeContents::as_ref)
             }
-            PubGrubPackageInner::Marker { marker, .. } => Some(marker.as_ref()),
+            PubGrubPackageInner::Marker { marker, .. } => Some(marker),
         }
     }
 
     /// Returns `true` if this PubGrub package is a proxy package.
-    pub fn is_proxy(&self) -> bool {
+    pub(crate) fn is_proxy(&self) -> bool {
         matches!(
             &**self,
             PubGrubPackageInner::Extra { .. }
@@ -171,10 +175,51 @@ impl PubGrubPackage {
                 | PubGrubPackageInner::Marker { .. }
         )
     }
+
+    /// This simplifies the markers on this package (if any exist) using the
+    /// given Python requirement as assumed context.
+    ///
+    /// See `RequiresPython::simplify_markers` for more details.
+    ///
+    /// NOTE: This routine is kind of weird, because this should only really be
+    /// applied in contexts where the `PubGrubPackage` is printed as output.
+    /// So in theory, this should be a transformation into a new type with a
+    /// "printable" `PubGrubPackage` coupled with a `Requires-Python`. But at
+    /// time of writing, this was a larger refactor, particularly in the error
+    /// reporting where this routine is used.
+    pub(crate) fn simplify_markers(&mut self, python_requirement: &PythonRequirement) {
+        match *Arc::make_mut(&mut self.0) {
+            PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => {}
+            PubGrubPackageInner::Package { ref mut marker, .. }
+            | PubGrubPackageInner::Extra { ref mut marker, .. }
+            | PubGrubPackageInner::Dev { ref mut marker, .. } => {
+                let Some(contents) = marker.as_mut() else {
+                    return;
+                };
+                let tree = MarkerTree::from(contents.clone());
+                *marker = python_requirement.simplify_markers(tree).contents();
+            }
+            PubGrubPackageInner::Marker { ref mut marker, .. } => {
+                *marker = python_requirement.simplify_markers(marker.clone());
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn kind(&self) -> &'static str {
+        match &**self {
+            PubGrubPackageInner::Root(_) => "root",
+            PubGrubPackageInner::Python(_) => "python",
+            PubGrubPackageInner::Package { .. } => "package",
+            PubGrubPackageInner::Extra { .. } => "extra",
+            PubGrubPackageInner::Dev { .. } => "dev",
+            PubGrubPackageInner::Marker { .. } => "marker",
+        }
+    }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
-pub enum PubGrubPython {
+#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
+pub(crate) enum PubGrubPython {
     /// The Python version installed in the current environment.
     Installed,
     /// The Python version for which dependencies are being resolved.
@@ -234,7 +279,13 @@ impl std::fmt::Display for PubGrubPackageInner {
             } => {
                 write!(f, "{name}[{dev}]{{{marker}}}")
             }
-            Self::Marker { name, marker, .. } => write!(f, "{name}{{{marker}}}"),
+            Self::Marker { name, marker, .. } => {
+                if let Some(marker) = marker.contents() {
+                    write!(f, "{name}{{{marker}}}")
+                } else {
+                    write!(f, "{name}")
+                }
+            }
             Self::Extra { name, extra, .. } => write!(f, "{name}[{extra}]"),
             Self::Dev { name, dev, .. } => write!(f, "{name}:{dev}"),
             // It is guaranteed that `extra` and `dev` are never set at the same time.

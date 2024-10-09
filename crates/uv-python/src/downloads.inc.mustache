@@ -3,6 +3,8 @@
 // Generated with `{{generated_with}}`
 // From template at `{{generated_from}}`
 
+use uv_pep440::{Prerelease, PrereleaseKind};
+
 pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
     {{#versions}}
     ManagedPythonDownload {
@@ -10,6 +12,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: {{value.major}},
             minor: {{value.minor}},
             patch: {{value.patch}},
+            prerelease: {{value.prerelease}},
             implementation: LenientImplementationName::Known(ImplementationName::{{value.name}}),
             arch: Arch(target_lexicon::Architecture::{{value.arch}}),
             os: Os(target_lexicon::OperatingSystem::{{value.os}}),

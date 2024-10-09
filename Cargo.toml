@@ -4,12 +4,16 @@ exclude = [
   "scripts",
   # Needs nightly
   "crates/uv-trampoline",
+  # Only used to pull in features, allocators, etc. — we specifically don't want them
+  # to be part of a workspace-wide cargo check, cargo clippy, etc.
+  "crates/uv-performance-memory-allocator",
+  "crates/uv-performance-flate2-backend",
 ]
 resolver = "2"
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.81"
 homepage = "https://pypi.org/project/uv/"
 documentation = "https://pypi.org/project/uv/"
 repository = "https://github.com/astral-sh/uv"
@@ -17,35 +21,40 @@ authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-cache-key = { path = "crates/cache-key" }
-distribution-filename = { path = "crates/distribution-filename" }
-distribution-types = { path = "crates/distribution-types" }
-install-wheel-rs = { path = "crates/install-wheel-rs", default-features = false }
-once-map = { path = "crates/once-map" }
-pep440_rs = { path = "crates/pep440-rs" }
-pep508_rs = { path = "crates/pep508-rs", features = ["non-pep508-extensions"] }
-platform-tags = { path = "crates/platform-tags" }
-pypi-types = { path = "crates/pypi-types" }
-requirements-txt = { path = "crates/requirements-txt" }
 uv-auth = { path = "crates/uv-auth" }
-uv-build = { path = "crates/uv-build" }
+uv-build-backend = { path = "crates/uv-build-backend" }
+uv-build-frontend = { path = "crates/uv-build-frontend" }
 uv-cache = { path = "crates/uv-cache" }
+uv-cache-info = { path = "crates/uv-cache-info" }
+uv-cache-key = { path = "crates/uv-cache-key" }
 uv-cli = { path = "crates/uv-cli" }
 uv-client = { path = "crates/uv-client" }
 uv-configuration = { path = "crates/uv-configuration" }
+uv-console = { path = "crates/uv-console" }
 uv-dispatch = { path = "crates/uv-dispatch" }
 uv-distribution = { path = "crates/uv-distribution" }
+uv-distribution-filename = { path = "crates/uv-distribution-filename" }
+uv-distribution-types = { path = "crates/uv-distribution-types" }
 uv-extract = { path = "crates/uv-extract" }
 uv-fs = { path = "crates/uv-fs" }
 uv-git = { path = "crates/uv-git" }
+uv-install-wheel = { path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { path = "crates/uv-installer" }
 uv-macros = { path = "crates/uv-macros" }
+uv-metadata = { path = "crates/uv-metadata" }
 uv-normalize = { path = "crates/uv-normalize" }
+uv-once-map = { path = "crates/uv-once-map" }
 uv-options-metadata = { path = "crates/uv-options-metadata" }
+uv-pep440 = { path = "crates/uv-pep440", features = ["tracing"] }
+uv-pep508 = { path = "crates/uv-pep508", features = ["non-pep508-extensions"] }
+uv-platform-tags = { path = "crates/uv-platform-tags" }
+uv-pubgrub = { path = "crates/uv-pubgrub" }
+uv-publish = { path = "crates/uv-publish" }
+uv-pypi-types = { path = "crates/uv-pypi-types" }
 uv-python = { path = "crates/uv-python" }
 uv-requirements = { path = "crates/uv-requirements" }
+uv-requirements-txt = { path = "crates/uv-requirements-txt" }
 uv-resolver = { path = "crates/uv-resolver" }
-uv-pubgrub = { path = "crates/uv-pubgrub" }
 uv-scripts = { path = "crates/uv-scripts" }
 uv-settings = { path = "crates/uv-settings" }
 uv-shell = { path = "crates/uv-shell" }
@@ -57,110 +66,113 @@ uv-virtualenv = { path = "crates/uv-virtualenv" }
 uv-warnings = { path = "crates/uv-warnings" }
 uv-workspace = { path = "crates/uv-workspace" }
 
-anstream = { version = "0.6.13" }
-anyhow = { version = "1.0.80" }
-async-channel = { version = "2.2.0" }
-async-compression = { version = "0.4.6" }
-async-trait = { version = "0.1.78" }
+anstream = { version = "0.6.15" }
+anyhow = { version = "1.0.89" }
+async-channel = { version = "2.3.1" }
+async-compression = { version = "0.4.12" }
+async-trait = { version = "0.1.82" }
 async_http_range_reader = { version = "0.8.0" }
-async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "011b24604fa7bc223daaad7712c0694bac8f0a87", features = ["deflate"] }
-axoupdater = { version = "0.7.0", default-features = false }
+async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "011b24604fa7bc223daaad7712c0694bac8f0a87", features = ["deflate", "tokio"] }
+axoupdater = { version = "0.7.2", default-features = false }
 backoff = { version = "0.4.0" }
-base64 = { version = "0.22.0" }
+base64 = { version = "0.22.1" }
 boxcar = { version = "0.2.5" }
+bytecheck = { version = "0.8.0" }
 cachedir = { version = "0.3.1" }
-cargo-util = { version = "0.2.8" }
-clap = { version = "4.5.9" }
-clap_complete_command = { version = "0.6.0" }
-configparser = { version = "3.0.4" }
+cargo-util = { version = "0.2.14" }
+clap = { version = "4.5.17" }
+clap_complete_command = { version = "0.6.1" }
+configparser = { version = "3.1.0" }
 console = { version = "0.15.8", default-features = false }
 csv = { version = "1.3.0" }
-ctrlc = { version = "3.4.4" }
-dashmap = { version = "6.0.0" }
-data-encoding = { version = "2.5.0" }
-derivative = { version = "2.2.0" }
+ctrlc = { version = "3.4.5" }
+dashmap = { version = "6.1.0" }
+data-encoding = { version = "2.6.0" }
 directories = { version = "5.0.1" }
 dirs-sys = { version = "0.4.1" }
-dunce = { version = "1.0.4" }
-either = { version = "1.12.0" }
+dunce = { version = "1.0.5" }
+either = { version = "1.13.0" }
 encoding_rs_io = { version = "0.1.7" }
 etcetera = { version = "0.8.0" }
-flate2 = { version = "1.0.28", default-features = false }
+flate2 = { version = "1.0.33", default-features = false }
 fs-err = { version = "2.11.0" }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }
+globwalk = { version = "0.9.1" }
 goblin = { version = "0.8.2", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
 hex = { version = "0.4.3" }
 home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
 http = { version = "1.1.0" }
-indexmap = { version = "2.2.5" }
-indicatif = { version = "0.17.7" }
-indoc = { version = "2.0.4" }
+indexmap = { version = "2.5.0" }
+indicatif = { version = "0.17.8" }
+indoc = { version = "2.0.5" }
 itertools = { version = "0.13.0" }
-jiff = { version = "0.1.6", features = ["serde"] }
-junction = { version = "1.0.0" }
+jiff = { version = "0.1.13", features = ["serde"] }
+junction = { version = "1.2.0" }
+krata-tokio-tar = { version = "0.4.2" }
 mailparse = { version = "0.15.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
 miette = { version = "7.2.0" }
 nanoid = { version = "0.4.0" }
-owo-colors = { version = "4.0.0" }
+owo-colors = { version = "4.1.0" }
 path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
-petgraph = { version = "0.6.4" }
-platform-info = { version = "2.0.2" }
+petgraph = { version = "0.6.5" }
+platform-info = { version = "2.0.3" }
 proc-macro2 = { version = "1.0.86" }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "388685a8711092971930986644cfed152d1a1f6c" }
-pyo3 = { version = "0.21.0" }
-pyo3-log = { version = "0.10.0" }
-quote = { version = "1.0.36" }
-rayon = { version = "1.8.0" }
-reflink-copy = { version = "0.1.15" }
-regex = { version = "1.10.2" }
-reqwest = { version = "0.12.3", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls", "rustls-tls-native-roots"] }
-reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
+quote = { version = "1.0.37" }
+rayon = { version = "1.10.0" }
+reflink-copy = { version = "0.1.19" }
+regex = { version = "1.10.6" }
+reqwest = { version = "0.12.7", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2"] }
+reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913", features = ["multipart"] }
 reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
-rkyv = { version = "0.7.43", features = ["strict", "validation"] }
-rmp-serde = { version = "1.1.2" }
-rust-netrc = { version = "0.1.1" }
+rkyv = { version = "0.8.8", features = ["bytecheck"] }
+rmp-serde = { version = "1.3.0" }
+rust-netrc = { git = "https://github.com/gribouille/netrc", rev = "544f3890b621f0dc30fcefb4f804269c160ce2e9" }
 rustc-hash = { version = "2.0.0" }
-rustix = { version = "0.38.34", default-features = false, features = ["fs", "std"] }
+rustix = { version = "0.38.37", default-features = false, features = ["fs", "std"] }
 same-file = { version = "1.0.6" }
-schemars = { version = "0.8.16", features = ["url"] }
+schemars = { version = "0.8.21", features = ["url"] }
 seahash = { version = "4.1.0" }
-serde = { version = "1.0.197", features = ["derive"] }
-serde_json = { version = "1.0.114" }
+serde = { version = "1.0.210", features = ["derive"] }
+serde-untagged = { version = "0.1.6" }
+serde_json = { version = "1.0.128" }
 sha2 = { version = "0.10.8" }
 smallvec = { version = "1.13.2" }
-syn = { version = "2.0.66" }
+spdx = { version = "0.10.6" }
+syn = { version = "2.0.77" }
 sys-info = { version = "0.9.1" }
-target-lexicon = { version = "0.12.14" }
-tempfile = { version = "3.9.0" }
+target-lexicon = { version = "0.12.16" }
+tempfile = { version = "3.12.0" }
 textwrap = { version = "0.16.1" }
-thiserror = { version = "1.0.56" }
+thiserror = { version = "1.0.63" }
 tl = { git = "https://github.com/charliermarsh/tl.git", rev = "6e25b2ee2513d75385101a8ff9f591ef51f314ec" }
-tokio = { version = "1.35.1", features = ["fs", "io-util", "macros", "process", "signal", "sync"] }
-tokio-stream = { version = "0.1.14" }
-tokio-tar = { version = "0.3.1" }
-tokio-util = { version = "0.7.10", features = ["compat"] }
-toml = { version = "0.8.12" }
-toml_edit = { version = "0.22.13" }
+tokio = { version = "1.40.0", features = ["fs", "io-util", "macros", "process", "signal", "sync"] }
+tokio-stream = { version = "0.1.16" }
+tokio-util = { version = "0.7.12", features = ["compat"] }
+toml = { version = "0.8.19" }
+toml_edit = { version = "0.22.21", features = ["serde"] }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.3.0", features = ["plot"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "registry"] }
 tracing-tree = { version = "0.4.0" }
-unicode-width = { version = "0.1.11" }
+unicode-width = { version = "0.1.13" }
 unscanny = { version = "0.1.0" }
-url = { version = "2.5.0" }
+url = { version = "2.5.2" }
 urlencoding = { version = "2.1.3" }
 walkdir = { version = "2.5.0" }
-which = { version = "6.0.0", features = ["regex"] }
-windows-sys = { version = "0.52.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
+which = { version = "6.0.3", features = ["regex"] }
+windows-registry = { version = "0.2.0" }
+windows-result = { version = "0.2.0" }
+windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
 winreg = { version = "0.52.0" }
 winsafe = { version = "0.0.22", features = ["kernel"] }
-wiremock = { version = "0.6.0" }
+wiremock = { version = "0.6.2" }
 xz2 = { version = "0.1.7" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 
@@ -168,9 +180,6 @@ zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 ignored = ["flate2", "xz2"]
 
 [patch.crates-io]
-# For pyproject-toml
-pep440_rs = { path = "crates/pep440-rs" }
-pep508_rs = { path = "crates/pep508-rs" }
 reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
 
 [workspace.lints.rust]
@@ -191,8 +200,9 @@ missing_panics_doc = "allow"
 module_name_repetitions = "allow"
 must_use_candidate = "allow"
 similar_names = "allow"
-too_many_lines = "allow"
 too_many_arguments = "allow"
+too_many_lines = "allow"
+used_underscore_binding = "allow"
 # Disallowed restriction lints
 print_stdout = "warn"
 print_stderr = "warn"
@@ -268,9 +278,9 @@ inherits = "release"
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.18.0"
+cargo-dist-version = "0.22.1"
 # CI backends to support
-ci = ["github"]
+ci = "github"
 # The installers to generate for each app
 installers = ["shell", "powershell"]
 # The archive format to use for windows builds (defaults .zip)
@@ -298,13 +308,13 @@ targets = [
 ]
 # Whether to auto-include files like READMEs, LICENSEs, and CHANGELOGs (default true)
 auto-includes = false
-# Whether cargo-dist should create a GitHub Release or use an existing draft
+# Whether cargo-dist should create a Github Release or use an existing draft
 create-release = true
-# Publish jobs to run in CI
+# Which actions to run on pull requests
 pr-run-mode = "skip"
 # Whether CI should trigger releases with dispatches instead of tag pushes
 dispatch-releases = true
-# The stage during which the GitHub Release should be created
+# Which phase cargo-dist should use to create the GitHub release
 github-release = "announce"
 # Whether CI should include auto-generated code to build local artifacts
 build-local-artifacts = false
@@ -312,9 +322,11 @@ build-local-artifacts = false
 local-artifacts-jobs = ["./build-binaries", "./build-docker"]
 # Publish jobs to run in CI
 publish-jobs = ["./publish-pypi"]
-# Announcement jobs to run in CI
+# Post-announce jobs to run in CI
 post-announce-jobs = ["./publish-docs"]
 # Custom permissions for GitHub Jobs
 github-custom-job-permissions = { "build-docker" = { packages = "write", contents = "read" } }
 # Whether to install an updater program
 install-updater = false
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"

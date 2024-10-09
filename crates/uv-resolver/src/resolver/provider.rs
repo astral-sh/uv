@@ -1,10 +1,10 @@
 use std::future::Future;
 
-use distribution_types::{Dist, IndexLocations};
-use platform_tags::Tags;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution_types::Dist;
 use uv_normalize::PackageName;
+use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
 
 use crate::flat_index::FlatIndex;
@@ -35,11 +35,11 @@ pub enum MetadataResponse {
     /// The wheel metadata was not found.
     MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
-    InvalidMetadata(Box<pypi_types::MetadataError>),
+    InvalidMetadata(Box<uv_pypi_types::MetadataError>),
     /// The wheel metadata was found, but the metadata was inconsistent.
     InconsistentMetadata(Box<uv_distribution::Error>),
     /// The wheel has an invalid structure.
-    InvalidStructure(Box<install_wheel_rs::Error>),
+    InvalidStructure(Box<uv_metadata::Error>),
     /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
 }
@@ -61,8 +61,6 @@ pub trait ResolverProvider {
         dist: &'io Dist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
-    fn index_locations(&self) -> &IndexLocations;
-
     /// Set the [`uv_distribution::Reporter`] to use for this installer.
     #[must_use]
     fn with_reporter(self, reporter: impl uv_distribution::Reporter + 'static) -> Self;
@@ -76,7 +74,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     /// These are the entries from `--find-links` that act as overrides for index responses.
     flat_index: FlatIndex,
     tags: Option<Tags>,
-    requires_python: Option<RequiresPython>,
+    requires_python: RequiresPython,
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
     exclude_newer: Option<ExcludeNewer>,
@@ -89,7 +87,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         fetcher: DistributionDatabase<'a, Context>,
         flat_index: &'a FlatIndex,
         tags: Option<&'a Tags>,
-        requires_python: Option<&'a RequiresPython>,
+        requires_python: &'a RequiresPython,
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
@@ -99,7 +97,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             fetcher,
             flat_index: flat_index.clone(),
             tags: tags.cloned(),
-            requires_python: requires_python.cloned(),
+            requires_python: requires_python.clone(),
             allowed_yanks,
             hasher: hasher.clone(),
             exclude_newer,
@@ -130,7 +128,7 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                             package_name,
                             &index,
                             self.tags.as_ref(),
-                            self.requires_python.as_ref(),
+                            &self.requires_python,
                             &self.allowed_yanks,
                             &self.hasher,
                             self.exclude_newer.as_ref(),
@@ -183,7 +181,7 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                     uv_client::ErrorKind::MetadataParseError(_, _, err) => {
                         Ok(MetadataResponse::InvalidMetadata(err))
                     }
-                    uv_client::ErrorKind::DistInfo(err) => {
+                    uv_client::ErrorKind::Metadata(_, err) => {
                         Ok(MetadataResponse::InvalidStructure(Box::new(err)))
                     }
                     kind => Err(uv_client::Error::from(kind).into()),
@@ -197,16 +195,12 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                 uv_distribution::Error::Metadata(err) => {
                     Ok(MetadataResponse::InvalidMetadata(Box::new(err)))
                 }
-                uv_distribution::Error::DistInfo(err) => {
-                    Ok(MetadataResponse::InvalidStructure(Box::new(err)))
+                uv_distribution::Error::WheelMetadata(_, err) => {
+                    Ok(MetadataResponse::InvalidStructure(err))
                 }
                 err => Err(err),
             },
         }
-    }
-
-    fn index_locations(&self) -> &IndexLocations {
-        self.fetcher.index_locations()
     }
 
     /// Set the [`uv_distribution::Reporter`] to use for this installer.

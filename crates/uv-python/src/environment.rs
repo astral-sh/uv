@@ -1,10 +1,11 @@
+use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-
 use uv_cache::Cache;
+use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, Simplified};
 
 use crate::discovery::find_python_installation;
@@ -34,6 +35,17 @@ pub struct EnvironmentNotFound {
     preference: EnvironmentPreference,
 }
 
+#[derive(Clone, Debug, Error)]
+pub struct InvalidEnvironment {
+    path: PathBuf,
+    pub kind: InvalidEnvironmentKind,
+}
+#[derive(Debug, Clone)]
+pub enum InvalidEnvironmentKind {
+    NotDirectory,
+    MissingExecutable(PathBuf),
+}
+
 impl From<PythonNotFound> for EnvironmentNotFound {
     fn from(value: PythonNotFound) -> Self {
         Self {
@@ -45,25 +57,76 @@ impl From<PythonNotFound> for EnvironmentNotFound {
 
 impl fmt::Display for EnvironmentNotFound {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let environment = match self.preference {
-            EnvironmentPreference::Any => "virtual or system environment",
-            EnvironmentPreference::ExplicitSystem => {
-                if self.request.is_explicit_system() {
-                    "virtual or system environment"
-                } else {
-                    // TODO(zanieb): We could add a hint to use the `--system` flag here
-                    "virtual environment"
+        #[derive(Debug, Copy, Clone)]
+        enum SearchType {
+            /// Only virtual environments were searched.
+            Virtual,
+            /// Only system installations were searched.
+            System,
+            /// Both virtual and system installations were searched.
+            VirtualOrSystem,
+        }
+
+        impl fmt::Display for SearchType {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                match self {
+                    Self::Virtual => write!(f, "virtual environment"),
+                    Self::System => write!(f, "system Python installation"),
+                    Self::VirtualOrSystem => {
+                        write!(f, "virtual environment or system Python installation")
+                    }
                 }
             }
-            EnvironmentPreference::OnlySystem => "system environment",
-            EnvironmentPreference::OnlyVirtual => "virtual environment",
-        };
-        match self.request {
-            PythonRequest::Any => {
-                write!(f, "No {environment} found")
+        }
+
+        let search_type = match self.preference {
+            EnvironmentPreference::Any => SearchType::VirtualOrSystem,
+            EnvironmentPreference::ExplicitSystem => {
+                if self.request.is_explicit_system() {
+                    SearchType::VirtualOrSystem
+                } else {
+                    SearchType::Virtual
+                }
             }
-            _ => {
-                write!(f, "No {environment} found for {}", self.request)
+            EnvironmentPreference::OnlySystem => SearchType::System,
+            EnvironmentPreference::OnlyVirtual => SearchType::Virtual,
+        };
+
+        if matches!(self.request, PythonRequest::Default | PythonRequest::Any) {
+            write!(f, "No {search_type} found")?;
+        } else {
+            write!(f, "No {search_type} found for {}", self.request)?;
+        }
+
+        match search_type {
+            // This error message assumes that the relevant API accepts the `--system` flag. This
+            // is true of the callsites today, since the project APIs never surface this error.
+            SearchType::Virtual => write!(f, "; run `{}` to create an environment, or pass `{}` to install into a non-virtual environment", "uv venv".green(), "--system".green())?,
+            SearchType::VirtualOrSystem => write!(f, "; run `{}` to create an environment", "uv venv".green())?,
+            SearchType::System => {}
+        }
+
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for InvalidEnvironment {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "Invalid environment at `{}`: {}",
+            self.path.user_display(),
+            self.kind
+        )
+    }
+}
+
+impl std::fmt::Display for InvalidEnvironmentKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::NotDirectory => write!(f, "expected directory but found a file"),
+            Self::MissingExecutable(path) => {
+                write!(f, "missing Python executable at `{}`", path.user_display())
             }
         }
     }
@@ -93,6 +156,8 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] from the virtual environment at the given root.
+    ///
+    /// N.B. This function also works for system Python environments and users depend on this.
     pub fn from_root(root: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
         let venv = match fs_err::canonicalize(root.as_ref()) {
             Ok(venv) => venv,
@@ -104,7 +169,28 @@ impl PythonEnvironment {
             }
             Err(err) => return Err(Error::Discovery(err.into())),
         };
-        let executable = virtualenv_python_executable(venv);
+
+        if venv.is_file() {
+            return Err(InvalidEnvironment {
+                path: venv,
+                kind: InvalidEnvironmentKind::NotDirectory,
+            }
+            .into());
+        }
+
+        let executable = virtualenv_python_executable(&venv);
+
+        // Check if the executable exists before querying so we can provide a more specific error
+        // Note we intentionally don't require a resolved link to exist here, we're just trying to
+        // tell if this _looks_ like a Python environment.
+        if !(executable.is_symlink() || executable.is_file()) {
+            return Err(InvalidEnvironment {
+                path: venv,
+                kind: InvalidEnvironmentKind::MissingExecutable(executable.clone()),
+            }
+            .into());
+        };
+
         let interpreter = Interpreter::query(executable, cache)?;
 
         Ok(Self(Arc::new(PythonEnvironmentShared {
@@ -189,22 +275,23 @@ impl PythonEnvironment {
     }
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
+    pub async fn lock(&self) -> Result<LockedFile, std::io::Error> {
         if let Some(target) = self.0.interpreter.target() {
             // If we're installing into a `--target`, use a target-specific lockfile.
-            LockedFile::acquire(target.root().join(".lock"), target.root().user_display())
+            LockedFile::acquire(target.root().join(".lock"), target.root().user_display()).await
         } else if let Some(prefix) = self.0.interpreter.prefix() {
             // Likewise, if we're installing into a `--prefix`, use a prefix-specific lockfile.
-            LockedFile::acquire(prefix.root().join(".lock"), prefix.root().user_display())
+            LockedFile::acquire(prefix.root().join(".lock"), prefix.root().user_display()).await
         } else if self.0.interpreter.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lockfile.
-            LockedFile::acquire(self.0.root.join(".lock"), self.0.root.user_display())
+            LockedFile::acquire(self.0.root.join(".lock"), self.0.root.user_display()).await
         } else {
             // Otherwise, use a global lockfile.
             LockedFile::acquire(
-                env::temp_dir().join(format!("uv-{}.lock", cache_key::cache_digest(&self.0.root))),
+                env::temp_dir().join(format!("uv-{}.lock", cache_digest(&self.0.root))),
                 self.0.root.user_display(),
             )
+            .await
         }
     }
 
@@ -213,5 +300,27 @@ impl PythonEnvironment {
     /// See also [`PythonEnvironment::interpreter`].
     pub fn into_interpreter(self) -> Interpreter {
         Arc::unwrap_or_clone(self.0).interpreter
+    }
+
+    /// Returns `true` if the [`PythonEnvironment`] uses the same underlying [`Interpreter`].
+    pub fn uses(&self, interpreter: &Interpreter) -> bool {
+        // TODO(zanieb): Consider using `sysconfig.get_path("stdlib")` instead, which
+        // should be generally robust.
+        if cfg!(windows) {
+            // On Windows, we can't canonicalize an interpreter based on its executable path
+            // because the executables are separate shim files (not links). Instead, we
+            // compare the `sys.base_prefix`.
+            let old_base_prefix = self.interpreter().sys_base_prefix();
+            let selected_base_prefix = interpreter.sys_base_prefix();
+            old_base_prefix == selected_base_prefix
+        } else {
+            // On Unix, we can see if the canonicalized executable is the same file.
+            self.interpreter().sys_executable() == interpreter.sys_executable()
+                || same_file::is_same_file(
+                    self.interpreter().sys_executable(),
+                    interpreter.sys_executable(),
+                )
+                .unwrap_or(false)
+        }
     }
 }

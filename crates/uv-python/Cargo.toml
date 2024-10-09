@@ -13,17 +13,18 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-cache-key = { workspace = true }
-distribution-filename = { workspace = true }
-install-wheel-rs = { workspace = true }
-pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
-platform-tags = { workspace = true }
-pypi-types = { workspace = true }
 uv-cache = { workspace = true }
+uv-cache-info = { workspace = true }
+uv-cache-key = { workspace = true }
 uv-client = { workspace = true }
+uv-distribution-filename = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
+uv-install-wheel = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-platform-tags = { workspace = true }
+uv-pypi-types = { workspace = true }
 uv-state = { workspace = true }
 uv-warnings = { workspace = true }
 
@@ -52,18 +53,16 @@ tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
 
-[target.'cfg(any(unix, target_os = "wasi", target_os = "redox"))'.dependencies]
-rustix = { workspace = true }
-
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true }
-winsafe = { workspace = true }
+windows-registry = { workspace = true }
+windows-result = { workspace = true }
 
 [dev-dependencies]
-anyhow = { version = "1.0.80" }
-assert_fs = { version = "1.1.1" }
-indoc = { version = "2.0.4" }
+anyhow = { version = "1.0.89" }
+assert_fs = { version = "1.1.2" }
+indoc = { version = "2.0.5" }
 itertools = { version = "0.13.0" }
 temp-env = { version = "0.3.6" }
-tempfile = { version = "3.9.0" }
-test-log = { version = "0.2.15", features = ["trace"], default-features = false }
+tempfile = { version = "3.12.0" }
+test-log = { version = "0.2.16", features = ["trace"], default-features = false }

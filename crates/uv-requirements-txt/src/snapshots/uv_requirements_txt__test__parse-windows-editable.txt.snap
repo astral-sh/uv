@@ -1,0 +1,344 @@
+---
+source: crates/requirements-txt/src/lib.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [],
+    constraints: [],
+    editables: [
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/editable",
+                                editable: true,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./editable",
+                            ),
+                        },
+                    },
+                    extras: [
+                        ExtraName(
+                            "d",
+                        ),
+                        ExtraName(
+                            "dev",
+                        ),
+                    ],
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/editable.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/editable",
+                                editable: true,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./editable",
+                            ),
+                        },
+                    },
+                    extras: [
+                        ExtraName(
+                            "d",
+                        ),
+                        ExtraName(
+                            "dev",
+                        ),
+                    ],
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/editable.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/editable",
+                                editable: true,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./editable",
+                            ),
+                        },
+                    },
+                    extras: [
+                        ExtraName(
+                            "d",
+                        ),
+                        ExtraName(
+                            "dev",
+                        ),
+                    ],
+                    marker: python_full_version >= '3.9' and os_name == 'posix',
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/editable.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/editable",
+                                editable: true,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./editable",
+                            ),
+                        },
+                    },
+                    extras: [
+                        ExtraName(
+                            "d",
+                        ),
+                        ExtraName(
+                            "dev",
+                        ),
+                    ],
+                    marker: python_full_version >= '3.9' and os_name == 'posix',
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/editable.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/editable",
+                                editable: true,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./editable",
+                            ),
+                        },
+                    },
+                    extras: [],
+                    marker: python_full_version >= '3.9' and os_name == 'posix',
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/editable.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/editable[d",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/editable[d",
+                                editable: true,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/editable[d",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./editable[d",
+                            ),
+                        },
+                    },
+                    extras: [],
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/editable.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+    ],
+    index_url: None,
+    extra_index_urls: [],
+    find_links: [],
+    no_index: false,
+    no_binary: None,
+    only_binary: None,
+}

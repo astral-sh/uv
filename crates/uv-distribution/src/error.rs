@@ -1,16 +1,17 @@
 use std::path::PathBuf;
 
+use owo_colors::OwoColorize;
 use tokio::task::JoinError;
 use url::Url;
 use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
-use distribution_filename::WheelFilenameError;
-use pep440_rs::Version;
-use pypi_types::{HashDigest, ParsedUrlError};
 use uv_client::WrappedReqwestError;
+use uv_distribution_filename::WheelFilenameError;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pypi_types::{HashDigest, ParsedUrlError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -25,7 +26,7 @@ pub enum Error {
     #[error(transparent)]
     ParsedUrl(#[from] ParsedUrlError),
     #[error(transparent)]
-    JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
+    JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(Url),
     #[error(transparent)]
@@ -44,6 +45,10 @@ pub enum Error {
     CacheDecode(#[from] rmp_serde::decode::Error),
     #[error("Failed to serialize cache entry")]
     CacheEncode(#[from] rmp_serde::encode::Error),
+    #[error("Failed to walk the distribution cache")]
+    CacheWalk(#[source] walkdir::Error),
+    #[error(transparent)]
+    CacheInfo(#[from] uv_cache_info::CacheInfoError),
 
     // Build error
     #[error(transparent)]
@@ -60,9 +65,9 @@ pub enum Error {
     #[error("Package metadata version `{metadata}` does not match given version `{given}`")]
     VersionMismatch { given: Version, metadata: Version },
     #[error("Failed to parse metadata from built wheel")]
-    Metadata(#[from] pypi_types::MetadataError),
-    #[error("Failed to read `dist-info` metadata from built wheel")]
-    DistInfo(#[from] install_wheel_rs::Error),
+    Metadata(#[from] uv_pypi_types::MetadataError),
+    #[error("Failed to read metadata: `{}`", _0.user_display())]
+    WheelMetadata(PathBuf, #[source] Box<uv_metadata::Error>),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
     #[error("Source distribution directory contains neither readable `pyproject.toml` nor `setup.py`: `{}`", _0.user_display())]
@@ -76,19 +81,21 @@ pub enum Error {
     #[error("The source distribution is missing a `requires.txt` file")]
     MissingRequiresTxt,
     #[error("Failed to extract static metadata from `PKG-INFO`")]
-    PkgInfo(#[source] pypi_types::MetadataError),
+    PkgInfo(#[source] uv_pypi_types::MetadataError),
     #[error("Failed to extract metadata from `requires.txt`")]
-    RequiresTxt(#[source] pypi_types::MetadataError),
+    RequiresTxt(#[source] uv_pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
     MissingPyprojectToml,
     #[error("Failed to extract static metadata from `pyproject.toml`")]
-    PyprojectToml(#[source] pypi_types::MetadataError),
+    PyprojectToml(#[source] uv_pypi_types::MetadataError),
     #[error("Unsupported scheme in URL: {0}")]
     UnsupportedScheme(String),
     #[error(transparent)]
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]
     NotFound(Url),
+    #[error("Attempted to re-extract the source distribution for `{0}`, but the hashes didn't match. Run `{}` to clear the cache.", "uv cache clean".green())]
+    CacheHeal(String),
 
     /// A generic request middleware error happened while making a request.
     /// Refer to the error message for more details.

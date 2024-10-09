@@ -3,12 +3,15 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::{CachedDist, IndexLocations, InstalledDist, Resolution, SourceDist};
-use pep508_rs::PackageName;
-use pypi_types::Requirement;
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_distribution_types::{
+    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, InstalledDist, Resolution,
+    SourceDist,
+};
 use uv_git::GitResolver;
+use uv_pep508::PackageName;
+use uv_pypi_types::Requirement;
 use uv_python::PythonEnvironment;
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
@@ -46,7 +49,7 @@ use uv_python::PythonEnvironment;
 /// ```
 ///
 /// Put in a different way, the types here allow `uv-resolver` to depend on `uv-build` and
-/// `uv-build` to depend on `uv-resolver` without having actual crate dependencies between
+/// `uv-build-frontend` to depend on `uv-resolver` without having actual crate dependencies between
 /// them.
 pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait;
@@ -57,11 +60,20 @@ pub trait BuildContext {
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
 
+    /// Return a reference to the discovered registry capabilities.
+    fn capabilities(&self) -> &IndexCapabilities;
+
+    /// Return a reference to any pre-defined static metadata.
+    fn dependency_metadata(&self) -> &DependencyMetadata;
+
     /// Whether source distribution building or pre-built wheels is disabled.
     ///
     /// This [`BuildContext::setup_build`] calls will fail if builds are disabled.
     /// This method exists to avoid fetching source distributions if we know we can't build them.
     fn build_options(&self) -> &BuildOptions;
+
+    /// The [`ConfigSettings`] used to build distributions.
+    fn config_settings(&self) -> &ConfigSettings;
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> SourceStrategy;
@@ -94,9 +106,10 @@ pub trait BuildContext {
         &'a self,
         source: &'a Path,
         subdirectory: Option<&'a Path>,
-        version_id: &'a str,
+        version_id: Option<String>,
         dist: Option<&'a SourceDist>,
         build_kind: BuildKind,
+        build_output: BuildOutput,
     ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + 'a;
 }
 

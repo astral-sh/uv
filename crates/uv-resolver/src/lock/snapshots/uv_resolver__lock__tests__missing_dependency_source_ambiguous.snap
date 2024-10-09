@@ -1,0 +1,16 @@
+---
+source: crates/uv-resolver/src/lock/mod.rs
+expression: result
+---
+Err(
+    Error {
+        inner: Error {
+            inner: TomlError {
+                message: "dependency a has missing `source` field but has more than one matching package",
+                raw: None,
+                keys: [],
+                span: None,
+            },
+        },
+    },
+)

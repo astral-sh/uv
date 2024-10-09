@@ -13,8 +13,8 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-cache-key = { workspace = true }
-uv-fs = { workspace = true }
+uv-cache-key = { workspace = true }
+uv-fs = { workspace = true, features = ["tokio"] }
 uv-auth = { workspace = true }
 
 anyhow = { workspace = true }

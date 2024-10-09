@@ -1,18 +1,18 @@
 use tracing::debug;
 
-use cache_key::{cache_digest, hash_digest};
-use distribution_types::Resolution;
-use uv_cache::{Cache, CacheBucket};
-use uv_client::Connectivity;
-use uv_configuration::Concurrency;
-use uv_python::{Interpreter, PythonEnvironment};
-use uv_requirements::RequirementsSpecification;
-
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
-use crate::commands::project::{resolve_environment, sync_environment, ProjectError};
+use crate::commands::project::{
+    resolve_environment, sync_environment, EnvironmentSpecification, ProjectError,
+};
 use crate::commands::SharedState;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
+use uv_cache::{Cache, CacheBucket};
+use uv_cache_key::{cache_digest, hash_digest};
+use uv_client::Connectivity;
+use uv_configuration::Concurrency;
+use uv_distribution_types::Resolution;
+use uv_python::{Interpreter, PythonEnvironment};
 
 /// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
@@ -28,7 +28,7 @@ impl CachedEnvironment {
     /// Get or create an [`CachedEnvironment`] based on a given set of requirements and a base
     /// interpreter.
     pub(crate) async fn get_or_create(
-        spec: RequirementsSpecification,
+        spec: EnvironmentSpecification<'_>,
         interpreter: Interpreter,
         settings: &ResolverInstallerSettings,
         state: &SharedState,
@@ -58,8 +58,8 @@ impl CachedEnvironment {
 
         // Resolve the requirements with the interpreter.
         let graph = resolve_environment(
-            &interpreter,
             spec,
+            &interpreter,
             settings.as_ref().into(),
             state,
             resolve,
@@ -104,6 +104,7 @@ impl CachedEnvironment {
             false,
             false,
             true,
+            false,
         )?;
 
         sync_environment(
