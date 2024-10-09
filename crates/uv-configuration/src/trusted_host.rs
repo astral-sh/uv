@@ -25,11 +25,10 @@ impl TrustedHost {
             return false;
         }
 
-        if Some(self.host.as_ref()) != url.host_str() {
-            return false;
-        }
+        let allow_all_hosts = self.host == "*";
+        let same_host = Some(self.host.as_ref()) == url.host_str();
 
-        true
+        allow_all_hosts || same_host
     }
 }
 
