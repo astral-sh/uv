@@ -1,7 +1,9 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
+use common::{reqwest_blocking_get, uv_snapshot, venv_bin_path, TestContext};
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
 use tempfile::tempdir_in;
 
 use crate::common::{uv_snapshot, venv_bin_path, TestContext};
@@ -2309,12 +2311,12 @@ fn sync_wheel_path_source_error() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a wheel.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl")?;
+    let bytes = reqwest_blocking_get( "https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl");
     let archive = context
         .temp_dir
         .child("cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl");
     let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+    std::io::copy(&mut &bytes[..], &mut archive_file)?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(

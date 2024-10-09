@@ -1279,6 +1279,25 @@ pub fn decode_token(content: &[&str]) -> String {
     token
 }
 
+/// Simulates `reqwest::blocking::get` but returns bytes directly, and disables
+/// certificate verification, passing through the `BaseClient`
+#[tokio::main(flavor = "current_thread")]
+pub async fn reqwest_blocking_get(url: &str) -> Vec<u8> {
+    let trusted_hosts: Vec<_> = std::env::var("UV_INSECURE_HOST")
+        .unwrap_or_default()
+        .split(' ')
+        .map(|h| uv_configuration::TrustedHost::from_str(h).unwrap())
+        .collect();
+
+    let client = uv_client::BaseClientBuilder::new()
+        .allow_insecure_host(trusted_hosts)
+        .build();
+    let url: reqwest::Url = url.parse().unwrap();
+    let client = client.for_host(&url);
+    let response = client.request(http::Method::GET, url).send().await.unwrap();
+    response.bytes().await.unwrap().to_vec()
+}
+
 /// Utility macro to return the name of the current function.
 ///
 /// https://stackoverflow.com/a/40234666/3549270
