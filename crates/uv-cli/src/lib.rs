@@ -2549,7 +2549,7 @@ pub struct RunArgs {
     /// If the path to a Python script (i.e., ending in `.py`), it will be
     /// executed with the Python interpreter.
     #[command(subcommand)]
-    pub command: ExternalCommand,
+    pub command: Option<ExternalCommand>,
 
     /// Run with the given packages installed.
     ///
@@ -3268,6 +3268,11 @@ pub enum ToolCommand {
     ///
     /// Packages are installed into an ephemeral virtual environment in the uv
     /// cache directory.
+    #[command(
+        after_help = "Use `uvx` as a shortcut for `uv tool run`.\n\n\
+        Use `uv help tool run` for more details.",
+        after_long_help = ""
+    )]
     Run(ToolRunArgs),
     /// Hidden alias for `uv tool run` for the `uvx` command
     #[command(
@@ -4455,7 +4460,8 @@ pub struct DisplayTreeArgs {
     #[arg(long)]
     pub no_dedupe: bool,
 
-    /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
+    /// Show the reverse dependencies for the given package. This flag will invert the tree and
+    /// display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
 }
@@ -4469,9 +4475,10 @@ pub struct PublishArgs {
     #[arg(default_value = "dist/*")]
     pub files: Vec<String>,
 
-    /// The URL of the upload endpoint.
+    /// The URL of the upload endpoint (not the index URL).
     ///
-    /// Note that this typically differs from the index URL.
+    /// Note that there are typically different URLs for index access (e.g., `https:://.../simple`)
+    /// and index upload.
     ///
     /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
     ///

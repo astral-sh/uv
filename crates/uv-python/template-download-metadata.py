@@ -17,6 +17,7 @@ Usage:
 import argparse
 import json
 import logging
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -29,6 +30,7 @@ WORKSPACE_ROOT = CRATE_ROOT.parent.parent
 VERSION_METADATA = CRATE_ROOT / "download-metadata.json"
 TEMPLATE = CRATE_ROOT / "src" / "downloads.inc.mustache"
 TARGET = TEMPLATE.with_suffix("")
+PRERELEASE_PATTERN = re.compile(r"(a|b|rc)(\d+)")
 
 
 def prepare_name(name: str) -> str:
@@ -61,11 +63,21 @@ def prepare_arch(arch: str) -> str:
             return arch.capitalize()
 
 
+def prepare_prerelease(prerelease: str) -> str:
+    if not prerelease:
+        return "None"
+    if not (match := PRERELEASE_PATTERN.match(prerelease)):
+        raise ValueError(f"Invalid prerelease: {prerelease!r}")
+    kind, number = match.groups()
+    return f"Some(Prerelease {{ kind: PrereleaseKind::{kind.capitalize()}, number: {number} }})"
+
+
 def prepare_value(value: dict) -> dict:
     value["os"] = value["os"].title()
     value["arch"] = prepare_arch(value["arch"])
     value["name"] = prepare_name(value["name"])
     value["libc"] = prepare_libc(value["libc"])
+    value["prerelease"] = prepare_prerelease(value["prerelease"])
     return value
 
 

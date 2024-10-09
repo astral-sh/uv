@@ -3,7 +3,7 @@ use std::path::Path;
 /// Check whether a path in PATH is a valid executable.
 ///
 /// Derived from `which`'s `Checker`.
-pub(crate) fn is_executable(path: &Path) -> bool {
+pub fn is_executable(path: &Path) -> bool {
     #[cfg(any(unix, target_os = "wasi", target_os = "redox"))]
     {
         if rustix::fs::access(path, rustix::fs::Access::EXEC_OK).is_err() {

@@ -260,18 +260,23 @@ impl PythonDownloadRequest {
                 return false;
             }
         }
+        // If we don't allow pre-releases, don't match a key with a pre-release tag
+        if !self.allows_prereleases() && key.prerelease.is_some() {
+            return false;
+        }
         if let Some(version) = &self.version {
-            if !version.matches_major_minor_patch(key.major, key.minor, key.patch) {
+            if !version.matches_major_minor_patch_prerelease(
+                key.major,
+                key.minor,
+                key.patch,
+                key.prerelease,
+            ) {
                 return false;
             }
             if version.is_freethreaded() {
                 debug!("Installing managed free-threaded Python is not yet supported");
                 return false;
             }
-        }
-        // If we don't allow pre-releases, don't match a key with a pre-release tag
-        if !self.allows_prereleases() && !key.prerelease.is_empty() {
-            return false;
         }
         true
     }

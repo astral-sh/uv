@@ -618,7 +618,7 @@ mod tests {
             .path()
             .join("uv_backend-0.1.0.dist-info/RECORD");
         assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
-        uv_backend-0.1.0.dist-info/WHEEL,sha256=3ab9e610d443a2f26ac5392439f8a7a71c00f181a8df237b7104768ac54c5214,79
+        uv_backend-0.1.0.dist-info/WHEEL,sha256=70ce44709b6a53e0d0c5a6755b0290179697020f1f867e794f26154fe4825738,79
         uv_backend-0.1.0.dist-info/METADATA,sha256=e4a0d390317d7182f65ea978254c71ed283e0a4242150cf1c99a694b113ff68d,224
         uv_backend-0.1.0.dist-info/RECORD,,
         "###);

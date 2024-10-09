@@ -2974,8 +2974,7 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 [[package]]
 name = "rust-netrc"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32662f97cbfdbad9d5f78f1338116f06871e7dae4fd37e9f59a0f57cf2044868"
+source = "git+https://github.com/gribouille/netrc?rev=544f3890b621f0dc30fcefb4f804269c160ce2e9#544f3890b621f0dc30fcefb4f804269c160ce2e9"
 dependencies = [
  "thiserror",
 ]
@@ -4134,7 +4133,7 @@ checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
 
 [[package]]
 name = "uv"
-version = "0.4.19"
+version = "0.4.20"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4679,12 +4678,14 @@ dependencies = [
  "fs2",
  "junction",
  "path-slash",
+ "rustix",
  "schemars",
  "serde",
  "tempfile",
  "tokio",
  "tracing",
  "urlencoding",
+ "winsafe 0.0.22",
 ]
 
 [[package]]
@@ -4982,7 +4983,6 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "rmp-serde",
- "rustix",
  "same-file",
  "schemars",
  "serde",
@@ -5014,7 +5014,6 @@ dependencies = [
  "windows-registry",
  "windows-result 0.2.0",
  "windows-sys 0.59.0",
- "winsafe 0.0.22",
 ]
 
 [[package]]
@@ -5248,7 +5247,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.4.19"
+version = "0.4.20"
 
 [[package]]
 name = "uv-virtualenv"
