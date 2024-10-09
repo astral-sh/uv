@@ -19,7 +19,6 @@ Set the `UV_TEST_PUBLISH_TOKEN` environment variables.
 Set the `UV_TEST_PUBLISH_PASSWORD` environment variable.
 This project also uses token authentication since it's the only thing that PyPI
 supports, but they both CLI options.
-TODO(konsti): Add an index for testing that supports username/password.
 
 **astral-test-keyring**
 ```console
@@ -29,6 +28,17 @@ keyring set https://test.pypi.org/legacy/?astral-test-keyring __token__
 The query parameter a horrible hack stolen from
 https://github.com/pypa/twine/issues/565#issue-555219267
 to prevent the other projects from implicitly using the same credentials.
+
+**astral-test-gitlab-pat**
+The username is astral-test-user, the password is a token.
+Web: https://gitlab.com/astral-test-publish/astral-test-gitlab-pat/-/packages
+Docs: https://docs.gitlab.com/ee/user/packages/pypi_repository/
+
+**astral-test-codeberg**
+The username is astral-test-user, the password is a token (the actual account password would also
+work).
+Web: https://codeberg.org/astral-test-user/-/packages/pypi/astral-test-codeberg/0.1.0
+Docs: https://forgejo.org/docs/latest/user/packages/pypi/
 
 **astral-test-trusted-publishing**
 This one only works in GitHub Actions on astral-sh/uv in `ci.yml` - sorry!
@@ -52,6 +62,7 @@ project_urls = {
     "astral-test-keyring": "https://test.pypi.org/simple/astral-test-keyring/",
     "astral-test-trusted-publishing": "https://test.pypi.org/simple/astral-test-trusted-publishing/",
     "astral-test-gitlab-pat": "https://gitlab.com/api/v4/projects/61853105/packages/pypi/simple/astral-test-gitlab-pat",
+    "astral-test-codeberg": "https://codeberg.org/api/packages/astral-test-user/pypi/simple/astral-test-forgejo-codeberg",
 }
 
 
@@ -147,6 +158,20 @@ def publish_project(project_name: str, uv: Path):
                 "https://gitlab.com/api/v4/projects/61853105/packages/pypi",
                 "--username",
                 "astral-test-gitlab-pat",
+            ],
+            cwd=cwd.joinpath(project_name),
+            env=env,
+        )
+    elif project_name == "astral-test-codeberg":
+        env = os.environ.copy()
+        env["UV_PUBLISH_USERNAME"] = "astral-test-user"
+        env["UV_PUBLISH_PASSWORD"] = os.environ["UV_TEST_PUBLISH_CODEBERG_TOKEN"]
+        check_call(
+            [
+                uv,
+                "publish",
+                "--publish-url",
+                "https://codeberg.org/api/packages/astral-test-user/pypi",
             ],
             cwd=cwd.joinpath(project_name),
             env=env,
