@@ -1,12 +1,13 @@
-use std::cmp::Ordering;
-use std::collections::{BTreeSet, Bound};
-use std::ops::Deref;
-
+use itertools::Itertools;
 use pubgrub::Range;
+use std::cmp::Ordering;
+use std::collections::Bound;
+use std::ops::Deref;
 
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_pubgrub::PubGrubSpecifier;
 
 #[derive(thiserror::Error, Debug)]
 pub enum RequiresPythonError {
@@ -52,11 +53,10 @@ impl RequiresPython {
 
     /// Returns a [`RequiresPython`] from a version specifier.
     pub fn from_specifiers(specifiers: &VersionSpecifiers) -> Result<Self, RequiresPythonError> {
-        let (lower_bound, upper_bound) =
-            crate::pubgrub::PubGrubSpecifier::from_release_specifiers(specifiers)?
-                .bounding_range()
-                .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
-                .unwrap_or((Bound::Unbounded, Bound::Unbounded));
+        let (lower_bound, upper_bound) = PubGrubSpecifier::from_release_specifiers(specifiers)?
+            .bounding_range()
+            .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
+            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
         Ok(Self {
             specifiers: specifiers.clone(),
             range: RequiresPythonRange(LowerBound(lower_bound), UpperBound(upper_bound)),
@@ -69,35 +69,35 @@ impl RequiresPython {
     pub fn intersection<'a>(
         specifiers: impl Iterator<Item = &'a VersionSpecifiers>,
     ) -> Result<Option<Self>, RequiresPythonError> {
-        let mut combined: BTreeSet<VersionSpecifier> = BTreeSet::new();
-        let mut lower_bound: LowerBound = LowerBound(Bound::Unbounded);
-        let mut upper_bound: UpperBound = UpperBound(Bound::Unbounded);
-
-        for specifier in specifiers {
-            // Convert to PubGrub range and perform an intersection.
-            let requires_python =
-                crate::pubgrub::PubGrubSpecifier::from_release_specifiers(specifier)?;
-            if let Some((lower, upper)) = requires_python.bounding_range() {
-                let lower = LowerBound(lower.cloned());
-                let upper = UpperBound(upper.cloned());
-                if lower > lower_bound {
-                    lower_bound = lower;
+        // Convert to PubGrub range and perform an intersection.
+        let range = specifiers
+            .into_iter()
+            .map(PubGrubSpecifier::from_release_specifiers)
+            .fold_ok(None, |range: Option<Range<Version>>, requires_python| {
+                if let Some(range) = range {
+                    Some(range.intersection(&requires_python.into()))
+                } else {
+                    Some(requires_python.into())
                 }
-                if upper < upper_bound {
-                    upper_bound = upper;
-                }
-            }
+            })?;
 
-            // Track all specifiers for the final result.
-            combined.extend(specifier.iter().cloned());
-        }
-
-        if combined.is_empty() {
+        let Some(range) = range else {
             return Ok(None);
-        }
+        };
 
-        // Compute the intersection by combining the specifiers.
-        let specifiers = combined.into_iter().collect();
+        // Extract the bounds.
+        let (lower_bound, upper_bound) = range
+            .bounding_range()
+            .map(|(lower_bound, upper_bound)| {
+                (
+                    LowerBound(lower_bound.cloned()),
+                    UpperBound(upper_bound.cloned()),
+                )
+            })
+            .unwrap_or((LowerBound::default(), UpperBound::default()));
+
+        // Convert back to PEP 440 specifiers.
+        let specifiers = VersionSpecifiers::from_release_only_bounds(range.iter());
 
         Ok(Some(Self {
             specifiers,
@@ -223,7 +223,7 @@ impl RequiresPython {
     /// provided range. However, `>=3.9` would not be considered compatible, as the
     /// `Requires-Python` includes Python 3.8, but `>=3.9` does not.
     pub fn is_contained_by(&self, target: &VersionSpecifiers) -> bool {
-        let Ok(target) = crate::pubgrub::PubGrubSpecifier::from_release_specifiers(target) else {
+        let Ok(target) = PubGrubSpecifier::from_release_specifiers(target) else {
             return false;
         };
         let target = target
@@ -458,12 +458,11 @@ impl serde::Serialize for RequiresPython {
 impl<'de> serde::Deserialize<'de> for RequiresPython {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let specifiers = VersionSpecifiers::deserialize(deserializer)?;
-        let (lower_bound, upper_bound) =
-            crate::pubgrub::PubGrubSpecifier::from_release_specifiers(&specifiers)
-                .map_err(serde::de::Error::custom)?
-                .bounding_range()
-                .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
-                .unwrap_or((Bound::Unbounded, Bound::Unbounded));
+        let (lower_bound, upper_bound) = PubGrubSpecifier::from_release_specifiers(&specifiers)
+            .map_err(serde::de::Error::custom)?
+            .bounding_range()
+            .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
+            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
         Ok(Self {
             specifiers,
             range: RequiresPythonRange(LowerBound(lower_bound), UpperBound(upper_bound)),

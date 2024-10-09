@@ -3818,7 +3818,7 @@ fn lock_requires_python_star() -> Result<()> {
 /// `Requires-Python` uses the != operator.
 #[test]
 fn lock_requires_python_not_equal() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = TestContext::new("3.12");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -3828,7 +3828,7 @@ fn lock_requires_python_not_equal() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">3.10, !=3.10.9, <3.13"
+        requires-python = ">3.10, !=3.10.9, !=3.10.10, !=3.11.*, <3.13"
         dependencies = ["iniconfig"]
 
         [build-system]
@@ -3854,7 +3854,7 @@ fn lock_requires_python_not_equal() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        requires-python = ">3.10, !=3.10.9, <3.13"
+        requires-python = ">3.10, !=3.10.9, !=3.10.10, !=3.11.*, <3.13"
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -3936,7 +3936,7 @@ fn lock_requires_python_pre() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        requires-python = ">=3.11b1"
+        requires-python = ">=3.11"
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -12954,7 +12954,7 @@ fn lock_simplified_environments() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        requires-python = ">=3.11, <3.12"
+        requires-python = "==3.11.*"
         resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform != 'darwin'",
