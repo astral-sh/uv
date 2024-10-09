@@ -1652,6 +1652,12 @@ pub struct PipInstallArgs {
 
     #[command(flatten)]
     pub compat_args: compat::PipInstallCompatArgs,
+
+    /// Remove extraneous packages present in the environment.
+    ///
+    /// When enabled, uv will remove any extraneous packages from the environment
+    #[arg(long)]
+    pub exact: bool,
 }
 
 #[derive(Args)]

@@ -1309,6 +1309,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
+    pub(crate) exact: bool,
 }
 
 impl PipInstallSettings {
@@ -1349,6 +1350,7 @@ impl PipInstallSettings {
             no_strict,
             dry_run,
             compat_args: _,
+            exact,
         } = args;
 
         let constraints_from_workspace = if let Some(configuration) = &filesystem {
@@ -1398,6 +1400,7 @@ impl PipInstallSettings {
             dry_run,
             constraints_from_workspace,
             overrides_from_workspace,
+            exact,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {

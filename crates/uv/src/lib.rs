@@ -508,6 +508,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.native_tls,
                 cache,
                 args.dry_run,
+                args.exact,
                 printer,
             )
             .await

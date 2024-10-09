@@ -81,6 +81,7 @@ pub(crate) async fn pip_install(
     native_tls: bool,
     cache: Cache,
     dry_run: bool,
+    exact: bool,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -404,11 +405,17 @@ pub(crate) async fn pip_install(
         Err(err) => return Err(err.into()),
     };
 
+    let modifications = if exact {
+        Modifications::Exact
+    } else {
+        Modifications::Sufficient
+    };
+
     // Sync the environment.
     operations::install(
         &resolution,
         site_packages,
-        Modifications::Sufficient,
+        modifications,
         &reinstall,
         &build_options,
         link_mode,
