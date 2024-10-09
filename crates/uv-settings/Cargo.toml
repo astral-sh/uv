@@ -28,7 +28,7 @@ uv-resolver = { workspace = true, features = ["schemars", "clap"] }
 uv-warnings = { workspace = true }
 
 clap = { workspace = true }
-dirs-sys = { workspace = true }
+etcetera = { workspace = true }
 fs-err = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
