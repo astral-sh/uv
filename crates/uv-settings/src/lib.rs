@@ -5,8 +5,6 @@ use etcetera::BaseStrategy;
 use tracing::debug;
 
 use uv_fs::Simplified;
-#[cfg(not(windows))]
-use uv_static::EnvVars;
 use uv_warnings::warn_user;
 
 pub use crate::combine::*;

@@ -1,4 +1,3 @@
-use std::ffi::c_float;
 use std::io;
 use std::path::{Path, PathBuf};
 use uv_static::EnvVars;
