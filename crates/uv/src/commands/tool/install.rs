@@ -403,7 +403,11 @@ pub(crate) async fn install(
             &cache,
             printer,
         )
-        .await?
+        .await
+        .inspect_err(|_| {
+            // If we failed to sync, remove the newly created environment.
+            let _ = installed_tools.remove_environment(&from.name);
+        })?
     };
 
     install_executables(
