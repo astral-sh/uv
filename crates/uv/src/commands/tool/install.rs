@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anyhow::{bail, Result};
 use owo_colors::OwoColorize;
-use tracing::trace;
+use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -406,6 +406,7 @@ pub(crate) async fn install(
         .await
         .inspect_err(|_| {
             // If we failed to sync, remove the newly created environment.
+            debug!("Failed to sync environment; removing `{}`", from.name);
             let _ = installed_tools.remove_environment(&from.name);
         })?
     };
