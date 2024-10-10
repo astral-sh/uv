@@ -518,7 +518,7 @@ fn test_parse_error() {
         indoc! {r"
             Failed to parse version: Unexpected end of version specifier, expected operator:
             ~= 0.9, %‍= 1.0, != 1.3.4.*
-                    ^^^^^^^
+                   ^^^^^^^
         "}
     );
 }
@@ -907,7 +907,7 @@ fn error_message_version_specifiers_parse_error() {
         "\
 Failed to parse version: Unexpected end of version specifier, expected operator:
 >=1.2.3, 5.4.3, >=3.4.5
-    ^^^^^^
+        ^^^^^^
 "
     );
 }

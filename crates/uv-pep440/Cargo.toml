@@ -28,6 +28,7 @@ unscanny = { workspace = true }
 
 [dev-dependencies]
 indoc = { version = "2.0.5" }
+tracing = { workspace = true }
 
 [features]
 # Match the API of the published crate, for compatibility.
