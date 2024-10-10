@@ -72,6 +72,7 @@ miette = { workspace = true, features = ["fancy-no-backtrace"] }
 owo-colors = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
+reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

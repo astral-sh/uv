@@ -249,7 +249,7 @@ fn run_no_args() -> Result<()> {
     Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 
     The following commands are available in the environment:
-    
+
     - pydoc
     - python
     - pythonw
@@ -2295,6 +2295,66 @@ fn run_script_explicit_directory() -> Result<()> {
     ----- stderr -----
     error: failed to read from file `script`
       Caused by: Is a directory (os error 21)
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_remote_pep723_script() {
+    let context = TestContext::new("3.12").with_filtered_python_names();
+    let mut filters = context.filters();
+    filters.push((
+        r"(?m)^Reading inline script metadata from:.*\.py$",
+        "Reading inline script metadata from: [TEMP_PATH].py",
+    ));
+    filters.push((
+        r"(?m)^Downloaded remote script to:.*\.py$",
+        "Downloaded remote script to: [TEMP_PATH].py",
+    ));
+    uv_snapshot!(filters, context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg("CI"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello CI, from uv!
+
+    ----- stderr -----
+    Downloaded remote script to: [TEMP_PATH].py
+    Reading inline script metadata from: [TEMP_PATH].py
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + markdown-it-py==3.0.0
+     + mdurl==0.1.2
+     + pygments==2.17.2
+     + rich==13.7.1
+    "###);
+}
+
+#[cfg(unix)] // A URL could be a valid filepath on Unix but not on Windows
+#[test]
+fn run_url_like_with_local_file_priority() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let url = "https://example.com/path/to/main.py";
+    let local_path: std::path::PathBuf = ["https:", "", "example.com", "path", "to", "main.py"]
+        .iter()
+        .collect();
+
+    // replace with URL-like filepath
+    let test_script = context.temp_dir.child(local_path);
+    test_script.write_str(indoc! { r#"
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg(url), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
     "###);
 
     Ok(())
