@@ -12,7 +12,7 @@ use predicates::Predicate;
 use url::Url;
 
 use crate::common::{
-    copy_dir_all, reqwest_blocking_get, site_packages_path, uv_snapshot, venv_to_interpreter,
+    copy_dir_all, download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter,
     TestContext,
 };
 use uv_fs::Simplified;
@@ -1070,10 +1070,8 @@ fn install_local_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a wheel.
-    let response = reqwest_blocking_get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl");
     let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut &response[..], &mut archive_file)?;
+    download_to_disk("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", &archive);
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1209,10 +1207,8 @@ fn mismatched_version() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a wheel.
-    let bytes = reqwest_blocking_get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl");
     let archive = context.temp_dir.child("tomli-3.7.2-py3-none-any.whl");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut &bytes[..], &mut archive_file)?;
+    download_to_disk("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", &archive);
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1244,10 +1240,11 @@ fn mismatched_name() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a wheel.
-    let bytes = reqwest_blocking_get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl");
     let archive = context.temp_dir.child("foo-2.0.1-py3-none-any.whl");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut &bytes[..], &mut archive_file)?;
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1280,10 +1277,11 @@ fn install_local_source_distribution() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a source distribution.
-    let bytes = reqwest_blocking_get("https://files.pythonhosted.org/packages/b0/b4/bc2baae3970c282fae6c2cb8e0f179923dceb7eaffb0e76170628f9af97b/wheel-0.42.0.tar.gz");
     let archive = context.temp_dir.child("wheel-0.42.0.tar.gz");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut &bytes[..], &mut archive_file)?;
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/b0/b4/bc2baae3970c282fae6c2cb8e0f179923dceb7eaffb0e76170628f9af97b/wheel-0.42.0.tar.gz",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1640,10 +1638,11 @@ fn install_path_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a source distribution.
-    let bytes = reqwest_blocking_get("https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz");
     let archive = context.temp_dir.child("source_distribution-0.0.1.tar.gz");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut &bytes[..], &mut archive_file)?;
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1735,10 +1734,11 @@ fn install_path_built_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a wheel.
-    let bytes = reqwest_blocking_get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl");
     let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut &bytes[..], &mut archive_file)?;
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     let url = Url::from_file_path(archive.path()).unwrap();
