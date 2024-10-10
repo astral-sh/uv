@@ -273,7 +273,13 @@ async fn do_lock(
     let requirements = workspace.non_project_requirements().collect::<Vec<_>>();
     let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
     let constraints = workspace.constraints();
-    let dev = vec![DEV_DEPENDENCIES.clone()];
+    let dev: Vec<_> = workspace
+        .pyproject_toml()
+        .dependency_groups
+        .iter()
+        .flat_map(|groups| groups.keys().cloned())
+        .chain(std::iter::once(DEV_DEPENDENCIES.clone()))
+        .collect();
     let source_trees = vec![];
 
     // Collect the list of members.
