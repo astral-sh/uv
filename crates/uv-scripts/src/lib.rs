@@ -22,7 +22,9 @@ pub enum Pep723Item {
     /// A PEP 723 script read from disk.
     Script(Pep723Script),
     /// A PEP 723 script provided via `stdin`.
-    Stdin(Pep723Stdin),
+    Stdin(Pep723Metadata),
+    /// A PEP 723 script provided via a remote URL.
+    Remote(Pep723Metadata),
 }
 
 impl Pep723Item {
@@ -30,7 +32,8 @@ impl Pep723Item {
     pub fn metadata(&self) -> &Pep723Metadata {
         match self {
             Self::Script(script) => &script.metadata,
-            Self::Stdin(stdin) => &stdin.metadata,
+            Self::Stdin(metadata) => metadata,
+            Self::Remote(metadata) => metadata,
         }
     }
 
@@ -38,7 +41,8 @@ impl Pep723Item {
     pub fn into_metadata(self) -> Pep723Metadata {
         match self {
             Self::Script(script) => script.metadata,
-            Self::Stdin(stdin) => stdin.metadata,
+            Self::Stdin(metadata) => metadata,
+            Self::Remote(metadata) => metadata,
         }
     }
 }
@@ -182,29 +186,6 @@ impl Pep723Script {
     }
 }
 
-/// A PEP 723 script, provided via `stdin`.
-#[derive(Debug)]
-pub struct Pep723Stdin {
-    metadata: Pep723Metadata,
-}
-
-impl Pep723Stdin {
-    /// Parse the PEP 723 `script` metadata from `stdin`.
-    pub fn parse(contents: &[u8]) -> Result<Option<Self>, Pep723Error> {
-        // Extract the `script` tag.
-        let ScriptTag { metadata, .. } = match ScriptTag::parse(contents) {
-            Ok(Some(tag)) => tag,
-            Ok(None) => return Ok(None),
-            Err(err) => return Err(err),
-        };
-
-        // Parse the metadata.
-        let metadata = Pep723Metadata::from_str(&metadata)?;
-
-        Ok(Some(Self { metadata }))
-    }
-}
-
 /// PEP 723 metadata as parsed from a `script` comment block.
 ///
 /// See: <https://peps.python.org/pep-0723/>
@@ -217,6 +198,42 @@ pub struct Pep723Metadata {
     /// The raw unserialized document.
     #[serde(skip)]
     pub raw: String,
+}
+
+impl Pep723Metadata {
+    /// Parse the PEP 723 metadata from `stdin`.
+    pub fn parse(contents: &[u8]) -> Result<Option<Self>, Pep723Error> {
+        // Extract the `script` tag.
+        let ScriptTag { metadata, .. } = match ScriptTag::parse(contents) {
+            Ok(Some(tag)) => tag,
+            Ok(None) => return Ok(None),
+            Err(err) => return Err(err),
+        };
+
+        // Parse the metadata.
+        Ok(Some(Self::from_str(&metadata)?))
+    }
+
+    /// Read the PEP 723 `script` metadata from a Python file, if it exists.
+    ///
+    /// See: <https://peps.python.org/pep-0723/>
+    pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
+        let contents = match fs_err::tokio::read(&file).await {
+            Ok(contents) => contents,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
+
+        // Extract the `script` tag.
+        let ScriptTag { metadata, .. } = match ScriptTag::parse(&contents) {
+            Ok(Some(tag)) => tag,
+            Ok(None) => return Ok(None),
+            Err(err) => return Err(err),
+        };
+
+        // Parse the metadata.
+        Ok(Some(Self::from_str(&metadata)?))
+    }
 }
 
 impl FromStr for Pep723Metadata {
