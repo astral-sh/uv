@@ -55,6 +55,49 @@ fn dependency() -> Result<()> {
 }
 
 #[test]
+fn export_no_header() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--no-header"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    -e .
+    anyio==3.7.0 \
+        --hash=sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce \
+        --hash=sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0
+    idna==3.6 \
+        --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+        --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+    sniffio==1.3.1 \
+        --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc \
+        --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn dependency_extra() -> Result<()> {
     let context = TestContext::new("3.12");
 
