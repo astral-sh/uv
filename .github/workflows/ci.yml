@@ -794,7 +794,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "graalpy24.0"
+          python-version: "graalpy24.1"
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -807,7 +807,6 @@ jobs:
       - name: Graalpy info
         run: |
           which graalpy
-          echo "GRAAL_PYTHONHOME=$(graalpy -c 'print(__graalpython__.home)')" >> $GITHUB_ENV
 
       - name: "Create a virtual environment"
         run: |
@@ -863,7 +862,7 @@ jobs:
     steps:
       - uses: timfel/setup-python@fc9bcb4a04f5b1ea7d678c2ca7ea1c479a2468d7
         with:
-          python-version: "graalpy24.0"
+          python-version: "graalpy24.1"
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
