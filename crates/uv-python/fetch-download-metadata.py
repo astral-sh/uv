@@ -106,6 +106,11 @@ class ImplementationName(StrEnum):
     PYPY = "pypy"
 
 
+class Variant(StrEnum):
+    FREETHREADED = "freethreaded"
+    DEBUG = "debug"
+
+
 @dataclass
 class PythonDownload:
     version: Version
@@ -115,9 +120,13 @@ class PythonDownload:
     filename: str
     url: str
     sha256: str | None = None
+    variant: Variant | None = None
 
     def key(self) -> str:
-        return f"{self.implementation}-{self.version}-{self.triple.platform}-{self.triple.arch}-{self.triple.libc}"
+        if self.variant:
+            return f"{self.implementation}-{self.version}+{self.variant}-{self.triple.platform}-{self.triple.arch}-{self.triple.libc}"
+        else:
+            return f"{self.implementation}-{self.version}-{self.triple.platform}-{self.triple.arch}-{self.triple.libc}"
 
 
 class Finder:
@@ -141,14 +150,8 @@ class CPythonFinder(Finder):
         "shared-pgo",
         "shared-noopt",
         "static-noopt",
-        "pgo+lto",
-        "pgo",
-        "lto",
-        "debug",
     ]
-    HIDDEN_FLAVORS = [
-        "noopt",
-    ]
+    VARIANTS = ["pgo", "lto", "debug", "noopt", "freethreaded"]
     SPECIAL_TRIPLES = {
         "macos": "x86_64-apple-darwin",
         "linux64": "x86_64-unknown-linux-gnu",
@@ -167,24 +170,15 @@ class CPythonFinder(Finder):
     _filename_re = re.compile(
         r"""(?x)
         ^
-            cpython-(?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)
-            (?:\+\d+)?
-            -(?P<triple>.*?)
-            (?:-[\dT]+)?\.tar\.(?:gz|zst)
+            cpython-
+            (?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)(?:\+\d+)?\+
+            (?P<date>\d+)-
+            (?P<triple>[a-z\d_]+-[a-z\d]+(?>-[a-z\d]+)?-[a-z\d]+)-
+            (?>(?P<build_options>.+)-)?
+            (?P<flavor>.+)
+            \.tar\.(?:gz|zst)
         $
     """
-    )
-
-    _flavor_re = re.compile(
-        r"""(?x)^(.*?)-(%s)$"""
-        % (
-            "|".join(
-                map(
-                    re.escape,
-                    sorted(FLAVOR_PREFERENCES + HIDDEN_FLAVORS, key=len, reverse=True),
-                )
-            )
-        )
     )
 
     def __init__(self, client: httpx.AsyncClient):
@@ -197,7 +191,7 @@ class CPythonFinder(Finder):
 
     async def _fetch_downloads(self, pages: int = 100) -> list[PythonDownload]:
         """Fetch all the indygreg downloads from the release API."""
-        results: dict[Version, list[PythonDownload]] = {}
+        downloads_by_version: dict[Version, list[PythonDownload]] = {}
 
         # Collect all available Python downloads
         for page in range(1, pages + 1):
@@ -213,24 +207,39 @@ class CPythonFinder(Finder):
                     download = self._parse_download_url(url)
                     if download is None:
                         continue
-                    results.setdefault(download.version, []).append(download)
+                    logging.debug("Found %s (%s)", download.key(), download.filename)
+                    downloads_by_version.setdefault(download.version, []).append(
+                        download
+                    )
 
-        # Collapse CPython variants to a single URL flavor per triple
+        # Collapse CPython variants to a single URL flavor per triple and variant
         downloads = []
-        for choices in results.values():
-            flavors: dict[PlatformTriple, tuple[PythonDownload, int]] = {}
-            for choice in choices:
-                priority = self._get_flavor_priority(choice.flavor)
-                existing = flavors.get(choice.triple)
+        for version_downloads in downloads_by_version.values():
+            selected: dict[
+                tuple[PlatformTriple, Variant | None], tuple[PythonDownload, int]
+            ] = {}
+            for download in version_downloads:
+                priority = self._get_flavor_priority(download.flavor)
+                existing = selected.get((download.triple, download.variant))
                 if existing:
-                    _, existing_priority = existing
+                    existing_download, existing_priority = existing
                     # Skip if we have a flavor with higher priority already (indicated by a smaller value)
                     if priority >= existing_priority:
+                        logging.debug(
+                            "Skipping %s (%s): lower priority than %s (%s)",
+                            download.key(),
+                            download.flavor,
+                            existing_download.key(),
+                            existing_download.flavor,
+                        )
                         continue
-                flavors[choice.triple] = (choice, priority)
+                selected[(download.triple, download.variant)] = (
+                    download,
+                    priority,
+                )
 
             # Drop the priorities
-            downloads.extend([choice for choice, _ in flavors.values()])
+            downloads.extend([download for download, _ in selected.values()])
 
         return downloads
 
@@ -288,23 +297,22 @@ class CPythonFinder(Finder):
 
         match = self._filename_re.match(filename)
         if match is None:
+            logging.debug("Skipping %s: no regex match", filename)
             return None
 
-        version, triple = match.groups()
-        if triple.endswith("-full"):
-            triple = triple[:-5]
+        version, _date, triple, build_options, flavor = match.groups()
 
-        match = self._flavor_re.match(triple)
-        if match is not None:
-            triple, flavor = match.groups()
+        variants = build_options.split("+") if build_options else []
+        for variant in Variant:
+            if variant in variants:
+                break
         else:
-            flavor = ""
-        if flavor in self.HIDDEN_FLAVORS:
-            return None
+            variant = None
 
         version = Version.from_str(version)
         triple = self._normalize_triple(triple)
         if triple is None:
+            # Skip is logged in `_normalize_triple`
             return None
 
         return PythonDownload(
@@ -314,6 +322,7 @@ class CPythonFinder(Finder):
             implementation=self.implementation,
             filename=filename,
             url=url,
+            variant=variant,
         )
 
     def _normalize_triple(self, triple: str) -> PlatformTriple | None:
@@ -477,7 +486,7 @@ def render(downloads: list[PythonDownload]) -> None:
     for download in downloads:
         key = download.key()
         logging.info(
-            "Found %s%s", key, (" (%s)" % download.flavor) if download.flavor else ""
+            "Selected %s%s", key, (" (%s)" % download.flavor) if download.flavor else ""
         )
         results[key] = {
             "name": download.implementation,
@@ -490,6 +499,7 @@ def render(downloads: list[PythonDownload]) -> None:
             "prerelease": download.version.prerelease,
             "url": download.url,
             "sha256": download.sha256,
+            "variant": download.variant if download.variant else None,
         }
 
     VERSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
