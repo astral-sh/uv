@@ -711,6 +711,10 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>The project environment will not be synced.</p>
 
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Add the requirements to the specified local dependency group.</p>
+
+<p>These requirements will not be included in the published metadata for the project.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -1028,6 +1032,8 @@ uv remove [OPTIONS] <PACKAGES>...
 </dd><dt><code>--frozen</code></dt><dd><p>Remove dependencies without re-locking the project.</p>
 
 <p>The project environment will not be synced.</p>
+
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Remove the packages from the specified local dependency group</p>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 

@@ -6,7 +6,8 @@ use thiserror::Error;
 use uv_configuration::SourceStrategy;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pypi_types::{HashDigest, ResolutionMetadata};
+use uv_pep508::Pep508Error;
+use uv_pypi_types::{HashDigest, ResolutionMetadata, VerbatimParsedUrl};
 use uv_workspace::WorkspaceError;
 
 pub use crate::metadata::lowering::LoweredRequirement;
@@ -22,8 +23,12 @@ pub enum MetadataError {
     Workspace(#[from] WorkspaceError),
     #[error("Failed to parse entry for: `{0}`")]
     LoweringError(PackageName, #[source] LoweringError),
-    #[error(transparent)]
-    Lower(#[from] LoweringError),
+    #[error("Failed to parse entry for: `{0}`")]
+    GroupRequirementError(
+        GroupName,
+        String,
+        #[source] Box<Pep508Error<VerbatimParsedUrl>>,
+    ),
 }
 
 #[derive(Debug, Clone)]

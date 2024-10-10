@@ -3,8 +3,10 @@ use crate::Metadata;
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::str::FromStr;
 use uv_configuration::SourceStrategy;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_workspace::pyproject::ToolUvSources;
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
@@ -72,7 +74,7 @@ impl RequiresDist {
         };
 
         let dev_dependencies = {
-            let dev_dependencies = project_workspace
+            let dev_dependencies: Vec<_> = project_workspace
                 .current_project()
                 .pyproject_toml()
                 .tool
@@ -81,36 +83,77 @@ impl RequiresDist {
                 .and_then(|uv| uv.dev_dependencies.as_ref())
                 .into_iter()
                 .flatten()
-                .cloned();
-            let dev_dependencies = match source_strategy {
-                SourceStrategy::Enabled => dev_dependencies
-                    .flat_map(|requirement| {
-                        let requirement_name = requirement.name.clone();
-                        LoweredRequirement::from_requirement(
-                            requirement,
-                            &metadata.name,
-                            project_workspace.project_root(),
-                            sources,
-                            project_workspace.workspace(),
-                        )
-                        .map(move |requirement| match requirement {
-                            Ok(requirement) => Ok(requirement.into_inner()),
-                            Err(err) => {
-                                Err(MetadataError::LoweringError(requirement_name.clone(), err))
-                            }
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
-                SourceStrategy::Disabled => dev_dependencies
-                    .into_iter()
-                    .map(uv_pypi_types::Requirement::from)
-                    .collect(),
-            };
-            if dev_dependencies.is_empty() {
-                BTreeMap::default()
-            } else {
-                BTreeMap::from([(DEV_DEPENDENCIES.clone(), dev_dependencies)])
-            }
+                .cloned()
+                .collect();
+
+            let dependency_groups = project_workspace
+                .current_project()
+                .pyproject_toml()
+                .dependency_groups
+                .iter()
+                .flatten()
+                .map(|(name, requirements)| {
+                    (
+                        name.clone(),
+                        requirements
+                            .iter()
+                            .map(|requirement| {
+                                match uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(
+                                    requirement,
+                                ) {
+                                    Ok(requirement) => Ok(requirement),
+                                    Err(err) => Err(MetadataError::GroupRequirementError(
+                                        name.clone(),
+                                        requirement.clone(),
+                                        Box::new(err),
+                                    )),
+                                }
+                            })
+                            .collect::<Result<Vec<_>, _>>(),
+                    )
+                })
+                .chain(std::iter::once((
+                    DEV_DEPENDENCIES.clone(),
+                    Ok(dev_dependencies),
+                )))
+                .map(|(name, requirements)| {
+                    let requirements = match requirements {
+                        Ok(requirements) => match source_strategy {
+                            SourceStrategy::Enabled => requirements
+                                .into_iter()
+                                .flat_map(|requirement| {
+                                    let requirement_name = requirement.name.clone();
+                                    LoweredRequirement::from_requirement(
+                                        requirement,
+                                        &metadata.name,
+                                        project_workspace.project_root(),
+                                        sources,
+                                        project_workspace.workspace(),
+                                    )
+                                    .map(move |requirement| {
+                                        match requirement {
+                                            Ok(requirement) => Ok(requirement.into_inner()),
+                                            Err(err) => Err(MetadataError::LoweringError(
+                                                requirement_name.clone(),
+                                                err,
+                                            )),
+                                        }
+                                    })
+                                })
+                                .collect::<Result<Vec<_>, _>>(),
+                            SourceStrategy::Disabled => Ok(requirements
+                                .into_iter()
+                                .map(uv_pypi_types::Requirement::from)
+                                .collect()),
+                        },
+                        Err(err) => Err(err),
+                    };
+                    // TODO(zanieb): Rewrite this to raise the error correctly
+                    (name, requirements.unwrap())
+                })
+                .collect::<BTreeMap<_, _>>();
+
+            dependency_groups
         };
 
         let requires_dist = metadata.requires_dist.into_iter();

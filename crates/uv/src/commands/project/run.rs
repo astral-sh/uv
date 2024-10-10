@@ -15,7 +15,8 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, SourceStrategy,
+    Concurrency, DevMode, DevSpecification, EditableMode, ExtrasSpecification, InstallOptions,
+    SourceStrategy,
 };
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
@@ -544,7 +545,7 @@ pub(crate) async fn run(
                     &venv,
                     result.lock(),
                     &extras,
-                    dev,
+                    &DevSpecification::from(dev),
                     editable,
                     install_options,
                     Modifications::Sufficient,

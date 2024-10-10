@@ -11,7 +11,7 @@ use uv_configuration::{
     Concurrency, DevMode, DevSpecification, EditableMode, ExportFormat, ExtrasSpecification,
     InstallOptions,
 };
-use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::RequirementsTxtExport;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
@@ -126,13 +126,6 @@ pub(crate) async fn export(
         Err(err) => return Err(err.into()),
     };
 
-    // Include development dependencies, if requested.
-    let dev = match dev {
-        DevMode::Include => DevSpecification::Include(std::slice::from_ref(&DEV_DEPENDENCIES)),
-        DevMode::Exclude => DevSpecification::Exclude,
-        DevMode::Only => DevSpecification::Only(std::slice::from_ref(&DEV_DEPENDENCIES)),
-    };
-
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
 
@@ -143,7 +136,7 @@ pub(crate) async fn export(
                 &lock,
                 project.project_name(),
                 &extras,
-                dev,
+                &DevSpecification::from(dev),
                 editable,
                 hashes,
                 &install_options,

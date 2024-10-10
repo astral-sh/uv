@@ -820,6 +820,7 @@ impl AddSettings {
             requirements,
             dev,
             optional,
+            group,
             editable,
             no_editable,
             extra,
@@ -840,6 +841,8 @@ impl AddSettings {
 
         let dependency_type = if let Some(extra) = optional {
             DependencyType::Optional(extra)
+        } else if let Some(group) = group {
+            DependencyType::Group(group)
         } else if dev {
             DependencyType::Dev
         } else {
@@ -895,6 +898,7 @@ impl RemoveSettings {
             dev,
             optional,
             packages,
+            group,
             no_sync,
             locked,
             frozen,
@@ -906,8 +910,10 @@ impl RemoveSettings {
             python,
         } = args;
 
-        let dependency_type = if let Some(group) = optional {
-            DependencyType::Optional(group)
+        let dependency_type = if let Some(extra) = optional {
+            DependencyType::Optional(extra)
+        } else if let Some(group) = group {
+            DependencyType::Group(group)
         } else if dev {
             DependencyType::Dev
         } else {
