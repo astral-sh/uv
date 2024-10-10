@@ -1,13 +1,13 @@
 #![allow(clippy::single_match_else)]
 
-use anstream::eprint;
-use owo_colors::OwoColorize;
-use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::Path;
-use tracing::debug;
 
+use anstream::eprint;
+use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashMap};
+use tracing::debug;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -466,6 +466,11 @@ async fn do_lock(
         .await
         {
             Ok(result) => Some(result),
+            Err(ProjectError::Lock(err)) if err.is_resolution() => {
+                // Resolver errors are not recoverable, as such errors can leave the resolver in a
+                // broken state. Specifically, tasks that fail with an error can be left as pending.
+                return Err(ProjectError::Lock(err));
+            }
             Err(err) => {
                 warn_user!("Failed to validate existing lockfile: {err}");
                 None
@@ -487,8 +492,6 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         _ => {
-            debug!("Starting clean resolution");
-
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
@@ -839,12 +842,6 @@ impl ValidatedLock {
             SatisfiesResult::MissingLocalIndex(name, version, index) => {
                 debug!(
                     "Ignoring existing lockfile due to missing local index: `{name}` `{version}` from `{}`", index.display()
-                );
-                Ok(Self::Preferable(lock))
-            }
-            SatisfiesResult::MissingMetadata(name, version) => {
-                debug!(
-                    "Ignoring existing lockfile due to missing metadata for: `{name}=={version}`"
                 );
                 Ok(Self::Preferable(lock))
             }
