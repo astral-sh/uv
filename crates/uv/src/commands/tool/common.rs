@@ -24,6 +24,10 @@ use crate::printer::Printer;
 
 /// Return all packages which contain an executable with the given name.
 pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec<InstalledDist> {
+    let stripped_name = name
+        .strip_suffix(std::env::consts::EXE_SUFFIX)
+        .unwrap_or(name);
+
     site_packages
         .iter()
         .filter_map(|package| {
@@ -36,7 +40,7 @@ pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec
                             entrypoint
                                 .0
                                 .strip_suffix(std::env::consts::EXE_SUFFIX)
-                                .is_some_and(|stripped| stripped == name)
+                                .is_some_and(|stripped| stripped == stripped_name)
                         })
                         .then(|| package.clone())
                 })

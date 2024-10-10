@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 
 use tracing::debug;
 
@@ -101,15 +101,28 @@ impl<'a> Target<'a> {
     }
 
     /// Returns the name of the executable.
-    pub(crate) fn executable(&self) -> &str {
-        match self {
+    pub(crate) fn executable(&self) -> Cow<str> {
+        let name = match self {
             Self::Unspecified(name) => name,
             Self::Version(name, _) => name,
             Self::Latest(name) => name,
             Self::FromVersion(name, _, _) => name,
             Self::FromLatest(name, _) => name,
             Self::From(name, _) => name,
+        };
+
+        // On Unix, we don't need to deal with an extension
+        if !cfg!(windows) {
+            return Cow::Borrowed(name);
         }
+
+        // On Windows, if we have an extension we won't also add `.exe`
+        if std::path::Path::new(name).extension().is_some() {
+            return Cow::Borrowed(name);
+        }
+
+        // Otherwise, we ensure `.exe` is present
+        Cow::Owned(format!("{name}.exe"))
     }
 
     /// Returns `true` if the target is `latest`.

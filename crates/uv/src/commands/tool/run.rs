@@ -142,7 +142,7 @@ pub(crate) async fn run(
     let executable = target.executable();
 
     // Construct the command
-    let mut process = Command::new(executable);
+    let mut process = Command::new(&*executable);
     process.args(args);
 
     // Construct the `PATH` environment variable.
@@ -171,7 +171,7 @@ pub(crate) async fn run(
     // We check if the provided command is not part of the executables for the `from` package.
     // If the command is found in other packages, we warn the user about the correct package to use.
     warn_executable_not_provided_by_package(
-        executable,
+        &executable,
         &from.name,
         &site_packages,
         invocation_source,
