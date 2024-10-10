@@ -19,16 +19,12 @@ use uv_cli::{
     compat::CompatArgs, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
     PipCommand, PipNamespace, ProjectCommand,
 };
-use uv_cli::{
-    ExternalCommand, GlobalArgs, PythonCommand, PythonNamespace, ToolCommand, ToolNamespace,
-    TopLevelArgs,
-};
+use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLevelArgs};
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
-use uv_client::BaseClientBuilder;
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
-use uv_scripts::{Pep723Item, Pep723Script, Pep723Stdin};
+use uv_scripts::{Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
@@ -46,62 +42,6 @@ pub(crate) mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
 pub(crate) mod version;
-
-/// Resolves the script target for a run command.
-///
-/// If it's a local file, does nothing. If it's a URL, downloads the content
-/// to a temporary file and updates the command. Prioritizes local files over URLs.
-/// Returns Some(NamedTempFile) if a remote script was downloaded, None otherwise.
-async fn resolve_script_target(
-    command: &mut ExternalCommand,
-    global_args: &GlobalArgs,
-    filesystem: Option<&FilesystemOptions>,
-) -> Result<Option<tempfile::NamedTempFile>> {
-    use std::io::Write;
-
-    let Some(target) = command.get_mut(0) else {
-        return Ok(None);
-    };
-
-    // Only continue if we are absolutely certain no local file exists.
-    //
-    // We don't do this check on Windows since the file path would
-    // be invalid anyway, and thus couldn't refer to a local file.
-    if cfg!(unix) && !matches!(Path::new(target).try_exists(), Ok(false)) {
-        return Ok(None);
-    }
-
-    let maybe_url = target.to_string_lossy();
-
-    // Only continue if the target truly looks like a URL.
-    if !(maybe_url.starts_with("http://") || maybe_url.starts_with("https://")) {
-        return Ok(None);
-    }
-
-    let script_url = url::Url::parse(&maybe_url)?;
-    let file_stem = script_url
-        .path_segments()
-        .and_then(std::iter::Iterator::last)
-        .and_then(|segment| segment.strip_suffix(".py"))
-        .unwrap_or("script");
-
-    let mut temp_file = tempfile::Builder::new()
-        .prefix(file_stem)
-        .suffix(".py")
-        .tempfile()?;
-
-    // Respect cli flags and workspace settings.
-    let settings = GlobalSettings::resolve(global_args, filesystem);
-    let client = BaseClientBuilder::new()
-        .connectivity(settings.connectivity)
-        .native_tls(settings.native_tls)
-        .build();
-    let response = client.client().get(script_url).send().await?;
-    let contents = response.bytes().await?;
-    temp_file.write_all(&contents)?;
-    *target = temp_file.path().into();
-    Ok(Some(temp_file))
-}
 
 #[instrument(skip_all)]
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
@@ -191,7 +131,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     };
 
     // Parse the external command, if necessary.
-    let mut maybe_tempfile: Option<tempfile::NamedTempFile> = None;
     let run_command = if let Commands::Project(command) = &mut *cli.command {
         if let ProjectCommand::Run(uv_cli::RunArgs {
             command: Some(command),
@@ -200,10 +139,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             ..
         }) = &mut **command
         {
-            maybe_tempfile =
-                resolve_script_target(command, &cli.top_level.global_args, filesystem.as_ref())
-                    .await?;
-            Some(RunCommand::from_args(command, *module, *script)?)
+            let settings = GlobalSettings::resolve(&cli.top_level.global_args, filesystem.as_ref());
+            Some(
+                RunCommand::from_args(
+                    command,
+                    *module,
+                    *script,
+                    settings.connectivity,
+                    settings.native_tls,
+                )
+                .await?,
+            )
         } else {
             None
         }
@@ -218,8 +164,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 Some(
                     RunCommand::PythonScript(script, _) | RunCommand::PythonGuiScript(script, _),
                 ) => Pep723Script::read(&script).await?.map(Pep723Item::Script),
+                Some(RunCommand::PythonRemote(script, _)) => {
+                    Pep723Metadata::read(&script).await?.map(Pep723Item::Remote)
+                }
                 Some(RunCommand::PythonStdin(contents)) => {
-                    Pep723Stdin::parse(contents)?.map(Pep723Item::Stdin)
+                    Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin)
                 }
                 _ => None,
             }
@@ -276,15 +225,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     } else {
         Printer::Default
     };
-
-    // We only have a tempfile if we downloaded a remote script.
-    if let Some(temp_file) = maybe_tempfile.as_ref() {
-        writeln!(
-            printer.stderr(),
-            "Downloaded remote script to: {}",
-            temp_file.path().display().cyan(),
-        )?;
-    }
 
     // Configure the `warn!` macros, which control user-facing warnings in the CLI.
     if globals.quiet {
@@ -1226,7 +1166,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .await
         .expect("tokio threadpool exited unexpectedly"),
     };
-    drop(maybe_tempfile);
     result
 }
 
@@ -1471,6 +1410,7 @@ async fn run_project(
             let script = script.map(|script| match script {
                 Pep723Item::Script(script) => script,
                 Pep723Item::Stdin(_) => unreachable!("`uv remove` does not support stdin"),
+                Pep723Item::Remote(_) => unreachable!("`uv remove` does not support remote files"),
             });
 
             commands::remove(
