@@ -1,5 +1,3 @@
-#![cfg(all(feature = "python", feature = "pypi"))]
-
 use crate::common::{copy_dir_all, uv_snapshot, TestContext};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;

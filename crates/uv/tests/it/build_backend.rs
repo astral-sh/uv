@@ -1,5 +1,3 @@
-#![cfg(feature = "python")]
-
 use crate::common::{uv_snapshot, TestContext};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;

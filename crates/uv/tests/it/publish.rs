@@ -1,5 +1,3 @@
-#![cfg(feature = "pypi")]
-
 use crate::common::{uv_snapshot, TestContext};
 
 #[test]

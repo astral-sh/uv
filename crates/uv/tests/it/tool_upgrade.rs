@@ -1,5 +1,3 @@
-#![cfg(all(feature = "python", feature = "pypi"))]
-
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 

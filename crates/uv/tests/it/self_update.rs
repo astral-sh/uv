@@ -1,5 +1,3 @@
-#![cfg(feature = "self-update")]
-
 use std::process::Command;
 
 use axoupdater::{

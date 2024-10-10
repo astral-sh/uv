@@ -1,5 +1,3 @@
-#![cfg(all(feature = "python", feature = "pypi"))]
-
 use assert_fs::fixture::PathChild;
 
 use crate::common::{uv_snapshot, TestContext};

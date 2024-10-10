@@ -1,5 +1,3 @@
-#![cfg(feature = "python")]
-
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;

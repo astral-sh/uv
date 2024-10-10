@@ -1,5 +1,3 @@
-#![cfg(all(feature = "python", feature = "pypi"))]
-
 use crate::common::{diff_snapshot, uv_snapshot, TestContext};
 use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild};

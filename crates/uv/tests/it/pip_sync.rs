@@ -1,5 +1,3 @@
-#![cfg(all(feature = "python", feature = "pypi"))]
-
 use std::env::consts::EXE_SUFFIX;
 use std::path::Path;
 use std::process::Command;
