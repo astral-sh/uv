@@ -24,7 +24,7 @@ use uv_cli::{
 };
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
-use uv_fs::{write_atomic, CWD};
+use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_scripts::Pep723Script;
 use uv_settings::{Combine, FilesystemOptions, Options};
@@ -53,6 +53,8 @@ pub(crate) mod version;
 async fn resolve_script_target(
     command: &mut ExternalCommand,
 ) -> Result<Option<tempfile::NamedTempFile>> {
+    use std::io::Write;
+
     let Some(target) = command.get_mut(0) else {
         return Ok(None);
     };
@@ -79,14 +81,14 @@ async fn resolve_script_target(
         .and_then(|segment| segment.strip_suffix(".py"))
         .unwrap_or("script");
 
-    let temp_file = tempfile::Builder::new()
+    let mut temp_file = tempfile::Builder::new()
         .prefix(file_stem)
         .suffix(".py")
         .tempfile()?;
 
     let response = reqwest::get(script_url).await?;
     let contents = response.bytes().await?;
-    write_atomic(&temp_file, &contents).await?;
+    temp_file.write_all(&contents)?;
     *target = temp_file.path().into();
     Ok(Some(temp_file))
 }
