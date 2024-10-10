@@ -1497,6 +1497,7 @@ async fn run_project(
 
             commands::tree(
                 project_dir,
+                args.dev,
                 args.locked,
                 args.frozen,
                 args.universal,
