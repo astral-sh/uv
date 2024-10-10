@@ -218,6 +218,7 @@ rest_pat_in_fully_bound_structs = "warn"
 [profile.release]
 strip = true
 lto = "fat"
+opt-level = "s"
 
 # This profile disables LTO and is used for ppc64le musl cross builds which fail otherwise
 [profile.release-no-lto]
