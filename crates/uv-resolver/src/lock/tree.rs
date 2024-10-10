@@ -166,13 +166,20 @@ impl<'env> TreeDisplay<'env> {
             }
         }
 
+        let members = &lock.manifest.members;
         // Compute the root nodes.
         let roots = lock
             .packages
             .iter()
-            .map(|dist| &dist.id)
-            .filter(|id| !non_roots.contains(*id))
-            .collect::<Vec<_>>();
+            .filter_map(|dist| {
+                // Always include workspace members in roots.
+                if !non_roots.contains(&dist.id) || members.contains(dist.name()) {
+                    Some(&dist.id)
+                } else {
+                    None
+                }
+            })
+            .collect_vec();
 
         Self {
             roots,
@@ -313,7 +320,7 @@ impl<'env> TreeDisplay<'env> {
         let mut lines = Vec::new();
 
         if self.packages.is_empty() {
-            for id in &self.roots {
+            for &id in &self.roots {
                 path.clear();
                 lines.extend(self.visit(Node::Root(id), &mut visited, &mut path));
             }
