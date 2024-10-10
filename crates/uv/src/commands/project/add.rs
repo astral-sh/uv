@@ -379,10 +379,7 @@ pub(crate) async fn add(
                 (uv_pep508::Requirement::from(requirement), None)
             }
             Target::Script(ref script, _) => {
-                let uv_scripts::Source::File(path) = &script.source else {
-                    unreachable!("script source is not a file");
-                };
-                let script_path = std::path::absolute(path)?;
+                let script_path = std::path::absolute(&script.path)?;
                 let script_dir = script_path.parent().expect("script path has no parent");
                 resolve_requirement(
                     requirement,
@@ -511,9 +508,11 @@ pub(crate) async fn add(
         Target::Project(project, venv) => (project, venv),
         // If `--script`, exit early. There's no reason to lock and sync.
         Target::Script(script, _) => {
-            if let uv_scripts::Source::File(path) = &script.source {
-                writeln!(printer.stderr(), "Updated `{}`", path.user_display().cyan())?;
-            }
+            writeln!(
+                printer.stderr(),
+                "Updated `{}`",
+                script.path.user_display().cyan()
+            )?;
             return Ok(ExitStatus::Success);
         }
     };

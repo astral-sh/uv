@@ -29,7 +29,7 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::Lock;
-use uv_scripts::Pep723Script;
+use uv_scripts::Pep723Item;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace, WorkspaceError};
 
@@ -52,7 +52,7 @@ use crate::settings::ResolverInstallerSettings;
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     project_dir: &Path,
-    script: Option<Pep723Script>,
+    script: Option<Pep723Item>,
     command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
@@ -107,11 +107,11 @@ pub(crate) async fn run(
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
     let script_interpreter = if let Some(script) = script {
-        if let uv_scripts::Source::File(path) = &script.source {
+        if let Pep723Item::Script(script) = &script {
             writeln!(
                 printer.stderr(),
                 "Reading inline script metadata from: {}",
-                path.user_display().cyan()
+                script.path.user_display().cyan()
             )?;
         } else {
             writeln!(
@@ -134,7 +134,7 @@ pub(crate) async fn run(
         } else {
             // (3) `Requires-Python` in the script
             let request = script
-                .metadata
+                .metadata()
                 .requires_python
                 .as_ref()
                 .map(|requires_python| {
@@ -163,7 +163,7 @@ pub(crate) async fn run(
         .await?
         .into_interpreter();
 
-        if let Some(requires_python) = script.metadata.requires_python.as_ref() {
+        if let Some(requires_python) = script.metadata().requires_python.as_ref() {
             if !requires_python.contains(interpreter.python_version()) {
                 let err = match source {
                     PythonRequestSource::UserRequest => {
@@ -190,29 +190,28 @@ pub(crate) async fn run(
             }
         }
 
+        // Determine the working directory for the script.
+        let script_dir = match &script {
+            Pep723Item::Script(script) => std::path::absolute(&script.path)?
+                .parent()
+                .expect("script path has no parent")
+                .to_owned(),
+            Pep723Item::Stdin(..) => std::env::current_dir()?,
+        };
+        let script = script.into_metadata();
+
         // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-        if let Some(dependencies) = script.metadata.dependencies {
+        if let Some(dependencies) = script.dependencies {
             // // Collect any `tool.uv.sources` from the script.
             let empty = BTreeMap::default();
             let script_sources = match settings.sources {
                 SourceStrategy::Enabled => script
-                    .metadata
                     .tool
                     .as_ref()
                     .and_then(|tool| tool.uv.as_ref())
                     .and_then(|uv| uv.sources.as_ref())
                     .unwrap_or(&empty),
                 SourceStrategy::Disabled => &empty,
-            };
-            let script_dir = match &script.source {
-                uv_scripts::Source::File(path) => {
-                    let script_path = std::path::absolute(path)?;
-                    script_path
-                        .parent()
-                        .expect("script path has no parent")
-                        .to_owned()
-                }
-                uv_scripts::Source::Stdin => std::env::current_dir()?,
             };
 
             let requirements = dependencies

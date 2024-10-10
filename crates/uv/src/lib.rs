@@ -28,7 +28,7 @@ use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use uv_client::BaseClientBuilder;
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
-use uv_scripts::Pep723Script;
+use uv_scripts::{Pep723Item, Pep723Script, Pep723Stdin};
 use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
@@ -217,8 +217,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             match run_command.as_ref() {
                 Some(
                     RunCommand::PythonScript(script, _) | RunCommand::PythonGuiScript(script, _),
-                ) => Pep723Script::read(&script).await?,
-                Some(RunCommand::PythonStdin(contents)) => Pep723Script::parse_stdin(contents)?,
+                ) => Pep723Script::read(&script).await?.map(Pep723Item::Script),
+                Some(RunCommand::PythonStdin(contents)) => {
+                    Pep723Stdin::parse(contents)?.map(Pep723Item::Stdin)
+                }
                 _ => None,
             }
         } else if let ProjectCommand::Remove(uv_cli::RemoveArgs {
@@ -226,7 +228,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             ..
         }) = &**command
         {
-            Pep723Script::read(&script).await?
+            Pep723Script::read(&script).await?.map(Pep723Item::Script)
         } else {
             None
         }
@@ -237,7 +239,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // If the target is a PEP 723 script, merge the metadata into the filesystem metadata.
     let filesystem = script
         .as_ref()
-        .map(|script| &script.metadata)
+        .map(Pep723Item::metadata)
         .and_then(|metadata| metadata.tool.as_ref())
         .and_then(|tool| tool.uv.as_ref())
         .map(|uv| Options::simple(uv.globals.clone(), uv.top_level.clone()))
@@ -1233,7 +1235,7 @@ async fn run_project(
     project_command: Box<ProjectCommand>,
     project_dir: &Path,
     command: Option<RunCommand>,
-    script: Option<Pep723Script>,
+    script: Option<Pep723Item>,
     globals: GlobalSettings,
     // TODO(zanieb): Determine a better story for passing `no_config` in here
     no_config: bool,
@@ -1464,6 +1466,12 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
+
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(_) => unreachable!("`uv remove` does not support stdin"),
+            });
 
             commands::remove(
                 project_dir,
