@@ -3162,6 +3162,13 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
 
+    /// Exclude the comment header at the top of the generated output file.
+    #[arg(long, overrides_with("header"))]
+    pub no_header: bool,
+
+    #[arg(long, overrides_with("no_header"), hide = true)]
+    pub header: bool,
+
     /// Install any editable dependencies, including the project and any workspace members, as
     /// non-editable.
     #[arg(long)]

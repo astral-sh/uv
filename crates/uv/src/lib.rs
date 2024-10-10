@@ -1464,6 +1464,7 @@ async fn run_project(
                 args.editable,
                 args.locked,
                 args.frozen,
+                args.include_header,
                 args.python,
                 args.settings,
                 globals.python_preference,
