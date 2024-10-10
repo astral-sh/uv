@@ -84,7 +84,10 @@ impl PrereleaseStrategy {
 
                     if specifier
                         .iter()
-                        .filter(|spec| (spec.operator() != &Operator::NotEqual))
+                        .filter(|spec| {
+                            (spec.operator() != &Operator::NotEqual)
+                                && (spec.operator() != &Operator::NotEqualStar)
+                        })
                         .any(uv_pep440::VersionSpecifier::any_prerelease)
                     {
                         packages.add(&requirement, ());
