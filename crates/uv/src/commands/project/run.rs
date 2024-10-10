@@ -737,7 +737,7 @@ pub(crate) async fn run(
                         diagnostics::build(dist, err);
                         return Ok(ExitStatus::Failure);
                     }
-                    Err(ProjectError::Operation(operations::Error::Named(err))) => {
+                    Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
                         let err = miette::Report::msg(format!("{err}"))
                             .context("Invalid `--with` requirement");
                         eprint!("{err:?}");

@@ -167,10 +167,7 @@ pub(crate) enum ProjectError {
     Name(#[from] uv_normalize::InvalidNameError),
 
     #[error(transparent)]
-    NamedRequirements(#[from] uv_requirements::NamedRequirementsError),
-
-    #[error(transparent)]
-    Extras(#[from] uv_requirements::ExtrasError),
+    Requirements(#[from] uv_requirements::Error),
 
     #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
@@ -611,7 +608,7 @@ pub(crate) async fn resolve_names(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<Vec<Requirement>, uv_requirements::NamedRequirementsError> {
+) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
         requirements

@@ -1,27 +1,14 @@
 use std::sync::Arc;
 
 use futures::{stream::FuturesOrdered, TryStreamExt};
-use thiserror::Error;
 
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::{BuiltDist, Dist, DistributionMetadata, SourceDist};
+use uv_distribution_types::{Dist, DistributionMetadata};
 use uv_pypi_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
-use crate::required_dist;
-
-#[derive(Debug, Error)]
-pub enum ExtrasError {
-    #[error("Failed to download: `{0}`")]
-    Download(BuiltDist, #[source] uv_distribution::Error),
-    #[error("Failed to download and build: `{0}`")]
-    DownloadAndBuild(SourceDist, #[source] uv_distribution::Error),
-    #[error("Failed to build: `{0}`")]
-    Build(SourceDist, #[source] uv_distribution::Error),
-    #[error(transparent)]
-    UnsupportedUrl(#[from] uv_distribution_types::Error),
-}
+use crate::{required_dist, Error};
 
 /// A resolver to expand the requested extras for a set of requirements to include all defined
 /// extras.
@@ -61,7 +48,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
     pub async fn resolve(
         self,
         requirements: impl Iterator<Item = Requirement>,
-    ) -> Result<Vec<Requirement>, ExtrasError> {
+    ) -> Result<Vec<Requirement>, Error> {
         let Self {
             hasher,
             index,
@@ -84,7 +71,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'a, Context>,
-    ) -> Result<Requirement, ExtrasError> {
+    ) -> Result<Requirement, Error> {
         // Determine whether the requirement represents a local distribution and convert to a
         // buildable distribution.
         let Some(dist) = required_dist(&requirement)? else {
@@ -114,12 +101,12 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
                     .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
                     .await
                     .map_err(|err| match &dist {
-                        Dist::Built(built) => ExtrasError::Download(built.clone(), err),
+                        Dist::Built(built) => Error::Download(built.clone(), err),
                         Dist::Source(source) => {
                             if source.is_local() {
-                                ExtrasError::Build(source.clone(), err)
+                                Error::Build(source.clone(), err)
                             } else {
-                                ExtrasError::DownloadAndBuild(source.clone(), err)
+                                Error::DownloadAndBuild(source.clone(), err)
                             }
                         }
                     })?;
