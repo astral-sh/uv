@@ -1436,45 +1436,43 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             )
             .collect::<Vec<_>>();
 
-        todo!()
-        //
-        // // Check if there are recursive self inclusions and we need to go into the expensive branch.
-        // if !requirements
-        //     .iter()
-        //     .any(|req| name == Some(&req.name) && !req.extras.is_empty())
-        // {
-        //     return requirements;
-        // }
-        //
-        // // Transitively process all extras that are recursively included, starting with the current
-        // // extra.
-        // let mut seen = FxHashSet::default();
-        // let mut queue: VecDeque<_> = requirements
-        //     .iter()
-        //     .filter(|req| name == Some(&req.name))
-        //     .flat_map(|req| req.extras.iter().cloned())
-        //     .collect();
-        // while let Some(extra) = queue.pop_front() {
-        //     if !seen.insert(extra.clone()) {
-        //         continue;
-        //     }
-        //     for requirement in
-        //         self.requirements_for_extra(dependencies, Some(&extra), markers, python_requirement)
-        //     {
-        //         if name == Some(&requirement.name) {
-        //             // Add each transitively included extra.
-        //             queue.extend(requirement.extras.iter().cloned());
-        //         } else {
-        //             // Add the requirements for that extra.
-        //             requirements.push(requirement);
-        //         }
-        //     }
-        // }
-        //
-        // // Drop all the self-requirements now that we flattened them out.
-        // requirements.retain(|req| name != Some(&req.name));
-        //
-        // requirements
+        // Check if there are recursive self inclusions and we need to go into the expensive branch.
+        if !requirements
+            .iter()
+            .any(|req| name == Some(&req.name) && !req.extras.is_empty())
+        {
+            return requirements;
+        }
+
+        // Transitively process all extras that are recursively included, starting with the current
+        // extra.
+        let mut seen = FxHashSet::default();
+        let mut queue: VecDeque<_> = requirements
+            .iter()
+            .filter(|req| name == Some(&req.name))
+            .flat_map(|req| req.extras.iter().cloned())
+            .collect();
+        while let Some(extra) = queue.pop_front() {
+            if !seen.insert(extra.clone()) {
+                continue;
+            }
+            for requirement in
+                self.requirements_for_extra(dependencies, Some(&extra), markers, python_requirement)
+            {
+                if name == Some(&requirement.name) {
+                    // Add each transitively included extra.
+                    queue.extend(requirement.extras.iter().cloned());
+                } else {
+                    // Add the requirements for that extra.
+                    requirements.push(requirement);
+                }
+            }
+        }
+
+        // Drop all the self-requirements now that we flattened them out.
+        requirements.retain(|req| name != Some(&req.name));
+
+        requirements
     }
 
     /// The set of the regular and dev dependencies, filtered by Python version,

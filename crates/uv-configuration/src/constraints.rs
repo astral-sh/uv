@@ -5,7 +5,7 @@ use rustc_hash::FxHashMap;
 
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{Extras, Requirement, RequirementSource};
+use uv_pypi_types::{Requirement, RequirementSource};
 
 /// A set of constraints for a set of requirements.
 #[derive(Debug, Default, Clone)]
@@ -28,7 +28,7 @@ impl Constraints {
                 .or_default()
                 .push(Requirement {
                     // We add and apply constraints independent of their extras.
-                    extras: Extras::Some(Vec::default()),
+                    extras: vec![],
                     ..requirement
                 });
         }

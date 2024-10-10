@@ -10,7 +10,7 @@ use uv_git::GitReference;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
-use uv_pypi_types::{Extras, ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
+use uv_pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 use uv_workspace::Workspace;
@@ -215,7 +215,7 @@ impl LoweredRequirement {
 
                     Ok(Self(Requirement {
                         name: requirement.name.clone(),
-                        extras: Extras::Some(requirement.extras.clone()),
+                        extras: requirement.extras.clone(),
                         marker,
                         source,
                         origin: requirement.origin.clone(),
@@ -327,7 +327,7 @@ impl LoweredRequirement {
 
                     Ok(Self(Requirement {
                         name: requirement.name.clone(),
-                        extras: Extras::Some(requirement.extras.clone()),
+                        extras: requirement.extras.clone(),
                         marker,
                         source,
                         origin: requirement.origin.clone(),
