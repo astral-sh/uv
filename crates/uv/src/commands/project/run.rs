@@ -116,8 +116,8 @@ pub(crate) async fn run(
         } else {
             writeln!(
                 printer.stderr(),
-                "Reading inline script metadata from: {}",
-                "<stdin>".cyan()
+                "Reading inline script metadata from: `{}`",
+                "stdin".cyan()
             )?;
         }
 

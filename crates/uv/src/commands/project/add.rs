@@ -380,7 +380,7 @@ pub(crate) async fn add(
             }
             Target::Script(ref script, _) => {
                 let uv_scripts::Source::File(path) = &script.source else {
-                    bail!("Cannot resolve requirement from stdin")
+                    unreachable!("script source is not a file");
                 };
                 let script_path = std::path::absolute(path)?;
                 let script_dir = script_path.parent().expect("script path has no parent");

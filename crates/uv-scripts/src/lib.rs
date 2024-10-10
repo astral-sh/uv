@@ -16,12 +16,6 @@ use uv_workspace::pyproject::Sources;
 
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
 
-#[derive(Debug)]
-pub enum Source {
-    File(PathBuf),
-    Stdin,
-}
-
 /// A PEP 723 script, including its [`Pep723Metadata`].
 #[derive(Debug)]
 pub struct Pep723Script {
@@ -42,18 +36,20 @@ impl Pep723Script {
     pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
         match fs_err::tokio::read(&file).await {
             Ok(contents) => {
-                Self::parse_contents(Source::File(file.as_ref().to_path_buf()), &contents)
+                Self::parse_contents(&contents, Source::File(file.as_ref().to_path_buf()))
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),
         }
     }
 
+    /// Read the PEP 723 `script` metadata from stdin.
     pub fn parse_stdin(contents: &[u8]) -> Result<Option<Self>, Pep723Error> {
-        Self::parse_contents(Source::Stdin, contents)
+        Self::parse_contents(contents, Source::Stdin)
     }
 
-    fn parse_contents(source: Source, contents: &[u8]) -> Result<Option<Self>, Pep723Error> {
+    /// Parse the contents of a Python script and extract the `script` metadata block.
+    fn parse_contents(contents: &[u8], source: Source) -> Result<Option<Self>, Pep723Error> {
         // Extract the `script` tag.
         let ScriptTag {
             prelude,
@@ -169,6 +165,15 @@ impl Pep723Script {
 
         Ok(())
     }
+}
+
+/// The source of a PEP 723 script.
+#[derive(Debug)]
+pub enum Source {
+    /// The PEP 723 script is sourced from a file.
+    File(PathBuf),
+    /// The PEP 723 script is sourced from stdin.
+    Stdin,
 }
 
 /// PEP 723 metadata as parsed from a `script` comment block.
