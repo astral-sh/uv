@@ -36,8 +36,6 @@ pub enum NamedRequirementsError {
 
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
 pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
-    /// The requirements for the project.
-    requirements: Vec<UnnamedRequirement<VerbatimParsedUrl>>,
     /// Whether to check hashes for distributions.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -47,15 +45,13 @@ pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
 }
 
 impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
-    /// Instantiate a new [`NamedRequirementsResolver`] for a given set of requirements.
+    /// Instantiate a new [`NamedRequirementsResolver`].
     pub fn new(
-        requirements: Vec<UnnamedRequirement<VerbatimParsedUrl>>,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
-            requirements,
             hasher,
             index,
             database,
@@ -72,15 +68,16 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
     }
 
     /// Resolve any unnamed requirements in the specification.
-    pub async fn resolve(self) -> Result<Vec<Requirement>, NamedRequirementsError> {
+    pub async fn resolve(
+        self,
+        requirements: impl Iterator<Item = UnnamedRequirement<VerbatimParsedUrl>>,
+    ) -> Result<Vec<Requirement>, NamedRequirementsError> {
         let Self {
-            requirements,
             hasher,
             index,
             database,
         } = self;
         requirements
-            .into_iter()
             .map(|requirement| async {
                 Self::resolve_requirement(requirement, hasher, index, &database)
                     .await

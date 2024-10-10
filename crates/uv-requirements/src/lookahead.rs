@@ -6,10 +6,10 @@ use rustc_hash::FxHashSet;
 use thiserror::Error;
 use tracing::trace;
 
+use crate::required_dist;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::{BuiltDist, Dist, DistributionMetadata, GitSourceDist, SourceDist};
-use uv_git::GitUrl;
+use uv_distribution_types::{BuiltDist, Dist, DistributionMetadata, SourceDist};
 use uv_normalize::GroupName;
 use uv_pypi_types::{Requirement, RequirementSource};
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverMarkers};
@@ -244,59 +244,4 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             direct,
         )))
     }
-}
-
-/// Convert a [`Requirement`] into a [`Dist`], if it is a direct URL.
-fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, uv_distribution_types::Error> {
-    Ok(Some(match &requirement.source {
-        RequirementSource::Registry { .. } => return Ok(None),
-        RequirementSource::Url {
-            subdirectory,
-            location,
-            ext,
-            url,
-        } => Dist::from_http_url(
-            requirement.name.clone(),
-            url.clone(),
-            location.clone(),
-            subdirectory.clone(),
-            *ext,
-        )?,
-        RequirementSource::Git {
-            repository,
-            reference,
-            precise,
-            subdirectory,
-            url,
-        } => {
-            let git_url = if let Some(precise) = precise {
-                GitUrl::from_commit(repository.clone(), reference.clone(), *precise)
-            } else {
-                GitUrl::from_reference(repository.clone(), reference.clone())
-            };
-            Dist::Source(SourceDist::Git(GitSourceDist {
-                name: requirement.name.clone(),
-                git: Box::new(git_url),
-                subdirectory: subdirectory.clone(),
-                url: url.clone(),
-            }))
-        }
-        RequirementSource::Path {
-            install_path,
-            ext,
-            url,
-        } => Dist::from_file_url(requirement.name.clone(), url.clone(), install_path, *ext)?,
-        RequirementSource::Directory {
-            install_path,
-            r#virtual,
-            url,
-            editable,
-        } => Dist::from_directory_url(
-            requirement.name.clone(),
-            url.clone(),
-            install_path,
-            *editable,
-            *r#virtual,
-        )?,
-    }))
 }

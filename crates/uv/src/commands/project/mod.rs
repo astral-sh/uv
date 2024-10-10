@@ -27,9 +27,7 @@ use uv_python::{
     VersionRequest,
 };
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
-use uv_requirements::{
-    NamedRequirementsError, NamedRequirementsResolver, RequirementsSpecification,
-};
+use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph,
     ResolverMarkers,
@@ -170,6 +168,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     NamedRequirements(#[from] uv_requirements::NamedRequirementsError),
+
+    #[error(transparent)]
+    Extras(#[from] uv_requirements::ExtrasError),
 
     #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
@@ -610,7 +611,7 @@ pub(crate) async fn resolve_names(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<Vec<Requirement>, NamedRequirementsError> {
+) -> Result<Vec<Requirement>, uv_requirements::NamedRequirementsError> {
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
         requirements
@@ -711,13 +712,12 @@ pub(crate) async fn resolve_names(
     // Resolve the unnamed requirements.
     requirements.extend(
         NamedRequirementsResolver::new(
-            unnamed,
             &hasher,
             &state.index,
             DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
         )
         .with_reporter(ResolverReporter::from(printer))
-        .resolve()
+        .resolve(unnamed.into_iter())
         .await?,
     );
 

@@ -26,6 +26,7 @@ use uv_pep440::Version;
 use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
+use uv_requirements::ExtrasResolver;
 use uv_resolver::{
     FlatIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython, ResolverManifest,
     ResolverMarkers, SatisfiesResult,
@@ -38,6 +39,7 @@ use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, Summary
 use crate::commands::project::{
     find_requires_python, ProjectError, ProjectInterpreter, SharedState,
 };
+use crate::commands::reporters::ResolverReporter;
 use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
@@ -534,8 +536,11 @@ async fn do_lock(
 
             // Resolve the requirements.
             let resolution = pip::operations::resolve(
-                workspace
-                    .members_requirements()
+                ExtrasResolver::new(&hasher, &state.index, database)
+                    .with_reporter(ResolverReporter::from(printer))
+                    .resolve(workspace.members_requirements())
+                    .await?
+                    .into_iter()
                     .chain(requirements.iter().cloned())
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
