@@ -120,6 +120,9 @@ pub(crate) async fn remove(
                     );
                 }
             }
+            DependencyType::Group(_) => {
+                todo!("removing dependencies from groups is not yet supported")
+            }
         }
     }
 
@@ -245,6 +248,9 @@ fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
                 warn_user!(
                     "`{name}` is an optional dependency; try calling `uv remove --optional {group}`",
                 );
+            }
+            DependencyType::Group(_) => {
+                // TODO(zanieb): Once we support `remove --group`, add a warning here.
             }
         }
     }

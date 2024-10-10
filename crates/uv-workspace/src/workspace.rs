@@ -1603,7 +1603,8 @@ mod tests {
                 ],
                 "optional-dependencies": null
               },
-              "tool": null
+              "tool": null,
+              "dependency-groups": null
             }
           }
         }
@@ -1654,7 +1655,8 @@ mod tests {
                     ],
                     "optional-dependencies": null
                   },
-                  "tool": null
+                  "tool": null,
+                  "dependency-groups": null
                 }
               }
             }
@@ -1761,7 +1763,8 @@ mod tests {
                       "override-dependencies": null,
                       "constraint-dependencies": null
                     }
-                  }
+                  },
+                  "dependency-groups": null
                 }
               }
             }
@@ -1848,7 +1851,8 @@ mod tests {
                       "override-dependencies": null,
                       "constraint-dependencies": null
                     }
-                  }
+                  },
+                  "dependency-groups": null
                 }
               }
             }
@@ -1898,7 +1902,8 @@ mod tests {
                     ],
                     "optional-dependencies": null
                   },
-                  "tool": null
+                  "tool": null,
+                  "dependency-groups": null
                 }
               }
             }
@@ -2047,7 +2052,8 @@ mod tests {
                       "override-dependencies": null,
                       "constraint-dependencies": null
                     }
-                  }
+                  },
+                  "dependency-groups": null
                 }
               }
             }
@@ -2146,7 +2152,8 @@ mod tests {
                       "override-dependencies": null,
                       "constraint-dependencies": null
                     }
-                  }
+                  },
+                  "dependency-groups": null
                 }
               }
             }
@@ -2258,7 +2265,8 @@ mod tests {
                       "override-dependencies": null,
                       "constraint-dependencies": null
                     }
-                  }
+                  },
+                  "dependency-groups": null
                 }
               }
             }
@@ -2344,7 +2352,8 @@ mod tests {
                       "override-dependencies": null,
                       "constraint-dependencies": null
                     }
-                  }
+                  },
+                  "dependency-groups": null
                 }
               }
             }

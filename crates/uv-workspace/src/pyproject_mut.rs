@@ -496,13 +496,29 @@ impl PyProjectTomlMut {
         }
 
         // Check `tool.uv.dev-dependencies`.
+        if let Some(groups) = self.doc.get("dependency-groups").and_then(Item::as_table) {
+            for (group, dependencies) in groups {
+                let Some(dependencies) = dependencies.as_array() else {
+                    continue;
+                };
+                let Ok(group) = ExtraName::new(group.to_string()) else {
+                    continue;
+                };
+
+                if !find_dependencies(name, marker, dependencies).is_empty() {
+                    types.push(DependencyType::Group(group));
+                }
+            }
+        }
+
+        // Check `tool.uv.dev-dependencies`.
         if let Some(dev_dependencies) = self
             .doc
             .get("tool")
             .and_then(Item::as_table)
             .and_then(|tool| tool.get("uv"))
             .and_then(Item::as_table)
-            .and_then(|tool| tool.get("dev-dependencies"))
+            .and_then(|uv| uv.get("dev-dependencies"))
             .and_then(Item::as_array)
         {
             if !find_dependencies(name, marker, dev_dependencies).is_empty() {

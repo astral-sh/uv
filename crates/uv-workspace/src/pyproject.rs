@@ -43,6 +43,8 @@ pub struct PyProjectToml {
     pub project: Option<Project>,
     /// Tool-specific metadata.
     pub tool: Option<Tool>,
+    /// Non-project dependency groups, as defined in PEP 735.
+    pub dependency_groups: Option<BTreeMap<ExtraName, Vec<String>>>,
     /// The raw unserialized document.
     #[serde(skip)]
     pub raw: String,
@@ -1053,6 +1055,8 @@ pub enum DependencyType {
     Dev,
     /// A dependency in `project.optional-dependencies.{0}`.
     Optional(ExtraName),
+    /// A dependency in `project.dependency-groups.{0}`.
+    Group(ExtraName),
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
@@ -1079,5 +1083,32 @@ mod serde_from_and_to_string {
         String::deserialize(deserializer)?
             .parse()
             .map_err(de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use uv_pep508::ExtraName;
+
+    use crate::pyproject::PyProjectToml;
+
+    #[test]
+    fn test_read_dependency_groups() {
+        let toml = r#"
+[dependency-groups]
+test = ["a"]
+"#;
+
+        let result =
+            PyProjectToml::from_string(toml.to_string()).expect("Deserialization should succeed");
+        let groups = result
+            .dependency_groups
+            .expect("`dependency-groups` should be present");
+        let test = groups
+            .get(&ExtraName::from_str("test").unwrap())
+            .expect("Group `test` should be present");
+        assert_eq!(test, &["a".to_string()]);
     }
 }
