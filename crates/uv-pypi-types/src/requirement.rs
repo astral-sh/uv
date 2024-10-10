@@ -32,6 +32,12 @@ pub enum RequirementError {
     OidParseError(#[from] uv_git::OidParseError),
 }
 
+#[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,)]
+pub enum Extras {
+    All,
+    Some(Vec<ExtraName>),
+}
+
 /// A representation of dependency on a package, an extension over a PEP 508's requirement.
 ///
 /// The main change is using [`RequirementSource`] to represent all supported package sources over
@@ -41,8 +47,8 @@ pub enum RequirementError {
 )]
 pub struct Requirement {
     pub name: PackageName,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub extras: Vec<ExtraName>,
+    // #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub extras: Extras,
     #[serde(
         skip_serializing_if = "marker::ser::is_empty",
         serialize_with = "marker::ser::serialize",
@@ -125,102 +131,102 @@ impl Requirement {
     }
 }
 
-impl From<Requirement> for uv_pep508::Requirement<VerbatimUrl> {
-    /// Convert a [`Requirement`] to a [`uv_pep508::Requirement`].
-    fn from(requirement: Requirement) -> Self {
-        uv_pep508::Requirement {
-            name: requirement.name,
-            extras: requirement.extras,
-            marker: requirement.marker,
-            origin: requirement.origin,
-            version_or_url: match requirement.source {
-                RequirementSource::Registry { specifier, .. } => {
-                    Some(VersionOrUrl::VersionSpecifier(specifier))
-                }
-                RequirementSource::Url { url, .. }
-                | RequirementSource::Git { url, .. }
-                | RequirementSource::Path { url, .. }
-                | RequirementSource::Directory { url, .. } => Some(VersionOrUrl::Url(url)),
-            },
-        }
-    }
-}
+// impl From<Requirement> for uv_pep508::Requirement<VerbatimUrl> {
+//     /// Convert a [`Requirement`] to a [`uv_pep508::Requirement`].
+//     fn from(requirement: Requirement) -> Self {
+//         uv_pep508::Requirement {
+//             name: requirement.name,
+//             extras: requirement.extras,
+//             marker: requirement.marker,
+//             origin: requirement.origin,
+//             version_or_url: match requirement.source {
+//                 RequirementSource::Registry { specifier, .. } => {
+//                     Some(VersionOrUrl::VersionSpecifier(specifier))
+//                 }
+//                 RequirementSource::Url { url, .. }
+//                 | RequirementSource::Git { url, .. }
+//                 | RequirementSource::Path { url, .. }
+//                 | RequirementSource::Directory { url, .. } => Some(VersionOrUrl::Url(url)),
+//             },
+//         }
+//     }
+// }
 
-impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
-    /// Convert a [`Requirement`] to a [`uv_pep508::Requirement`].
-    fn from(requirement: Requirement) -> Self {
-        uv_pep508::Requirement {
-            name: requirement.name,
-            extras: requirement.extras,
-            marker: requirement.marker,
-            origin: requirement.origin,
-            version_or_url: match requirement.source {
-                RequirementSource::Registry { specifier, .. } => {
-                    Some(VersionOrUrl::VersionSpecifier(specifier))
-                }
-                RequirementSource::Url {
-                    location,
-                    subdirectory,
-                    ext,
-                    url,
-                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
-                    parsed_url: ParsedUrl::Archive(ParsedArchiveUrl {
-                        url: location,
-                        subdirectory,
-                        ext,
-                    }),
-                    verbatim: url,
-                })),
-                RequirementSource::Git {
-                    repository,
-                    reference,
-                    precise,
-                    subdirectory,
-                    url,
-                } => {
-                    let git_url = if let Some(precise) = precise {
-                        GitUrl::from_commit(repository, reference, precise)
-                    } else {
-                        GitUrl::from_reference(repository, reference)
-                    };
-                    Some(VersionOrUrl::Url(VerbatimParsedUrl {
-                        parsed_url: ParsedUrl::Git(ParsedGitUrl {
-                            url: git_url,
-                            subdirectory,
-                        }),
-                        verbatim: url,
-                    }))
-                }
-                RequirementSource::Path {
-                    install_path,
-                    ext,
-                    url,
-                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
-                    parsed_url: ParsedUrl::Path(ParsedPathUrl {
-                        url: url.to_url(),
-                        install_path,
-                        ext,
-                    }),
-                    verbatim: url,
-                })),
-                RequirementSource::Directory {
-                    install_path,
-                    editable,
-                    r#virtual,
-                    url,
-                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
-                    parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
-                        url: url.to_url(),
-                        install_path,
-                        editable,
-                        r#virtual,
-                    }),
-                    verbatim: url,
-                })),
-            },
-        }
-    }
-}
+// impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
+//     /// Convert a [`Requirement`] to a [`uv_pep508::Requirement`].
+//     fn from(requirement: Requirement) -> Self {
+//         uv_pep508::Requirement {
+//             name: requirement.name,
+//             extras: requirement.extras,
+//             marker: requirement.marker,
+//             origin: requirement.origin,
+//             version_or_url: match requirement.source {
+//                 RequirementSource::Registry { specifier, .. } => {
+//                     Some(VersionOrUrl::VersionSpecifier(specifier))
+//                 }
+//                 RequirementSource::Url {
+//                     location,
+//                     subdirectory,
+//                     ext,
+//                     url,
+//                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
+//                     parsed_url: ParsedUrl::Archive(ParsedArchiveUrl {
+//                         url: location,
+//                         subdirectory,
+//                         ext,
+//                     }),
+//                     verbatim: url,
+//                 })),
+//                 RequirementSource::Git {
+//                     repository,
+//                     reference,
+//                     precise,
+//                     subdirectory,
+//                     url,
+//                 } => {
+//                     let git_url = if let Some(precise) = precise {
+//                         GitUrl::from_commit(repository, reference, precise)
+//                     } else {
+//                         GitUrl::from_reference(repository, reference)
+//                     };
+//                     Some(VersionOrUrl::Url(VerbatimParsedUrl {
+//                         parsed_url: ParsedUrl::Git(ParsedGitUrl {
+//                             url: git_url,
+//                             subdirectory,
+//                         }),
+//                         verbatim: url,
+//                     }))
+//                 }
+//                 RequirementSource::Path {
+//                     install_path,
+//                     ext,
+//                     url,
+//                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
+//                     parsed_url: ParsedUrl::Path(ParsedPathUrl {
+//                         url: url.to_url(),
+//                         install_path,
+//                         ext,
+//                     }),
+//                     verbatim: url,
+//                 })),
+//                 RequirementSource::Directory {
+//                     install_path,
+//                     editable,
+//                     r#virtual,
+//                     url,
+//                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
+//                     parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
+//                         url: url.to_url(),
+//                         install_path,
+//                         editable,
+//                         r#virtual,
+//                     }),
+//                     verbatim: url,
+//                 })),
+//             },
+//         }
+//     }
+// }
 
 impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
     /// Convert a [`uv_pep508::Requirement`] to a [`Requirement`].
@@ -241,7 +247,7 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
         };
         Requirement {
             name: requirement.name,
-            extras: requirement.extras,
+            extras: Extras::Some(requirement.extras),
             marker: requirement.marker,
             source,
             origin: requirement.origin,
@@ -254,17 +260,17 @@ impl Display for Requirement {
     /// than for inclusion in a `requirements.txt` file.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)?;
-        if !self.extras.is_empty() {
-            write!(
-                f,
-                "[{}]",
-                self.extras
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(",")
-            )?;
-        }
+        // if !self.extras.is_empty() {
+        //     write!(
+        //         f,
+        //         "[{}]",
+        //         self.extras
+        //             .iter()
+        //             .map(ToString::to_string)
+        //             .collect::<Vec<_>>()
+        //             .join(",")
+        //     )?;
+        // }
         match &self.source {
             RequirementSource::Registry { specifier, index } => {
                 write!(f, "{specifier}")?;

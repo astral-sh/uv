@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{HashDigest, Requirement, RequirementSource};
+use uv_pypi_types::{Extras, HashDigest, Requirement, RequirementSource};
 
 use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
 
@@ -251,7 +251,7 @@ impl From<&ResolvedDist> for Requirement {
         };
         Requirement {
             name: resolved_dist.name().clone(),
-            extras: vec![],
+            extras: Extras::Some(Vec::default()),
             marker: MarkerTree::TRUE,
             source,
             origin: None,
