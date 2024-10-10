@@ -905,7 +905,7 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
 
     let output = Command::new(&git)
         .arg("config")
-        .arg("get")
+        .arg("--get")
         .arg("user.name")
         .current_dir(path)
         .stdout(Stdio::piped())
@@ -917,7 +917,7 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
 
     let output = Command::new(&git)
         .arg("config")
-        .arg("get")
+        .arg("--get")
         .arg("user.email")
         .current_dir(path)
         .stdout(Stdio::piped())
