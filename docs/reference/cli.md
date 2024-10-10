@@ -214,6 +214,11 @@ uv run [OPTIONS] [COMMAND]
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt><code>--load-dotenv</code></dt><dd><p>Run the command and load environment variables from the <code>.env</code> file in the current project.</p>
+
+<p>By default, the .env file is not loaded.</p>
+
+<p>May also be set with the <code>UV_RUN_LOAD_DOTENV</code> environment variable.</p>
 </dd><dt><code>--locked</code></dt><dd><p>Assert that the <code>uv.lock</code> will remain unchanged.</p>
 
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>

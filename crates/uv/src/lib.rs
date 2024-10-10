@@ -1258,6 +1258,7 @@ async fn run_project(
                 args.editable,
                 args.python,
                 args.settings,
+                args.load_dotenv,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,

@@ -236,6 +236,7 @@ pub(crate) struct RunSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) load_dotenv: bool,
 }
 
 impl RunSettings {
@@ -267,6 +268,7 @@ impl RunSettings {
             no_project,
             python,
             show_resolution,
+            load_dotenv,
         } = args;
 
         Self {
@@ -295,6 +297,7 @@ impl RunSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
+            load_dotenv,
         }
     }
 }
