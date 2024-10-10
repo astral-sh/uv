@@ -174,22 +174,25 @@ uv pip install wheel && uv pip install --no-build-isolation biopython==1.77
 For a list of packages that are known to fail under PEP 517 build isolation, see
 [#2252](https://github.com/astral-sh/uv/issues/2252).
 
-## Transitive direct URL dependencies for constraints and overrides
+## Transitive URL dependencies
 
-While uv does support URL dependencies (e.g., `black @ https://...`), it does not support
-_transitive_ (i.e., "nested") direct URL dependencies for constraints and overrides.
+While uv includes first-class support for URL dependencies (e.g., `ruff @ https://...`), it differs
+from pip in its handling of _transitive_ URL dependencies in two ways.
 
-Specifically, if a constraint or override is defined using a direct URL dependency, and the
-constrained package has a direct URL dependency of its own, uv _may_ reject that transitive direct
-URL dependency during resolution.
+First, uv makes the assumption that non-URL dependencies do not introduce URL dependencies into the
+resolution. In other words, it assumes that dependencies fetched from a registry do not themselves
+depend on URLs. If a non-URL dependency _does_ introduce a URL dependency, uv will reject the URL
+dependency during resolution. (Note that PyPI does not allow published packages to depend on URL
+dependencies; other registries may be more permissive.)
 
-uv also makes the assumption that non-URL dependencies won't introduce URL dependencies (i.e., that
-dependencies fetched from a registry will not themselves have direct URL dependencies). If a non-URL
-dependency _does_ introduce a URL dependency, uv will reject the URL dependency during resolution.
+Second, if a constraint (`--constraint`) or override (`--override`) is defined using a direct URL
+dependency, and the constrained package has a direct URL dependency of its own, uv _may_ reject that
+transitive direct URL dependency during resolution, if the URL isn't referenced elsewhere in the set
+of input requirements.
 
-If uv rejects a transitive URL dependency in either case, the best course of action is to provide
-the URL dependency as a direct dependency in the `requirements.in` file, rather than as a
-constraint, override, or transitive dependency.
+If uv rejects a transitive URL dependency, the best course of action is to provide the URL
+dependency as a direct dependency in the relevant `pyproject.toml` or `requirement.in` file, as the
+above constraints do not apply to direct dependencies.
 
 ## Virtual environments by default
 
