@@ -61,6 +61,21 @@ $ pip install uv
 See the [installation documentation](https://docs.astral.sh/uv/getting-started/installation/) for
 details and alternative installation methods.
 
+## Upgrading uv
+
+If installed via standallone installer, uv can update itself:
+
+```console
+$ uv self update
+```
+
+To prevent modifying shell profiles, set `INSTALLER_NO_MODIFY_PATH=1`. For other methods, use the
+package manager’s upgrade command, like:
+
+```console
+$ pip install --upgrade uv
+```
+
 ## Documentation
 
 uv's documentation is available at [docs.astral.sh/uv](https://docs.astral.sh/uv).
