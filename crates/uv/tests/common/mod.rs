@@ -1,13 +1,10 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
-use std::borrow::BorrowMut;
-use std::env;
-use std::ffi::OsString;
-use std::iter::Iterator;
-use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Output};
-use std::str::FromStr;
+mod declarative;
+
+#[allow(unused_imports)] // False positive in clippy
+pub use declarative::DeclarativeTest;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
@@ -18,7 +15,13 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::Regex;
-
+use std::borrow::BorrowMut;
+use std::env;
+use std::ffi::OsString;
+use std::iter::Iterator;
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitStatus, Output};
+use std::str::FromStr;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::managed::ManagedPythonInstallations;
