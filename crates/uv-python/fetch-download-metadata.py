@@ -303,6 +303,7 @@ class CPythonFinder(Finder):
         version, _date, triple, build_options, flavor = match.groups()
 
         variants = build_options.split("+") if build_options else []
+        variant: Variant | None
         for variant in Variant:
             if variant in variants:
                 break
