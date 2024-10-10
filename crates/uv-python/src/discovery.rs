@@ -262,6 +262,7 @@ fn python_executables_from_environments<'a>(
             })
             .map_err(Error::from)
     })
+    .filter(Result::is_ok)
     .flatten_ok();
 
     from_virtual_environment
