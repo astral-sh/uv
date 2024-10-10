@@ -4512,7 +4512,7 @@ pub struct PublishArgs {
     pub username: Option<String>,
 
     /// The password for the upload.
-    #[arg(short, long, env = "UV_PUBLISH_PASSWORD")]
+    #[arg(short, long, env = "UV_PUBLISH_PASSWORD", requires = "username")]
     pub password: Option<String>,
 
     /// The token for the upload.
