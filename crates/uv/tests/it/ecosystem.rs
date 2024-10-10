@@ -1,5 +1,3 @@
-#![cfg(all(feature = "python", feature = "pypi"))]
-
 use crate::common::{self, get_bin, TestContext};
 use anyhow::Result;
 use insta::assert_snapshot;

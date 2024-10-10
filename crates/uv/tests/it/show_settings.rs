@@ -1,5 +1,3 @@
-#![cfg(all(feature = "python", feature = "pypi"))]
-
 use std::process::Command;
 
 use assert_fs::prelude::*;

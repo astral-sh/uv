@@ -1,5 +1,3 @@
-#![cfg(all(feature = "python", feature = "pypi"))]
-
 use crate::common::{self, uv_snapshot, TestContext};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;

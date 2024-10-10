@@ -1,5 +1,3 @@
-#![cfg(all(feature = "python", feature = "pypi"))]
-
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
 

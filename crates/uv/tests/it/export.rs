@@ -1,4 +1,3 @@
-#![cfg(all(feature = "python", feature = "pypi"))]
 #![allow(clippy::disallowed_types)]
 
 use crate::common::{apply_filters, uv_snapshot, TestContext};

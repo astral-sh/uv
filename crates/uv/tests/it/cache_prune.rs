@@ -1,5 +1,3 @@
-#![cfg(all(feature = "python", feature = "pypi"))]
-
 use crate::common::uv_snapshot;
 use anyhow::Result;
 use assert_cmd::prelude::*;
