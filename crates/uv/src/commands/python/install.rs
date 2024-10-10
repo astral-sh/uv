@@ -21,6 +21,7 @@ use crate::printer::Printer;
 /// Download and install Python versions.
 pub(crate) async fn install(
     project_dir: &Path,
+    install_dir: Option<&Path>,
     targets: Vec<String>,
     reinstall: bool,
     python_downloads: PythonDownloads,
@@ -31,7 +32,12 @@ pub(crate) async fn install(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
-    let installations = ManagedPythonInstallations::from_settings()?.init()?;
+    let installations = if let Some(install_dir) = install_dir {
+        ManagedPythonInstallations::from_path(install_dir)
+    } else {
+        ManagedPythonInstallations::from_settings()?
+    }
+    .init()?;
     let installations_dir = installations.root();
     let cache_dir = installations.cache();
     let _lock = installations.lock().await?;

@@ -3638,6 +3638,11 @@ pub struct PythonListArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonInstallArgs {
+    /// The directory where Python will be installed.
+    ///
+    #[arg(long, short, env = "UV_PYTHON_INSTALL_DIR")]
+    pub install_dir: Option<PathBuf>,
+
     /// The Python version(s) to install.
     ///
     /// If not provided, the requested Python version(s) will be read from the
@@ -3659,6 +3664,11 @@ pub struct PythonInstallArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonUninstallArgs {
+    /// The directory where Python is installed.
+    ///
+    #[arg(long, short, env = "UV_PYTHON_INSTALL_DIR")]
+    pub install_dir: Option<PathBuf>,
+
     /// The Python version(s) to uninstall.
     ///
     /// See `uv help python` to view supported request formats.
