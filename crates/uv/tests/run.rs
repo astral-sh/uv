@@ -2386,7 +2386,7 @@ fn run_stdin_with_pep723() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from: <stdin>
+    Reading inline script metadata from: `stdin`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
