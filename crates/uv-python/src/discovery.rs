@@ -132,7 +132,7 @@ pub enum EnvironmentPreference {
     Any,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum PythonVariant {
     #[default]
     Default,
@@ -1975,6 +1975,19 @@ impl VersionRequest {
             Self::Range(specifiers, _) => Self::Range(specifiers, PythonVariant::Default),
         }
     }
+
+    /// Return the required [`PythonVariant`] of the request.
+    pub(crate) fn variant(&self) -> Option<PythonVariant> {
+        match self {
+            Self::Any => None,
+            Self::Default => Some(PythonVariant::Default),
+            Self::Major(_, variant)
+            | Self::MajorMinor(_, _, variant)
+            | Self::MajorMinorPatch(_, _, _, variant)
+            | Self::MajorMinorPrerelease(_, _, _, variant)
+            | Self::Range(_, variant) => Some(*variant),
+        }
+    }
 }
 
 impl FromStr for VersionRequest {
@@ -2045,6 +2058,27 @@ impl FromStr for VersionRequest {
                 Ok(Self::MajorMinorPatch(*major, *minor, *patch, variant))
             }
             _ => Err(Error::InvalidVersionRequest(s.to_string())),
+        }
+    }
+}
+
+impl FromStr for PythonVariant {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "t" | "freethreaded" => Ok(Self::Freethreaded),
+            "" => Ok(Self::Default),
+            _ => Err(()),
+        }
+    }
+}
+
+impl std::fmt::Display for PythonVariant {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Default => f.write_str("default"),
+            Self::Freethreaded => f.write_str("freethreaded"),
         }
     }
 }

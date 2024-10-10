@@ -20,7 +20,7 @@ use crate::libc::LibcDetectionError;
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
-use crate::PythonRequest;
+use crate::{PythonRequest, PythonVariant};
 use uv_fs::{LockedFile, Simplified};
 
 #[derive(Error, Debug)]
@@ -329,13 +329,17 @@ impl ManagedPythonInstallation {
         let stdlib = if matches!(self.key.os, Os(target_lexicon::OperatingSystem::Windows)) {
             self.python_dir().join("Lib")
         } else {
+            let lib_suffix = match self.key.variant {
+                PythonVariant::Default => "",
+                PythonVariant::Freethreaded => "t",
+            };
             let python = if matches!(
                 self.key.implementation,
                 LenientImplementationName::Known(ImplementationName::PyPy)
             ) {
                 format!("pypy{}", self.key.version().python_version())
             } else {
-                format!("python{}", self.key.version().python_version())
+                format!("python{}{lib_suffix}", self.key.version().python_version())
             };
             self.python_dir().join("lib").join(python)
         };

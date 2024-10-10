@@ -1,9 +1,8 @@
-// DO NOT EDIT
-//
 // Generated with `{{generated_with}}`
 // From template at `{{generated_from}}`
 
 use uv_pep440::{Prerelease, PrereleaseKind};
+use crate::PythonVariant;
 
 pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
     {{#versions}}
@@ -22,6 +21,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             {{^value.libc}}
             libc: Libc::None,
             {{/value.libc}}
+            variant: {{value.variant}}
+
         },
         url: "{{value.url}}",
         {{#value.sha256}}

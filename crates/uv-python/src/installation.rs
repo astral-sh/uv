@@ -16,7 +16,7 @@ use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::platform::{Arch, Libc, Os};
 use crate::{
     downloads, Error, ImplementationName, Interpreter, PythonDownloads, PythonPreference,
-    PythonSource, PythonVersion,
+    PythonSource, PythonVariant, PythonVersion,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -227,6 +227,7 @@ pub struct PythonInstallationKey {
     pub(crate) os: Os,
     pub(crate) arch: Arch,
     pub(crate) libc: Libc,
+    pub(crate) variant: PythonVariant,
 }
 
 impl PythonInstallationKey {
@@ -239,6 +240,7 @@ impl PythonInstallationKey {
         os: Os,
         arch: Arch,
         libc: Libc,
+        variant: PythonVariant,
     ) -> Self {
         Self {
             implementation,
@@ -249,6 +251,7 @@ impl PythonInstallationKey {
             os,
             arch,
             libc,
+            variant,
         }
     }
 
@@ -258,6 +261,7 @@ impl PythonInstallationKey {
         os: Os,
         arch: Arch,
         libc: Libc,
+        variant: PythonVariant,
     ) -> Self {
         Self {
             implementation,
@@ -268,6 +272,7 @@ impl PythonInstallationKey {
             os,
             arch,
             libc,
+            variant,
         }
     }
 
@@ -303,9 +308,13 @@ impl PythonInstallationKey {
 
 impl fmt::Display for PythonInstallationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let variant = match self.variant {
+            PythonVariant::Default => String::new(),
+            PythonVariant::Freethreaded => format!("+{}", self.variant),
+        };
         write!(
             f,
-            "{}-{}.{}.{}{}-{}-{}-{}",
+            "{}-{}.{}.{}{}{}-{}-{}-{}",
             self.implementation,
             self.major,
             self.minor,
@@ -313,6 +322,7 @@ impl fmt::Display for PythonInstallationKey {
             self.prerelease
                 .map(|pre| pre.to_string())
                 .unwrap_or_default(),
+            variant,
             self.os,
             self.arch,
             self.libc
@@ -349,6 +359,19 @@ impl FromStr for PythonInstallationKey {
             PythonInstallationKeyError::ParseError(key.to_string(), format!("invalid libc: {err}"))
         })?;
 
+        let (version, variant) = match version.split_once('+') {
+            Some((version, variant)) => {
+                let variant = PythonVariant::from_str(variant).map_err(|()| {
+                    PythonInstallationKeyError::ParseError(
+                        key.to_string(),
+                        format!("invalid Python variant: {variant}"),
+                    )
+                })?;
+                (version, variant)
+            }
+            None => (*version, PythonVariant::Default),
+        };
+
         let version = PythonVersion::from_str(version).map_err(|err| {
             PythonInstallationKeyError::ParseError(
                 key.to_string(),
@@ -362,6 +385,7 @@ impl FromStr for PythonInstallationKey {
             os,
             arch,
             libc,
+            variant,
         ))
     }
 }

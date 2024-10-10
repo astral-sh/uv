@@ -26,7 +26,8 @@ use crate::implementation::LenientImplementationName;
 use crate::platform::{Arch, Libc, Os};
 use crate::pointer_size::PointerSize;
 use crate::{
-    Prefix, PythonInstallationKey, PythonVersion, Target, VersionRequest, VirtualEnvironment,
+    Prefix, PythonInstallationKey, PythonVariant, PythonVersion, Target, VersionRequest,
+    VirtualEnvironment,
 };
 
 /// A Python executable and its associated platform markers.
@@ -161,7 +162,16 @@ impl Interpreter {
             self.os(),
             self.arch(),
             self.libc(),
+            self.variant(),
         )
+    }
+
+    pub fn variant(&self) -> PythonVariant {
+        if self.gil_disabled() {
+            PythonVariant::Freethreaded
+        } else {
+            PythonVariant::default()
+        }
     }
 
     /// Return the [`Arch`] reported by the interpreter platform tags.
