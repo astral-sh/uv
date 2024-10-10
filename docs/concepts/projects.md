@@ -71,6 +71,14 @@ build and install the project into the project environment. By default, projects
 [editable mode](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) so changes to
 the source code are reflected immediately, without re-installation.
 
+To define uv as build backend:
+
+```toml
+[build-system]
+requires = ["uv>=0.4.18,<5"]
+build-backend = "uv"
+```
+
 ### Configuring project packaging
 
 uv also allows manually declaring if a project should be packaged using the
@@ -603,14 +611,47 @@ documentation.
 To distribute your project to others (e.g., to upload it to an index like PyPI), you'll need to
 build it into a distributable format.
 
-Python projects are typically distributed as both source distributions (sdists) and binary
-distributions (wheels). The former is typically a `.tar.gz` or `.zip` file containing the project's
-source code along with some additional metadata, while the latter is a `.whl` file containing
-pre-built artifacts that can be installed directly.
+In Python building packages is split between the build frontend and the build backend. The build
+backend is the `[build-system]` definition in the `pyproject.toml`, e.g. `build-backend = "uv"` or
+`build-backend = "setuptools.build_meta"`. The build frontend is the command you execute for
+building source distributions and wheels, such as `uv build` or `python -m build`. You can mix
+tools: `uv build` can build a package with a setuptools backend, just like `python -m build` can use
+a uv backend.
 
-`uv build` can be used to build both source distributions and binary distributions for your project.
-By default, `uv build` will build the project in the current directory, and place the built
-artifacts in a `dist/` subdirectory:
+Python projects are typically distributed as both source distributions (sdists) and binary
+distributions (wheels). The former is typically a `.tar.gz` file containing the project's source
+code along with some additional metadata, while the latter is a `.whl` file containing pre-built
+artifacts that can be installed directly. Wheel come in two flavors: Universal and platform
+specific. A universal wheel is called `{name}-{version}-py3-none-any.whl` and only needs a
+sufficiently recent Python version. Package with native code produce platform-specific wheels, e.g.,
+`numpy-2.1.2-cp312-cp312-win_amd64.whl` only works on CPython 3.12 on 64-bit x86 Windows. With
+universal wheels, the source distribution only exists for redistributors such as linux
+distributions, while with platform specific wheels, it is a fallback for platforms with no matching
+built wheel. The uv build backend currently only supports universal, pure Python projects, while the
+`uv build` frontend can build native code through specialized build backends.
+
+### Build backend
+
+The uv build backend supports pure python projects. Their code needs to be in `src/{project_name}`
+where all dots (`.`) and dashes (`-`) in the project name are replaced with underscores, e.g., the
+project `foo-bar` needs at least `src/foo_bar/__init__.py`.
+
+To use uv as build backend, add the following to `pyproject.toml`:
+
+```toml
+[build-system]
+requires = ["uv>=0.4.18,<5"]
+build-backend = "uv"
+```
+
+When using uv as build backend, setting an upper bound on the uv version is recommended, otherwise
+an already published version of your project may fail to build when a new breaking release of uv is
+published.
+
+### Build frontend
+
+By default, `uv build` will build a source distribution and a wheel for the project in the current
+directory, and place the built artifacts in a `dist/` subdirectory:
 
 ```console
 $ uv build
