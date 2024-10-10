@@ -266,23 +266,12 @@ impl Workspace {
     /// Returns the set of requirements that include all packages in the workspace.
     pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.packages.values().filter_map(|member| {
-            let project = member.pyproject_toml.project.as_ref()?;
-            // Extract the extras available in the project.
-            let extras = project
-                .optional_dependencies
-                .as_ref()
-                .map(|optional_dependencies| {
-                    // It's a `BTreeMap` so the keys are sorted.
-                    optional_dependencies.keys().cloned().collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-
             let url = VerbatimUrl::from_absolute_path(&member.root)
                 .expect("path is valid URL")
                 .with_given(member.root.to_string_lossy());
             Some(Requirement {
-                name: project.name.clone(),
-                extras,
+                name: member.pyproject_toml.project.as_ref()?.name.clone(),
+                extras: vec![],
                 marker: MarkerTree::TRUE,
                 source: if member.pyproject_toml.is_package() {
                     RequirementSource::Directory {
