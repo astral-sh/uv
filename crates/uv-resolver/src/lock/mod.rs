@@ -1158,15 +1158,13 @@ impl Lock {
                 build_options,
             )?;
 
-            let Ok(archive) = database
+            let archive = database
                 .get_or_build_wheel_metadata(&dist, HashPolicy::None)
                 .await
-            else {
-                return Ok(SatisfiesResult::MissingMetadata(
-                    &package.id.name,
-                    &package.id.version,
-                ));
-            };
+                .map_err(|err| LockErrorKind::Resolution {
+                    id: package.id.clone(),
+                    err,
+                })?;
 
             // Validate the `requires-dist` metadata.
             {
@@ -1312,8 +1310,6 @@ pub enum SatisfiesResult<'lock> {
     MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
     /// The lockfile referenced a local index that was not provided
     MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock PathBuf),
-    /// The resolver failed to generate metadata for a given package.
-    MissingMetadata(&'lock PackageName, &'lock Version),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedRequiresDist(
         &'lock PackageName,
@@ -3758,6 +3754,13 @@ fn normalize_requirement(
 #[error(transparent)]
 pub struct LockError(Box<LockErrorKind>);
 
+impl LockError {
+    /// Returns true if the [`LockError`] is a resolver error.
+    pub fn is_resolution(&self) -> bool {
+        matches!(&*self.0, LockErrorKind::Resolution { .. })
+    }
+}
+
 impl<E> From<E> for LockError
 where
     LockErrorKind: From<E>,
@@ -4042,10 +4045,19 @@ enum LockErrorKind {
         /// The ID of the package.
         name: PackageName,
     },
+    /// An error that occurs when resolving metadata for a package.
+    #[error("failed to generate package metadata for `{id}`")]
+    Resolution {
+        /// The ID of the distribution that failed to resolve.
+        id: PackageId,
+        /// The inner error we forward.
+        #[source]
+        err: uv_distribution::Error,
+    },
 }
 
 /// An error that occurs when a source string could not be parsed.
-#[derive(Clone, Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 enum SourceParseError {
     /// An error that occurs when the URL in the source is invalid.
     #[error("invalid URL in source `{given}`")]
