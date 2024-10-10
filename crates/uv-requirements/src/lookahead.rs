@@ -3,29 +3,17 @@ use std::{collections::VecDeque, sync::Arc};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
-use thiserror::Error;
 use tracing::trace;
 
-use crate::required_dist;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::{BuiltDist, Dist, DistributionMetadata, SourceDist};
+use uv_distribution_types::{Dist, DistributionMetadata};
 use uv_normalize::GroupName;
 use uv_pypi_types::{Requirement, RequirementSource};
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverMarkers};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
-#[derive(Debug, Error)]
-pub enum LookaheadError {
-    #[error("Failed to download: `{0}`")]
-    Download(BuiltDist, #[source] uv_distribution::Error),
-    #[error("Failed to download and build: `{0}`")]
-    DownloadAndBuild(SourceDist, #[source] uv_distribution::Error),
-    #[error("Failed to build: `{0}`")]
-    Build(SourceDist, #[source] uv_distribution::Error),
-    #[error(transparent)]
-    UnsupportedUrl(#[from] uv_distribution_types::Error),
-}
+use crate::{required_dist, Error};
 
 /// A resolver for resolving lookahead requirements from direct URLs.
 ///
@@ -100,7 +88,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     pub async fn resolve(
         self,
         markers: &ResolverMarkers,
-    ) -> Result<Vec<RequestedRequirements>, LookaheadError> {
+    ) -> Result<Vec<RequestedRequirements>, Error> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
         let mut seen = FxHashSet::default();
@@ -146,7 +134,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     async fn lookahead(
         &self,
         requirement: Requirement,
-    ) -> Result<Option<RequestedRequirements>, LookaheadError> {
+    ) -> Result<Option<RequestedRequirements>, Error> {
         trace!("Performing lookahead for {requirement}");
 
         // Determine whether the requirement represents a local distribution and convert to a
@@ -180,12 +168,12 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .get_or_build_wheel_metadata(&dist, self.hasher.get(&dist))
                     .await
                     .map_err(|err| match &dist {
-                        Dist::Built(built) => LookaheadError::Download(built.clone(), err),
+                        Dist::Built(built) => Error::Download(built.clone(), err),
                         Dist::Source(source) => {
                             if source.is_local() {
-                                LookaheadError::Build(source.clone(), err)
+                                Error::Build(source.clone(), err)
                             } else {
-                                LookaheadError::DownloadAndBuild(source.clone(), err)
+                                Error::DownloadAndBuild(source.clone(), err)
                             }
                         }
                     })?;

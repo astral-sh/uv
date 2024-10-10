@@ -9,6 +9,7 @@ use serde::Deserialize;
 use tracing::debug;
 use url::Host;
 
+use crate::Error;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
@@ -21,18 +22,6 @@ use uv_pypi_types::{Metadata10, Requirement};
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
-
-#[derive(Debug, thiserror::Error)]
-pub enum NamedRequirementsError {
-    #[error(transparent)]
-    Distribution(#[from] uv_distribution::Error),
-
-    #[error(transparent)]
-    DistributionTypes(#[from] uv_distribution_types::Error),
-
-    #[error(transparent)]
-    WheelFilename(#[from] uv_distribution_filename::WheelFilenameError),
-}
 
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
 pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
@@ -71,7 +60,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
     pub async fn resolve(
         self,
         requirements: impl Iterator<Item = UnnamedRequirement<VerbatimParsedUrl>>,
-    ) -> Result<Vec<Requirement>, NamedRequirementsError> {
+    ) -> Result<Vec<Requirement>, Error> {
         let Self {
             hasher,
             index,
@@ -94,7 +83,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'a, Context>,
-    ) -> Result<uv_pep508::Requirement<VerbatimParsedUrl>, NamedRequirementsError> {
+    ) -> Result<uv_pep508::Requirement<VerbatimParsedUrl>, Error> {
         // If the requirement is a wheel, extract the package name from the wheel filename.
         //
         // Ex) `anyio-4.3.0-py3-none-any.whl`
