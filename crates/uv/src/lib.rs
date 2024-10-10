@@ -20,10 +20,12 @@ use uv_cli::{
     PipCommand, PipNamespace, ProjectCommand,
 };
 use uv_cli::{
-    ExternalCommand, PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
+    ExternalCommand, GlobalArgs, PythonCommand, PythonNamespace, ToolCommand, ToolNamespace,
+    TopLevelArgs,
 };
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
+use uv_client::BaseClientBuilder;
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_scripts::Pep723Script;
@@ -52,6 +54,7 @@ pub(crate) mod version;
 /// Returns Some(NamedTempFile) if a remote script was downloaded, None otherwise.
 async fn resolve_script_target(
     command: &mut ExternalCommand,
+    global_args: &GlobalArgs,
 ) -> Result<Option<tempfile::NamedTempFile>> {
     use std::io::Write;
 
@@ -86,7 +89,13 @@ async fn resolve_script_target(
         .suffix(".py")
         .tempfile()?;
 
-    let response = reqwest::get(script_url).await?;
+    // Resolve the client settings
+    let settings = GlobalSettings::resolve(global_args, None);
+    let client = BaseClientBuilder::new()
+        .connectivity(settings.connectivity)
+        .native_tls(settings.native_tls)
+        .build();
+    let response = client.client().get(script_url).send().await?;
     let contents = response.bytes().await?;
     temp_file.write_all(&contents)?;
     *target = temp_file.path().into();
@@ -190,7 +199,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             ..
         }) = &mut **command
         {
-            maybe_tempfile = resolve_script_target(command).await?;
+            maybe_tempfile = resolve_script_target(command, &cli.top_level.global_args).await?;
             Some(RunCommand::from_args(command, *module, *script)?)
         } else {
             None
