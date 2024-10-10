@@ -25,6 +25,7 @@ use crate::managed::ManagedPythonInstallations;
 use crate::microsoft_store::find_microsoft_store_pythons;
 #[cfg(windows)]
 use crate::py_launcher::{registry_pythons, WindowsPython};
+use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable,
@@ -697,6 +698,10 @@ impl Error {
                     false
                 }
             },
+            Error::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
+                trace!("Skipping broken virtualenv at {}", path.display());
+                false
+            }
             _ => true,
         }
     }
