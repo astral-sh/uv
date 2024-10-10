@@ -7170,7 +7170,7 @@ fn sklearn() {
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.pip_install().arg("sklearn"), @r###"
+    uv_snapshot!(filters, context.pip_install().arg("sklearn"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7181,7 +7181,7 @@ fn sklearn() {
 
           [stderr]
           The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
-          rather than 'sklearn' for pip commands.
+          rather than 'sklearn' for pip commands. 
 
           Here is how to fix this error in the main use cases:
           - use 'pip install scikit-learn' rather than 'pip install sklearn'
@@ -7197,6 +7197,6 @@ fn sklearn() {
           https://github.com/scikit-learn/sklearn-pypi-package
 
       help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
-    "###
+    "#
     );
 }
