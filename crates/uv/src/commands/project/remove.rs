@@ -144,9 +144,11 @@ pub(crate) async fn remove(
         Target::Project(project) => project,
         // If `--script`, exit early. There's no reason to lock and sync.
         Target::Script(script) => {
-            if let uv_scripts::Source::File(path) = &script.source {
-                writeln!(printer.stderr(), "Updated `{}`", path.user_display().cyan())?;
-            }
+            writeln!(
+                printer.stderr(),
+                "Updated `{}`",
+                script.path.user_display().cyan()
+            )?;
             return Ok(ExitStatus::Success);
         }
     };
