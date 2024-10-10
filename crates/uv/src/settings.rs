@@ -936,6 +936,7 @@ impl RemoveSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
+    pub(crate) dev: DevMode,
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) universal: bool,
@@ -956,6 +957,8 @@ impl TreeSettings {
         let TreeArgs {
             tree,
             universal,
+            dev,
+            no_dev,
             locked,
             frozen,
             build,
@@ -966,6 +969,7 @@ impl TreeSettings {
         } = args;
 
         Self {
+            dev: DevMode::from_args(dev, no_dev, false),
             locked,
             frozen,
             universal,
