@@ -208,7 +208,7 @@ fn help_short_flag() {
 fn help_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("python"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -266,25 +266,25 @@ fn help_subcommand() {
       -n, --no-cache
               Avoid reading from or writing to the cache, instead using a temporary directory for the
               duration of the operation
-
+              
               [env: UV_NO_CACHE=]
 
           --cache-dir [CACHE_DIR]
               Path to the cache directory.
-
+              
               Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv`
               on Linux, and `%LOCALAPPDATA%/uv/cache` on Windows.
-
+              
               [env: UV_CACHE_DIR=]
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer uv-managed or system Python installations.
-
+              
               By default, uv prefers using Python versions it manages. However, it will use system
               Python installations if a uv-managed Python is not installed. This option allows
               prioritizing or ignoring system Python installations.
-
+              
               [env: UV_PYTHON_PREFERENCE=]
 
               Possible values:
@@ -304,13 +304,13 @@ fn help_subcommand() {
 
       -v, --verbose...
               Use verbose output.
-
+              
               You can configure fine-grained logging using the `RUST_LOG` environment variable.
               (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
 
           --color <COLOR_CHOICE>
               Control colors in output
-
+              
               [default: auto]
 
               Possible values:
@@ -321,62 +321,62 @@ fn help_subcommand() {
 
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store.
-
+              
               By default, uv loads certificates from the bundled `webpki-roots` crate. The
               `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
               improves portability and performance (especially on macOS).
-
+              
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-
+              
               [env: UV_NATIVE_TLS=]
 
           --offline
               Disable network access.
-
+              
               When disabled, uv will only use locally cached data and locally available files.
 
           --no-progress
               Hide all progress outputs.
-
+              
               For example, spinners or progress bars.
 
           --directory <DIRECTORY>
               Change to the given directory prior to running the command.
-
+              
               Relative paths are resolved with the given directory as the base.
-
+              
               See `--project` to only change the project root directory.
 
           --project <PROJECT>
               Run the command within the given project directory.
-
+              
               All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
               up the directory tree from the project root, as will the project's virtual environment
               (`.venv`).
-
+              
               Other command-line arguments (such as relative paths) will be resolved relative to the
               current working directory.
-
+              
               See `--directory` to change the working directory entirely.
-
+              
               This setting has no effect when used in the `uv pip` interface.
 
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration.
-
+              
               While uv configuration can be included in a `pyproject.toml` file, it is not allowed in
               this context.
-
+              
               [env: UV_CONFIG_FILE=]
 
           --no-config
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`).
-
+              
               Normally, configuration files are discovered in the current directory, parent directories,
               or user configuration directories.
-
+              
               [env: UV_NO_CONFIG=]
 
       -h, --help
@@ -389,14 +389,14 @@ fn help_subcommand() {
 
 
     ----- stderr -----
-    "###);
+    "##);
 }
 
 #[test]
 fn help_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -419,42 +419,42 @@ fn help_subsubcommand() {
     Arguments:
       [TARGETS]...
               The Python version(s) to install.
-
+              
               If not provided, the requested Python version(s) will be read from the `.python-versions`
               or `.python-version` files. If neither file is present, uv will check if it has installed
               any Python versions. If not, it will install the latest stable version of Python.
-
+              
               See `uv help python` to view supported request formats.
 
     Options:
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed.
-
+              
               By default, uv will exit successfully if the version is already installed.
 
     Cache options:
       -n, --no-cache
               Avoid reading from or writing to the cache, instead using a temporary directory for the
               duration of the operation
-
+              
               [env: UV_NO_CACHE=]
 
           --cache-dir [CACHE_DIR]
               Path to the cache directory.
-
+              
               Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv`
               on Linux, and `%LOCALAPPDATA%/uv/cache` on Windows.
-
+              
               [env: UV_CACHE_DIR=]
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer uv-managed or system Python installations.
-
+              
               By default, uv prefers using Python versions it manages. However, it will use system
               Python installations if a uv-managed Python is not installed. This option allows
               prioritizing or ignoring system Python installations.
-
+              
               [env: UV_PYTHON_PREFERENCE=]
 
               Possible values:
@@ -474,13 +474,13 @@ fn help_subsubcommand() {
 
       -v, --verbose...
               Use verbose output.
-
+              
               You can configure fine-grained logging using the `RUST_LOG` environment variable.
               (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
 
           --color <COLOR_CHOICE>
               Control colors in output
-
+              
               [default: auto]
 
               Possible values:
@@ -491,62 +491,62 @@ fn help_subsubcommand() {
 
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store.
-
+              
               By default, uv loads certificates from the bundled `webpki-roots` crate. The
               `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
               improves portability and performance (especially on macOS).
-
+              
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-
+              
               [env: UV_NATIVE_TLS=]
 
           --offline
               Disable network access.
-
+              
               When disabled, uv will only use locally cached data and locally available files.
 
           --no-progress
               Hide all progress outputs.
-
+              
               For example, spinners or progress bars.
 
           --directory <DIRECTORY>
               Change to the given directory prior to running the command.
-
+              
               Relative paths are resolved with the given directory as the base.
-
+              
               See `--project` to only change the project root directory.
 
           --project <PROJECT>
               Run the command within the given project directory.
-
+              
               All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
               up the directory tree from the project root, as will the project's virtual environment
               (`.venv`).
-
+              
               Other command-line arguments (such as relative paths) will be resolved relative to the
               current working directory.
-
+              
               See `--directory` to change the working directory entirely.
-
+              
               This setting has no effect when used in the `uv pip` interface.
 
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration.
-
+              
               While uv configuration can be included in a `pyproject.toml` file, it is not allowed in
               this context.
-
+              
               [env: UV_CONFIG_FILE=]
 
           --no-config
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`).
-
+              
               Normally, configuration files are discovered in the current directory, parent directories,
               or user configuration directories.
-
+              
               [env: UV_NO_CONFIG=]
 
       -h, --help
@@ -557,7 +557,7 @@ fn help_subsubcommand() {
 
 
     ----- stderr -----
-    "###);
+    "##);
 }
 
 #[test]
