@@ -2,33 +2,39 @@ use serde::{Deserialize, Deserializer};
 use std::str::FromStr;
 use url::Url;
 
-/// A trusted host, which could be a host or a host-port pair.
+/// A host specification (wildcard, or host, with optional scheme and/or port) for which
+/// certificates are not verified when making HTTPS requests.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrustedHost {
-    scheme: Option<String>,
-    host: String,
-    port: Option<u16>,
+pub enum TrustedHost {
+    Wildcard,
+    Host {
+        scheme: Option<String>,
+        host: String,
+        port: Option<u16>,
+    },
 }
 
 impl TrustedHost {
     /// Returns `true` if the [`Url`] matches this trusted host.
     pub fn matches(&self, url: &Url) -> bool {
-        if self
-            .scheme
-            .as_ref()
-            .is_some_and(|scheme| scheme != url.scheme())
-        {
-            return false;
+        match self {
+            TrustedHost::Wildcard => true,
+            TrustedHost::Host { scheme, host, port } => {
+                if scheme.as_ref().is_some_and(|scheme| scheme != url.scheme()) {
+                    return false;
+                }
+
+                if port.is_some_and(|port| url.port() != Some(port)) {
+                    return false;
+                }
+
+                if Some(host.as_str()) != url.host_str() {
+                    return false;
+                }
+
+                true
+            }
         }
-
-        if self.port.is_some_and(|port| url.port() != Some(port)) {
-            return false;
-        }
-
-        let allow_all_hosts = self.host == "*";
-        let same_host = Some(self.host.as_ref()) == url.host_str();
-
-        allow_all_hosts || same_host
     }
 }
 
@@ -47,7 +53,7 @@ impl<'de> Deserialize<'de> for TrustedHost {
         serde_untagged::UntaggedEnumVisitor::new()
             .string(|string| TrustedHost::from_str(string).map_err(serde::de::Error::custom))
             .map(|map| {
-                map.deserialize::<Inner>().map(|inner| TrustedHost {
+                map.deserialize::<Inner>().map(|inner| TrustedHost::Host {
                     scheme: inner.scheme,
                     host: inner.host,
                     port: inner.port,
@@ -79,6 +85,10 @@ impl std::str::FromStr for TrustedHost {
     type Err = TrustedHostError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "*" {
+            return Ok(Self::Wildcard);
+        }
+
         // Detect scheme.
         let (scheme, s) = if let Some(s) = s.strip_prefix("https://") {
             (Some("https".to_string()), s)
@@ -104,20 +114,27 @@ impl std::str::FromStr for TrustedHost {
             .transpose()
             .map_err(|_| TrustedHostError::InvalidPort(s.to_string()))?;
 
-        Ok(Self { scheme, host, port })
+        Ok(Self::Host { scheme, host, port })
     }
 }
 
 impl std::fmt::Display for TrustedHost {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Some(scheme) = &self.scheme {
-            write!(f, "{}://{}", scheme, self.host)?;
-        } else {
-            write!(f, "{}", self.host)?;
-        }
+        match self {
+            TrustedHost::Wildcard => {
+                write!(f, "*")?;
+            }
+            TrustedHost::Host { scheme, host, port } => {
+                if let Some(scheme) = &scheme {
+                    write!(f, "{scheme}://{host}")?;
+                } else {
+                    write!(f, "{host}")?;
+                }
 
-        if let Some(port) = self.port {
-            write!(f, ":{port}")?;
+                if let Some(port) = port {
+                    write!(f, ":{port}")?;
+                }
+            }
         }
 
         Ok(())
