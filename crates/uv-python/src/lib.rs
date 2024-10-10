@@ -2,8 +2,9 @@
 use thiserror::Error;
 
 pub use crate::discovery::{
-    find_python_installations, EnvironmentPreference, Error as DiscoveryError, PythonDownloads,
-    PythonNotFound, PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
+    find_python_installations, satisfies_python_preference, EnvironmentPreference,
+    Error as DiscoveryError, PythonDownloads, PythonNotFound, PythonPreference, PythonRequest,
+    PythonSource, PythonVariant, VersionRequest,
 };
 pub use crate::environment::{InvalidEnvironment, InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::ImplementationName;

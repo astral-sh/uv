@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -22,9 +22,9 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::Requirement;
 use uv_python::{
-    EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
-    VersionRequest,
+    satisfies_python_preference, EnvironmentPreference, Interpreter, InvalidEnvironmentKind,
+    PythonDownloads, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
+    PythonSource, PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
@@ -359,6 +359,55 @@ impl WorkspacePython {
     }
 }
 
+fn environment_satisfies_requirements(
+    environment: &PythonEnvironment,
+    python_request: Option<&PythonRequest>,
+    python_preference: PythonPreference,
+    requires_python: Option<&RequiresPython>,
+    cache: &Cache,
+) -> bool {
+    if let Some(request) = python_request {
+        if request.satisfied(environment.interpreter(), cache) {
+            debug!("The virtual environment's Python version satisfies `{request}`");
+        } else {
+            debug!("The virtual environment's Python version does not satisfy `{request}`");
+            return false;
+        }
+    };
+
+    if let Some(requires_python) = requires_python.as_ref() {
+        if requires_python.contains(environment.interpreter().python_version()) {
+            trace!(
+                "The virtual environment's Python version meets the project's Python requirement: `{requires_python}`"
+            );
+        } else {
+            debug!(
+                "The virtual environment's Python version does not meet the project's Python requirement: `{requires_python}`"
+            );
+            return false;
+        }
+    }
+
+    if satisfies_python_preference(
+        PythonSource::DiscoveredEnvironment,
+        environment.interpreter(),
+        python_preference,
+    ) {
+        trace!(
+            "The virtual environment's interpreter satisfies the Python preference: {}",
+            python_preference.canonical_name()
+        );
+    } else {
+        debug!(
+            "The virtual environment's interpreter does not satisfy the Python preference: {}",
+            python_preference.canonical_name()
+        );
+        return false;
+    }
+
+    true
+}
+
 impl ProjectInterpreter {
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
@@ -382,27 +431,14 @@ impl ProjectInterpreter {
         let venv = workspace.venv();
         match PythonEnvironment::from_root(&venv, cache) {
             Ok(venv) => {
-                if python_request.as_ref().map_or(true, |request| {
-                    if request.satisfied(venv.interpreter(), cache) {
-                        debug!("The virtual environment's Python version satisfies `{request}`");
-                        true
-                    } else {
-                        debug!(
-                            "The virtual environment's Python version does not satisfy `{request}`"
-                        );
-                        false
-                    }
-                }) {
-                    if let Some(requires_python) = requires_python.as_ref() {
-                        if requires_python.contains(venv.interpreter().python_version()) {
-                            return Ok(Self::Environment(venv));
-                        }
-                        debug!(
-                            "The virtual environment's Python version does not meet the project's Python requirement: `{requires_python}`"
-                        );
-                    } else {
-                        return Ok(Self::Environment(venv));
-                    }
+                if environment_satisfies_requirements(
+                    &venv,
+                    python_request.as_ref(),
+                    python_preference,
+                    requires_python.as_ref(),
+                    cache,
+                ) {
+                    return Ok(Self::Environment(venv));
                 }
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}

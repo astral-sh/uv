@@ -145,8 +145,7 @@ impl PythonEnvironment {
         let installation = match find_python_installation(
             request,
             preference,
-            // Ignore managed installations when looking for environments
-            PythonPreference::OnlySystem,
+            PythonPreference::default(),
             cache,
         )? {
             Ok(installation) => installation,
