@@ -11,16 +11,16 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{trace, warn};
 
-use cache_key::cache_digest;
-use install_wheel_rs::Layout;
-use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, StringVersion};
-use platform_tags::Platform;
-use platform_tags::{Tags, TagsError};
-use pypi_types::{ResolverMarkerEnvironment, Scheme};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
+use uv_cache_key::cache_digest;
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
+use uv_install_wheel::Layout;
+use uv_pep440::Version;
+use uv_pep508::{MarkerEnvironment, StringVersion};
+use uv_platform_tags::Platform;
+use uv_platform_tags::{Tags, TagsError};
+use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
 use crate::platform::{Arch, Libc, Os};
@@ -157,10 +157,7 @@ impl Interpreter {
             self.python_major(),
             self.python_minor(),
             self.python_patch(),
-            self.python_version()
-                .pre()
-                .map(|pre| pre.to_string())
-                .unwrap_or_default(),
+            self.python_version().pre(),
             self.os(),
             self.arch(),
             self.libc(),
@@ -802,8 +799,8 @@ mod tests {
     use indoc::{formatdoc, indoc};
     use tempfile::tempdir;
 
-    use pep440_rs::Version;
     use uv_cache::Cache;
+    use uv_pep440::Version;
 
     use crate::Interpreter;
 

@@ -666,18 +666,18 @@ fn create_venv_unknown_python_patch() {
 #[cfg(feature = "python-patch")]
 #[test]
 fn create_venv_python_patch() {
-    let context = TestContext::new_with_versions(&["3.12.1"]);
+    let context = TestContext::new_with_versions(&["3.12.6"]);
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12.1"), @r###"
+        .arg("3.12.6"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.1 interpreter at: [PYTHON-3.12.1]
+    Using CPython 3.12.6 interpreter at: [PYTHON-3.12.6]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "###
@@ -957,7 +957,9 @@ fn verify_pyvenv_cfg_relocatable() {
 
     let activate_sh = scripts.child("activate");
     activate_sh.assert(predicates::path::is_file());
-    activate_sh.assert(predicates::str::contains(r#"VIRTUAL_ENV=''"$(dirname -- "$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" > /dev/null && echo "$PWD")")"''"#));
+    activate_sh.assert(predicates::str::contains(
+        r#"VIRTUAL_ENV=''"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"''"#,
+    ));
 
     let activate_bat = scripts.child("activate.bat");
     activate_bat.assert(predicates::path::is_file());

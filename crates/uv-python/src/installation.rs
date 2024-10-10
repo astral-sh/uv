@@ -1,12 +1,11 @@
-use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
 use tracing::{debug, info};
 
-use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_pep440::{Prerelease, Version};
 
 use crate::discovery::{
     find_best_python_installation, find_python_installation, EnvironmentPreference, PythonRequest,
@@ -224,7 +223,7 @@ pub struct PythonInstallationKey {
     pub(crate) major: u8,
     pub(crate) minor: u8,
     pub(crate) patch: u8,
-    pub(crate) prerelease: Cow<'static, str>,
+    pub(crate) prerelease: Option<Prerelease>,
     pub(crate) os: Os,
     pub(crate) arch: Arch,
     pub(crate) libc: Libc,
@@ -236,7 +235,7 @@ impl PythonInstallationKey {
         major: u8,
         minor: u8,
         patch: u8,
-        prerelease: String,
+        prerelease: Option<Prerelease>,
         os: Os,
         arch: Arch,
         libc: Libc,
@@ -246,7 +245,7 @@ impl PythonInstallationKey {
             major,
             minor,
             patch,
-            prerelease: Cow::Owned(prerelease),
+            prerelease,
             os,
             arch,
             libc,
@@ -265,7 +264,7 @@ impl PythonInstallationKey {
             major: version.major(),
             minor: version.minor(),
             patch: version.patch().unwrap_or_default(),
-            prerelease: Cow::Owned(version.pre().map(|pre| pre.to_string()).unwrap_or_default()),
+            prerelease: version.pre(),
             os,
             arch,
             libc,
@@ -279,7 +278,12 @@ impl PythonInstallationKey {
     pub fn version(&self) -> PythonVersion {
         PythonVersion::from_str(&format!(
             "{}.{}.{}{}",
-            self.major, self.minor, self.patch, self.prerelease
+            self.major,
+            self.minor,
+            self.patch,
+            self.prerelease
+                .map(|pre| pre.to_string())
+                .unwrap_or_default()
         ))
         .expect("Python installation keys must have valid Python versions")
     }
@@ -306,7 +310,9 @@ impl fmt::Display for PythonInstallationKey {
             self.major,
             self.minor,
             self.patch,
-            self.prerelease,
+            self.prerelease
+                .map(|pre| pre.to_string())
+                .unwrap_or_default(),
             self.os,
             self.arch,
             self.libc

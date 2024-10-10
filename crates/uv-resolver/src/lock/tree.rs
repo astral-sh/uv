@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 use itertools::Itertools;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use pypi_types::ResolverMarkerEnvironment;
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pypi_types::ResolverMarkerEnvironment;
 
 use crate::lock::{Dependency, PackageId};
 use crate::Lock;
@@ -319,11 +319,7 @@ impl<'env> TreeDisplay<'env> {
             }
         } else {
             let by_package: FxHashMap<_, _> = self.roots.iter().map(|id| (&id.name, id)).collect();
-            let mut first = true;
             for package in &self.packages {
-                if std::mem::take(&mut first) {
-                    lines.push(String::new());
-                }
                 if let Some(id) = by_package.get(package) {
                     path.clear();
                     lines.extend(self.visit(Node::Root(id), &mut visited, &mut path));

@@ -7,11 +7,10 @@ use std::path::Path;
 use std::time::Duration;
 use std::{fmt::Display, fmt::Write, process::ExitCode};
 
-pub(crate) use build::build;
+pub(crate) use build_frontend::build_frontend;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 pub(crate) use cache_prune::cache_prune;
-use distribution_types::{IndexCapabilities, InstalledMetadata};
 pub(crate) use help::help;
 pub(crate) use pip::check::pip_check;
 pub(crate) use pip::compile::pip_compile;
@@ -48,6 +47,7 @@ pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 use uv_cache::Cache;
+use uv_distribution_types::{IndexCapabilities, InstalledMetadata};
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::compile_tree;
@@ -60,8 +60,8 @@ pub(crate) use version::version;
 
 use crate::printer::Printer;
 
-mod build;
 pub(crate) mod build_backend;
+mod build_frontend;
 mod cache_clean;
 mod cache_dir;
 mod cache_prune;

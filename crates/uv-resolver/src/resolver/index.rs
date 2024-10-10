@@ -1,10 +1,10 @@
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
-use distribution_types::VersionId;
-use once_map::OnceMap;
 use rustc_hash::FxHasher;
+use uv_distribution_types::VersionId;
 use uv_normalize::PackageName;
+use uv_once_map::OnceMap;
 
 use crate::resolver::provider::{MetadataResponse, VersionsResponse};
 

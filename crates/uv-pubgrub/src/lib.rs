@@ -4,7 +4,7 @@ use itertools::Itertools;
 use pubgrub::Range;
 use thiserror::Error;
 
-use pep440_rs::{Operator, Prerelease, Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{Operator, Prerelease, Version, VersionSpecifier, VersionSpecifiers};
 
 #[derive(Debug, Error)]
 pub enum PubGrubSpecifierError {

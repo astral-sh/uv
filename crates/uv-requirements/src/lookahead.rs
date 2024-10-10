@@ -6,12 +6,12 @@ use rustc_hash::FxHashSet;
 use thiserror::Error;
 use tracing::trace;
 
-use distribution_types::{BuiltDist, Dist, DistributionMetadata, GitSourceDist, SourceDist};
-use pypi_types::{Requirement, RequirementSource};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
+use uv_distribution_types::{BuiltDist, Dist, DistributionMetadata, GitSourceDist, SourceDist};
 use uv_git::GitUrl;
 use uv_normalize::GroupName;
+use uv_pypi_types::{Requirement, RequirementSource};
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverMarkers};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
@@ -24,7 +24,7 @@ pub enum LookaheadError {
     #[error("Failed to build: `{0}`")]
     Build(SourceDist, #[source] uv_distribution::Error),
     #[error(transparent)]
-    UnsupportedUrl(#[from] distribution_types::Error),
+    UnsupportedUrl(#[from] uv_distribution_types::Error),
 }
 
 /// A resolver for resolving lookahead requirements from direct URLs.
@@ -247,7 +247,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 }
 
 /// Convert a [`Requirement`] into a [`Dist`], if it is a direct URL.
-fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, distribution_types::Error> {
+fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, uv_distribution_types::Error> {
     Ok(Some(match &requirement.source {
         RequirementSource::Registry { .. } => return Ok(None),
         RequirementSource::Url {

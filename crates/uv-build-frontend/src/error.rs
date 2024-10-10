@@ -1,18 +1,20 @@
-use crate::PythonRunnerOutput;
-use itertools::Itertools;
-use pep440_rs::Version;
-use pep508_rs::PackageName;
-use regex::Regex;
 use std::env;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::sync::LazyLock;
+
+use owo_colors::OwoColorize;
+use regex::Regex;
 use thiserror::Error;
 use tracing::error;
 use uv_configuration::BuildOutput;
 use uv_fs::Simplified;
+use uv_pep440::Version;
+use uv_pep508::PackageName;
+
+use crate::PythonRunnerOutput;
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE_GCC: LazyLock<Regex> = LazyLock::new(|| {
@@ -71,35 +73,10 @@ pub enum Error {
     Virtualenv(#[from] uv_virtualenv::Error),
     #[error("Failed to run `{0}`")]
     CommandFailed(PathBuf, #[source] io::Error),
-    #[error("{message} ({exit_code})\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
-    BuildBackendOutput {
-        message: String,
-        exit_code: ExitStatus,
-        stdout: String,
-        stderr: String,
-    },
-    /// Nudge the user towards installing the missing dev library
-    #[error("{message} ({exit_code})\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
-    MissingHeaderOutput {
-        message: String,
-        exit_code: ExitStatus,
-        stdout: String,
-        stderr: String,
-        #[source]
-        missing_header_cause: MissingHeaderCause,
-    },
-    #[error("{message} ({exit_code})")]
-    BuildBackend {
-        message: String,
-        exit_code: ExitStatus,
-    },
-    #[error("{message} ({exit_code})")]
-    MissingHeader {
-        message: String,
-        exit_code: ExitStatus,
-        #[source]
-        missing_header_cause: MissingHeaderCause,
-    },
+    #[error(transparent)]
+    BuildBackend(#[from] BuildBackendError),
+    #[error(transparent)]
+    MissingHeader(#[from] MissingHeaderError),
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
 }
@@ -202,6 +179,72 @@ impl Display for MissingHeaderCause {
     }
 }
 
+#[derive(Debug, Error)]
+pub struct BuildBackendError {
+    message: String,
+    exit_code: ExitStatus,
+    stdout: Vec<String>,
+    stderr: Vec<String>,
+}
+
+impl Display for BuildBackendError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ({})", self.message, self.exit_code)?;
+
+        let mut non_empty = false;
+
+        if self.stdout.iter().any(|line| !line.trim().is_empty()) {
+            write!(f, "\n\n{}\n{}", "[stdout]".red(), self.stdout.join("\n"))?;
+            non_empty = true;
+        }
+
+        if self.stderr.iter().any(|line| !line.trim().is_empty()) {
+            write!(f, "\n\n{}\n{}", "[stderr]".red(), self.stderr.join("\n"))?;
+            non_empty = true;
+        }
+
+        if non_empty {
+            writeln!(f)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+pub struct MissingHeaderError {
+    message: String,
+    exit_code: ExitStatus,
+    stdout: Vec<String>,
+    stderr: Vec<String>,
+    #[source]
+    cause: MissingHeaderCause,
+}
+
+impl Display for MissingHeaderError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ({})", self.message, self.exit_code)?;
+
+        let mut non_empty = false;
+
+        if self.stdout.iter().any(|line| !line.trim().is_empty()) {
+            write!(f, "\n\n{}\n{}", "[stdout]".red(), self.stdout.join("\n"))?;
+            non_empty = true;
+        }
+
+        if self.stderr.iter().any(|line| !line.trim().is_empty()) {
+            write!(f, "\n\n{}\n{}", "[stderr]".red(), self.stderr.join("\n"))?;
+            non_empty = true;
+        }
+
+        if non_empty {
+            writeln!(f)?;
+        }
+
+        Ok(())
+    }
+}
+
 impl Error {
     /// Construct an [`Error`] from the output of a failed command.
     pub(crate) fn from_command_output(
@@ -241,42 +284,48 @@ impl Error {
 
         if let Some(missing_library) = missing_library {
             return match level {
-                BuildOutput::Stderr | BuildOutput::Quiet => Self::MissingHeader {
+                BuildOutput::Stderr | BuildOutput::Quiet => {
+                    Self::MissingHeader(MissingHeaderError {
+                        message,
+                        exit_code: output.status,
+                        stdout: vec![],
+                        stderr: vec![],
+                        cause: MissingHeaderCause {
+                            missing_library,
+                            package_name: name.cloned(),
+                            package_version: version.cloned(),
+                            version_id: version_id.map(ToString::to_string),
+                        },
+                    })
+                }
+                BuildOutput::Debug => Self::MissingHeader(MissingHeaderError {
                     message,
                     exit_code: output.status,
-                    missing_header_cause: MissingHeaderCause {
+                    stdout: output.stdout.clone(),
+                    stderr: output.stderr.clone(),
+                    cause: MissingHeaderCause {
                         missing_library,
                         package_name: name.cloned(),
                         package_version: version.cloned(),
                         version_id: version_id.map(ToString::to_string),
                     },
-                },
-                BuildOutput::Debug => Self::MissingHeaderOutput {
-                    message,
-                    exit_code: output.status,
-                    stdout: output.stdout.iter().join("\n"),
-                    stderr: output.stderr.iter().join("\n"),
-                    missing_header_cause: MissingHeaderCause {
-                        missing_library,
-                        package_name: name.cloned(),
-                        package_version: version.cloned(),
-                        version_id: version_id.map(ToString::to_string),
-                    },
-                },
+                }),
             };
         }
 
         match level {
-            BuildOutput::Stderr | BuildOutput::Quiet => Self::BuildBackend {
+            BuildOutput::Stderr | BuildOutput::Quiet => Self::BuildBackend(BuildBackendError {
                 message,
                 exit_code: output.status,
-            },
-            BuildOutput::Debug => Self::BuildBackendOutput {
+                stdout: vec![],
+                stderr: vec![],
+            }),
+            BuildOutput::Debug => Self::BuildBackend(BuildBackendError {
                 message,
                 exit_code: output.status,
-                stdout: output.stdout.iter().join("\n"),
-                stderr: output.stderr.iter().join("\n"),
-            },
+                stdout: output.stdout.clone(),
+                stderr: output.stderr.clone(),
+            }),
         }
     }
 }
@@ -285,11 +334,11 @@ impl Error {
 mod test {
     use crate::{Error, PythonRunnerOutput};
     use indoc::indoc;
-    use pep440_rs::Version;
-    use pep508_rs::PackageName;
     use std::process::ExitStatus;
     use std::str::FromStr;
     use uv_configuration::BuildOutput;
+    use uv_pep440::Version;
+    use uv_pep508::PackageName;
 
     #[test]
     fn missing_header() {
@@ -325,18 +374,22 @@ mod test {
             None,
             Some("pygraphviz-1.11"),
         );
-        assert!(matches!(err, Error::MissingHeaderOutput { .. }));
+
+        assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r###"
         Failed building wheel through setup.py (exit code: 0)
-        --- stdout:
+
+        [stdout]
         running bdist_wheel
         running build
         [...]
         creating build/temp.linux-x86_64-cpython-39/pygraphviz
         gcc -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -DOPENSSL_NO_SSL3 -fPIC -DSWIG_PYTHON_STRICT_BYTE_CHAR -I/tmp/.tmpy6vVes/.venv/include -I/home/konsti/.pyenv/versions/3.9.18/include/python3.9 -c pygraphviz/graphviz_wrap.c -o build/temp.linux-x86_64-cpython-39/pygraphviz/graphviz_wrap.o
-        --- stderr:
+
+        [stderr]
         warning: no files found matching '*.png' under directory 'doc'
         warning: no files found matching '*.txt' under directory 'doc'
         [...]
@@ -346,7 +399,6 @@ mod test {
               |          ^~~~~~~~~~~~~~~~~~~
         compilation terminated.
         error: command '/usr/bin/gcc' failed with exit code 1
-        ---
         "###);
         insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
@@ -380,20 +432,19 @@ mod test {
             None,
             Some("pygraphviz-1.11"),
         );
-        assert!(matches!(err, Error::MissingHeaderOutput { .. }));
+        assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r###"
         Failed building wheel through setup.py (exit code: 0)
-        --- stdout:
 
-        --- stderr:
+        [stderr]
         1099 |     n = strlen(p);
              |         ^~~~~~~~~
         /usr/bin/ld: cannot find -lncurses: No such file or directory
         collect2: error: ld returned 1 exit status
         error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
-        ---
         "###);
         insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
@@ -428,21 +479,20 @@ mod test {
             None,
             Some("pygraphviz-1.11"),
         );
-        assert!(matches!(err, Error::MissingHeaderOutput { .. }));
+        assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r###"
         Failed building wheel through setup.py (exit code: 0)
-        --- stdout:
 
-        --- stderr:
+        [stderr]
         usage: setup.py [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
            or: setup.py --help [cmd1 cmd2 ...]
            or: setup.py --help-commands
            or: setup.py cmd --help
 
         error: invalid command 'bdist_wheel'
-        ---
         "###);
         insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
@@ -474,17 +524,16 @@ mod test {
             Some(&Version::new([1, 11])),
             Some("pygraphviz-1.11"),
         );
-        assert!(matches!(err, Error::MissingHeaderOutput { .. }));
+        assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r###"
         Failed building wheel through setup.py (exit code: 0)
-        --- stdout:
 
-        --- stderr:
+        [stderr]
         import distutils.core
         ModuleNotFoundError: No module named 'distutils'
-        ---
         "###);
         insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),

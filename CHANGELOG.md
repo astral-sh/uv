@@ -1,5 +1,109 @@
 # Changelog
 
+## 0.4.20
+
+### Enhancements
+
+- Add managed downloads for CPython 3.13.0 (final) ([#8010](https://github.com/astral-sh/uv/pull/8010))
+- Python 3.13 is the default version for `uv python install` ([#8010](https://github.com/astral-sh/uv/pull/8010))
+- Hint at wrong endpoint in `uv publish` failures ([#7872](https://github.com/astral-sh/uv/pull/7872))
+- List available scripts when a command is not specified for `uv run` ([#7687](https://github.com/astral-sh/uv/pull/7687))
+- Fill in `authors` field during `uv init` ([#7756](https://github.com/astral-sh/uv/pull/7756))
+
+### Documentation
+
+- Add snapshot testing to contribution guide ([#7882](https://github.com/astral-sh/uv/pull/7882))
+- Fix and improve GitLab integration docs ([#8000](https://github.com/astral-sh/uv/pull/8000))
+
+## 0.4.19
+
+### Enhancements
+
+- Add managed downloads for CPython 3.13.0rc3 and 3.12.7 ([#7880](https://github.com/astral-sh/uv/pull/7880))
+- Display the target virtual environment path if non-default ([#7850](https://github.com/astral-sh/uv/pull/7850))
+- Preserve case-insensitive sorts in `uv add` ([#7864](https://github.com/astral-sh/uv/pull/7864))
+- Respect project upper bounds when filtering wheels on `requires-python` ([#7904](https://github.com/astral-sh/uv/pull/7904))
+- Add `--script` to `uv run` to treat an input as PEP 723 regardless of extension ([#7739](https://github.com/astral-sh/uv/pull/7739))
+- Improve legibility of build failure errors ([#7854](https://github.com/astral-sh/uv/pull/7854))
+- Show interpreter source during Python discovery query errors ([#7928](https://github.com/astral-sh/uv/pull/7928))
+
+### Configuration
+
+- Add `UV_FIND_LINKS` environment variable for `--find-links` ([#7912](https://github.com/astral-sh/uv/pull/7912))
+- Ignore empty string values for `UV_PYTHON` environment variable ([#7878](https://github.com/astral-sh/uv/pull/7878))
+
+### Bug fixes
+
+- Allow `py3x-none` tags in newer than Python 3.x ([#7867](https://github.com/astral-sh/uv/pull/7867))
+- Allow self-dependencies in the `dev` section ([#7943](https://github.com/astral-sh/uv/pull/7943))
+- Always ignore `cp2` wheels in resolution ([#7902](https://github.com/astral-sh/uv/pull/7902))
+- Clear the publish progress bar on retry ([#7921](https://github.com/astral-sh/uv/pull/7921))
+- Fix parsing of `gnueabi` libc variants in Python version requests ([#7975](https://github.com/astral-sh/uv/pull/7975))
+- Simplify supported environments when comparing to lockfile ([#7894](https://github.com/astral-sh/uv/pull/7894))
+- Trim commits when reading from Git refs ([#7922](https://github.com/astral-sh/uv/pull/7922))
+- Use a higher HTTP read timeout when publishing packages ([#7923](https://github.com/astral-sh/uv/pull/7923))
+- Remove the first empty line for `uv tree --package foo` ([#7885](https://github.com/astral-sh/uv/pull/7885))
+
+### Documentation
+
+- Add 3.13 support to the platform reference ([#7971](https://github.com/astral-sh/uv/pull/7971))
+- Clarify project environment creation ([#7941](https://github.com/astral-sh/uv/pull/7941))
+- Fix code block title in Gitlab integration docs ([#7861](https://github.com/astral-sh/uv/pull/7861))
+- Fix project guide section on adding a Git dependency ([#7916](https://github.com/astral-sh/uv/pull/7916))
+- Fix uninstallation command for Windows ([#7944](https://github.com/astral-sh/uv/pull/7944))
+- Clearly specify the minimum supported Windows Server version ([#7946](https://github.com/astral-sh/uv/pull/7946))
+
+### Rust API
+
+- Remove unused `Sha256Reader` ([#7929](https://github.com/astral-sh/uv/pull/7929))
+- Remove unnecessary `Deserialize` derives on settings ([#7856](https://github.com/astral-sh/uv/pull/7856))
+
+## 0.4.18
+
+### Enhancements
+
+- Allow multiple source entries for each package in `tool.uv.sources` ([#7745](https://github.com/astral-sh/uv/pull/7745))
+- Add `.gitignore` file to `uv build` output directory ([#7835](https://github.com/astral-sh/uv/pull/7835))
+- Disable jemalloc on FreeBSD ([#7780](https://github.com/astral-sh/uv/pull/7780))
+- Respect `PAGER` env var when paging in `uv help` command ([#5511](https://github.com/astral-sh/uv/pull/5511))
+- Support `uv run -m foo` to run a module ([#7754](https://github.com/astral-sh/uv/pull/7754))
+- Use a top-level output directory for `uv build` in workspaces ([#7813](https://github.com/astral-sh/uv/pull/7813))
+- Update `uv init --package` command to match project name ([#7670](https://github.com/astral-sh/uv/pull/7670))
+- Add a custom suggestion for `uv add dotenv` ([#7799](https://github.com/astral-sh/uv/pull/7799))
+- Add detailed errors for `tool.uv.sources` deserialization failures ([#7823](https://github.com/astral-sh/uv/pull/7823))
+- Improve error message copy for failed builds ([#7849](https://github.com/astral-sh/uv/pull/7849))
+- Use `serde-untagged` to improve some untagged enum error messages ([#7822](https://github.com/astral-sh/uv/pull/7822))
+- Use build failure hints for `dotenv` errors, rather than in `uv add` ([#7825](https://github.com/astral-sh/uv/pull/7825))
+
+### Configuration
+
+- Add `UV_NO_SYNC` environment variable ([#7752](https://github.com/astral-sh/uv/pull/7752))
+
+### Bug fixes
+
+- Accept `git+` prefix in `tool.uv.sources` ([#7847](https://github.com/astral-sh/uv/pull/7847))
+- Allow spaces in path requirements ([#7767](https://github.com/astral-sh/uv/pull/7767))
+- Avoid reusing cached downloaded binaries with `--no-binary` ([#7772](https://github.com/astral-sh/uv/pull/7772))
+- Correctly trims values during wheel WHEEL file parsing ([#7770](https://github.com/astral-sh/uv/pull/7770))
+- Fix `uv tree --invert` for platform dependencies ([#7808](https://github.com/astral-sh/uv/pull/7808))
+- Fix encoding mismatch between python child process and uv ([#7757](https://github.com/astral-sh/uv/pull/7757))
+- Reject self-dependencies in `uv add` ([#7766](https://github.com/astral-sh/uv/pull/7766))
+- Respect `tool.uv.environments` for legacy virtual workspace roots ([#7824](https://github.com/astral-sh/uv/pull/7824))
+- Retain empty extras on workspace members ([#7762](https://github.com/astral-sh/uv/pull/7762))
+- Use file stem when parsing cached wheel names ([#7773](https://github.com/astral-sh/uv/pull/7773))
+
+### Rust API
+
+- Make `FlatDistributions` public ([#7833](https://github.com/astral-sh/uv/pull/7833))
+
+### Documentation
+
+- Fix table of contents sizing ([#7751](https://github.com/astral-sh/uv/pull/7751))
+- GitLab Integration documentation ([#6857](https://github.com/astral-sh/uv/pull/6857))
+- Update documentation to setup-uv@v3 ([#7807](https://github.com/astral-sh/uv/pull/7807))
+- Use `uv publish` instead of twine in docs ([#7837](https://github.com/astral-sh/uv/pull/7837))
+- Fix typo in `projects.md` ([#7784](https://github.com/astral-sh/uv/pull/7784))
+
 ## 0.4.17
 
 ### Enhancements

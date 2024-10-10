@@ -11,21 +11,21 @@ use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
     pub name: PackageName,
-    pub requires_dist: Vec<pypi_types::Requirement>,
+    pub requires_dist: Vec<uv_pypi_types::Requirement>,
     pub provides_extras: Vec<ExtraName>,
-    pub dev_dependencies: BTreeMap<GroupName, Vec<pypi_types::Requirement>>,
+    pub dev_dependencies: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
 }
 
 impl RequiresDist {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_metadata23(metadata: pypi_types::RequiresDist) -> Self {
+    pub fn from_metadata23(metadata: uv_pypi_types::RequiresDist) -> Self {
         Self {
             name: metadata.name,
             requires_dist: metadata
                 .requires_dist
                 .into_iter()
-                .map(pypi_types::Requirement::from)
+                .map(uv_pypi_types::Requirement::from)
                 .collect(),
             provides_extras: metadata.provides_extras,
             dev_dependencies: BTreeMap::default(),
@@ -35,7 +35,7 @@ impl RequiresDist {
     /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
     /// dependencies.
     pub async fn from_project_maybe_workspace(
-        metadata: pypi_types::RequiresDist,
+        metadata: uv_pypi_types::RequiresDist,
         install_path: &Path,
         sources: SourceStrategy,
     ) -> Result<Self, MetadataError> {
@@ -52,7 +52,7 @@ impl RequiresDist {
     }
 
     fn from_project_workspace(
-        metadata: pypi_types::RequiresDist,
+        metadata: uv_pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
         source_strategy: SourceStrategy,
     ) -> Result<Self, MetadataError> {
@@ -103,7 +103,7 @@ impl RequiresDist {
                     .collect::<Result<Vec<_>, _>>()?,
                 SourceStrategy::Disabled => dev_dependencies
                     .into_iter()
-                    .map(pypi_types::Requirement::from)
+                    .map(uv_pypi_types::Requirement::from)
                     .collect(),
             };
             if dev_dependencies.is_empty() {
@@ -135,7 +135,7 @@ impl RequiresDist {
                 .collect::<Result<Vec<_>, _>>()?,
             SourceStrategy::Disabled => requires_dist
                 .into_iter()
-                .map(pypi_types::Requirement::from)
+                .map(uv_pypi_types::Requirement::from)
                 .collect(),
         };
 
@@ -188,7 +188,7 @@ mod test {
             },
         )
         .await?;
-        let requires_dist = pypi_types::RequiresDist::parse_pyproject_toml(contents)?;
+        let requires_dist = uv_pypi_types::RequiresDist::parse_pyproject_toml(contents)?;
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,

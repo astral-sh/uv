@@ -13,15 +13,15 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
-pypi-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio", "schemars"] }
 uv-git = { workspace = true }
 uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
-uv-warnings = { workspace = true }
 uv-options-metadata = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-warnings = { workspace = true }
 
 either = { workspace = true }
 fs-err = { workspace = true }

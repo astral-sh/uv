@@ -1,8 +1,8 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use pep508_rs::{MarkerTree, MarkerTreeContents};
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep508::{MarkerTree, MarkerTreeContents};
 
 use crate::python_requirement::PythonRequirement;
 

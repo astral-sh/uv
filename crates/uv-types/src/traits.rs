@@ -3,15 +3,15 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::{
+use uv_cache::Cache;
+use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_distribution_types::{
     CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, InstalledDist, Resolution,
     SourceDist,
 };
-use pep508_rs::PackageName;
-use pypi_types::Requirement;
-use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_git::GitResolver;
+use uv_pep508::PackageName;
+use uv_pypi_types::Requirement;
 use uv_python::PythonEnvironment;
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.

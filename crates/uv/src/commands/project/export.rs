@@ -18,7 +18,7 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace}
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::do_safe_lock;
-use crate::commands::project::{FoundInterpreter, ProjectError};
+use crate::commands::project::{ProjectError, ProjectInterpreter};
 use crate::commands::{diagnostics, pip, ExitStatus, OutputWriter};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
@@ -74,7 +74,7 @@ pub(crate) async fn export(
     };
 
     // Find an interpreter for the project
-    let interpreter = FoundInterpreter::discover(
+    let interpreter = ProjectInterpreter::discover(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
         python_preference,

@@ -1,0 +1,27 @@
+---
+source: crates/uv-distribution-filename/src/wheel.rs
+expression: "WheelFilename::from_str(\"foo-1.2.3-202206090410-python-abi-platform.whl\")"
+---
+Ok(
+    WheelFilename {
+        name: PackageName(
+            "foo",
+        ),
+        version: "1.2.3",
+        build_tag: Some(
+            BuildTag(
+                202206090410,
+                None,
+            ),
+        ),
+        python_tag: [
+            "python",
+        ],
+        abi_tag: [
+            "abi",
+        ],
+        platform_tag: [
+            "platform",
+        ],
+    },
+)

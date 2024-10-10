@@ -1,7 +1,5 @@
-use distribution_filename::{ExtensionError, SourceDistExtension};
 use futures::TryStreamExt;
 use owo_colors::OwoColorize;
-use pypi_types::{HashAlgorithm, HashDigest};
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -15,8 +13,10 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 use uv_client::WrappedReqwestError;
+use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, Simplified};
+use uv_pypi_types::{HashAlgorithm, HashDigest};
 
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
@@ -260,18 +260,23 @@ impl PythonDownloadRequest {
                 return false;
             }
         }
+        // If we don't allow pre-releases, don't match a key with a pre-release tag
+        if !self.allows_prereleases() && key.prerelease.is_some() {
+            return false;
+        }
         if let Some(version) = &self.version {
-            if !version.matches_major_minor_patch(key.major, key.minor, key.patch) {
+            if !version.matches_major_minor_patch_prerelease(
+                key.major,
+                key.minor,
+                key.patch,
+                key.prerelease,
+            ) {
                 return false;
             }
-            if version.is_free_threaded_requested() {
+            if version.is_freethreaded() {
                 debug!("Installing managed free-threaded Python is not yet supported");
                 return false;
             }
-        }
-        // If we don't allow pre-releases, don't match a key with a pre-release tag
-        if !self.allows_prereleases() && !key.prerelease.is_empty() {
-            return false;
         }
         true
     }

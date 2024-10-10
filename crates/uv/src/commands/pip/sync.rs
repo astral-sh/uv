@@ -4,9 +4,6 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{DependencyMetadata, IndexLocations, Resolution};
-use install_wheel_rs::linker::LinkMode;
-use pep508_rs::PackageName;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -16,8 +13,11 @@ use uv_configuration::{
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
+use uv_distribution_types::{DependencyMetadata, IndexLocations, Resolution};
 use uv_fs::Simplified;
+use uv_install_wheel::linker::LinkMode;
 use uv_installer::SitePackages;
+use uv_pep508::PackageName;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
 };
@@ -29,6 +29,7 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, HashStrategy};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
+use crate::commands::pip::operations::report_target_environment;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{diagnostics, ExitStatus, SharedState};
@@ -131,11 +132,7 @@ pub(crate) async fn pip_sync(
         &cache,
     )?;
 
-    debug!(
-        "Using Python {} environment at {}",
-        environment.interpreter().python_version(),
-        environment.python_executable().user_display().cyan()
-    );
+    report_target_environment(&environment, &cache, printer)?;
 
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {

@@ -1,6 +1,6 @@
-use pep508_rs::{MarkerTree, PackageName};
-use pypi_types::Requirement;
 use rustc_hash::FxHashMap;
+use uv_pep508::{MarkerTree, PackageName};
+use uv_pypi_types::Requirement;
 
 use crate::ResolverMarkers;
 

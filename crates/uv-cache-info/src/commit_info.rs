@@ -45,7 +45,8 @@ impl CacheCommit {
         })?;
         let commit = if let Some(git_ref) = git_ref_parts.next() {
             let git_ref_path = git_dir.join(git_ref);
-            fs_err::read_to_string(git_ref_path)?
+            let commit = fs_err::read_to_string(git_ref_path)?;
+            commit.trim().to_string()
         } else {
             commit_or_ref.to_string()
         };

@@ -1,0 +1,56 @@
+[package]
+name = "uv-install-wheel"
+version = "0.0.1"
+publish = false
+description = "Takes a wheel and installs it."
+keywords = ["wheel", "python"]
+
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[lib]
+name = "uv_install_wheel"
+
+[dependencies]
+uv-cache-info = { workspace = true }
+uv-distribution-filename = { workspace = true }
+uv-fs = { workspace = true }
+uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-platform-tags = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-warnings = { workspace = true }
+
+clap = { workspace = true, optional = true, features = ["derive"] }
+configparser = { workspace = true }
+csv = { workspace = true }
+data-encoding = { workspace = true }
+fs-err = { workspace = true }
+mailparse = { workspace = true }
+pathdiff = { workspace = true }
+platform-info = { workspace = true }
+reflink-copy = { workspace = true }
+regex = { workspace = true }
+rustc-hash = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+walkdir = { workspace = true }
+zip = { workspace = true }
+
+[dev-dependencies]
+anyhow = { version = "1.0.89" }
+assert_fs = { version = "1.1.2" }
+indoc = { version = "2.0.5" }

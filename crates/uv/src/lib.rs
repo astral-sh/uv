@@ -11,6 +11,7 @@ use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
+use tokio::task::spawn_blocking;
 use tracing::{debug, instrument};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
@@ -181,11 +182,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     let mut maybe_tempfile: Option<tempfile::NamedTempFile> = None;
     let run_command = if let Commands::Project(command) = &mut *cli.command {
         if let ProjectCommand::Run(uv_cli::RunArgs {
-            command, module, ..
+            command: Some(command),
+            module,
+            script,
+            ..
         }) = &mut **command
         {
             maybe_tempfile = resolve_script_target(command).await?;
-            Some(RunCommand::from_args(command, *module)?)
+            Some(RunCommand::from_args(command, *module, *script)?)
         } else {
             None
         }
@@ -549,6 +553,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.no_build_isolation,
                 args.settings.no_build_isolation_package,
                 args.settings.build_options,
+                args.modifications,
                 args.settings.python_version,
                 args.settings.python_platform,
                 args.settings.strict,
@@ -741,7 +746,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
 
-            commands::build(
+            commands::build_frontend(
                 &project_dir,
                 args.src,
                 args.package,
@@ -1169,7 +1174,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::BuildBackend { command } => match command {
+        Commands::BuildBackend { command } => spawn_blocking(move || match command {
             BuildBackendCommand::BuildSdist { sdist_directory } => {
                 commands::build_backend::build_sdist(&sdist_directory)
             }
@@ -1202,7 +1207,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             BuildBackendCommand::PrepareMetadataForBuildEditable { wheel_directory } => {
                 commands::build_backend::prepare_metadata_for_build_editable(&wheel_directory)
             }
-        },
+        })
+        .await
+        .expect("tokio threadpool exited unexpectedly"),
     };
     drop(maybe_tempfile);
     result
@@ -1253,6 +1260,7 @@ async fn run_project(
                 args.kind,
                 args.vcs,
                 args.no_readme,
+                args.author_from,
                 args.no_pin_python,
                 args.python,
                 args.no_workspace,
@@ -1292,9 +1300,6 @@ async fn run_project(
                         .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Vec<_>>();
-
-            // Given `ProjectCommand::Run`, we always expect a `RunCommand` to be present.
-            let command = command.expect("run command is required");
 
             Box::pin(commands::run(
                 project_dir,

@@ -7,12 +7,7 @@ use crate::commands::{diagnostics, pip, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 use anyhow::{Context, Result};
-use distribution_types::{DirectorySourceDist, Dist, ResolvedDist, SourceDist};
 use itertools::Itertools;
-use pep508_rs::{MarkerTree, Requirement, VersionOrUrl};
-use pypi_types::{
-    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
-};
 use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
@@ -23,8 +18,13 @@ use uv_configuration::{
     HashCheckingMode, InstallOptions,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution_types::{DirectorySourceDist, Dist, ResolvedDist, SourceDist};
 use uv_installer::SitePackages;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
+use uv_pypi_types::{
+    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
+};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
@@ -366,8 +366,8 @@ pub(super) async fn do_sync(
 
 /// Filter out any virtual workspace members.
 fn apply_no_virtual_project(
-    resolution: distribution_types::Resolution,
-) -> distribution_types::Resolution {
+    resolution: uv_distribution_types::Resolution,
+) -> uv_distribution_types::Resolution {
     resolution.filter(|dist| {
         let ResolvedDist::Installable(dist) = dist else {
             return true;
@@ -387,9 +387,9 @@ fn apply_no_virtual_project(
 
 /// If necessary, convert any editable requirements to non-editable.
 fn apply_editable_mode(
-    resolution: distribution_types::Resolution,
+    resolution: uv_distribution_types::Resolution,
     editable: EditableMode,
-) -> distribution_types::Resolution {
+) -> uv_distribution_types::Resolution {
     match editable {
         // No modifications are necessary for editable mode; retain any editable distributions.
         EditableMode::Editable => resolution,

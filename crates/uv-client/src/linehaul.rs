@@ -3,8 +3,8 @@ use std::env;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use pep508_rs::MarkerEnvironment;
-use platform_tags::{Os, Platform};
+use uv_pep508::MarkerEnvironment;
+use uv_platform_tags::{Os, Platform};
 use uv_version::version;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -68,7 +68,7 @@ impl LineHaul {
             .iter()
             .find_map(|&var_name| env::var(var_name).ok().map(|_| true));
 
-        let libc = match platform.map(platform_tags::Platform::os) {
+        let libc = match platform.map(Platform::os) {
             Some(Os::Manylinux { major, minor }) => Some(Libc {
                 lib: Some("glibc".to_string()),
                 version: Some(format!("{major}.{minor}")),
@@ -94,7 +94,7 @@ impl LineHaul {
                 libc,
             })
         } else if cfg!(target_os = "macos") {
-            let version = match platform.map(platform_tags::Platform::os) {
+            let version = match platform.map(Platform::os) {
                 Some(Os::Macos { major, minor }) => Some(format!("{major}.{minor}")),
                 _ => None,
             };

@@ -1,4 +1,4 @@
-use pep508_rs::PackageName;
+use uv_pep508::PackageName;
 use uv_python::PythonEnvironment;
 
 /// Whether to enforce build isolation when building source distributions.

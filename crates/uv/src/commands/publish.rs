@@ -5,6 +5,7 @@ use anyhow::{bail, Result};
 use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::info;
 use url::Url;
 use uv_client::{AuthIntegration, BaseClientBuilder, Connectivity, DEFAULT_RETRIES};
@@ -50,6 +51,9 @@ pub(crate) async fn publish(
         .allow_insecure_host(allow_insecure_host)
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
+        // Set a very high timeout for uploads, connections are often 10x slower on upload than
+        // download. 15 min is taken from the time a trusted publishing token is valid.
+        .default_timeout(Duration::from_secs(15 * 60))
         .build();
     let oidc_client = BaseClientBuilder::new()
         .auth_integration(AuthIntegration::NoAuthMiddleware)

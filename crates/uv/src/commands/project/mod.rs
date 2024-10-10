@@ -5,23 +5,26 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification};
-use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::MarkerTreeContents;
-use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
+use uv_distribution_types::{
+    Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
+};
 use uv_fs::Simplified;
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
+use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::MarkerTreeContents;
+use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
+    VersionRequest,
 };
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::{
@@ -142,7 +145,7 @@ pub(crate) enum ProjectError {
     HashStrategy(#[from] uv_types::HashStrategyError),
 
     #[error(transparent)]
-    Tags(#[from] platform_tags::TagsError),
+    Tags(#[from] uv_platform_tags::TagsError),
 
     #[error(transparent)]
     FlatIndex(#[from] uv_client::FlatIndexError),
@@ -278,10 +281,13 @@ pub(crate) fn validate_requires_python(
     }
 }
 
+/// An interpreter suitable for the project.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub(crate) enum FoundInterpreter {
+pub(crate) enum ProjectInterpreter {
+    /// An interpreter from outside the project, to create a new project virtual environment.
     Interpreter(Interpreter),
+    /// An interpreter from an existing project virtual environment.
     Environment(PythonEnvironment),
 }
 
@@ -335,7 +341,10 @@ impl WorkspacePython {
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        specifiers.clone(),
+                        PythonVariant::Default,
+                    ))
                 });
             let source = PythonRequestSource::RequiresPython;
             (source, request)
@@ -349,7 +358,7 @@ impl WorkspacePython {
     }
 }
 
-impl FoundInterpreter {
+impl ProjectInterpreter {
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
         workspace: &Workspace,
@@ -476,11 +485,11 @@ impl FoundInterpreter {
         Ok(Self::Interpreter(interpreter))
     }
 
-    /// Convert the [`FoundInterpreter`] into an [`Interpreter`].
+    /// Convert the [`ProjectInterpreter`] into an [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
-            FoundInterpreter::Interpreter(interpreter) => interpreter,
-            FoundInterpreter::Environment(venv) => venv.into_interpreter(),
+            ProjectInterpreter::Interpreter(interpreter) => interpreter,
+            ProjectInterpreter::Environment(venv) => venv.into_interpreter(),
         }
     }
 }
@@ -496,7 +505,7 @@ pub(crate) async fn get_or_init_environment(
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
-    match FoundInterpreter::discover(
+    match ProjectInterpreter::discover(
         workspace,
         python,
         python_preference,
@@ -509,31 +518,47 @@ pub(crate) async fn get_or_init_environment(
     .await?
     {
         // If we found an existing, compatible environment, use it.
-        FoundInterpreter::Environment(environment) => Ok(environment),
+        ProjectInterpreter::Environment(environment) => Ok(environment),
 
         // Otherwise, create a virtual environment with the discovered interpreter.
-        FoundInterpreter::Interpreter(interpreter) => {
+        ProjectInterpreter::Interpreter(interpreter) => {
             let venv = workspace.venv();
 
             // Avoid removing things that are not virtual environments
-            if venv.exists() && !venv.join("pyvenv.cfg").exists() {
-                return Err(ProjectError::InvalidProjectEnvironmentDir(
-                    venv,
-                    "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
-                ));
-            }
+            let should_remove = match (venv.try_exists(), venv.join("pyvenv.cfg").try_exists()) {
+                // It's a virtual environment we can remove it
+                (_, Ok(true)) => true,
+                // It doesn't exist at all, we should use it without deleting it to avoid TOCTOU bugs
+                (Ok(false), Ok(false)) => false,
+                // If it's not a virtual environment, bail
+                (Ok(true), Ok(false)) => {
+                    return Err(ProjectError::InvalidProjectEnvironmentDir(
+                        venv,
+                        "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                    ));
+                }
+                // Similarly, if we can't _tell_ if it exists we should bail
+                (_, Err(err)) | (Err(err), _) => {
+                    return Err(ProjectError::InvalidProjectEnvironmentDir(
+                        venv,
+                        format!("it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"),
+                    ));
+                }
+            };
 
             // Remove the existing virtual environment if it doesn't meet the requirements.
-            match fs_err::remove_dir_all(&venv) {
-                Ok(()) => {
-                    writeln!(
-                        printer.stderr(),
-                        "Removed virtual environment at: {}",
-                        venv.user_display().cyan()
-                    )?;
+            if should_remove {
+                match fs_err::remove_dir_all(&venv) {
+                    Ok(()) => {
+                        writeln!(
+                            printer.stderr(),
+                            "Removed virtual environment at: {}",
+                            venv.user_display().cyan()
+                        )?;
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.into()),
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e.into()),
             }
 
             writeln!(

@@ -1385,6 +1385,69 @@ fn tool_install_no_entrypoints() {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
+
+    // Ensure the tool environment is not created.
+    tool_dir
+        .child("iniconfig")
+        .assert(predicate::path::missing());
+    bin_dir
+        .child("iniconfig")
+        .assert(predicate::path::missing());
+}
+
+/// Test installing a package that can't be installed.
+#[test]
+fn tool_install_uninstallable() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
+            (r"\\\.", ""),
+            (r"#+", "#"),
+        ])
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.tool_install()
+        .arg("pyenv")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r##"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: pyenv==0.0.1
+      Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+
+    [stdout]
+    running bdist_wheel
+    running build
+    installing to build/bdist.linux-x86_64/wheel
+    running install
+
+    [stderr]
+    # NOTE #
+    We are sorry, but this package is not installable with pip.
+
+    Please read the installation instructions at:
+     
+    https://github.com/pyenv/pyenv#installation
+    #
+
+
+    "##);
+
+    // Ensure the tool environment is not created.
+    tool_dir.child("pyenv").assert(predicate::path::missing());
+    bin_dir.child("pyenv").assert(predicate::path::missing());
 }
 
 /// Test installing a tool with a bare URL requirement.

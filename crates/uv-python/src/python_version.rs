@@ -2,8 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
 
-use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, StringVersion};
+use uv_pep440::Version;
+use uv_pep508::{MarkerEnvironment, StringVersion};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PythonVersion(StringVersion);
@@ -171,7 +171,7 @@ impl PythonVersion {
 mod tests {
     use std::str::FromStr;
 
-    use pep440_rs::{Prerelease, PrereleaseKind, Version};
+    use uv_pep440::{Prerelease, PrereleaseKind, Version};
 
     use crate::PythonVersion;
 

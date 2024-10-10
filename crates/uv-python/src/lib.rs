@@ -3,7 +3,7 @@ use thiserror::Error;
 
 pub use crate::discovery::{
     find_python_installations, EnvironmentPreference, Error as DiscoveryError, PythonDownloads,
-    PythonNotFound, PythonPreference, PythonRequest, PythonSource, VersionRequest,
+    PythonNotFound, PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
 };
 pub use crate::environment::{InvalidEnvironment, InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::ImplementationName;
@@ -37,7 +37,6 @@ mod python_version;
 mod target;
 mod version_files;
 mod virtualenv;
-mod which;
 
 #[cfg(not(test))]
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {

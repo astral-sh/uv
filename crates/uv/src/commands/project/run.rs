@@ -18,12 +18,14 @@ use uv_configuration::{
     Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, SourceStrategy,
 };
 use uv_distribution::LoweredRequirement;
+use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
+
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::Lock;
@@ -51,7 +53,7 @@ use crate::settings::ResolverInstallerSettings;
 pub(crate) async fn run(
     project_dir: &Path,
     script: Option<Pep723Script>,
-    command: RunCommand,
+    command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
     locked: bool,
@@ -128,7 +130,10 @@ pub(crate) async fn run(
                 .requires_python
                 .as_ref()
                 .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python.clone(), false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        requires_python.clone(),
+                        PythonVariant::Default,
+                    ))
                 });
             let source = PythonRequestSource::RequiresPython;
             (source, request)
@@ -748,6 +753,73 @@ pub(crate) async fn run(
         .as_ref()
         .map_or_else(|| &base_interpreter, |env| env.interpreter());
 
+    // Check if any run command is given.
+    // If not, print the available scripts for the current interpreter.
+    let Some(command) = command else {
+        writeln!(
+            printer.stdout(),
+            "Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.\n"
+        )?;
+
+        #[allow(clippy::map_identity)]
+        let commands = interpreter
+            .scripts()
+            .read_dir()
+            .ok()
+            .into_iter()
+            .flatten()
+            .map(|entry| match entry {
+                Ok(entry) => Ok(entry),
+                Err(err) => {
+                    // If we can't read the entry, fail.
+                    // This could be a symptom of a more serious problem.
+                    warn!("Failed to read entry: {}", err);
+                    Err(err)
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(|entry| {
+                entry
+                    .file_type()
+                    .is_ok_and(|file_type| file_type.is_file() || file_type.is_symlink())
+            })
+            .map(|entry| entry.path())
+            .filter(|path| is_executable(path))
+            .map(|path| {
+                if cfg!(windows) {
+                    // Remove the extensions.
+                    path.with_extension("")
+                } else {
+                    path
+                }
+            })
+            .map(|path| {
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .filter(|command| {
+                !command.starts_with("activate") && !command.starts_with("deactivate")
+            })
+            .sorted()
+            .collect_vec();
+
+        if !commands.is_empty() {
+            writeln!(
+                printer.stdout(),
+                "The following commands are available in the environment:\n"
+            )?;
+            for command in commands {
+                writeln!(printer.stdout(), "- {command}")?;
+            }
+        }
+        let help = format!("See `{}` for more information.", "uv run --help".bold());
+        writeln!(printer.stdout(), "\n{help}")?;
+        return Ok(ExitStatus::Error);
+    };
+
     debug!("Running `{command}`");
     let mut process = command.as_command(interpreter);
 
@@ -1021,7 +1093,11 @@ impl std::fmt::Display for RunCommand {
 }
 
 impl RunCommand {
-    pub(crate) fn from_args(command: &ExternalCommand, module: bool) -> anyhow::Result<Self> {
+    pub(crate) fn from_args(
+        command: &ExternalCommand,
+        module: bool,
+        script: bool,
+    ) -> anyhow::Result<Self> {
         let (target, args) = command.split();
         let Some(target) = target else {
             return Ok(Self::Empty);
@@ -1029,6 +1105,8 @@ impl RunCommand {
 
         if module {
             return Ok(Self::PythonModule(target.clone(), args.to_vec()));
+        } else if script {
+            return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
         }
 
         let target_path = PathBuf::from(target);

@@ -8,9 +8,9 @@ description = "Parse PEP 723-style Python scripts."
 workspace = true
 
 [dependencies]
-pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
-pypi-types = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-pypi-types = { workspace = true }
 uv-settings = { workspace = true }
 uv-workspace = { workspace = true }
 

@@ -1,10 +1,10 @@
 use std::future::Future;
 
-use distribution_types::Dist;
-use platform_tags::Tags;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution_types::Dist;
 use uv_normalize::PackageName;
+use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
 
 use crate::flat_index::FlatIndex;
@@ -35,7 +35,7 @@ pub enum MetadataResponse {
     /// The wheel metadata was not found.
     MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
-    InvalidMetadata(Box<pypi_types::MetadataError>),
+    InvalidMetadata(Box<uv_pypi_types::MetadataError>),
     /// The wheel metadata was found, but the metadata was inconsistent.
     InconsistentMetadata(Box<uv_distribution::Error>),
     /// The wheel has an invalid structure.

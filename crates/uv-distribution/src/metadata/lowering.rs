@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use url::Url;
 
-use distribution_filename::DistExtension;
-use pep440_rs::VersionSpecifiers;
-use pep508_rs::{MarkerTree, VerbatimUrl, VersionOrUrl};
-use pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
+use uv_distribution_filename::DistExtension;
 use uv_git::GitReference;
 use uv_normalize::PackageName;
+use uv_pep440::VersionSpecifiers;
+use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
+use uv_pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 use uv_workspace::Workspace;
@@ -29,7 +29,7 @@ enum Origin {
 impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
     pub(crate) fn from_requirement<'data>(
-        requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         project_name: &'data PackageName,
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
@@ -229,10 +229,10 @@ impl LoweredRequirement {
         )
     }
 
-    /// Lower a [`pep508_rs::Requirement`] in a non-workspace setting (for example, in a PEP 723
+    /// Lower a [`uv_pep508::Requirement`] in a non-workspace setting (for example, in a PEP 723
     /// script, which runs in an isolated context).
     pub fn from_non_workspace_requirement<'data>(
-        requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         dir: &'data Path,
         sources: &'data BTreeMap<PackageName, Sources>,
     ) -> impl Iterator<Item = Result<LoweredRequirement, LoweringError>> + 'data {
@@ -360,7 +360,7 @@ pub enum LoweringError {
     #[error(transparent)]
     InvalidUrl(#[from] url::ParseError),
     #[error(transparent)]
-    InvalidVerbatimUrl(#[from] pep508_rs::VerbatimUrlError),
+    InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
     #[error("Can't combine URLs from both `project.dependencies` and `tool.uv.sources`")]
     ConflictingUrls,
     #[error("Fragments are not allowed in URLs: `{0}`")]
@@ -444,7 +444,7 @@ fn url_source(url: Url, subdirectory: Option<PathBuf>) -> Result<RequirementSour
 
 /// Convert a registry source into a [`RequirementSource`].
 fn registry_source(
-    requirement: &pep508_rs::Requirement<VerbatimParsedUrl>,
+    requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
     index: String,
 ) -> Result<RequirementSource, LoweringError> {
     match &requirement.version_or_url {

@@ -6,11 +6,11 @@ use indexmap::IndexSet;
 use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Range, Reporter};
 use rustc_hash::FxHashMap;
 
-use distribution_types::{BuiltDist, IndexLocations, IndexUrl, InstalledDist, SourceDist};
-use pep440_rs::Version;
-use pep508_rs::MarkerTree;
 use tracing::trace;
+use uv_distribution_types::{BuiltDist, IndexLocations, IndexUrl, InstalledDist, SourceDist};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
@@ -56,10 +56,10 @@ pub enum ResolveError {
     DisallowedUrl(PackageName, String),
 
     #[error(transparent)]
-    DistributionType(#[from] distribution_types::Error),
+    DistributionType(#[from] uv_distribution_types::Error),
 
     #[error(transparent)]
-    ParsedUrl(#[from] pypi_types::ParsedUrlError),
+    ParsedUrl(#[from] uv_pypi_types::ParsedUrlError),
 
     #[error("Failed to download `{0}`")]
     Fetch(Box<BuiltDist>, #[source] uv_distribution::Error),
@@ -81,7 +81,7 @@ pub enum ResolveError {
     NoSolution(#[from] NoSolutionError),
 
     #[error("Attempted to construct an invalid version specifier")]
-    InvalidVersion(#[from] pep440_rs::VersionSpecifierBuildError),
+    InvalidVersion(#[from] uv_pep440::VersionSpecifierBuildError),
 
     #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`")]
     UnhashedPackage(PackageName),

@@ -6,9 +6,9 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use distribution_types::{InstalledMetadata, Name};
-use pep440_rs::Version;
+use uv_distribution_types::{InstalledMetadata, Name};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 
 use crate::commands::pip::operations::Changelog;
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};

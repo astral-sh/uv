@@ -4594,10 +4594,9 @@ fn fail_to_add_revert_project() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: pytorch==1.0.2
-      Caused by: Build backend failed to build wheel through `build_wheel()` (exit status: 1)
-    --- stdout:
+      Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
-    --- stderr:
+    [stderr]
     Traceback (most recent call last):
       File "<string>", line 11, in <module>
       File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 410, in build_wheel
@@ -4611,7 +4610,7 @@ fn fail_to_add_revert_project() -> Result<()> {
         exec(code, locals())
       File "<string>", line 15, in <module>
     Exception: You tried to install "pytorch". The package named for PyTorch is "torch"
-    ---
+
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4692,7 +4691,76 @@ fn sorted_dependencies() -> Result<()> {
         description = "Add your description here"
         requires-python = ">=3.12"
         dependencies = [
+            "anyio>=4.3.0",
             "CacheControl[filecache]>=0.14,<0.15",
+            "iniconfig",
+            "typing-extensions>=4.10.0",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+/// Ensure that the added dependencies are case sensitive sorted if the dependency list was already
+/// case sensitive sorted prior to the operation.
+#[test]
+fn case_sensitive_sorted_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    description = "Add your description here"
+    requires-python = ">=3.12"
+    dependencies = [
+        "CacheControl[filecache]>=0.14,<0.15",
+        "PyYAML",
+        "iniconfig",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["typing-extensions", "anyio"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 14 packages in [TIME]
+    Prepared 13 packages in [TIME]
+    Installed 13 packages in [TIME]
+     + anyio==4.3.0
+     + cachecontrol==0.14.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + filelock==3.13.1
+     + idna==3.6
+     + iniconfig==2.0.0
+     + msgpack==1.0.8
+     + pyyaml==6.0.1
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+        dependencies = [
+            "CacheControl[filecache]>=0.14,<0.15",
+            "PyYAML",
             "anyio>=4.3.0",
             "iniconfig",
             "typing-extensions>=4.10.0",
@@ -4891,7 +4959,7 @@ fn add_self() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirement name `anyio` matches project name `anyio`, but self-dependencies are not permitted. If your project name (`anyio`) is shadowing that of a third-party dependency, consider renaming the project.
+    error: Requirement name `anyio` matches project name `anyio`, but self-dependencies are not permitted without the `--dev` or `--optional` flags. If your project name (`anyio`) is shadowing that of a third-party dependency, consider renaming the project.
     "###);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -4946,6 +5014,54 @@ fn add_self() -> Result<()> {
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        anyio = { workspace = true }
+        "###
+        );
+    });
+
+    // And recursive development dependencies
+    uv_snapshot!(context.filters(), context.add().arg("anyio[types]").arg("--dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ anyio==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        types = ["typing-extensions>=4"]
+        all = [
+            "anyio[types]",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv]
+        dev-dependencies = [
+            "anyio[types]",
+        ]
 
         [tool.uv.sources]
         anyio = { workspace = true }

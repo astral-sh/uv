@@ -155,7 +155,7 @@ pub(crate) async fn pin(
     Ok(ExitStatus::Success)
 }
 
-fn pep440_version_from_request(request: &PythonRequest) -> Option<pep440_rs::Version> {
+fn pep440_version_from_request(request: &PythonRequest) -> Option<uv_pep440::Version> {
     let version_request = match request {
         PythonRequest::Version(ref version)
         | PythonRequest::ImplementationVersion(_, ref version) => version,
@@ -169,8 +169,12 @@ fn pep440_version_from_request(request: &PythonRequest) -> Option<pep440_rs::Ver
         return None;
     }
 
-    // SAFETY: converting `VersionRequest` to `Version` is guaranteed to succeed if not a `Range`.
-    Some(pep440_rs::Version::from_str(&version_request.to_string()).unwrap())
+    // SAFETY: converting `VersionRequest` to `Version` is guaranteed to succeed if not a `Range`
+    // and does not have a Python variant (e.g., freethreaded) attached.
+    Some(
+        uv_pep440::Version::from_str(&version_request.clone().without_python_variant().to_string())
+            .unwrap(),
+    )
 }
 
 /// Check if pinned request is compatible with the workspace/project's `Requires-Python`.
@@ -235,7 +239,7 @@ fn warn_if_existing_pin_incompatible_with_project(
 /// Utility struct for representing pins in error messages.
 struct Pin<'a> {
     request: &'a PythonRequest,
-    version: &'a pep440_rs::Version,
+    version: &'a uv_pep440::Version,
     resolved: bool,
     existing: bool,
 }

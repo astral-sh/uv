@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 
-use platform_tags::{Tags, TagsError};
-use pypi_types::ResolverMarkerEnvironment;
 use uv_configuration::TargetTriple;
+use uv_platform_tags::{Tags, TagsError};
+use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_python::{Interpreter, PythonVersion};
 
 pub(crate) mod check;

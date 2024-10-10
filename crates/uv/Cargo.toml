@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.4.17"
+version = "0.4.20"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -14,28 +14,31 @@ default-run = "uv"
 workspace = true
 
 [dependencies]
-cache-key = { workspace = true }
-distribution-filename = { workspace = true }
-distribution-types = { workspace = true }
-install-wheel-rs = { workspace = true, default-features = false }
-pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
-platform-tags = { workspace = true }
-pypi-types = { workspace = true }
 uv-auth = { workspace = true }
+uv-build-backend = { workspace = true }
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
+uv-cache-key = { workspace = true }
 uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
+uv-distribution-filename = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
+uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
 uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-performance-flate2-backend = { path = "../uv-performance-flate2-backend", optional = true }
+uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
+uv-platform-tags = { workspace = true }
 uv-publish = { workspace = true }
+uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["schemars"] }
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true }
@@ -47,8 +50,6 @@ uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
-uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
-uv-performance-flate2-backend = { path = "../uv-performance-flate2-backend", optional = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }

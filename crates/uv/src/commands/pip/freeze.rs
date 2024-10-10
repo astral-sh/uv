@@ -3,14 +3,13 @@ use std::fmt::Write;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::debug;
 
-use distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_cache::Cache;
-use uv_fs::Simplified;
+use uv_distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_installer::SitePackages;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
+use crate::commands::pip::operations::report_target_environment;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
@@ -30,11 +29,7 @@ pub(crate) fn pip_freeze(
         cache,
     )?;
 
-    debug!(
-        "Using Python {} environment at {}",
-        environment.interpreter().python_version(),
-        environment.python_executable().user_display().cyan()
-    );
+    report_target_environment(&environment, cache, printer)?;
 
     // Build the installed index.
     let site_packages = SitePackages::from_environment(&environment)?;

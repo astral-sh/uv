@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use distribution_filename::WheelFilename;
-use distribution_types::Hashed;
-use platform_tags::Tags;
-use pypi_types::HashDigest;
 use uv_cache::CacheShard;
 use uv_cache_info::CacheInfo;
+use uv_distribution_filename::WheelFilename;
+use uv_distribution_types::Hashed;
 use uv_fs::files;
+use uv_platform_tags::Tags;
+use uv_pypi_types::HashDigest;
 
 /// The information about the wheel we either just built or got from the cache.
 #[derive(Debug, Clone)]

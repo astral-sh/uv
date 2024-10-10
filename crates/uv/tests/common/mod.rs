@@ -138,6 +138,21 @@ impl TestContext {
         self
     }
 
+    /// Add extra standard filtering for executable suffixes on the current platform e.g.
+    /// drops `.exe` on Windows.
+    #[must_use]
+    pub fn with_filtered_python_sources(mut self) -> Self {
+        self.filters.push((
+            "managed installations or system path".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
+            "managed installations, system path, or `py` launcher".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self
+    }
+
     /// Add extra standard filtering for Python executable names, e.g., stripping version number
     /// and `.exe` suffixes.
     #[must_use]
@@ -433,6 +448,7 @@ impl TestContext {
             .env("UV_PYTHON_INSTALL_DIR", "")
             .env("UV_TEST_PYTHON_PATH", self.python_path())
             .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+            .env_remove("UV_CACHE_DIR")
             .current_dir(self.temp_dir.path());
 
         if activate_venv {
@@ -529,6 +545,7 @@ impl TestContext {
     pub fn help(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("help");
+        command.env_remove("UV_CACHE_DIR");
 
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
@@ -724,6 +741,16 @@ impl TestContext {
     pub fn prune(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("cache").arg("prune");
+        self.add_shared_args(&mut command, false);
+        command
+    }
+
+    /// Create a `uv build_backend` command.
+    ///
+    /// Note that this command is hidden and only invoking it through a build frontend is supported.
+    pub fn build_backend(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("build-backend");
         self.add_shared_args(&mut command, false);
         command
     }

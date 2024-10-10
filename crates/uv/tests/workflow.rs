@@ -84,7 +84,7 @@ fn packse_add_remove_one_package() {
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
 
-        @@ -601,20 +603,29 @@
+        @@ -599,20 +601,29 @@
              { name = "rfc3986" },
              { name = "rich" },
              { name = "urllib3" },
@@ -172,7 +172,7 @@ fn packse_add_remove_one_package() {
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
 
-        @@ -600,29 +598,20 @@
+        @@ -598,29 +596,20 @@
              { name = "readme-renderer" },
              { name = "requests" },
              { name = "requests-toolbelt" },

@@ -7,12 +7,9 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
-use cache_key::RepositoryUrl;
-use distribution_types::UnresolvedRequirement;
-use pep508_rs::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
-use pypi_types::{redact_git_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
+use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevMode, EditableMode, ExtrasSpecification, InstallOptions,
@@ -20,12 +17,15 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
+use uv_distribution_types::UnresolvedRequirement;
 use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
+use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
+use uv_pypi_types::{redact_git_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
@@ -158,7 +158,10 @@ pub(crate) async fn add(
                 .requires_python
                 .clone()
                 .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python, false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        requires_python,
+                        PythonVariant::Default,
+                    ))
                 })
         };
 
@@ -338,16 +341,13 @@ pub(crate) async fn add(
     };
 
     // If any of the requirements are self-dependencies, bail.
-    if matches!(
-        dependency_type,
-        DependencyType::Production | DependencyType::Dev
-    ) {
+    if matches!(dependency_type, DependencyType::Production) {
         if let Target::Project(project, _) = &target {
             if let Some(project_name) = project.project_name() {
                 for requirement in &requirements {
                     if requirement.name == *project_name {
                         bail!(
-                            "Requirement name `{}` matches project name `{}`, but self-dependencies are not permitted. If your project name (`{}`) is shadowing that of a third-party dependency, consider renaming the project.",
+                            "Requirement name `{}` matches project name `{}`, but self-dependencies are not permitted without the `--dev` or `--optional` flags. If your project name (`{}`) is shadowing that of a third-party dependency, consider renaming the project.",
                             requirement.name.cyan(),
                             project_name.cyan(),
                             project_name.cyan(),
@@ -377,7 +377,7 @@ pub(crate) async fn add(
 
         let (requirement, source) = match target {
             Target::Script(_, _) | Target::Project(_, _) if raw_sources => {
-                (pep508_rs::Requirement::from(requirement), None)
+                (uv_pep508::Requirement::from(requirement), None)
             }
             Target::Script(ref script, _) => {
                 let script_path = std::path::absolute(&script.path)?;
@@ -803,7 +803,7 @@ fn augment_requirement(
 ) -> UnresolvedRequirement {
     match requirement {
         UnresolvedRequirement::Named(requirement) => {
-            UnresolvedRequirement::Named(pypi_types::Requirement {
+            UnresolvedRequirement::Named(uv_pypi_types::Requirement {
                 source: match requirement.source {
                     RequirementSource::Git {
                         repository,
@@ -863,7 +863,7 @@ fn augment_requirement(
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.
 fn resolve_requirement(
-    requirement: pypi_types::Requirement,
+    requirement: uv_pypi_types::Requirement,
     workspace: bool,
     editable: Option<bool>,
     rev: Option<String>,
@@ -894,7 +894,7 @@ fn resolve_requirement(
     };
 
     // Ignore the PEP 508 source by clearing the URL.
-    let mut processed_requirement = pep508_rs::Requirement::from(requirement);
+    let mut processed_requirement = uv_pep508::Requirement::from(requirement);
     processed_requirement.clear_url();
 
     Ok((processed_requirement, source))

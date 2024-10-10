@@ -1,8 +1,8 @@
-use distribution_types::{Name, SourceDist};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use std::str::FromStr;
 use std::sync::LazyLock;
+use uv_distribution_types::{Name, SourceDist};
 use uv_normalize::PackageName;
 
 /// Static map of common package name typos or misconfigurations to their correct package names.

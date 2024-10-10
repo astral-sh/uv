@@ -20,23 +20,23 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info, instrument, trace, warn, Level};
 
-use distribution_types::{
-    BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
-    IncompatibleWheel, IndexCapabilities, IndexLocations, InstalledDist, PythonRequirementKind,
-    RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
-};
 pub(crate) use fork_map::{ForkMap, ForkSet};
 use locals::Locals;
-use pep440_rs::{Version, MIN_VERSION};
-use pep508_rs::MarkerTree;
-use platform_tags::Tags;
-use pypi_types::{Requirement, ResolutionMetadata, VerbatimParsedUrl};
 pub use resolver_markers::ResolverMarkers;
 pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution_types::{
+    BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
+    IncompatibleWheel, IndexCapabilities, IndexLocations, InstalledDist, PythonRequirementKind,
+    RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+};
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep440::{Version, MIN_VERSION};
+use uv_pep508::MarkerTree;
+use uv_platform_tags::Tags;
+use uv_pypi_types::{Requirement, ResolutionMetadata, VerbatimParsedUrl};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 

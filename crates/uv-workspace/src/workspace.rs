@@ -7,10 +7,10 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use tracing::{debug, trace, warn};
 
-use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
-use pypi_types::{Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_pep508::{MarkerTree, RequirementOrigin, VerbatimUrl};
+use uv_pypi_types::{Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::pyproject::{
@@ -1485,7 +1485,7 @@ impl<'env> InstallTarget<'env> {
     pub fn group(
         &self,
         name: &GroupName,
-    ) -> impl Iterator<Item = &pep508_rs::Requirement<VerbatimParsedUrl>> {
+    ) -> impl Iterator<Item = &uv_pep508::Requirement<VerbatimParsedUrl>> {
         match self {
             Self::Project(_) | Self::FrozenMember(..) => {
                 // For projects, dev dependencies are attached to the members.
