@@ -5,6 +5,9 @@ use axoupdater::{
     ReleaseSourceType,
 };
 
+use crate::common::get_bin;
+
+#[test]
 fn check_self_update() {
     // To maximally emulate behaviour in practice, this test actually modifies CARGO_HOME
     // and therefore should only be run in CI by default, where it can't hurt developers.
