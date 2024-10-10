@@ -2042,6 +2042,8 @@ uv export [OPTIONS]
 
 </dd><dt><code>--no-hashes</code></dt><dd><p>Omit hashes in the generated output</p>
 
+</dd><dt><code>--no-header</code></dt><dd><p>Exclude the comment header at the top of the generated output file</p>
+
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
