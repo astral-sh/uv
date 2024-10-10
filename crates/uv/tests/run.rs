@@ -2359,3 +2359,39 @@ fn run_url_like_with_local_file_priority() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_stdin_with_pep723() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+        print("Hello, world!")
+       "#
+    })?;
+
+    let mut command = context.run();
+    let command_with_args = command.stdin(std::fs::File::open(test_script)?).arg("-");
+    uv_snapshot!(context.filters(), command_with_args, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from: <stdin>
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
