@@ -38,18 +38,21 @@ In addition, uv publishes the following images:
     - `ghcr.io/astral-sh/uv:debian`
     - `ghcr.io/astral-sh/uv:bookworm`
 - Based on `python3.x-alpine`:
+    - `ghcr.io/astral-sh/uv:python3.13-alpine`
     - `ghcr.io/astral-sh/uv:python3.12-alpine`
     - `ghcr.io/astral-sh/uv:python3.11-alpine`
     - `ghcr.io/astral-sh/uv:python3.10-alpine`
     - `ghcr.io/astral-sh/uv:python3.9-alpine`
     - `ghcr.io/astral-sh/uv:python3.8-alpine`
 - Based on `python3.x-bookworm`:
+    - `ghcr.io/astral-sh/uv:python3.13-bookworm`
     - `ghcr.io/astral-sh/uv:python3.12-bookworm`
     - `ghcr.io/astral-sh/uv:python3.11-bookworm`
     - `ghcr.io/astral-sh/uv:python3.10-bookworm`
     - `ghcr.io/astral-sh/uv:python3.9-bookworm`
     - `ghcr.io/astral-sh/uv:python3.8-bookworm`
 - Based on `python3.x-slim-bookworm`:
+    - `ghcr.io/astral-sh/uv:python3.13-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.11-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.10-bookworm-slim`
