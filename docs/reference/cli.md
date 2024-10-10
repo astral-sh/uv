@@ -4426,6 +4426,10 @@ uv python list [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+</dd><dt><code>--only-downloads</code></dt><dd><p>Only show Python downloads, exclude installed distributions.</p>
+
+<p>By default, available downloads for the current platform are shown.</p>
+
 </dd><dt><code>--only-installed</code></dt><dd><p>Only show installed Python versions, exclude available downloads.</p>
 
 <p>By default, available downloads for the current platform are shown.</p>
@@ -4457,6 +4461,10 @@ uv python list [OPTIONS]
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+
+</dd><dt><code>--show-urls</code></dt><dd><p>Show the URLs of available Python downloads.</p>
+
+<p>By default, these display as <code>&lt;download available&gt;</code>.</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
