@@ -14,6 +14,7 @@ authors = { workspace = true }
 [lib]
 name = "uv_pep440"
 crate-type = ["rlib", "cdylib"]
+doctest = false
 
 [lints]
 workspace = true

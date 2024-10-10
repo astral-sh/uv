@@ -4,6 +4,9 @@ version = "0.0.1"
 edition = "2021"
 description = "Parse PEP 723-style Python scripts."
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
