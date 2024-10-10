@@ -92,6 +92,9 @@ impl CacheInfo {
                     let path = directory.join(file);
                     let metadata = match path.metadata() {
                         Ok(metadata) => metadata,
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                            continue;
+                        }
                         Err(err) => {
                             warn!("Failed to read metadata for file: {err}");
                             continue;
