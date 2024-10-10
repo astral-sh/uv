@@ -55,6 +55,7 @@ pub(crate) mod version;
 async fn resolve_script_target(
     command: &mut ExternalCommand,
     global_args: &GlobalArgs,
+    filesystem: Option<&FilesystemOptions>,
 ) -> Result<Option<tempfile::NamedTempFile>> {
     use std::io::Write;
 
@@ -89,8 +90,8 @@ async fn resolve_script_target(
         .suffix(".py")
         .tempfile()?;
 
-    // Resolve the client settings
-    let settings = GlobalSettings::resolve(global_args, None);
+    // Respect cli flags and workspace settings.
+    let settings = GlobalSettings::resolve(global_args, filesystem);
     let client = BaseClientBuilder::new()
         .connectivity(settings.connectivity)
         .native_tls(settings.native_tls)
@@ -199,7 +200,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             ..
         }) = &mut **command
         {
-            maybe_tempfile = resolve_script_target(command, &cli.top_level.global_args).await?;
+            maybe_tempfile =
+                resolve_script_target(command, &cli.top_level.global_args, filesystem.as_ref())
+                    .await?;
             Some(RunCommand::from_args(command, *module, *script)?)
         } else {
             None
