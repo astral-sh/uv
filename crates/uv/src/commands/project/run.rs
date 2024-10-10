@@ -107,11 +107,19 @@ pub(crate) async fn run(
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
     let script_interpreter = if let Some(script) = script {
-        writeln!(
-            printer.stderr(),
-            "Reading inline script metadata from: {}",
-            script.path.user_display().cyan()
-        )?;
+        if let uv_scripts::Source::File(path) = &script.source {
+            writeln!(
+                printer.stderr(),
+                "Reading inline script metadata from: {}",
+                path.user_display().cyan()
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "Reading inline script metadata from: `{}`",
+                "stdin".cyan()
+            )?;
+        }
 
         let (source, python_request) = if let Some(request) = python.as_deref() {
             // (1) Explicit request from user
@@ -196,15 +204,23 @@ pub(crate) async fn run(
                     .unwrap_or(&empty),
                 SourceStrategy::Disabled => &empty,
             };
-            let script_path = std::path::absolute(script.path)?;
-            let script_dir = script_path.parent().expect("script path has no parent");
+            let script_dir = match &script.source {
+                uv_scripts::Source::File(path) => {
+                    let script_path = std::path::absolute(path)?;
+                    script_path
+                        .parent()
+                        .expect("script path has no parent")
+                        .to_owned()
+                }
+                uv_scripts::Source::Stdin => std::env::current_dir()?,
+            };
 
             let requirements = dependencies
                 .into_iter()
                 .flat_map(|requirement| {
                     LoweredRequirement::from_non_workspace_requirement(
                         requirement,
-                        script_dir,
+                        script_dir.as_ref(),
                         script_sources,
                     )
                     .map_ok(LoweredRequirement::into_inner)

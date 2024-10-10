@@ -20,7 +20,7 @@ static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"))
 #[derive(Debug)]
 pub struct Pep723Script {
     /// The path to the Python script.
-    pub path: PathBuf,
+    pub source: Source,
     /// The parsed [`Pep723Metadata`] table from the script.
     pub metadata: Pep723Metadata,
     /// The content of the script before the metadata table.
@@ -34,18 +34,28 @@ impl Pep723Script {
     ///
     /// See: <https://peps.python.org/pep-0723/>
     pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
-        let contents = match fs_err::tokio::read(&file).await {
-            Ok(contents) => contents,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(err) => return Err(err.into()),
-        };
+        match fs_err::tokio::read(&file).await {
+            Ok(contents) => {
+                Self::parse_contents(&contents, Source::File(file.as_ref().to_path_buf()))
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err.into()),
+        }
+    }
 
+    /// Read the PEP 723 `script` metadata from stdin.
+    pub fn parse_stdin(contents: &[u8]) -> Result<Option<Self>, Pep723Error> {
+        Self::parse_contents(contents, Source::Stdin)
+    }
+
+    /// Parse the contents of a Python script and extract the `script` metadata block.
+    fn parse_contents(contents: &[u8], source: Source) -> Result<Option<Self>, Pep723Error> {
         // Extract the `script` tag.
         let ScriptTag {
             prelude,
             metadata,
             postlude,
-        } = match ScriptTag::parse(&contents) {
+        } = match ScriptTag::parse(contents) {
             Ok(Some(tag)) => tag,
             Ok(None) => return Ok(None),
             Err(err) => return Err(err),
@@ -55,7 +65,7 @@ impl Pep723Script {
         let metadata = Pep723Metadata::from_str(&metadata)?;
 
         Ok(Some(Self {
-            path: file.as_ref().to_path_buf(),
+            source,
             metadata,
             prelude,
             postlude,
@@ -84,7 +94,7 @@ impl Pep723Script {
         let (shebang, postlude) = extract_shebang(&contents)?;
 
         Ok(Self {
-            path: file.as_ref().to_path_buf(),
+            source: Source::File(file.as_ref().to_path_buf()),
             prelude: if shebang.is_empty() {
                 String::new()
             } else {
@@ -149,8 +159,21 @@ impl Pep723Script {
             self.postlude
         );
 
-        Ok(fs_err::tokio::write(&self.path, content).await?)
+        if let Source::File(path) = &self.source {
+            fs_err::tokio::write(&path, content).await?;
+        }
+
+        Ok(())
     }
+}
+
+/// The source of a PEP 723 script.
+#[derive(Debug)]
+pub enum Source {
+    /// The PEP 723 script is sourced from a file.
+    File(PathBuf),
+    /// The PEP 723 script is sourced from stdin.
+    Stdin,
 }
 
 /// PEP 723 metadata as parsed from a `script` comment block.
