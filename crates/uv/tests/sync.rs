@@ -1214,7 +1214,7 @@ fn no_install_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: could not find root package `fake`
+    error: Could not find root package `fake`
     "###);
 
     // But we do require the root `pyproject.toml`.
@@ -1319,9 +1319,9 @@ fn no_install_project_no_build() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to validate existing lockfile: distribution project==0.1.0 @ editable+. can't be installed because it is marked as `--no-build` but has no binary distribution
+    warning: Failed to validate existing lockfile: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
     Resolved 4 packages in [TIME]
-    error: distribution project==0.1.0 @ editable+. can't be installed because it is marked as `--no-build` but has no binary distribution
+    error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
     "###);
 
     // But it's fine to combine `--no-install-project` with `--no-build`. We shouldn't error, since
@@ -1332,7 +1332,7 @@ fn no_install_project_no_build() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to validate existing lockfile: distribution project==0.1.0 @ editable+. can't be installed because it is marked as `--no-build` but has no binary distribution
+    warning: Failed to validate existing lockfile: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -2224,7 +2224,7 @@ fn no_binary_error() -> Result<()> {
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    error: distribution django-allauth==0.51.0 @ registry+https://pypi.org/simple can't be installed because it is marked as `--no-build` but has no binary distribution
+    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -2302,7 +2302,7 @@ fn sync_wheel_url_source_error() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: distribution cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because the binary distribution is incompatible with the current platform
+    error: distribution `cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
     "###);
 
     Ok(())
@@ -2350,7 +2350,7 @@ fn sync_wheel_path_source_error() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: distribution cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl can't be installed because the binary distribution is incompatible with the current platform
+    error: distribution `cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
     "###);
 
     Ok(())
