@@ -7,7 +7,8 @@ use std::io::BufReader;
 use url::Url;
 
 use crate::common::{
-    self, build_vendor_links_url, decode_token, packse_index_url, uv_snapshot, TestContext,
+    self, build_vendor_links_url, decode_token, packse_index_url, reqwest_blocking_get,
+    uv_snapshot, TestContext,
 };
 use uv_fs::Simplified;
 
@@ -7876,11 +7877,11 @@ fn lock_sources_archive() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download the source.
-    let response =
-        reqwest::blocking::get("https://github.com/user-attachments/files/16592193/workspace.zip")?;
+    let bytes =
+        reqwest_blocking_get("https://github.com/user-attachments/files/16592193/workspace.zip");
     let workspace_archive = context.temp_dir.child("workspace.zip");
     let mut workspace_archive_file = fs_err::File::create(&*workspace_archive)?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut workspace_archive_file)?;
+    std::io::copy(&mut &bytes[..], &mut workspace_archive_file)?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
@@ -8015,11 +8016,11 @@ fn lock_sources_source_tree() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download the source.
-    let response =
-        reqwest::blocking::get("https://github.com/user-attachments/files/16592193/workspace.zip")?;
+    let bytes =
+        reqwest_blocking_get("https://github.com/user-attachments/files/16592193/workspace.zip");
     let workspace_archive = context.temp_dir.child("workspace.zip");
     let mut workspace_archive_file = fs_err::File::create(&*workspace_archive)?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut workspace_archive_file)?;
+    std::io::copy(&mut &bytes[..], &mut workspace_archive_file)?;
 
     // Unzip the file.
     let file = fs_err::File::open(&*workspace_archive)?;

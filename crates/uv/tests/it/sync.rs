@@ -1,13 +1,11 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
-use common::{reqwest_blocking_get, uv_snapshot, venv_bin_path, TestContext};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use tempfile::tempdir_in;
 
-use crate::common::{uv_snapshot, venv_bin_path, TestContext};
-use predicates::prelude::predicate;
+use crate::common::{reqwest_blocking_get, uv_snapshot, venv_bin_path, TestContext};
 
 #[test]
 fn sync() -> Result<()> {

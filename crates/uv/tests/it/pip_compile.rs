@@ -8,9 +8,9 @@ use anyhow::{bail, Context, Result};
 use assert_fs::prelude::*;
 use indoc::indoc;
 use url::Url;
-use uv_fs::Simplified;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{reqwest_blocking_get, uv_snapshot, TestContext};
+use uv_fs::Simplified;
 
 #[test]
 fn compile_requirements_in() -> Result<()> {
@@ -2592,10 +2592,10 @@ fn compile_wheel_path_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a wheel.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
+    let bytes = reqwest_blocking_get("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl");
     let flask_wheel = context.temp_dir.child("flask-3.0.0-py3-none-any.whl");
     let mut flask_wheel_file = fs::File::create(&flask_wheel)?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut flask_wheel_file)?;
+    std::io::copy(&mut &bytes[..], &mut flask_wheel_file)?;
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!(
@@ -2842,10 +2842,10 @@ fn compile_wheel_path_dependency() -> Result<()> {
 fn compile_source_distribution_path_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     // Download a source distribution.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz")?;
+    let bytes = reqwest_blocking_get("https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz");
     let flask_wheel = context.temp_dir.child("flask-3.0.0.tar.gz");
     let mut flask_wheel_file = std::fs::File::create(&flask_wheel)?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut flask_wheel_file)?;
+    std::io::copy(&mut &bytes[..], &mut flask_wheel_file)?;
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!(
@@ -3517,10 +3517,10 @@ fn preserve_url() -> Result<()> {
 fn preserve_project_root() -> Result<()> {
     let context = TestContext::new("3.12");
     // Download a wheel.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
+    let bytes = reqwest_blocking_get("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl");
     let flask_wheel = context.temp_dir.child("flask-3.0.0-py3-none-any.whl");
     let mut flask_wheel_file = std::fs::File::create(flask_wheel)?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut flask_wheel_file)?;
+    std::io::copy(&mut &bytes[..], &mut flask_wheel_file)?;
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ file://${PROJECT_ROOT}/flask-3.0.0-py3-none-any.whl")?;
@@ -3670,10 +3670,10 @@ fn error_missing_unnamed_env_var() -> Result<()> {
 fn respect_file_env_var() -> Result<()> {
     let context = TestContext::new("3.12");
     // Download a wheel.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
+    let bytes = reqwest_blocking_get("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl");
     let flask_wheel = context.temp_dir.child("flask-3.0.0-py3-none-any.whl");
     let mut flask_wheel_file = std::fs::File::create(flask_wheel)?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut flask_wheel_file)?;
+    std::io::copy(&mut &bytes[..], &mut flask_wheel_file)?;
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ ${FILE_PATH}")?;
