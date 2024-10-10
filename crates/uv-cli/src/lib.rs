@@ -3670,6 +3670,14 @@ pub struct PythonInstallArgs {
     /// installed.
     #[arg(long, short, alias = "force")]
     pub reinstall: bool,
+
+    /// Install a `python` shim.
+    #[arg(long, overrides_with("no_shim"))]
+    pub shim: bool,
+
+    /// Do not install a `python` shim.
+    #[arg(long, overrides_with("shim"))]
+    pub no_shim: bool,
 }
 
 #[derive(Args)]
