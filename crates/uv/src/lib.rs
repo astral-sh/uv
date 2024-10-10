@@ -917,7 +917,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let requirements = args
                 .with
                 .into_iter()
-                .map(RequirementsSource::from_package)
+                .map(RequirementsSource::from_with_package)
                 .chain(
                     args.with_editable
                         .into_iter()
@@ -966,7 +966,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let requirements = args
                 .with
                 .into_iter()
-                .map(RequirementsSource::from_package)
+                .map(RequirementsSource::from_with_package)
                 .chain(
                     args.with_requirements
                         .into_iter()
@@ -1302,7 +1302,7 @@ async fn run_project(
             let requirements = args
                 .with
                 .into_iter()
-                .map(RequirementsSource::from_package)
+                .map(RequirementsSource::from_with_package)
                 .chain(
                     args.with_editable
                         .into_iter()
