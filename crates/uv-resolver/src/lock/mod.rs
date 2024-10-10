@@ -3780,14 +3780,14 @@ where
 enum LockErrorKind {
     /// An error that occurs when multiple packages with the same
     /// ID were found.
-    #[error("found duplicate package `{id}`")]
+    #[error("Found duplicate package `{id}`")]
     DuplicatePackage {
         /// The ID of the conflicting package.
         id: PackageId,
     },
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers.
-    #[error("for package `{id}`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}`, found duplicate dependency `{dependency}`")]
     DuplicateDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -3798,7 +3798,7 @@ enum LockErrorKind {
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers, as part of the
     /// that package's optional dependencies.
-    #[error("for package `{id}[{extra}]`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}[{extra}]`, found duplicate dependency `{dependency}`")]
     DuplicateOptionalDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -3811,7 +3811,7 @@ enum LockErrorKind {
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers, as part of the
     /// that package's development dependencies.
-    #[error("for package `{id}:{group}`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}:{group}`, found duplicate dependency `{dependency}`")]
     DuplicateDevDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -3823,7 +3823,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when the URL to a file for a wheel or
     /// source dist could not be converted to a structured `url::Url`.
-    #[error("failed to parse wheel or source distribution URL")]
+    #[error("Failed to parse wheel or source distribution URL")]
     InvalidFileUrl(
         /// The underlying error that occurred. This includes the
         /// errant URL in its error message.
@@ -3832,10 +3832,10 @@ enum LockErrorKind {
     ),
     /// An error that occurs when the extension can't be determined
     /// for a given wheel or source distribution.
-    #[error("failed to parse file extension; expected one of: {0}")]
+    #[error("Failed to parse file extension; expected one of: {0}")]
     MissingExtension(#[from] ExtensionError),
     /// Failed to parse a git source URL.
-    #[error("failed to parse source git URL")]
+    #[error("Failed to parse source git URL")]
     InvalidGitSourceUrl(
         /// The underlying error that occurred. This includes the
         /// errant URL in the message.
@@ -3845,7 +3845,7 @@ enum LockErrorKind {
     /// An error that occurs when there's an unrecognized dependency.
     ///
     /// That is, a dependency for a package that isn't in the lockfile.
-    #[error("for package `{id}`, found dependency `{dependency}` with no locked package")]
+    #[error("For package `{id}`, found dependency `{dependency}` with no locked package")]
     UnrecognizedDependency {
         /// The ID of the package that has an unrecognized dependency.
         id: PackageId,
@@ -3855,7 +3855,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).
-    #[error("since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
+    #[error("Since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
     Hash {
         /// The ID of the package that has a missing hash.
         id: PackageId,
@@ -3867,7 +3867,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a package is included with an extra name,
     /// but no corresponding base package (i.e., without the extra) exists.
-    #[error("found package `{id}` with extra `{extra}` but no base package")]
+    #[error("Found package `{id}` with extra `{extra}` but no base package")]
     MissingExtraBase {
         /// The ID of the package that has a missing base.
         id: PackageId,
@@ -3888,7 +3888,7 @@ enum LockErrorKind {
     },
     /// An error that occurs from an invalid lockfile where a wheel comes from a non-wheel source
     /// such as a directory.
-    #[error("wheels cannot come from {source_type} sources")]
+    #[error("Wheels cannot come from {source_type} sources")]
     InvalidWheelSource {
         /// The ID of the distribution that has a missing base.
         id: PackageId,
@@ -3897,7 +3897,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a remote
     /// registry, but is missing a URL.
-    #[error("found registry distribution {name}=={version} without a valid URL")]
+    #[error("Found registry distribution `{name}=={version}` without a valid URL")]
     MissingUrl {
         /// The name of the distribution that is missing a URL.
         name: PackageName,
@@ -3906,7 +3906,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a local registry,
     /// but is missing a path.
-    #[error("found registry distribution {name}=={version} without a valid path")]
+    #[error("Found registry distribution `{name}=={version}` without a valid path")]
     MissingPath {
         /// The name of the distribution that is missing a path.
         name: PackageName,
@@ -3915,34 +3915,34 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a registry, but
     /// is missing a filename.
-    #[error("found registry distribution {id} without a valid filename")]
+    #[error("Found registry distribution `{id}` without a valid filename")]
     MissingFilename {
         /// The ID of the distribution that is missing a filename.
         id: PackageId,
     },
     /// An error that occurs when a distribution is included with neither wheels nor a source
     /// distribution.
-    #[error("distribution {id} can't be installed because it doesn't have a source distribution or wheel for the current platform")]
+    #[error("Distribution `{id}` can't be installed because it doesn't have a source distribution or wheel for the current platform")]
     NeitherSourceDistNorWheel {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as both `--no-binary` and `--no-build`.
-    #[error("distribution {id} can't be installed because it is marked as both `--no-binary` and `--no-build`")]
+    #[error("Distribution `{id}` can't be installed because it is marked as both `--no-binary` and `--no-build`")]
     NoBinaryNoBuild {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as `--no-binary`, but no source
     /// distribution is available.
-    #[error("distribution {id} can't be installed because it is marked as `--no-binary` but has no source distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but has no source distribution")]
     NoBinary {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as `--no-build`, but no binary
     /// distribution is available.
-    #[error("distribution {id} can't be installed because it is marked as `--no-build` but has no binary distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-build` but has no binary distribution")]
     NoBuild {
         /// The ID of the distribution.
         id: PackageId,
@@ -3950,20 +3950,20 @@ enum LockErrorKind {
     /// An error that occurs when a wheel-only distribution is incompatible with the current
     /// platform.
     #[error(
-        "distribution {id} can't be installed because the binary distribution is incompatible with the current platform"
+        "distribution `{id}` can't be installed because the binary distribution is incompatible with the current platform"
     )]
     IncompatibleWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a wheel-only source is marked as `--no-binary`.
-    #[error("distribution {id} can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
     NoBinaryWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when converting between URLs and paths.
-    #[error("found dependency `{id}` with no locked distribution")]
+    #[error("Found dependency `{id}` with no locked distribution")]
     VerbatimUrl {
         /// The ID of the distribution that has a missing base.
         id: PackageId,
@@ -3972,14 +3972,14 @@ enum LockErrorKind {
         err: VerbatimUrlError,
     },
     /// An error that occurs when parsing an existing requirement.
-    #[error("could not compute relative path between workspace and distribution")]
+    #[error("Could not compute relative path between workspace and distribution")]
     DistributionRelativePath(
         /// The inner error we forward.
         #[source]
         std::io::Error,
     ),
     /// An error that occurs when converting an index URL to a relative path
-    #[error("could not compute relative path between workspace and index")]
+    #[error("Could not compute relative path between workspace and index")]
     IndexRelativePath(
         /// The inner error we forward.
         #[source]
@@ -3988,7 +3988,7 @@ enum LockErrorKind {
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `version` field.
     #[error(
-        "dependency {name} has missing `version` \
+        "Dependency `{name}` has missing `version` \
          field but has more than one matching package"
     )]
     MissingDependencyVersion {
@@ -3998,7 +3998,7 @@ enum LockErrorKind {
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `source` field.
     #[error(
-        "dependency {name} has missing `source` \
+        "Dependency `{name}` has missing `source` \
          field but has more than one matching package"
     )]
     MissingDependencySource {
@@ -4006,47 +4006,47 @@ enum LockErrorKind {
         name: PackageName,
     },
     /// An error that occurs when parsing an existing requirement.
-    #[error("could not compute relative path between workspace and requirement")]
+    #[error("Could not compute relative path between workspace and requirement")]
     RequirementRelativePath(
         /// The inner error we forward.
         #[source]
         std::io::Error,
     ),
     /// An error that occurs when parsing an existing requirement.
-    #[error("could not convert between URL and path")]
+    #[error("Could not convert between URL and path")]
     RequirementVerbatimUrl(
         /// The inner error we forward.
         #[source]
         VerbatimUrlError,
     ),
     /// An error that occurs when parsing a registry's index URL.
-    #[error("could not convert between URL and path")]
+    #[error("Could not convert between URL and path")]
     RegistryVerbatimUrl(
         /// The inner error we forward.
         #[source]
         VerbatimUrlError,
     ),
     /// An error that occurs when converting a path to a URL.
-    #[error("failed to convert path to URL")]
+    #[error("Failed to convert path to URL")]
     PathToUrl,
     /// An error that occurs when converting a URL to a path
-    #[error("failed to convert URL to path")]
+    #[error("Failed to convert URL to path")]
     UrlToPath,
     /// An error that occurs when multiple packages with the same
     /// name were found when identifying the root packages.
-    #[error("found multiple packages matching `{name}`")]
+    #[error("Found multiple packages matching `{name}`")]
     MultipleRootPackages {
         /// The ID of the package.
         name: PackageName,
     },
     /// An error that occurs when a root package can't be found.
-    #[error("could not find root package `{name}`")]
+    #[error("Could not find root package `{name}`")]
     MissingRootPackage {
         /// The ID of the package.
         name: PackageName,
     },
     /// An error that occurs when resolving metadata for a package.
-    #[error("failed to generate package metadata for `{id}`")]
+    #[error("Failed to generate package metadata for `{id}`")]
     Resolution {
         /// The ID of the distribution that failed to resolve.
         id: PackageId,
@@ -4060,7 +4060,7 @@ enum LockErrorKind {
 #[derive(Debug, thiserror::Error)]
 enum SourceParseError {
     /// An error that occurs when the URL in the source is invalid.
-    #[error("invalid URL in source `{given}`")]
+    #[error("Invalid URL in source `{given}`")]
     InvalidUrl {
         /// The source string given.
         given: String,
@@ -4069,13 +4069,13 @@ enum SourceParseError {
         err: url::ParseError,
     },
     /// An error that occurs when a Git URL is missing a precise commit SHA.
-    #[error("missing SHA in source `{given}`")]
+    #[error("Missing SHA in source `{given}`")]
     MissingSha {
         /// The source string given.
         given: String,
     },
     /// An error that occurs when a Git URL has an invalid SHA.
-    #[error("invalid SHA in source `{given}`")]
+    #[error("Invalid SHA in source `{given}`")]
     InvalidSha {
         /// The source string given.
         given: String,
