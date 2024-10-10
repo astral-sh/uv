@@ -200,6 +200,28 @@ members = ["member1", "path/to/member2", "libs/*"]
 
 ---
 
+#### [`private-members`](#workspace_private-members) {: #workspace_private-members }
+<span id="private-members"></span>
+
+Packages to include as workspace private members.
+
+Supports both globs and explicit paths.
+
+For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.workspace]
+private-members = ["project1", "path/to/project2", "projects/*"]
+```
+
+---
+
 ## Configuration
 ### [`allow-insecure-host`](#allow-insecure-host) {: #allow-insecure-host }
 
