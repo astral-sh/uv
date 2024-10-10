@@ -1952,6 +1952,29 @@ impl VersionRequest {
             | Self::Range(_, variant) => variant == &PythonVariant::Freethreaded,
         }
     }
+
+    /// Return a new [`VersionRequest`] with the [`PythonVariant`] if it has one.
+    ///
+    /// This is useful for converting the string representation to pep440.
+    #[must_use]
+    pub fn without_python_variant(self) -> Self {
+        // TODO(zanieb): Replace this entire function with a utility that casts this to a version
+        // without using `VersionRequest::to_string`.
+        match self {
+            Self::Any | Self::Default => self,
+            Self::Major(major, _) => Self::Major(major, PythonVariant::Default),
+            Self::MajorMinor(major, minor, _) => {
+                Self::MajorMinor(major, minor, PythonVariant::Default)
+            }
+            Self::MajorMinorPatch(major, minor, patch, _) => {
+                Self::MajorMinorPatch(major, minor, patch, PythonVariant::Default)
+            }
+            Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
+                Self::MajorMinorPrerelease(major, minor, prerelease, PythonVariant::Default)
+            }
+            Self::Range(specifiers, _) => Self::Range(specifiers, PythonVariant::Default),
+        }
+    }
 }
 
 impl FromStr for VersionRequest {

@@ -222,7 +222,8 @@ fn python_pin_no_python() {
 
 #[test]
 fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
-    let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11"]);
+    let context: TestContext =
+        TestContext::new_with_versions(&["3.10", "3.11"]).with_filtered_python_sources();
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -294,12 +295,23 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     ----- stderr -----
     "###);
 
+    // Request a version that is compatible and uses a Python variant
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.13t"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `.python-version` from `3.11` -> `3.13t`
+
+    ----- stderr -----
+    warning: No interpreter found for Python 3.13t in [PYTHON SOURCES]
+    "###);
+
     // Request a implementation version that is compatible
     uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Updated `.python-version` from `3.11` -> `cpython@3.11`
+    Updated `.python-version` from `3.13t` -> `cpython@3.11`
 
     ----- stderr -----
     "###);
