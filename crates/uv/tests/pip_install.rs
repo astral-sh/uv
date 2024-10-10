@@ -6810,6 +6810,18 @@ fn install_relocatable() -> Result<()> {
         .success()
         .stdout(predicate::str::contains("Hello world!"));
 
+    // Relocatable entrypoint should still be usable even if symlinked.
+    // Only testable on POSIX since symlinks require elevated privilege on Windows
+    #[cfg(unix)]
+    {
+        let script_symlink_path = context.temp_dir.join("black");
+        std::os::unix::fs::symlink(script_path, script_symlink_path.clone())?;
+        Command::new(script_symlink_path.as_os_str())
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Hello world!"));
+    }
+
     Ok(())
 }
 
