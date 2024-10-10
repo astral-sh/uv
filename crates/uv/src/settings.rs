@@ -658,6 +658,7 @@ pub(crate) struct PythonPinSettings {
     pub(crate) request: Option<String>,
     pub(crate) resolved: bool,
     pub(crate) no_project: bool,
+    pub(crate) upgrade: bool,
 }
 
 impl PythonPinSettings {
@@ -669,12 +670,14 @@ impl PythonPinSettings {
             no_resolved,
             resolved,
             no_project,
+            upgrade,
         } = args;
 
         Self {
             request,
             resolved: flag(resolved, no_resolved).unwrap_or(false),
             no_project,
+            upgrade,
         }
     }
 }
