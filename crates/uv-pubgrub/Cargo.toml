@@ -4,6 +4,9 @@ version = "0.0.1"
 edition = "2021"
 description = "Common uv pubgrub types."
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 

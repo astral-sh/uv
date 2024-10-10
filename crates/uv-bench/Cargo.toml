@@ -15,6 +15,7 @@ license = { workspace = true }
 workspace = true
 
 [lib]
+doctest = false
 bench = false
 
 [[bench]]

@@ -17,6 +17,7 @@ license = { workspace = true }
 workspace = true
 
 [lib]
+doctest = false
 name = "uv_install_wheel"
 
 [dependencies]
