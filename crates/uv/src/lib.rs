@@ -1086,6 +1086,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.resolved,
                 globals.python_preference,
                 args.no_project,
+                args.upgrade,
                 &cache,
                 printer,
             )

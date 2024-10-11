@@ -14,7 +14,7 @@ pub static PYTHON_VERSION_FILENAME: &str = ".python-version";
 pub static PYTHON_VERSIONS_FILENAME: &str = ".python-versions";
 
 /// A `.python-version` or `.python-versions` file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PythonVersionFile {
     /// The path to the version file.
     path: PathBuf,

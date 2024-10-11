@@ -3752,6 +3752,11 @@ pub struct PythonPinArgs {
     /// `requires-python` constraint.
     #[arg(long, alias = "no-workspace")]
     pub no_project: bool,
+
+    /// Upgrade the patches of distributions specified in .python-version(s)
+    /// files to the latest available versions.
+    #[arg(long, conflicts_with = "request")]
+    pub r#upgrade: bool,
 }
 
 #[derive(Args)]

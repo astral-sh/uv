@@ -4351,6 +4351,8 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>This option is usually not safe to use when committing the <code>.python-version</code> file to version control.</p>
 
+</dd><dt><code>--upgrade</code></dt><dd><p>Upgrade the patches of distributions specified in .python-version(s) files to the latest available versions</p>
+
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>

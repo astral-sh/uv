@@ -18,6 +18,8 @@ use uv_workspace::{DiscoveryOptions, VirtualProject};
 use crate::commands::{project::find_requires_python, ExitStatus};
 use crate::printer::Printer;
 
+use super::patch_upgrade::patch;
+
 /// Pin to a specific Python version.
 pub(crate) async fn pin(
     project_dir: &Path,
@@ -25,9 +27,23 @@ pub(crate) async fn pin(
     resolved: bool,
     python_preference: PythonPreference,
     no_project: bool,
+    upgrade: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    if upgrade {
+        if no_project {
+            warn_user_once!("`--no_project` is a no-op when used with `uv python pin --upgrade`");
+        }
+
+        if resolved {
+            warn_user_once!("`--resolved` is a no-op when used with `uv python pin --upgrade`");
+        }
+
+        patch(project_dir, cache).await?;
+        return Ok(ExitStatus::Success);
+    }
+
     let virtual_project = if no_project {
         None
     } else {
