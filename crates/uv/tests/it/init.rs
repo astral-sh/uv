@@ -2314,7 +2314,7 @@ fn init_with_author() {
         description = "Add your description here"
         readme = "README.md"
         authors = [
-            { name = "Alice", email = "alice@example.com" }
+            { name = "Alice", email = "alice@example.com" } 
         ]
         requires-python = ">=3.12"
         dependencies = []
@@ -2336,7 +2336,7 @@ fn init_with_author() {
         description = "Add your description here"
         readme = "README.md"
         authors = [
-            { name = "Alice", email = "alice@example.com" }
+            { name = "Alice", email = "alice@example.com" } 
         ]
         requires-python = ">=3.12"
         dependencies = []

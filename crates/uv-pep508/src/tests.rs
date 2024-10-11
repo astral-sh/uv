@@ -180,10 +180,11 @@ fn direct_url_extras() {
 fn error_extras_eof1() {
     assert_snapshot!(
         parse_pep508_err("black["),
-        @"
-        Missing closing bracket (expected ']', found end of dependency specification)
-        black[
-                ^"
+        @r#"
+    Missing closing bracket (expected ']', found end of dependency specification)
+    black[
+         ^
+    "#
     );
 }
 
@@ -191,10 +192,11 @@ fn error_extras_eof1() {
 fn error_extras_eof2() {
     assert_snapshot!(
         parse_pep508_err("black[d"),
-        @"
-        Missing closing bracket (expected ']', found end of dependency specification)
-        black[d
-                ^"
+        @r#"
+    Missing closing bracket (expected ']', found end of dependency specification)
+    black[d
+         ^
+    "#
     );
 }
 
@@ -202,10 +204,11 @@ fn error_extras_eof2() {
 fn error_extras_eof3() {
     assert_snapshot!(
         parse_pep508_err("black[d,"),
-        @"
-        Missing closing bracket (expected ']', found end of dependency specification)
-        black[d,
-                ^"
+        @r#"
+    Missing closing bracket (expected ']', found end of dependency specification)
+    black[d,
+         ^
+    "#
     );
 }
 
@@ -213,10 +216,11 @@ fn error_extras_eof3() {
 fn error_extras_illegal_start1() {
     assert_snapshot!(
         parse_pep508_err("black[ö]"),
-        @"
-        Expected an alphanumeric character starting the extra name, found `ö`
-        black[ö]
-                ^"
+        @r#"
+    Expected an alphanumeric character starting the extra name, found `ö`
+    black[ö]
+          ^
+    "#
     );
 }
 
@@ -224,10 +228,11 @@ fn error_extras_illegal_start1() {
 fn error_extras_illegal_start2() {
     assert_snapshot!(
         parse_pep508_err("black[_d]"),
-        @"
-        Expected an alphanumeric character starting the extra name, found `_`
-        black[_d]
-                ^"
+        @r#"
+    Expected an alphanumeric character starting the extra name, found `_`
+    black[_d]
+          ^
+    "#
     );
 }
 
@@ -235,10 +240,11 @@ fn error_extras_illegal_start2() {
 fn error_extras_illegal_start3() {
     assert_snapshot!(
         parse_pep508_err("black[,]"),
-        @"
-        Expected either alphanumerical character (starting the extra name) or `]` (ending the extras section), found `,`
-        black[,]
-                ^"
+        @r#"
+    Expected either alphanumerical character (starting the extra name) or `]` (ending the extras section), found `,`
+    black[,]
+          ^
+    "#
     );
 }
 
@@ -246,10 +252,11 @@ fn error_extras_illegal_start3() {
 fn error_extras_illegal_character() {
     assert_snapshot!(
         parse_pep508_err("black[jüpyter]"),
-        @"
-        Invalid character in extras name, expected an alphanumeric character, `-`, `_`, `.`, `,` or `]`, found `ü`
-        black[jüpyter]
-                ^"
+        @r#"
+    Invalid character in extras name, expected an alphanumeric character, `-`, `_`, `.`, `,` or `]`, found `ü`
+    black[jüpyter]
+           ^
+    "#
     );
 }
 
@@ -309,10 +316,11 @@ fn error_parenthesized_pep440() {
 fn error_parenthesized_parenthesis() {
     assert_snapshot!(
         parse_pep508_err("numpy ( >=1.19"),
-        @"
-        Missing closing parenthesis (expected ')', found end of dependency specification)
-        numpy ( >=1.19
-                ^"
+        @r#"
+    Missing closing parenthesis (expected ')', found end of dependency specification)
+    numpy ( >=1.19
+          ^
+    "#
     );
 }
 
@@ -320,10 +328,11 @@ fn error_parenthesized_parenthesis() {
 fn error_whats_that() {
     assert_snapshot!(
         parse_pep508_err("numpy % 1.16"),
-        @"
-        Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `%`
-        numpy % 1.16
-                ^"
+        @r#"
+    Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `%`
+    numpy % 1.16
+          ^
+    "#
     );
 }
 
@@ -391,11 +400,11 @@ fn name_and_marker() {
 fn error_marker_incomplete1() {
     assert_snapshot!(
         parse_pep508_err(r"numpy; sys_platform"),
-        @"
-        Expected a valid marker operator (such as `>=` or `not in`), found ``
-        numpy; sys_platform
-                            ^
-        "
+        @r#"
+    Expected a valid marker operator (such as `>=` or `not in`), found ``
+    numpy; sys_platform
+                       ^
+    "#
     );
 }
 
@@ -403,10 +412,11 @@ fn error_marker_incomplete1() {
 fn error_marker_incomplete2() {
     assert_snapshot!(
         parse_pep508_err(r"numpy; sys_platform =="),
-        @r"
-        Expected marker value, found end of dependency specification
-        numpy; sys_platform ==
-                                ^"
+        @r#"
+    Expected marker value, found end of dependency specification
+    numpy; sys_platform ==
+                          ^
+    "#
     );
 }
 
@@ -415,9 +425,10 @@ fn error_marker_incomplete3() {
     assert_snapshot!(
         parse_pep508_err(r#"numpy; sys_platform == "win32" or"#),
         @r#"
-        Expected marker value, found end of dependency specification
-        numpy; sys_platform == "win32" or
-                                            ^"#
+    Expected marker value, found end of dependency specification
+    numpy; sys_platform == "win32" or
+                                     ^
+    "#
     );
 }
 
@@ -426,9 +437,10 @@ fn error_marker_incomplete4() {
     assert_snapshot!(
         parse_pep508_err(r#"numpy; sys_platform == "win32" or (os_name == "linux""#),
         @r#"
-        Expected ')', found end of dependency specification
-        numpy; sys_platform == "win32" or (os_name == "linux"
-                                            ^"#
+    Expected ')', found end of dependency specification
+    numpy; sys_platform == "win32" or (os_name == "linux"
+                                      ^
+    "#
     );
 }
 
@@ -437,9 +449,10 @@ fn error_marker_incomplete5() {
     assert_snapshot!(
         parse_pep508_err(r#"numpy; sys_platform == "win32" or (os_name == "linux" and"#),
         @r#"
-        Expected marker value, found end of dependency specification
-        numpy; sys_platform == "win32" or (os_name == "linux" and
-                                                                    ^"#
+    Expected marker value, found end of dependency specification
+    numpy; sys_platform == "win32" or (os_name == "linux" and
+                                                             ^
+    "#
     );
 }
 
@@ -447,10 +460,11 @@ fn error_marker_incomplete5() {
 fn error_pep440() {
     assert_snapshot!(
         parse_pep508_err(r"numpy >=1.1.*"),
-        @r"
-        Operator >= cannot be used with a wildcard version specifier
-        numpy >=1.1.*
-                ^^^^^^^"
+        @r#"
+    Operator >= cannot be used with a wildcard version specifier
+    numpy >=1.1.*
+          ^^^^^^^
+    "#
     );
 }
 
@@ -493,10 +507,11 @@ fn error_unnamed_file_path() {
 fn error_no_comma_between_extras() {
     assert_snapshot!(
         parse_pep508_err(r"name[bar baz]"),
-        @"
-        Expected either `,` (separating extras) or `]` (ending the extras section), found `b`
-        name[bar baz]
-                    ^"
+        @r#"
+    Expected either `,` (separating extras) or `]` (ending the extras section), found `b`
+    name[bar baz]
+             ^
+    "#
     );
 }
 
@@ -504,10 +519,11 @@ fn error_no_comma_between_extras() {
 fn error_extra_comma_after_extras() {
     assert_snapshot!(
         parse_pep508_err(r"name[bar, baz,]"),
-        @"
-        Expected an alphanumeric character starting the extra name, found `]`
-        name[bar, baz,]
-                        ^"
+        @r#"
+    Expected an alphanumeric character starting the extra name, found `]`
+    name[bar, baz,]
+                  ^
+    "#
     );
 }
 
@@ -515,10 +531,11 @@ fn error_extra_comma_after_extras() {
 fn error_extras_not_closed() {
     assert_snapshot!(
         parse_pep508_err(r"name[bar, baz >= 1.0"),
-        @"
-        Expected either `,` (separating extras) or `]` (ending the extras section), found `>`
-        name[bar, baz >= 1.0
-                        ^"
+        @r#"
+    Expected either `,` (separating extras) or `]` (ending the extras section), found `>`
+    name[bar, baz >= 1.0
+                  ^
+    "#
     );
 }
 
@@ -526,10 +543,11 @@ fn error_extras_not_closed() {
 fn error_no_space_after_url() {
     assert_snapshot!(
         parse_pep508_err(r"name @ https://example.com/; extra == 'example'"),
-        @"
-        Missing space before ';', the end of the URL is ambiguous
-        name @ https://example.com/; extra == 'example'
-                                    ^"
+        @r#"
+    Missing space before ';', the end of the URL is ambiguous
+    name @ https://example.com/; extra == 'example'
+                               ^
+    "#
     );
 }
 
@@ -537,10 +555,11 @@ fn error_no_space_after_url() {
 fn error_name_at_nothing() {
     assert_snapshot!(
         parse_pep508_err(r"name @"),
-        @"
-        Expected URL
-        name @
-                ^"
+        @r#"
+    Expected URL
+    name @
+          ^
+    "#
     );
 }
 
@@ -548,11 +567,11 @@ fn error_name_at_nothing() {
 fn test_error_invalid_marker_key() {
     assert_snapshot!(
         parse_pep508_err(r"name; invalid_name"),
-        @"
-        Expected a quoted string or a valid marker name, found `invalid_name`
-        name; invalid_name
-                ^^^^^^^^^^^^
-        "
+        @r#"
+    Expected a quoted string or a valid marker name, found `invalid_name`
+    name; invalid_name
+          ^^^^^^^^^^^^
+    "#
     );
 }
 
@@ -560,11 +579,11 @@ fn test_error_invalid_marker_key() {
 fn error_markers_invalid_order() {
     assert_snapshot!(
         parse_pep508_err("name; '3.7' <= invalid_name"),
-        @"
-        Expected a quoted string or a valid marker name, found `invalid_name`
-        name; '3.7' <= invalid_name
-                        ^^^^^^^^^^^^
-        "
+        @r#"
+    Expected a quoted string or a valid marker name, found `invalid_name`
+    name; '3.7' <= invalid_name
+                   ^^^^^^^^^^^^
+    "#
     );
 }
 
@@ -595,10 +614,11 @@ fn error_missing_quote() {
 fn error_markers_inpython_version() {
     assert_snapshot!(
         parse_pep508_err("name; '3.6'inpython_version"),
-        @"
-        Expected a valid marker operator (such as `>=` or `not in`), found `inpython_version`
-        name; '3.6'inpython_version
-                    ^^^^^^^^^^^^^^^^"
+        @r#"
+    Expected a valid marker operator (such as `>=` or `not in`), found `inpython_version`
+    name; '3.6'inpython_version
+               ^^^^^^^^^^^^^^^^
+    "#
     );
 }
 
@@ -651,10 +671,11 @@ fn error_no_version_value() {
 fn error_no_version_operator() {
     assert_snapshot!(
         parse_pep508_err("name 1.0"),
-        @"
-        Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `1`
-        name 1.0
-                ^"
+        @r#"
+    Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `1`
+    name 1.0
+         ^
+    "#
     );
 }
 
@@ -662,10 +683,11 @@ fn error_no_version_operator() {
 fn error_random_char() {
     assert_snapshot!(
         parse_pep508_err("name >= 1.0 #"),
-        @"
-        Trailing `#` is not allowed
-        name >= 1.0 #
-                ^^^^^^^^"
+        @r##"
+    Trailing `#` is not allowed
+    name >= 1.0 #
+         ^^^^^^^^
+    "##
     );
 }
 
@@ -674,11 +696,11 @@ fn error_random_char() {
 fn error_invalid_extra_unnamed_url() {
     assert_snapshot!(
         parse_unnamed_err("/foo-3.0.0-py3-none-any.whl[d,]"),
-        @r###"
+        @r#"
     Expected an alphanumeric character starting the extra name, found `]`
     /foo-3.0.0-py3-none-any.whl[d,]
-                                    ^
-    "###
+                                  ^
+    "#
     );
 }
 

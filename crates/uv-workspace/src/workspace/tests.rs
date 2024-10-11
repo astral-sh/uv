@@ -43,43 +43,43 @@ async fn albatross_in_example() {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r###"
+        @r#"
     {
-        "project_root": "[ROOT]/albatross-in-example/examples/bird-feeder",
-        "project_name": "bird-feeder",
-        "workspace": {
+      "project_root": "[ROOT]/albatross-in-example/examples/bird-feeder",
+      "project_name": "bird-feeder",
+      "workspace": {
         "install_path": "[ROOT]/albatross-in-example/examples/bird-feeder",
         "packages": {
-            "bird-feeder": {
+          "bird-feeder": {
             "root": "[ROOT]/albatross-in-example/examples/bird-feeder",
             "project": {
-                "name": "bird-feeder",
-                "version": "1.0.0",
-                "requires-python": ">=3.12",
-                "dependencies": [
+              "name": "bird-feeder",
+              "version": "1.0.0",
+              "requires-python": ">=3.12",
+              "dependencies": [
                 "anyio>=4.3.0,<5"
-                ],
-                "optional-dependencies": null
+              ],
+              "optional-dependencies": null
             },
             "pyproject_toml": "[PYPROJECT_TOML]"
-            }
+          }
         },
         "sources": {},
         "pyproject_toml": {
-            "project": {
+          "project": {
             "name": "bird-feeder",
             "version": "1.0.0",
             "requires-python": ">=3.12",
             "dependencies": [
-                "anyio>=4.3.0,<5"
+              "anyio>=4.3.0,<5"
             ],
             "optional-dependencies": null
-            },
-            "tool": null
+          },
+          "tool": null
         }
-        }
+      }
     }
-    "###);
+    "#);
     });
 }
 
@@ -94,43 +94,43 @@ async fn albatross_project_in_excluded() {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r###"
+        @r#"
         {
-            "project_root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
-            "project_name": "bird-feeder",
-            "workspace": {
+          "project_root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
+          "project_name": "bird-feeder",
+          "workspace": {
             "install_path": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
             "packages": {
-                "bird-feeder": {
+              "bird-feeder": {
                 "root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
                 "project": {
-                    "name": "bird-feeder",
-                    "version": "1.0.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "bird-feeder",
+                  "version": "1.0.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "anyio>=4.3.0,<5"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                }
+              }
             },
             "sources": {},
             "pyproject_toml": {
-                "project": {
+              "project": {
                 "name": "bird-feeder",
                 "version": "1.0.0",
                 "requires-python": ">=3.12",
                 "dependencies": [
-                    "anyio>=4.3.0,<5"
+                  "anyio>=4.3.0,<5"
                 ],
                 "optional-dependencies": null
-                },
-                "tool": null
+              },
+              "tool": null
             }
-            }
+          }
         }
-        "###);
+        "#);
     });
 }
 
@@ -144,100 +144,100 @@ async fn albatross_root_workspace() {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r###"
+        @r#"
         {
-            "project_root": "[ROOT]/albatross-root-workspace",
-            "project_name": "albatross",
-            "workspace": {
+          "project_root": "[ROOT]/albatross-root-workspace",
+          "project_name": "albatross",
+          "workspace": {
             "install_path": "[ROOT]/albatross-root-workspace",
             "packages": {
-                "albatross": {
+              "albatross": {
                 "root": "[ROOT]/albatross-root-workspace",
                 "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "albatross",
+                  "version": "0.1.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "bird-feeder",
                     "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                },
-                "bird-feeder": {
+              },
+              "bird-feeder": {
                 "root": "[ROOT]/albatross-root-workspace/packages/bird-feeder",
                 "project": {
-                    "name": "bird-feeder",
-                    "version": "1.0.0",
-                    "requires-python": ">=3.8",
-                    "dependencies": [
+                  "name": "bird-feeder",
+                  "version": "1.0.0",
+                  "requires-python": ">=3.8",
+                  "dependencies": [
                     "anyio>=4.3.0,<5",
                     "seeds"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                },
-                "seeds": {
+              },
+              "seeds": {
                 "root": "[ROOT]/albatross-root-workspace/packages/seeds",
                 "project": {
-                    "name": "seeds",
-                    "version": "1.0.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "seeds",
+                  "version": "1.0.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "idna==3.6"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                }
+              }
             },
             "sources": {
-                "bird-feeder": [
+              "bird-feeder": [
                 {
-                    "workspace": true
+                  "workspace": true
                 }
-                ]
+              ]
             },
             "pyproject_toml": {
-                "project": {
+              "project": {
                 "name": "albatross",
                 "version": "0.1.0",
                 "requires-python": ">=3.12",
                 "dependencies": [
-                    "bird-feeder",
-                    "tqdm>=4,<5"
+                  "bird-feeder",
+                  "tqdm>=4,<5"
                 ],
                 "optional-dependencies": null
-                },
-                "tool": {
+              },
+              "tool": {
                 "uv": {
-                    "sources": {
+                  "sources": {
                     "bird-feeder": [
-                        {
+                      {
                         "workspace": true
-                        }
+                      }
                     ]
-                    },
-                    "workspace": {
+                  },
+                  "workspace": {
                     "members": [
-                        "packages/*"
+                      "packages/*"
                     ],
                     "exclude": null
-                    },
-                    "managed": null,
-                    "package": null,
-                    "dev-dependencies": null,
-                    "environments": null,
-                    "override-dependencies": null,
-                    "constraint-dependencies": null
+                  },
+                  "managed": null,
+                  "package": null,
+                  "dev-dependencies": null,
+                  "environments": null,
+                  "override-dependencies": null,
+                  "constraint-dependencies": null
                 }
-                }
+              }
             }
-            }
+          }
         }
-        "###);
+        "#);
     });
 }
 
@@ -252,79 +252,79 @@ async fn albatross_virtual_workspace() {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r###"
+        @r#"
         {
-            "project_root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
-            "project_name": "albatross",
-            "workspace": {
+          "project_root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
+          "project_name": "albatross",
+          "workspace": {
             "install_path": "[ROOT]/albatross-virtual-workspace",
             "packages": {
-                "albatross": {
+              "albatross": {
                 "root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
                 "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "albatross",
+                  "version": "0.1.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "bird-feeder",
                     "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                },
-                "bird-feeder": {
+              },
+              "bird-feeder": {
                 "root": "[ROOT]/albatross-virtual-workspace/packages/bird-feeder",
                 "project": {
-                    "name": "bird-feeder",
-                    "version": "1.0.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "bird-feeder",
+                  "version": "1.0.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "anyio>=4.3.0,<5",
                     "seeds"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                },
-                "seeds": {
+              },
+              "seeds": {
                 "root": "[ROOT]/albatross-virtual-workspace/packages/seeds",
                 "project": {
-                    "name": "seeds",
-                    "version": "1.0.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "seeds",
+                  "version": "1.0.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "idna==3.6"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                }
+              }
             },
             "sources": {},
             "pyproject_toml": {
-                "project": null,
-                "tool": {
+              "project": null,
+              "tool": {
                 "uv": {
-                    "sources": null,
-                    "workspace": {
+                  "sources": null,
+                  "workspace": {
                     "members": [
-                        "packages/*"
+                      "packages/*"
                     ],
                     "exclude": null
-                    },
-                    "managed": null,
-                    "package": null,
-                    "dev-dependencies": null,
-                    "environments": null,
-                    "override-dependencies": null,
-                    "constraint-dependencies": null
+                  },
+                  "managed": null,
+                  "package": null,
+                  "dev-dependencies": null,
+                  "environments": null,
+                  "override-dependencies": null,
+                  "constraint-dependencies": null
                 }
-                }
+              }
             }
-            }
+          }
         }
-        "###);
+        "#);
     });
 }
 
@@ -338,43 +338,43 @@ async fn albatross_just_project() {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r###"
+        @r#"
         {
-            "project_root": "[ROOT]/albatross-just-project",
-            "project_name": "albatross",
-            "workspace": {
+          "project_root": "[ROOT]/albatross-just-project",
+          "project_name": "albatross",
+          "workspace": {
             "install_path": "[ROOT]/albatross-just-project",
             "packages": {
-                "albatross": {
+              "albatross": {
                 "root": "[ROOT]/albatross-just-project",
                 "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "albatross",
+                  "version": "0.1.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                }
+              }
             },
             "sources": {},
             "pyproject_toml": {
-                "project": {
+              "project": {
                 "name": "albatross",
                 "version": "0.1.0",
                 "requires-python": ">=3.12",
                 "dependencies": [
-                    "tqdm>=4,<5"
+                  "tqdm>=4,<5"
                 ],
                 "optional-dependencies": null
-                },
-                "tool": null
+              },
+              "tool": null
             }
-            }
+          }
         }
-        "###);
+        "#);
     });
 }
 #[tokio::test]
@@ -456,74 +456,74 @@ async fn exclude_package() -> Result<()> {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r###"
+        @r#"
         {
-            "project_root": "[ROOT]",
-            "project_name": "albatross",
-            "workspace": {
+          "project_root": "[ROOT]",
+          "project_name": "albatross",
+          "workspace": {
             "install_path": "[ROOT]",
             "packages": {
-                "albatross": {
+              "albatross": {
                 "root": "[ROOT]",
                 "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "albatross",
+                  "version": "0.1.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                },
-                "seeds": {
+              },
+              "seeds": {
                 "root": "[ROOT]/packages/seeds",
                 "project": {
-                    "name": "seeds",
-                    "version": "1.0.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "seeds",
+                  "version": "1.0.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "idna==3.6"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                }
+              }
             },
             "sources": {},
             "pyproject_toml": {
-                "project": {
+              "project": {
                 "name": "albatross",
                 "version": "0.1.0",
                 "requires-python": ">=3.12",
                 "dependencies": [
-                    "tqdm>=4,<5"
+                  "tqdm>=4,<5"
                 ],
                 "optional-dependencies": null
-                },
-                "tool": {
+              },
+              "tool": {
                 "uv": {
-                    "sources": null,
-                    "workspace": {
+                  "sources": null,
+                  "workspace": {
                     "members": [
-                        "packages/*"
+                      "packages/*"
                     ],
                     "exclude": [
-                        "packages/bird-feeder"
+                      "packages/bird-feeder"
                     ]
-                    },
-                    "managed": null,
-                    "package": null,
-                    "dev-dependencies": null,
-                    "environments": null,
-                    "override-dependencies": null,
-                    "constraint-dependencies": null
+                  },
+                  "managed": null,
+                  "package": null,
+                  "dev-dependencies": null,
+                  "environments": null,
+                  "override-dependencies": null,
+                  "constraint-dependencies": null
                 }
-                }
+              }
             }
-            }
+          }
         }
-        "###);
+        "#);
     });
 
     // Rewrite the members to both include and exclude `bird-feeder` by name.
@@ -554,75 +554,75 @@ async fn exclude_package() -> Result<()> {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r###"
+        @r#"
         {
-            "project_root": "[ROOT]",
-            "project_name": "albatross",
-            "workspace": {
+          "project_root": "[ROOT]",
+          "project_name": "albatross",
+          "workspace": {
             "install_path": "[ROOT]",
             "packages": {
-                "albatross": {
+              "albatross": {
                 "root": "[ROOT]",
                 "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "albatross",
+                  "version": "0.1.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                },
-                "seeds": {
+              },
+              "seeds": {
                 "root": "[ROOT]/packages/seeds",
                 "project": {
-                    "name": "seeds",
-                    "version": "1.0.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "seeds",
+                  "version": "1.0.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "idna==3.6"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                }
+              }
             },
             "sources": {},
             "pyproject_toml": {
-                "project": {
+              "project": {
                 "name": "albatross",
                 "version": "0.1.0",
                 "requires-python": ">=3.12",
                 "dependencies": [
-                    "tqdm>=4,<5"
+                  "tqdm>=4,<5"
                 ],
                 "optional-dependencies": null
-                },
-                "tool": {
+              },
+              "tool": {
                 "uv": {
-                    "sources": null,
-                    "workspace": {
+                  "sources": null,
+                  "workspace": {
                     "members": [
-                        "packages/seeds",
-                        "packages/bird-feeder"
+                      "packages/seeds",
+                      "packages/bird-feeder"
                     ],
                     "exclude": [
-                        "packages/bird-feeder"
+                      "packages/bird-feeder"
                     ]
-                    },
-                    "managed": null,
-                    "package": null,
-                    "dev-dependencies": null,
-                    "environments": null,
-                    "override-dependencies": null,
-                    "constraint-dependencies": null
+                  },
+                  "managed": null,
+                  "package": null,
+                  "dev-dependencies": null,
+                  "environments": null,
+                  "override-dependencies": null,
+                  "constraint-dependencies": null
                 }
-                }
+              }
             }
-            }
+          }
         }
-        "###);
+        "#);
     });
 
     // Rewrite the exclusion to use the top-level directory (`packages`).
@@ -653,88 +653,88 @@ async fn exclude_package() -> Result<()> {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r###"
+        @r#"
         {
-            "project_root": "[ROOT]",
-            "project_name": "albatross",
-            "workspace": {
+          "project_root": "[ROOT]",
+          "project_name": "albatross",
+          "workspace": {
             "install_path": "[ROOT]",
             "packages": {
-                "albatross": {
+              "albatross": {
                 "root": "[ROOT]",
                 "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "albatross",
+                  "version": "0.1.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                },
-                "bird-feeder": {
+              },
+              "bird-feeder": {
                 "root": "[ROOT]/packages/bird-feeder",
                 "project": {
-                    "name": "bird-feeder",
-                    "version": "1.0.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "bird-feeder",
+                  "version": "1.0.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "anyio>=4.3.0,<5"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                },
-                "seeds": {
+              },
+              "seeds": {
                 "root": "[ROOT]/packages/seeds",
                 "project": {
-                    "name": "seeds",
-                    "version": "1.0.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "seeds",
+                  "version": "1.0.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "idna==3.6"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                }
+              }
             },
             "sources": {},
             "pyproject_toml": {
-                "project": {
+              "project": {
                 "name": "albatross",
                 "version": "0.1.0",
                 "requires-python": ">=3.12",
                 "dependencies": [
-                    "tqdm>=4,<5"
+                  "tqdm>=4,<5"
                 ],
                 "optional-dependencies": null
-                },
-                "tool": {
+              },
+              "tool": {
                 "uv": {
-                    "sources": null,
-                    "workspace": {
+                  "sources": null,
+                  "workspace": {
                     "members": [
-                        "packages/seeds",
-                        "packages/bird-feeder"
+                      "packages/seeds",
+                      "packages/bird-feeder"
                     ],
                     "exclude": [
-                        "packages"
+                      "packages"
                     ]
-                    },
-                    "managed": null,
-                    "package": null,
-                    "dev-dependencies": null,
-                    "environments": null,
-                    "override-dependencies": null,
-                    "constraint-dependencies": null
+                  },
+                  "managed": null,
+                  "package": null,
+                  "dev-dependencies": null,
+                  "environments": null,
+                  "override-dependencies": null,
+                  "constraint-dependencies": null
                 }
-                }
+              }
             }
-            }
+          }
         }
-        "###);
+        "#);
     });
 
     // Rewrite the exclusion to use the top-level directory with a glob (`packages/*`).
@@ -765,62 +765,62 @@ async fn exclude_package() -> Result<()> {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r###"
+        @r#"
         {
-            "project_root": "[ROOT]",
-            "project_name": "albatross",
-            "workspace": {
+          "project_root": "[ROOT]",
+          "project_name": "albatross",
+          "workspace": {
             "install_path": "[ROOT]",
             "packages": {
-                "albatross": {
+              "albatross": {
                 "root": "[ROOT]",
                 "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
+                  "name": "albatross",
+                  "version": "0.1.0",
+                  "requires-python": ">=3.12",
+                  "dependencies": [
                     "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
+                  ],
+                  "optional-dependencies": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
-                }
+              }
             },
             "sources": {},
             "pyproject_toml": {
-                "project": {
+              "project": {
                 "name": "albatross",
                 "version": "0.1.0",
                 "requires-python": ">=3.12",
                 "dependencies": [
-                    "tqdm>=4,<5"
+                  "tqdm>=4,<5"
                 ],
                 "optional-dependencies": null
-                },
-                "tool": {
+              },
+              "tool": {
                 "uv": {
-                    "sources": null,
-                    "workspace": {
+                  "sources": null,
+                  "workspace": {
                     "members": [
-                        "packages/seeds",
-                        "packages/bird-feeder"
+                      "packages/seeds",
+                      "packages/bird-feeder"
                     ],
                     "exclude": [
-                        "packages/*"
+                      "packages/*"
                     ]
-                    },
-                    "managed": null,
-                    "package": null,
-                    "dev-dependencies": null,
-                    "environments": null,
-                    "override-dependencies": null,
-                    "constraint-dependencies": null
+                  },
+                  "managed": null,
+                  "package": null,
+                  "dev-dependencies": null,
+                  "environments": null,
+                  "override-dependencies": null,
+                  "constraint-dependencies": null
                 }
-                }
+              }
             }
-            }
+          }
         }
-        "###);
+        "#);
     });
 
     Ok(())
