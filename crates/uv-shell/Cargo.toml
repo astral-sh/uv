@@ -4,6 +4,9 @@ version = "0.0.1"
 edition = "2021"
 description = "Utilities for detecting and manipulating shell environments"
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
