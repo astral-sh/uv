@@ -5,6 +5,8 @@
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 #![allow(clippy::needless_raw_string_hashes)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::doc_lazy_continuation)]
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -65,14 +67,14 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -80,7 +82,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -111,7 +113,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=1" },
         ]
-        "###
+        "#
         );
     });
 
@@ -182,14 +184,14 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -197,7 +199,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
 
@@ -223,7 +225,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
             { name = "package-a", specifier = "<2" },
             { name = "package-a", specifier = ">=1" },
         ]
-        "###
+        "#
         );
     });
 
@@ -281,14 +283,14 @@ fn fork_basic() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -296,7 +298,7 @@ fn fork_basic() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -343,7 +345,7 @@ fn fork_basic() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -415,7 +417,7 @@ fn conflict_in_fork() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -429,7 +431,7 @@ fn conflict_in_fork() -> Result<()> {
               package-a{sys_platform == 'darwin'}==1.0.0
               package-a{sys_platform == 'darwin'}>2
           and your project depends on package-a{sys_platform == 'darwin'}<2, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -483,7 +485,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -491,7 +493,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on package-a>=2 and package-a<2, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -566,14 +568,14 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -581,7 +583,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -680,7 +682,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = "==1.0.0" },
             { name = "package-c", marker = "sys_platform == 'darwin'", specifier = "==1.0.0" },
         ]
-        "###
+        "#
         );
     });
 
@@ -744,14 +746,14 @@ fn fork_upgrade() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -759,7 +761,7 @@ fn fork_upgrade() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
 
@@ -794,7 +796,7 @@ fn fork_upgrade() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-foo" }]
-        "###
+        "#
         );
     });
 
@@ -864,14 +866,14 @@ fn fork_incomplete_markers() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -879,7 +881,7 @@ fn fork_incomplete_markers() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -949,7 +951,7 @@ fn fork_incomplete_markers() -> Result<()> {
             { name = "package-a", marker = "python_full_version >= '3.11'", specifier = "==2" },
             { name = "package-b" },
         ]
-        "###
+        "#
         );
     });
 
@@ -1017,14 +1019,14 @@ fn fork_marker_accrue() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -1032,7 +1034,7 @@ fn fork_marker_accrue() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
 
@@ -1083,7 +1085,7 @@ fn fork_marker_accrue() -> Result<()> {
             { name = "package-a", marker = "implementation_name == 'cpython'", specifier = "==1.0.0" },
             { name = "package-b", marker = "implementation_name == 'pypy'", specifier = "==1.0.0" },
         ]
-        "###
+        "#
         );
     });
 
@@ -1150,7 +1152,7 @@ fn fork_marker_disjoint() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1158,7 +1160,7 @@ fn fork_marker_disjoint() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies for split (sys_platform == 'linux'):
       ╰─▶ Because your project depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -1220,14 +1222,14 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -1235,7 +1237,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -1326,7 +1328,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -1400,14 +1402,14 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -1415,7 +1417,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -1494,7 +1496,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -1569,14 +1571,14 @@ fn fork_marker_inherit_combined() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -1584,7 +1586,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -1663,7 +1665,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -1731,14 +1733,14 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -1746,7 +1748,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -1805,7 +1807,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -1879,14 +1881,14 @@ fn fork_marker_inherit_transitive() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -1894,7 +1896,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -1965,7 +1967,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2035,14 +2037,14 @@ fn fork_marker_inherit() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -2050,7 +2052,7 @@ fn fork_marker_inherit() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -2097,7 +2099,7 @@ fn fork_marker_inherit() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2173,14 +2175,14 @@ fn fork_marker_limited_inherit() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -2188,7 +2190,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -2258,7 +2260,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-b" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2328,14 +2330,14 @@ fn fork_marker_selection() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -2343,7 +2345,7 @@ fn fork_marker_selection() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -2401,7 +2403,7 @@ fn fork_marker_selection() -> Result<()> {
             { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2483,14 +2485,14 @@ fn fork_marker_track() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -2498,7 +2500,7 @@ fn fork_marker_track() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -2568,7 +2570,7 @@ fn fork_marker_track() -> Result<()> {
             { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2.8" },
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2.8" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2635,14 +2637,14 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -2650,7 +2652,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
 
@@ -2701,7 +2703,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
             { name = "package-a", specifier = "==1.0.0" },
             { name = "package-b", specifier = "==1.0.0" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2769,7 +2771,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2778,7 +2780,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because package-b{sys_platform == 'darwin'}==1.0.0 depends on package-c>=2.0.0 and package-a{sys_platform == 'linux'}==1.0.0 depends on package-c<2.0.0, we can conclude that package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
           And because your project depends on package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -2841,7 +2843,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2854,7 +2856,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
               package-c{sys_platform == 'linux'}>2.0.0
           and package-a==1.0.0 depends on package-c{sys_platform == 'linux'}<2.0.0, we can conclude that package-a==1.0.0 and package-b==1.0.0 are incompatible.
           And because your project depends on package-a==1.0.0 and package-b==1.0.0, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "#
     );
 
     Ok(())
@@ -2934,14 +2936,14 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -2949,7 +2951,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -2981,7 +2983,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
             { name = "package-a", marker = "python_full_version >= '3.10'", specifier = ">=1.1.0" },
             { name = "package-a", marker = "python_full_version >= '3.11'", specifier = ">=1.2.0" },
         ]
-        "###
+        "#
         );
     });
 
@@ -3101,14 +3103,14 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -3116,7 +3118,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -3221,7 +3223,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-cleaver" }]
-        "###
+        "#
         );
     });
 
@@ -3337,14 +3339,14 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "#
     );
 
     Ok(())
@@ -3479,14 +3481,14 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -3494,7 +3496,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -3647,7 +3649,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
             { name = "package-cleaver" },
             { name = "package-foo" },
         ]
-        "###
+        "#
         );
     });
 
@@ -3762,14 +3764,14 @@ fn preferences_dependent_forking() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -3777,7 +3779,7 @@ fn preferences_dependent_forking() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -3848,7 +3850,7 @@ fn preferences_dependent_forking() -> Result<()> {
             { name = "package-cleaver" },
             { name = "package-foo" },
         ]
-        "###
+        "#
         );
     });
 
@@ -3936,14 +3938,14 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -3951,7 +3953,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -4030,7 +4032,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'illumos'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'windows'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -4088,14 +4090,14 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -4103,7 +4105,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.10"
 
@@ -4114,7 +4116,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9'", specifier = "==1.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -4172,14 +4174,14 @@ fn fork_requires_python_full() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -4187,7 +4189,7 @@ fn fork_requires_python_full() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.10"
 
@@ -4198,7 +4200,7 @@ fn fork_requires_python_full() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9'", specifier = "==1.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -4260,14 +4262,14 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -4275,7 +4277,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.10.1"
 
@@ -4298,7 +4300,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_full_version == '3.10.*'", specifier = "==1.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -4353,14 +4355,14 @@ fn fork_requires_python() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -4368,7 +4370,7 @@ fn fork_requires_python() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.10"
 
@@ -4379,7 +4381,7 @@ fn fork_requires_python() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9.*'", specifier = "==1.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -4436,14 +4438,14 @@ fn unreachable_package() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -4451,7 +4453,7 @@ fn unreachable_package() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
 
@@ -4474,7 +4476,7 @@ fn unreachable_package() -> Result<()> {
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_package_a-1.0.0-py3-none-any.whl", hash = "sha256:cc472ded9f3b260e6cda0e633fa407a13607e190422cb455f02beebd32d6751f" },
         ]
-        "###
+        "#
         );
     });
 
@@ -4537,14 +4539,14 @@ fn unreachable_wheels() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -4552,7 +4554,7 @@ fn unreachable_wheels() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
 
@@ -4600,7 +4602,7 @@ fn unreachable_wheels() -> Result<()> {
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_wheels_c-1.0.0-cp312-cp312-macosx_14_0_x86_64.whl", hash = "sha256:4b846c5b1646b04828a2bef6c9d180ff7cfd725866013dcec8933de7fb5f9e8d" },
         ]
-        "###
+        "#
         );
     });
 
@@ -4654,14 +4656,14 @@ fn requires_python_wheels() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r#"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "#
     );
 
     let lock = context.read("uv.lock");
@@ -4669,7 +4671,7 @@ fn requires_python_wheels() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.10"
 
@@ -4693,7 +4695,7 @@ fn requires_python_wheels() -> Result<()> {
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/requires_python_wheels_a-1.0.0-cp310-cp310-any.whl", hash = "sha256:b979494a0d7dc825b84d6c516ac407143915f6d2840d229ee2a36b3d06deb61d" },
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/requires_python_wheels_a-1.0.0-cp311-cp311-any.whl", hash = "sha256:b979494a0d7dc825b84d6c516ac407143915f6d2840d229ee2a36b3d06deb61d" },
         ]
-        "###
+        "#
         );
     });
 
