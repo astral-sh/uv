@@ -52,7 +52,7 @@ Install uv with our standalone installers, or from [PyPI](https://pypi.org/proje
 $ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # On Windows.
-$ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+$ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # With pip.
 $ pip install uv
