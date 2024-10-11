@@ -199,7 +199,7 @@ jobs:
           # Generate Dockerfile content
           cat <<EOF > Dockerfile
           FROM ${BASE_IMAGE}
-          COPY --from=${{ env.UV_BASE_IMG }}:latest /uv /uvx /usr/local/bin/
+          COPY --from=${{ env.UV_BASE_IMG }}:latest /uv /uvx /uv-python /usr/local/bin/
           ENTRYPOINT []
           CMD ["/usr/local/bin/uv"]
           EOF

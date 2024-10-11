@@ -1030,10 +1030,18 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonInstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
+            if matches!(args.shim, Some(true)) && globals.preview.is_disabled() {
+                warn_user_once!(
+                    "The uv Python shim is experimental and may change without warning"
+                );
+            }
+
             commands::python_install(
                 &project_dir,
                 args.targets,
                 args.reinstall,
+                args.shim,
+                globals.preview,
                 globals.python_downloads,
                 globals.native_tls,
                 globals.connectivity,

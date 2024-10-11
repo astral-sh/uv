@@ -1,17 +1,24 @@
-use anyhow::Result;
+use std::collections::BTreeSet;
+use std::fmt::Write;
+use std::path::{Path, PathBuf};
+
+use anyhow::{bail, Result};
 use fs_err as fs;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::BTreeSet;
-use std::fmt::Write;
-use std::path::Path;
 
+use tracing::debug;
 use uv_client::Connectivity;
+use uv_configuration::PreviewMode;
+use uv_fs::Simplified;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
-use uv_python::{PythonDownloads, PythonRequest, PythonVersionFile};
+use uv_python::{
+    ImplementationName, LenientImplementationName, PythonDownloads, PythonRequest,
+    PythonVersionFile,
+};
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -23,6 +30,8 @@ pub(crate) async fn install(
     project_dir: &Path,
     targets: Vec<String>,
     reinstall: bool,
+    shim: Option<bool>,
+    preview: PreviewMode,
     python_downloads: PythonDownloads,
     native_tls: bool,
     connectivity: Connectivity,
@@ -170,6 +179,13 @@ pub(crate) async fn install(
         }
     }
 
+    let any_cpython = installed.iter().any(|key| {
+        matches!(
+            key.implementation(),
+            LenientImplementationName::Known(ImplementationName::CPython)
+        )
+    });
+
     if !installed.is_empty() {
         if let [installed] = installed.as_slice() {
             // Ex) "Installed Python 3.9.7 in 1.68s"
@@ -236,5 +252,43 @@ pub(crate) async fn install(
         return Ok(ExitStatus::Failure);
     }
 
+    // Install a shim if explicitly requested or if we installed a CPython version
+    if shim.unwrap_or(preview.is_enabled() && any_cpython) {
+        let shim_src = find_shim()?;
+        let executable_dir = uv_tool::find_executable_directory()?;
+        let shim_dst = executable_dir.join("python");
+        if shim_dst.try_exists()? {
+            writeln!(
+                printer.stderr(),
+                "Python executable already exists at `{}`",
+                shim_dst.user_display().cyan()
+            )?;
+        } else {
+            debug!(
+                "Linking {} -> {}",
+                shim_src.user_display(),
+                shim_dst.user_display()
+            );
+            uv_fs::replace_symlink(&shim_src, &shim_dst)?;
+            writeln!(
+                printer.stderr(),
+                "Installed Python shim to `{}`",
+                shim_dst.user_display().cyan()
+            )?;
+        }
+    }
+
     Ok(ExitStatus::Success)
+}
+
+fn find_shim() -> Result<PathBuf> {
+    let current_exe = std::env::current_exe()?;
+    let Some(bin) = current_exe.parent() else {
+        bail!("Could not find the directory for the `uv-python` binary");
+    };
+    let uv_python = bin.join("uv-python");
+    if !uv_python.try_exists()? {
+        bail!("Could not find the `uv-python` binary");
+    }
+    Ok(uv_python)
 }
