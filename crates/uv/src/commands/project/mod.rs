@@ -32,7 +32,7 @@ use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph,
-    ResolverMarkers,
+    ResolverEnvironment,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -813,7 +813,7 @@ pub(crate) async fn resolve_environment<'a>(
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = interpreter.tags()?;
-    let markers = interpreter.resolver_markers();
+    let marker_env = interpreter.resolver_marker_environment();
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Add all authenticated sources to the cache.
@@ -929,7 +929,7 @@ pub(crate) async fn resolve_environment<'a>(
         &reinstall,
         &upgrade,
         Some(tags),
-        ResolverMarkers::specific_environment(markers),
+        ResolverEnvironment::specific(marker_env),
         python_requirement,
         &client,
         &flat_index,
@@ -1143,12 +1143,12 @@ pub(crate) async fn update_environment(
 
     // Determine markers to use for resolution.
     let interpreter = venv.interpreter();
-    let markers = venv.interpreter().resolver_markers();
+    let marker_env = venv.interpreter().resolver_marker_environment();
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
     if source_trees.is_empty() && reinstall.is_none() && upgrade.is_none() && overrides.is_empty() {
-        match site_packages.satisfies(&requirements, &constraints, &markers)? {
+        match site_packages.satisfies(&requirements, &constraints, &marker_env)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -1271,7 +1271,7 @@ pub(crate) async fn update_environment(
         reinstall,
         upgrade,
         Some(tags),
-        ResolverMarkers::specific_environment(markers.clone()),
+        ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
         &client,
         &flat_index,

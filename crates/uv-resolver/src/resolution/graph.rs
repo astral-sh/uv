@@ -28,7 +28,7 @@ use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::{
     InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
-    ResolverMarkers, VersionsResponse,
+    VersionsResponse,
 };
 
 pub(crate) type MarkersForDistribution = Vec<MarkerTree>;
@@ -124,7 +124,7 @@ impl ResolutionGraph {
                 if package.is_base() {
                     // For packages with diverging versions, store which version comes from which
                     // fork.
-                    if let Some(markers) = resolution.markers.fork_markers() {
+                    if let Some(markers) = resolution.env.try_markers() {
                         package_markers
                             .entry(package.name.clone())
                             .or_default()
@@ -152,11 +152,7 @@ impl ResolutionGraph {
 
         let mut seen = FxHashSet::default();
         for resolution in resolutions {
-            let marker = resolution
-                .markers
-                .fork_markers()
-                .cloned()
-                .unwrap_or_default();
+            let marker = resolution.env.try_markers().cloned().unwrap_or_default();
 
             // Add every edge to the graph, propagating the marker for the current fork, if
             // necessary.
@@ -180,32 +176,31 @@ impl ResolutionGraph {
         let requires_python = python.target().clone();
 
         let fork_markers = if let [resolution] = resolutions {
-            match resolution.markers {
-                ResolverMarkers::Universal { .. } | ResolverMarkers::SpecificEnvironment(_) => {
-                    vec![]
-                }
-                ResolverMarkers::Fork(_) => {
+            resolution
+                .env
+                .try_markers()
+                .map(|_| {
                     resolutions
                         .iter()
                         .map(|resolution| {
                             resolution
-                                .markers
-                                .fork_markers()
+                                .env
+                                .try_markers()
                                 .expect("A non-forking resolution exists in forking mode")
                                 .clone()
                         })
                         // Any unsatisfiable forks were skipped.
                         .filter(|fork| !fork.is_false())
                         .collect()
-                }
-            }
+                })
+                .unwrap_or_else(Vec::new)
         } else {
             resolutions
                 .iter()
                 .map(|resolution| {
                     resolution
-                        .markers
-                        .fork_markers()
+                        .env
+                        .try_markers()
                         .expect("A non-forking resolution exists in forking mode")
                         .clone()
                 })

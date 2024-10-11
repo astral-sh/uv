@@ -34,7 +34,7 @@ use uv_requirements::{
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
-    ResolutionMode, ResolverMarkers,
+    ResolutionMode, ResolverEnvironment,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -251,15 +251,15 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine the environment for the resolution.
-    let (tags, markers) = if universal {
+    let (tags, resolver_env) = if universal {
         (
             None,
-            ResolverMarkers::universal(environments.into_markers()),
+            ResolverEnvironment::universal(environments.into_markers()),
         )
     } else {
-        let (tags, markers) =
+        let (tags, marker_env) =
             resolution_environment(python_version, python_platform, &interpreter)?;
-        (Some(tags), ResolverMarkers::specific_environment(markers))
+        (Some(tags), ResolverEnvironment::specific(marker_env))
     };
 
     // Generate, but don't enforce hashes for the requirements.
@@ -392,7 +392,7 @@ pub(crate) async fn pip_compile(
         &Reinstall::None,
         &upgrade,
         tags.as_deref(),
-        markers.clone(),
+        resolver_env.clone(),
         python_requirement,
         &client,
         &flat_index,
@@ -446,8 +446,8 @@ pub(crate) async fn pip_compile(
     }
 
     if include_marker_expression {
-        if let ResolverMarkers::SpecificEnvironment(markers) = &markers {
-            let relevant_markers = resolution.marker_tree(&top_level_index, markers)?;
+        if let Some(marker_env) = resolver_env.marker_environment() {
+            let relevant_markers = resolution.marker_tree(&top_level_index, marker_env)?;
             if let Some(relevant_markers) = relevant_markers.contents() {
                 writeln!(
                     writer,
@@ -524,7 +524,7 @@ pub(crate) async fn pip_compile(
         "{}",
         DisplayResolutionGraph::new(
             &resolution,
-            &markers,
+            &resolver_env,
             &no_emit_packages,
             generate_hashes,
             include_extras,
