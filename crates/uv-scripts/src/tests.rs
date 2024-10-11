@@ -20,8 +20,8 @@ fn no_closing_pragma() {
         # /// script
         # requires-python = '>=3.11'
         # dependencies = [
-        #   'requests<3',
-        #   'rich',
+        #     'requests<3',
+        #     'rich',
         # ]
     "};
 
@@ -54,8 +54,8 @@ fn simple() {
         # /// script
         # requires-python = '>=3.11'
         # dependencies = [
-        #   'requests<3',
-        #   'rich',
+        #     'requests<3',
+        #     'rich',
         # ]
         # ///
 
@@ -97,8 +97,8 @@ fn simple_with_shebang() {
         # /// script
         # requires-python = '>=3.11'
         # dependencies = [
-        #   'requests<3',
-        #   'rich',
+        #     'requests<3',
+        #     'rich',
         # ]
         # ///
 
@@ -170,8 +170,8 @@ fn trailing_lines() {
         # /// script
         # requires-python = '>=3.11'
         # dependencies = [
-        #   'requests<3',
-        #   'rich',
+        #     'requests<3',
+        #     'rich',
         # ]
         # ///
         #
@@ -199,8 +199,8 @@ fn test_serialize_metadata_formatting() {
     let metadata = indoc::indoc! {r"
         requires-python = '>=3.11'
         dependencies = [
-            'requests<3',
-            'rich',
+          'requests<3',
+          'rich',
         ]
     "};
 
