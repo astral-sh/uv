@@ -2571,7 +2571,7 @@ pub struct RunArgs {
     /// When used in a project, these dependencies will be layered on top of
     /// the project environment in a separate, ephemeral environment. These
     /// dependencies are allowed to conflict with those specified by the project.
-    #[arg(long)]
+    #[arg(long, value_delimiter = ',')]
     pub with: Vec<String>,
 
     /// Run with the given packages installed as editables.
@@ -2579,7 +2579,7 @@ pub struct RunArgs {
     /// When used in a project, these dependencies will be layered on top of
     /// the project environment in a separate, ephemeral environment. These
     /// dependencies are allowed to conflict with those specified by the project.
-    #[arg(long)]
+    #[arg(long, value_delimiter = ',')]
     pub with_editable: Vec<String>,
 
     /// Run with all packages listed in the given `requirements.txt` files.
@@ -2587,7 +2587,7 @@ pub struct RunArgs {
     /// The same environment semantics as `--with` apply.
     ///
     /// Using `pyproject.toml`, `setup.py`, or `setup.cfg` files is not allowed.
-    #[arg(long, value_parser = parse_maybe_file_path)]
+    #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
     /// Run the command in an isolated virtual environment.
@@ -3373,7 +3373,7 @@ pub struct ToolRunArgs {
     pub from: Option<String>,
 
     /// Run with the given packages installed.
-    #[arg(long)]
+    #[arg(long, value_delimiter = ',')]
     pub with: Vec<String>,
 
     /// Run with the given packages installed as editables
@@ -3381,11 +3381,11 @@ pub struct ToolRunArgs {
     /// When used in a project, these dependencies will be layered on top of
     /// the uv tool's environment in a separate, ephemeral environment. These
     /// dependencies are allowed to conflict with those specified.
-    #[arg(long)]
+    #[arg(long, value_delimiter = ',')]
     pub with_editable: Vec<String>,
 
     /// Run with all packages listed in the given `requirements.txt` files.
-    #[arg(long, value_parser = parse_maybe_file_path)]
+    #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
     /// Run the tool in an isolated virtual environment, ignoring any already-installed tools.
@@ -3441,11 +3441,11 @@ pub struct ToolInstallArgs {
     pub from: Option<String>,
 
     /// Include the following extra requirements.
-    #[arg(long)]
+    #[arg(long, value_delimiter = ',')]
     pub with: Vec<String>,
 
     /// Run all requirements listed in the given `requirements.txt` files.
-    #[arg(long, value_parser = parse_maybe_file_path)]
+    #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
     #[command(flatten)]
