@@ -11,11 +11,7 @@ use std::process::Command;
 use assert_cmd::assert::Assert;
 use assert_cmd::prelude::*;
 
-use common::{venv_to_interpreter};
-
-use crate::common::{build_vendor_links_url, get_bin, packse_index_url, uv_snapshot, TestContext};
-
-mod common;
+use crate::common::{venv_to_interpreter, build_vendor_links_url, get_bin, packse_index_url, uv_snapshot, TestContext};
 
 
 fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {

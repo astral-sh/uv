@@ -11,9 +11,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use common::{packse_index_url, TestContext, uv_snapshot};
-
-mod common;
+use crate::common::{packse_index_url, TestContext, uv_snapshot};
 
 {{#scenarios}}
 
@@ -61,7 +59,7 @@ fn {{module_name}}() -> Result<()> {
     );
 
     {{#expected.satisfiable}}
-    let lock = context.read("uv.lock")();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => filters,
     }, {
