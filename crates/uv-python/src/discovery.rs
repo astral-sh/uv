@@ -587,6 +587,7 @@ fn python_interpreters<'a>(
         cache,
     )
     .filter(move |result| result_satisfies_environment_preference(result, environments))
+    .filter(move |result| result_satisfies_python_preference(result, preference))
 }
 
 /// Lazily convert Python executables into interpreters.
@@ -667,6 +668,69 @@ fn result_satisfies_environment_preference(
 ) -> bool {
     result.as_ref().ok().map_or(true, |(source, interpreter)| {
         satisfies_environment_preference(*source, interpreter, preference)
+    })
+}
+
+/// Returns true if a Python interpreter matches the [`EnvironmentPreference`].
+pub fn satisfies_python_preference(
+    source: PythonSource,
+    interpreter: &Interpreter,
+    preference: PythonPreference,
+) -> bool {
+    match preference {
+        PythonPreference::OnlyManaged => {
+            // Perform a fast check using the source before querying the interpreter
+            if matches!(source, PythonSource::Managed) || interpreter.is_managed() {
+                true
+            } else {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: only managed interpreters allowed",
+                    interpreter.sys_executable().display()
+                );
+                false
+            }
+        }
+        // If not "only" a kind, any interpreter is okay
+        PythonPreference::Managed | PythonPreference::System => true,
+        PythonPreference::OnlySystem => match source {
+            // A managed interpreter is never a system interpreter
+            PythonSource::Managed => {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: only unmanaged interpreters allowed",
+                    interpreter.sys_executable().display()
+                );
+                false
+            }
+            // We can't be sure if this is a system interpreter without checking
+            PythonSource::ProvidedPath
+            | PythonSource::ParentInterpreter
+            | PythonSource::ActiveEnvironment
+            | PythonSource::CondaPrefix
+            | PythonSource::DiscoveredEnvironment
+            | PythonSource::SearchPath => {
+                if interpreter.is_managed() {
+                    debug!(
+                        "Ignoring Python interpreter at `{}`: only unmanaged interpreters allowed",
+                        interpreter.sys_executable().display()
+                    );
+                    false
+                } else {
+                    true
+                }
+            }
+            // Managed interpreters should never be found in these sources
+            PythonSource::Registry | PythonSource::MicrosoftStore => true,
+        },
+    }
+}
+
+/// Utility for applying [`satisfies_python_preference`] to a result type.
+fn result_satisfies_python_preference(
+    result: &Result<(PythonSource, Interpreter), Error>,
+    preference: PythonPreference,
+) -> bool {
+    result.as_ref().ok().map_or(true, |(source, interpreter)| {
+        satisfies_python_preference(*source, interpreter, preference)
     })
 }
 
@@ -2152,6 +2216,18 @@ impl PythonPreference {
                     &["system path"]
                 }
             }
+        }
+    }
+
+    /// Return the canonical name.
+    // TODO(zanieb): This should be a `Display` impl and we should have a different view for
+    // the sources
+    pub fn canonical_name(&self) -> &'static str {
+        match self {
+            Self::OnlyManaged => "only managed",
+            Self::Managed => "prefer managed",
+            Self::System => "prefer system",
+            Self::OnlySystem => "only system",
         }
     }
 }

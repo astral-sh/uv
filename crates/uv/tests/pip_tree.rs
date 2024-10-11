@@ -1,16 +1,14 @@
-use std::process::Command;
-
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 
 use common::uv_snapshot;
 
-use crate::common::{get_bin, TestContext};
+use crate::common::TestContext;
 
 mod common;
 
 #[test]
-fn no_package() {
+fn pip_tree_no_package() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.filters(), context.pip_tree(), @r###"
@@ -25,7 +23,7 @@ fn no_package() {
 }
 
 #[test]
-fn prune_last_in_the_subgroup() {
+fn pip_tree_prune_last_in_the_subgroup() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -68,7 +66,7 @@ fn prune_last_in_the_subgroup() {
 }
 
 #[test]
-fn single_package() {
+fn pip_tree_single_package() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -113,7 +111,7 @@ fn single_package() {
 // `pandas` requires `numpy` with markers on Python version.
 #[test]
 #[cfg(not(windows))]
-fn python_version_marker() {
+fn pip_tree_python_version_marker() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -159,7 +157,7 @@ fn python_version_marker() {
 }
 
 #[test]
-fn nested_dependencies() {
+fn pip_tree_nested_dependencies() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -206,7 +204,7 @@ fn nested_dependencies() {
 
 // Identical test as `invert` since `--reverse` is simply an alias for `--invert`.
 #[test]
-fn reverse() {
+fn pip_tree_reverse() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -254,7 +252,7 @@ fn reverse() {
 }
 
 #[test]
-fn invert() {
+fn pip_tree_invert() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -302,7 +300,7 @@ fn invert() {
 }
 
 #[test]
-fn depth() {
+fn pip_tree_depth() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -330,16 +328,9 @@ fn depth() {
     "###
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--depth")
-        .arg("0")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("0"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -350,16 +341,9 @@ fn depth() {
     "###
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--depth")
-        .arg("1")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -374,16 +358,9 @@ fn depth() {
     "###
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--depth")
-        .arg("2")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("2"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -400,7 +377,7 @@ fn depth() {
 }
 
 #[test]
-fn prune() {
+fn pip_tree_prune() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -428,16 +405,9 @@ fn prune() {
     "###
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--prune")
-        .arg("numpy")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("numpy"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -450,18 +420,11 @@ fn prune() {
     "###
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--prune")
         .arg("numpy")
         .arg("--prune")
-        .arg("joblib")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("joblib"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -473,16 +436,9 @@ fn prune() {
     "###
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--prune")
-        .arg("scipy")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("scipy"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -498,7 +454,7 @@ fn prune() {
 
 #[test]
 #[cfg(target_os = "macos")]
-fn complex_nested_dependencies_inverted() {
+fn pip_tree_complex_nested_dependencies_inverted() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -620,7 +576,7 @@ fn complex_nested_dependencies_inverted() {
 
 #[test]
 #[cfg(target_os = "macos")]
-fn complex_nested_dependencies() {
+fn pip_tree_complex_nested_dependencies() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -723,7 +679,7 @@ fn complex_nested_dependencies() {
 
 #[test]
 #[cfg(target_os = "macos")]
-fn prune_large_tree() {
+fn pip_tree_prune_large_tree() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -776,16 +732,9 @@ fn prune_large_tree() {
     "###
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--prune")
-        .arg("hatchling")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("hatchling"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -833,7 +782,7 @@ fn prune_large_tree() {
 // Additionally, package `uv-cyclic-dependencies-c` is included (depends on `uv-cyclic-dependencies-a`)
 // to make this test case more realistic and meaningful.
 #[test]
-fn cyclic_dependency() {
+fn pip_tree_cyclic_dependency() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -881,7 +830,7 @@ fn cyclic_dependency() {
 
 // Ensure `pip tree` behaves correctly after a package has been removed.
 #[test]
-fn removed_dependency() {
+fn pip_tree_removed_dependency() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -936,7 +885,7 @@ fn removed_dependency() {
 }
 
 #[test]
-fn multiple_packages() {
+fn pip_tree_multiple_packages() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -995,7 +944,7 @@ fn multiple_packages() {
 // Both `pendulum` and `boto3` depend on `python-dateutil`.
 #[test]
 #[cfg(not(windows))]
-fn multiple_packages_shared_descendant() {
+fn pip_tree_multiple_packages_shared_descendant() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1063,7 +1012,7 @@ fn multiple_packages_shared_descendant() {
 // Test the interaction between `--no-dedupe` and `--invert`.
 #[test]
 #[cfg(not(windows))]
-fn no_dedupe_and_invert() {
+fn pip_tree_no_dedupe_and_invert() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1139,7 +1088,7 @@ fn no_dedupe_and_invert() {
 // in the presence of dependency cycles.
 #[test]
 #[cfg(not(windows))]
-fn no_dedupe_and_cycle() {
+fn pip_tree_no_dedupe_and_cycle() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1239,7 +1188,7 @@ fn no_dedupe_and_cycle() {
 
 #[test]
 #[cfg(not(windows))]
-fn no_dedupe() {
+fn pip_tree_no_dedupe() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1312,7 +1261,7 @@ fn no_dedupe() {
 
 #[test]
 #[cfg(feature = "git")]
-fn with_editable() {
+fn pip_tree_with_editable() {
     let context = TestContext::new("3.12");
 
     // Install the editable package.
@@ -1353,7 +1302,7 @@ fn with_editable() {
 
 #[test]
 #[cfg(target_os = "macos")]
-fn package_flag_complex() {
+fn pip_tree_package_flag_complex() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1436,7 +1385,7 @@ fn package_flag_complex() {
 }
 
 #[test]
-fn package_flag() {
+fn pip_tree_package_flag() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1502,7 +1451,7 @@ fn package_flag() {
 }
 
 #[test]
-fn show_version_specifiers_simple() {
+fn pip_tree_show_version_specifiers_simple() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1546,7 +1495,7 @@ fn show_version_specifiers_simple() {
 
 #[test]
 #[cfg(target_os = "macos")]
-fn show_version_specifiers_complex() {
+fn pip_tree_show_version_specifiers_complex() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1648,7 +1597,7 @@ fn show_version_specifiers_complex() {
 }
 
 #[test]
-fn show_version_specifiers_with_invert() {
+fn pip_tree_show_version_specifiers_with_invert() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1700,7 +1649,7 @@ fn show_version_specifiers_with_invert() {
 }
 
 #[test]
-fn show_version_specifiers_with_package() {
+fn pip_tree_show_version_specifiers_with_package() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
