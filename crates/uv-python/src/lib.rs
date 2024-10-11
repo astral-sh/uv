@@ -1036,10 +1036,54 @@ mod tests {
                     &context.cache,
                 )
             })??;
+
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
             "3.12.0",
             "We should allow the active conda python"
+        );
+
+        // But not if it's a base environment
+        let result = context.run_with_vars(
+            &[
+                ("CONDA_PREFIX", Some(condaenv.as_os_str())),
+                ("CONDA_DEFAULT_ENV", Some(&OsString::from("base"))),
+            ],
+            || {
+                find_python_installation(
+                    &PythonRequest::Default,
+                    EnvironmentPreference::OnlyVirtual,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            },
+        )?;
+
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
+            "We should not allow the non-virtual environment; got {result:?}"
+        );
+
+        // Unless, system interpreters are included...
+        let python = context.run_with_vars(
+            &[
+                ("CONDA_PREFIX", Some(condaenv.as_os_str())),
+                ("CONDA_DEFAULT_ENV", Some(&OsString::from("base"))),
+            ],
+            || {
+                find_python_installation(
+                    &PythonRequest::Default,
+                    EnvironmentPreference::OnlySystem,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            },
+        )??;
+
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should find the base conda environment"
         );
 
         Ok(())
