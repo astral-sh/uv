@@ -10,7 +10,7 @@ use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
-use crate::{ResolutionGraph, ResolverMarkers};
+use crate::{ResolutionGraph, ResolverEnvironment};
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
@@ -18,8 +18,8 @@ use crate::{ResolutionGraph, ResolverMarkers};
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolutionGraph,
-    /// The marker environment, used to determine the markers that apply to each package.
-    marker_env: &'a ResolverMarkers,
+    /// The resolver marker environment, used to determine the markers that apply to each package.
+    env: &'a ResolverEnvironment,
     /// The packages to exclude from the output.
     no_emit_packages: &'a [PackageName],
     /// Whether to include hashes in the output.
@@ -58,7 +58,7 @@ impl<'a> DisplayResolutionGraph<'a> {
     #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
         underlying: &'a ResolutionGraph,
-        marker_env: &'a ResolverMarkers,
+        env: &'a ResolverEnvironment,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
@@ -69,7 +69,7 @@ impl<'a> DisplayResolutionGraph<'a> {
     ) -> DisplayResolutionGraph<'a> {
         Self {
             resolution: underlying,
-            marker_env,
+            env,
             no_emit_packages,
             show_hashes,
             include_extras,
@@ -89,7 +89,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             let mut sources = SourceAnnotations::default();
 
             for requirement in self.resolution.requirements.iter().filter(|requirement| {
-                requirement.evaluate_markers(self.marker_env.marker_environment(), &[])
+                requirement.evaluate_markers(self.env.marker_environment(), &[])
             }) {
                 if let Some(origin) = &requirement.origin {
                     sources.add(
@@ -104,7 +104,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 .constraints
                 .requirements()
                 .filter(|requirement| {
-                    requirement.evaluate_markers(self.marker_env.marker_environment(), &[])
+                    requirement.evaluate_markers(self.env.marker_environment(), &[])
                 })
             {
                 if let Some(origin) = &requirement.origin {
@@ -120,7 +120,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 .overrides
                 .requirements()
                 .filter(|requirement| {
-                    requirement.evaluate_markers(self.marker_env.marker_environment(), &[])
+                    requirement.evaluate_markers(self.env.marker_environment(), &[])
                 })
             {
                 if let Some(origin) = &requirement.origin {

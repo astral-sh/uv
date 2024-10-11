@@ -2,7 +2,7 @@ use rustc_hash::FxHashSet;
 
 use uv_normalize::PackageName;
 
-use crate::{DependencyMode, Manifest, ResolverMarkers};
+use crate::{DependencyMode, Manifest, ResolverEnvironment};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -46,7 +46,7 @@ impl ResolutionStrategy {
     pub(crate) fn from_mode(
         mode: ResolutionMode,
         manifest: &Manifest,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         dependencies: DependencyMode,
     ) -> Self {
         match mode {
@@ -54,7 +54,7 @@ impl ResolutionStrategy {
             ResolutionMode::Lowest => Self::Lowest,
             ResolutionMode::LowestDirect => Self::LowestDirect(
                 manifest
-                    .user_requirements(markers, dependencies)
+                    .user_requirements(env, dependencies)
                     .map(|requirement| requirement.name.clone())
                     .collect(),
             ),

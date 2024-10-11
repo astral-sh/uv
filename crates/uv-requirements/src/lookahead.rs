@@ -10,7 +10,7 @@ use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{Dist, DistributionMetadata};
 use uv_normalize::GroupName;
 use uv_pypi_types::{Requirement, RequirementSource};
-use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverMarkers};
+use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
 use crate::{required_dist, Error};
@@ -87,7 +87,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     /// to "only evaluate marker expressions that reference an extra name.")
     pub async fn resolve(
         self,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
     ) -> Result<Vec<RequestedRequirements>, Error> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
@@ -97,7 +97,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         let mut queue: VecDeque<_> = self
             .constraints
             .apply(self.overrides.apply(self.requirements))
-            .filter(|requirement| requirement.evaluate_markers(markers.marker_environment(), &[]))
+            .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
             .map(|requirement| (*requirement).clone())
             .collect();
 
@@ -117,7 +117,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         .apply(self.overrides.apply(lookahead.requirements()))
                     {
                         if requirement
-                            .evaluate_markers(markers.marker_environment(), lookahead.extras())
+                            .evaluate_markers(env.marker_environment(), lookahead.extras())
                         {
                             queue.push_back((*requirement).clone());
                         }

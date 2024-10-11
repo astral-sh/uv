@@ -4,7 +4,7 @@ use uv_pep508::VerbatimUrl;
 use uv_pypi_types::RequirementSource;
 
 use crate::resolver::ForkMap;
-use crate::{DependencyMode, Manifest, ResolverMarkers};
+use crate::{DependencyMode, Manifest, ResolverEnvironment};
 
 /// A map of package names to their explicit index.
 ///
@@ -26,12 +26,12 @@ impl Indexes {
     /// Determine the set of explicit, pinned indexes in the [`Manifest`].
     pub(crate) fn from_manifest(
         manifest: &Manifest,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         dependencies: DependencyMode,
     ) -> Self {
         let mut indexes = ForkMap::default();
 
-        for requirement in manifest.requirements(markers, dependencies) {
+        for requirement in manifest.requirements(env, dependencies) {
             let RequirementSource::Registry {
                 index: Some(index), ..
             } = &requirement.source
@@ -54,8 +54,8 @@ impl Indexes {
     pub(crate) fn get(
         &self,
         package_name: &PackageName,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
     ) -> Vec<&IndexUrl> {
-        self.0.get(package_name, markers)
+        self.0.get(package_name, env)
     }
 }

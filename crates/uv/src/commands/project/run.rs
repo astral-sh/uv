@@ -1009,7 +1009,7 @@ fn can_skip_ephemeral(
     match site_packages.satisfies(
         &spec.requirements,
         &spec.constraints,
-        &base_interpreter.resolver_markers(),
+        &base_interpreter.resolver_marker_environment(),
     ) {
         // If the requirements are already satisfied, we're done.
         Ok(SatisfiesResult::Fresh {

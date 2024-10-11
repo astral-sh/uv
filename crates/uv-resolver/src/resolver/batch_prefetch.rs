@@ -9,7 +9,9 @@ use tracing::{debug, trace};
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::resolver::Request;
-use crate::{InMemoryIndex, PythonRequirement, ResolveError, ResolverMarkers, VersionsResponse};
+use crate::{
+    InMemoryIndex, PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse,
+};
 use uv_distribution_types::{CompatibleDist, DistributionMetadata, IndexCapabilities, IndexUrl};
 use uv_pep440::Version;
 
@@ -55,7 +57,7 @@ impl BatchPrefetcher {
         in_memory: &InMemoryIndex,
         capabilities: &IndexCapabilities,
         selector: &CandidateSelector,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
     ) -> anyhow::Result<(), ResolveError> {
         let PubGrubPackageInner::Package {
             name,
@@ -102,7 +104,7 @@ impl BatchPrefetcher {
                     previous,
                 } => {
                     if let Some(candidate) =
-                        selector.select_no_preference(name, &compatible, version_map, markers)
+                        selector.select_no_preference(name, &compatible, version_map, env)
                     {
                         let compatible = compatible.intersection(
                             &Range::singleton(candidate.version().clone()).complement(),
@@ -137,7 +139,7 @@ impl BatchPrefetcher {
                         };
                     }
                     if let Some(candidate) =
-                        selector.select_no_preference(name, &range, version_map, markers)
+                        selector.select_no_preference(name, &range, version_map, env)
                     {
                         phase = BatchPrefetchStrategy::InOrder {
                             previous: candidate.version().clone(),

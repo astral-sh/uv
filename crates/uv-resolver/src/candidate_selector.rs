@@ -15,7 +15,7 @@ use crate::preferences::Preferences;
 use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
-use crate::{Exclusions, Manifest, Options, ResolverMarkers};
+use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_field_names)]
@@ -30,19 +30,19 @@ impl CandidateSelector {
     pub(crate) fn for_resolution(
         options: Options,
         manifest: &Manifest,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
     ) -> Self {
         Self {
             resolution_strategy: ResolutionStrategy::from_mode(
                 options.resolution_mode,
                 manifest,
-                markers,
+                env,
                 options.dependency_mode,
             ),
             prerelease_strategy: PrereleaseStrategy::from_mode(
                 options.prerelease_mode,
                 manifest,
-                markers,
+                env,
                 options.dependency_mode,
             ),
             index_strategy: options.index_strategy,
@@ -80,7 +80,7 @@ impl CandidateSelector {
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
         exclusions: &'a Exclusions,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
     ) -> Option<Candidate<'a>> {
         let is_excluded = exclusions.contains(package_name);
 
@@ -93,7 +93,7 @@ impl CandidateSelector {
             preferences,
             installed_packages,
             is_excluded,
-            markers,
+            env,
         ) {
             trace!("Using preference {} {}", preferred.name, preferred.version);
             return Some(preferred);
@@ -111,7 +111,7 @@ impl CandidateSelector {
             }
         }
 
-        self.select_no_preference(package_name, range, version_maps, markers)
+        self.select_no_preference(package_name, range, version_maps, env)
     }
 
     /// If the package has a preference, an existing version from an existing lockfile or a version
@@ -131,74 +131,26 @@ impl CandidateSelector {
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
         is_excluded: bool,
-        resolver_markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
     ) -> Option<Candidate> {
         // In the branches, we "sort" the preferences by marker-matching through an iterator that
         // first has the matching half and then the mismatching half.
-        match resolver_markers {
-            ResolverMarkers::SpecificEnvironment(env) => {
-                // We may hit a combination of fork markers preferences with specific environment
-                // output in the future when adding support for the PEP 665 successor.
-                let preferences_match =
-                    preferences.get(package_name).filter(|(marker, _version)| {
-                        // `.unwrap_or(true)` because the universal marker is considered matching.
-                        marker
-                            .map(|marker| marker.evaluate(env, &[]))
-                            .unwrap_or(true)
-                    });
-                let preferences_mismatch =
-                    preferences.get(package_name).filter(|(marker, _version)| {
-                        marker
-                            .map(|marker| !marker.evaluate(env, &[]))
-                            .unwrap_or(false)
-                    });
-                self.get_preferred_from_iter(
-                    preferences_match.chain(preferences_mismatch),
-                    package_name,
-                    range,
-                    version_maps,
-                    installed_packages,
-                    is_excluded,
-                    resolver_markers,
-                )
-            }
-            ResolverMarkers::Universal { .. } => {
-                // In universal mode, all preferences are matching.
-                self.get_preferred_from_iter(
-                    preferences.get(package_name),
-                    package_name,
-                    range,
-                    version_maps,
-                    installed_packages,
-                    is_excluded,
-                    resolver_markers,
-                )
-            }
-            ResolverMarkers::Fork(fork_markers) => {
-                let preferences_match =
-                    preferences.get(package_name).filter(|(marker, _version)| {
-                        // `.unwrap_or(true)` because the universal marker is considered matching.
-                        marker
-                            .map(|marker| !marker.is_disjoint(fork_markers))
-                            .unwrap_or(true)
-                    });
-                let preferences_mismatch =
-                    preferences.get(package_name).filter(|(marker, _version)| {
-                        marker
-                            .map(|marker| marker.is_disjoint(fork_markers))
-                            .unwrap_or(false)
-                    });
-                self.get_preferred_from_iter(
-                    preferences_match.chain(preferences_mismatch),
-                    package_name,
-                    range,
-                    version_maps,
-                    installed_packages,
-                    is_excluded,
-                    resolver_markers,
-                )
-            }
-        }
+        let preferences_match = preferences.get(package_name).filter(|(marker, _version)| {
+            // `.unwrap_or(true)` because the universal marker is considered matching.
+            marker.map(|marker| env.included(marker)).unwrap_or(true)
+        });
+        let preferences_mismatch = preferences.get(package_name).filter(|(marker, _version)| {
+            marker.map(|marker| !env.included(marker)).unwrap_or(false)
+        });
+        self.get_preferred_from_iter(
+            preferences_match.chain(preferences_mismatch),
+            package_name,
+            range,
+            version_maps,
+            installed_packages,
+            is_excluded,
+            env,
+        )
     }
 
     /// Return the first preference that satisfies the current range and is allowed.
@@ -210,7 +162,7 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
         installed_packages: &'a InstalledPackages,
         is_excluded: bool,
-        resolver_markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
     ) -> Option<Candidate<'a>> {
         for (marker, version) in preferences {
             // Respect the version range for this requirement.
@@ -247,10 +199,7 @@ impl CandidateSelector {
 
             // Respect the pre-release strategy for this fork.
             if version.any_prerelease() {
-                let allow = match self
-                    .prerelease_strategy
-                    .allows(package_name, resolver_markers)
-                {
+                let allow = match self.prerelease_strategy.allows(package_name, env) {
                     AllowPrerelease::Yes => true,
                     AllowPrerelease::No => false,
                     // If the pre-release is "global" (i.e., provided via a lockfile, rather than
@@ -321,7 +270,7 @@ impl CandidateSelector {
         package_name: &'a PackageName,
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
     ) -> Option<Candidate> {
         trace!(
             "Selecting candidate for {package_name} with range {range} with {} remote versions",
@@ -329,7 +278,7 @@ impl CandidateSelector {
         );
         let highest = self.use_highest_version(package_name);
 
-        let allow_prerelease = match self.prerelease_strategy.allows(package_name, markers) {
+        let allow_prerelease = match self.prerelease_strategy.allows(package_name, env) {
             AllowPrerelease::Yes => true,
             AllowPrerelease::No => false,
             // Allow pre-releases if there are no stable versions available.
