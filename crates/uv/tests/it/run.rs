@@ -8,6 +8,7 @@ use predicates::str::contains;
 use std::path::Path;
 
 use uv_python::PYTHON_VERSION_FILENAME;
+use uv_static::EnvVars;
 
 use crate::common::{copy_dir_all, uv_snapshot, TestContext};
 
@@ -92,7 +93,7 @@ fn run_with_python_version() -> Result<()> {
         .arg("python")
         .arg("-B")
         .arg("main.py")
-        .env_remove("VIRTUAL_ENV");
+        .env_remove(EnvVars::VIRTUAL_ENV);
 
     uv_snapshot!(context.filters(), command_with_args, @r###"
     success: true
@@ -122,7 +123,7 @@ fn run_with_python_version() -> Result<()> {
         .arg("python")
         .arg("-B")
         .arg("main.py")
-        .env_remove("VIRTUAL_ENV");
+        .env_remove(EnvVars::VIRTUAL_ENV);
 
     uv_snapshot!(context.filters(), command_with_args, @r###"
     success: false
@@ -1603,7 +1604,7 @@ fn run_without_output() -> Result<()> {
     })?;
 
     // On the first run, we only show the summary line for each environment.
-    uv_snapshot!(context.filters(), context.run().env_remove("UV_SHOW_RESOLUTION").arg("--with").arg("iniconfig").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().env_remove(EnvVars::UV_SHOW_RESOLUTION).arg("--with").arg("iniconfig").arg("main.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1614,7 +1615,7 @@ fn run_without_output() -> Result<()> {
     "###);
 
     // Subsequent runs are quiet.
-    uv_snapshot!(context.filters(), context.run().env_remove("UV_SHOW_RESOLUTION").arg("--with").arg("iniconfig").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().env_remove(EnvVars::UV_SHOW_RESOLUTION).arg("--with").arg("iniconfig").arg("main.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

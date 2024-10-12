@@ -12,6 +12,7 @@ use crate::common::{
     self, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path, TestContext,
 };
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 
 #[test]
 fn missing_requirements_txt() {
@@ -1393,7 +1394,7 @@ fn install_extra_index_url_has_priority() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg("https://test.pypi.org/simple")
         .arg("--extra-index-url")
@@ -3953,7 +3954,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     uv_snapshot!(filters, context.pip_install()
         .arg("-r")
         .arg("requirements.in")
-        .env("UV_NO_BUILD_ISOLATION", "yes"), @r###"
+        .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3990,7 +3991,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.in")
-        .env("UV_NO_BUILD_ISOLATION", "yes"), @r###"
+        .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4018,7 +4019,7 @@ fn install_utf16le_requirements() -> Result<()> {
     requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -4045,7 +4046,7 @@ fn install_utf16be_requirements() -> Result<()> {
     requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -4419,7 +4420,7 @@ fn install_package_basic_auth_from_netrc_default() -> Result<()> {
         .arg("anyio")
         .arg("--index-url")
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
-        .env("NETRC", netrc.to_str().unwrap())
+        .env(EnvVars::NETRC, netrc.to_str().unwrap())
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
@@ -4451,7 +4452,7 @@ fn install_package_basic_auth_from_netrc() -> Result<()> {
         .arg("anyio")
         .arg("--index-url")
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
-        .env("NETRC", netrc.to_str().unwrap())
+        .env(EnvVars::NETRC, netrc.to_str().unwrap())
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
@@ -4491,7 +4492,7 @@ anyio
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .env("NETRC", netrc.to_str().unwrap())
+        .env(EnvVars::NETRC, netrc.to_str().unwrap())
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
@@ -4564,8 +4565,8 @@ fn install_package_basic_auth_from_keyring() {
         .arg("--keyring-provider")
         .arg("subprocess")
         .arg("--strict")
-        .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
-        .env("PATH", venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4611,8 +4612,8 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
         .arg("--keyring-provider")
         .arg("subprocess")
         .arg("--strict")
-        .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
-        .env("PATH", venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4652,8 +4653,8 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
         .arg("--keyring-provider")
         .arg("subprocess")
         .arg("--strict")
-        .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
-        .env("PATH", venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6447,7 +6448,7 @@ fn local_index_absolute() -> Result<()> {
     "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("tqdm")
         .arg("--index-url")
         .arg(Url::from_directory_path(root).unwrap().as_str()), @r###"
@@ -6498,7 +6499,7 @@ fn local_index_relative() -> Result<()> {
     "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("tqdm")
         .arg("--index-url")
         .arg("./simple-html"), @r###"
@@ -6555,7 +6556,7 @@ fn local_index_requirements_txt_absolute() -> Result<()> {
     "#, Url::from_directory_path(root).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -6613,7 +6614,7 @@ fn local_index_requirements_txt_relative() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true

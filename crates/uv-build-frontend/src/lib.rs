@@ -35,6 +35,7 @@ use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_static::EnvVars;
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
 
 /// The default backend to use when PEP 517 is used without a `build-system` section.
@@ -318,10 +319,10 @@ impl SourceBuild {
 
         // Figure out what the modified path should be, and remove the PATH variable from the
         // environment variables if it's there.
-        let user_path = environment_variables.remove(&OsString::from("PATH"));
+        let user_path = environment_variables.remove(&OsString::from(EnvVars::PATH));
 
         // See if there is an OS PATH variable.
-        let os_path = env::var_os("PATH");
+        let os_path = env::var_os(EnvVars::PATH);
 
         // Prepend the user supplied PATH to the existing OS PATH
         let modified_path = if let Some(user_path) = user_path {
@@ -944,10 +945,10 @@ impl PythonRunner {
             .args(["-c", script])
             .current_dir(source_tree.simplified())
             .envs(environment_variables)
-            .env("PATH", modified_path)
-            .env("VIRTUAL_ENV", venv.root())
-            .env("CLICOLOR_FORCE", "1")
-            .env("PYTHONIOENCODING", "utf-8:backslashreplace")
+            .env(EnvVars::PATH, modified_path)
+            .env(EnvVars::VIRTUAL_ENV, venv.root())
+            .env(EnvVars::CLICOLOR_FORCE, "1")
+            .env(EnvVars::PYTHONIOENCODING, "utf-8:backslashreplace")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()

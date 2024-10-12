@@ -26,6 +26,7 @@ use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_scripts::{Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, FilesystemOptions, Options};
+use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
@@ -41,7 +42,6 @@ pub(crate) mod commands;
 pub(crate) mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
-pub(crate) mod version;
 
 #[instrument(skip_all)]
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
@@ -241,7 +241,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .break_words(false)
                 .word_separator(textwrap::WordSeparator::AsciiSpace)
                 .word_splitter(textwrap::WordSplitter::NoHyphenation)
-                .wrap_lines(std::env::var("UV_NO_WRAP").map(|_| false).unwrap_or(true))
+                .wrap_lines(
+                    std::env::var(EnvVars::UV_NO_WRAP)
+                        .map(|_| false)
+                        .unwrap_or(true),
+                )
                 .build(),
         )
     }))?;
@@ -251,7 +255,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .build_global()
         .expect("failed to initialize global rayon pool");
 
-    debug!("uv {}", version::version());
+    debug!("uv {}", uv_cli::version::version());
 
     // Write out any resolved settings.
     macro_rules! show_settings {
@@ -1584,7 +1588,7 @@ where
     // We support increasing the stack size to avoid stack overflows in debug mode on Windows. In
     // addition, we box types and futures in various places. This includes the `Box::pin(run())`
     // here, which prevents the large (non-send) main future alone from overflowing the stack.
-    let result = if let Ok(stack_size) = std::env::var("UV_STACK_SIZE") {
+    let result = if let Ok(stack_size) = std::env::var(EnvVars::UV_STACK_SIZE) {
         let stack_size = stack_size.parse().expect("Invalid stack size");
         let tokio_main = move || {
             let runtime = tokio::runtime::Builder::new_current_thread()

@@ -11,6 +11,7 @@ use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{MarkerTree, RequirementOrigin, VerbatimUrl};
 use uv_pypi_types::{Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
+use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::pyproject::{
@@ -402,7 +403,7 @@ impl Workspace {
     pub fn venv(&self) -> PathBuf {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
         fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
-            let value = std::env::var_os("UV_PROJECT_ENVIRONMENT")?;
+            let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
 
             if value.is_empty() {
                 return None;
@@ -419,7 +420,7 @@ impl Workspace {
 
         // Resolve the `VIRTUAL_ENV` variable, if any.
         fn from_virtual_env_variable() -> Option<PathBuf> {
-            let value = std::env::var_os("VIRTUAL_ENV")?;
+            let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
 
             if value.is_empty() {
                 return None;

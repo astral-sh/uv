@@ -4,6 +4,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
 use fs_err as fs;
 use insta::assert_snapshot;
+use uv_static::EnvVars;
 
 #[test]
 fn tool_list() {
@@ -15,14 +16,14 @@ fn tool_list() {
     context
         .tool_install()
         .arg("black==24.2.0")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
     uv_snapshot!(context.filters(), context.tool_list()
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -44,14 +45,14 @@ fn tool_list_paths() {
     context
         .tool_install()
         .arg("black==24.2.0")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-paths")
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -70,8 +71,8 @@ fn tool_list_empty() {
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_list()
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -91,16 +92,16 @@ fn tool_list_missing_receipt() {
     context
         .tool_install()
         .arg("black==24.2.0")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
     fs_err::remove_file(tool_dir.join("black").join("uv-receipt.toml")).unwrap();
 
     uv_snapshot!(context.filters(), context.tool_list()
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -123,8 +124,8 @@ fn tool_list_bad_environment() -> Result<()> {
     context
         .tool_install()
         .arg("black==24.2.0")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
@@ -132,8 +133,8 @@ fn tool_list_bad_environment() -> Result<()> {
     context
         .tool_install()
         .arg("ruff==0.3.4")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
@@ -145,8 +146,8 @@ fn tool_list_bad_environment() -> Result<()> {
         context.filters(),
         context
             .tool_list()
-            .env("UV_TOOL_DIR", tool_dir.as_os_str())
-            .env("XDG_BIN_HOME", bin_dir.as_os_str()),
+            .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+            .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()),
         @r###"
     success: true
     exit_code: 0
@@ -172,8 +173,8 @@ fn tool_list_deprecated() -> Result<()> {
     context
         .tool_install()
         .arg("black==24.2.0")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
@@ -209,8 +210,8 @@ fn tool_list_deprecated() -> Result<()> {
 
     // Ensure that we can still list the tool.
     uv_snapshot!(context.filters(), context.tool_list()
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -236,8 +237,8 @@ fn tool_list_deprecated() -> Result<()> {
 
     // Ensure that listing fails.
     uv_snapshot!(context.filters(), context.tool_list()
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -259,14 +260,14 @@ fn tool_list_show_version_specifiers() {
     context
         .tool_install()
         .arg("black<24.3.0")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-version-specifiers")
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -279,8 +280,8 @@ fn tool_list_show_version_specifiers() {
 
     // with paths
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-version-specifiers").arg("--show-paths")
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

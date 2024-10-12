@@ -26,6 +26,7 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
 
@@ -148,13 +149,13 @@ pub(crate) async fn run(
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
         std::iter::once(environment.scripts().to_path_buf()).chain(
-            std::env::var_os("PATH")
+            std::env::var_os(EnvVars::PATH)
                 .as_ref()
                 .iter()
                 .flat_map(std::env::split_paths),
         ),
     )?;
-    process.env("PATH", new_path);
+    process.env(EnvVars::PATH, new_path);
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited

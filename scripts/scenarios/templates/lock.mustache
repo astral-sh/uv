@@ -13,6 +13,8 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
+use uv_static::EnvVars;
+
 use crate::common::{packse_index_url, TestContext, uv_snapshot};
 
 {{#scenarios}}
@@ -51,7 +53,7 @@ fn {{module_name}}() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     {{#expected.explanation}}
     // {{expected.explanation}}
@@ -75,7 +77,7 @@ fn {{module_name}}() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()

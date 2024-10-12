@@ -1,5 +1,7 @@
 use assert_fs::fixture::PathChild;
 
+use uv_static::EnvVars;
+
 use crate::common::{uv_snapshot, TestContext};
 
 #[test]
@@ -9,8 +11,8 @@ fn tool_dir() {
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_dir()
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -27,8 +29,8 @@ fn tool_dir_bin() {
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_dir().arg("--bin")
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

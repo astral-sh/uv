@@ -22,6 +22,7 @@ use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
 use crate::PythonRequest;
 use uv_fs::{LockedFile, Simplified};
+use uv_static::EnvVars;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -80,7 +81,7 @@ impl ManagedPythonInstallations {
     /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`
     /// 3. A directory in the local data directory, e.g., `./.uv/python`
     pub fn from_settings() -> Result<Self, Error> {
-        if let Some(install_dir) = std::env::var_os("UV_PYTHON_INSTALL_DIR") {
+        if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
             Ok(Self::from_path(install_dir))
         } else {
             Ok(Self::from_path(

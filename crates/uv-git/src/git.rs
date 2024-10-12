@@ -14,6 +14,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 use url::Url;
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
@@ -604,13 +605,13 @@ fn fetch_with_cli(
         // rebase`), the GIT_DIR is set by git and will point to the wrong
         // location (this takes precedence over the cwd). Make sure this is
         // unset so git will look at cwd for the repo.
-        .env_remove("GIT_DIR")
+        .env_remove(EnvVars::GIT_DIR)
         // The reset of these may not be necessary, but I'm including them
         // just to be extra paranoid and avoid any issues.
-        .env_remove("GIT_WORK_TREE")
-        .env_remove("GIT_INDEX_FILE")
-        .env_remove("GIT_OBJECT_DIRECTORY")
-        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
+        .env_remove(EnvVars::GIT_WORK_TREE)
+        .env_remove(EnvVars::GIT_INDEX_FILE)
+        .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+        .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
         .cwd(&repo.path);
 
     // We capture the output to avoid streaming it to the user's console during clones.

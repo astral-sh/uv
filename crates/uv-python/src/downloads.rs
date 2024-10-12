@@ -17,6 +17,7 @@ use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, Simplified};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_static::EnvVars;
 
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
@@ -579,11 +580,11 @@ impl ManagedPythonDownload {
     fn download_url(&self) -> Result<Url, Error> {
         match self.key.implementation {
             LenientImplementationName::Known(ImplementationName::CPython) => {
-                if let Ok(mirror) = std::env::var("UV_PYTHON_INSTALL_MIRROR") {
+                if let Ok(mirror) = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR) {
                     let Some(suffix) = self.url.strip_prefix(
                         "https://github.com/indygreg/python-build-standalone/releases/download/",
                     ) else {
-                        return Err(Error::Mirror("UV_PYTHON_INSTALL_MIRROR", self.url));
+                        return Err(Error::Mirror(EnvVars::UV_PYTHON_INSTALL_MIRROR, self.url));
                     };
                     return Ok(Url::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
@@ -592,10 +593,10 @@ impl ManagedPythonDownload {
             }
 
             LenientImplementationName::Known(ImplementationName::PyPy) => {
-                if let Ok(mirror) = std::env::var("UV_PYPY_INSTALL_MIRROR") {
+                if let Ok(mirror) = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR) {
                     let Some(suffix) = self.url.strip_prefix("https://downloads.python.org/pypy/")
                     else {
-                        return Err(Error::Mirror("UV_PYPY_INSTALL_MIRROR", self.url));
+                        return Err(Error::Mirror(EnvVars::UV_PYPY_INSTALL_MIRROR, self.url));
                     };
                     return Ok(Url::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),

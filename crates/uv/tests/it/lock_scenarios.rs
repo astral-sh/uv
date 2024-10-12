@@ -13,6 +13,8 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
+use uv_static::EnvVars;
+
 use crate::common::{packse_index_url, uv_snapshot, TestContext};
 
 /// This test ensures that multiple non-conflicting but also
@@ -65,7 +67,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -121,7 +123,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -182,7 +184,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -233,7 +235,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -281,7 +283,7 @@ fn fork_basic() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -353,7 +355,7 @@ fn fork_basic() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -415,7 +417,7 @@ fn conflict_in_fork() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: false
@@ -483,7 +485,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: false
@@ -566,7 +568,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -690,7 +692,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -744,7 +746,7 @@ fn fork_upgrade() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -804,7 +806,7 @@ fn fork_upgrade() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -864,7 +866,7 @@ fn fork_incomplete_markers() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -959,7 +961,7 @@ fn fork_incomplete_markers() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -1017,7 +1019,7 @@ fn fork_marker_accrue() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -1093,7 +1095,7 @@ fn fork_marker_accrue() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -1150,7 +1152,7 @@ fn fork_marker_disjoint() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: false
@@ -1220,7 +1222,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -1336,7 +1338,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -1400,7 +1402,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -1504,7 +1506,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -1569,7 +1571,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -1673,7 +1675,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -1731,7 +1733,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -1815,7 +1817,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -1879,7 +1881,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -1975,7 +1977,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -2035,7 +2037,7 @@ fn fork_marker_inherit() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -2107,7 +2109,7 @@ fn fork_marker_inherit() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -2173,7 +2175,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -2268,7 +2270,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -2328,7 +2330,7 @@ fn fork_marker_selection() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -2411,7 +2413,7 @@ fn fork_marker_selection() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -2483,7 +2485,7 @@ fn fork_marker_track() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -2578,7 +2580,7 @@ fn fork_marker_track() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -2635,7 +2637,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -2711,7 +2713,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -2769,7 +2771,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: false
@@ -2841,7 +2843,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: false
@@ -2934,7 +2936,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -2991,7 +2993,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -3101,7 +3103,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -3231,7 +3233,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -3337,7 +3339,7 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -3479,7 +3481,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -3657,7 +3659,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -3762,7 +3764,7 @@ fn preferences_dependent_forking() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -3858,7 +3860,7 @@ fn preferences_dependent_forking() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -3936,7 +3938,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -4040,7 +4042,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -4088,7 +4090,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -4124,7 +4126,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -4172,7 +4174,7 @@ fn fork_requires_python_full() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -4208,7 +4210,7 @@ fn fork_requires_python_full() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -4260,7 +4262,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -4308,7 +4310,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -4353,7 +4355,7 @@ fn fork_requires_python() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -4389,7 +4391,7 @@ fn fork_requires_python() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -4436,7 +4438,7 @@ fn unreachable_package() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -4484,7 +4486,7 @@ fn unreachable_package() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -4537,7 +4539,7 @@ fn unreachable_wheels() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -4610,7 +4612,7 @@ fn unreachable_wheels() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()
@@ -4654,7 +4656,7 @@ fn requires_python_wheels() -> Result<()> {
     )?;
 
     let mut cmd = context.lock();
-    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r#"
     success: true
@@ -4703,7 +4705,7 @@ fn requires_python_wheels() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg(packse_index_url())
         .assert()

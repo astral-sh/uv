@@ -11,6 +11,7 @@ use crate::common::{
     TestContext,
 };
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 
 #[test]
 fn lock_wheel_registry() -> Result<()> {
@@ -157,7 +158,7 @@ fn lock_sdist_registry() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -197,7 +198,7 @@ fn lock_sdist_registry() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -207,7 +208,7 @@ fn lock_sdist_registry() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3396,7 +3397,7 @@ fn lock_requires_python_upper() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env("UV_EXCLUDE_NEWER", "2024-08-29T00:00:00Z"), @r###"
+    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_EXCLUDE_NEWER, "2024-08-29T00:00:00Z"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3488,7 +3489,7 @@ fn lock_requires_python_upper() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env("UV_EXCLUDE_NEWER", "2024-08-29T00:00:00Z"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, "2024-08-29T00:00:00Z"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5277,7 +5278,7 @@ fn lock_invalid_hash() -> Result<()> {
         "#)?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5288,7 +5289,7 @@ fn lock_invalid_hash() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6196,7 +6197,7 @@ fn lock_redact_https() -> Result<()> {
     "###);
 
     // Installing with credentials from with `UV_INDEX_URL` should succeed.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").env("UV_INDEX_URL", "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").env(EnvVars::UV_INDEX_URL, "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7215,7 +7216,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .lock()
         .arg("--index-url")
         .arg(packse_index_url())
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .assert()
         .success();
     let lock = context.read("uv.lock");
@@ -7227,7 +7228,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .lock()
         .arg("--index-url")
         .arg(packse_index_url())
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--upgrade")
         .assert()
         .success();
@@ -7753,7 +7754,7 @@ fn lock_local_index() -> Result<()> {
         Url::from_directory_path(&root).unwrap().as_str()
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7801,7 +7802,7 @@ fn lock_local_index() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7811,7 +7812,7 @@ fn lock_local_index() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -27,6 +27,7 @@ uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["clap", "schemars"]}
 uv-resolver = { workspace = true, features = ["clap"] }
 uv-settings = { workspace = true, features = ["schemars"] }
+uv-static = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 

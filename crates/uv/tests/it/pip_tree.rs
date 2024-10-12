@@ -3,6 +3,8 @@ use std::process::Command;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 
+use uv_static::EnvVars;
+
 use crate::common::get_bin;
 use crate::common::{uv_snapshot, TestContext};
 
@@ -334,8 +336,8 @@ fn depth() {
         .arg(context.cache_dir.path())
         .arg("--depth")
         .arg("0")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -354,8 +356,8 @@ fn depth() {
         .arg(context.cache_dir.path())
         .arg("--depth")
         .arg("1")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -378,8 +380,8 @@ fn depth() {
         .arg(context.cache_dir.path())
         .arg("--depth")
         .arg("2")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -432,8 +434,8 @@ fn prune() {
         .arg(context.cache_dir.path())
         .arg("--prune")
         .arg("numpy")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -456,8 +458,8 @@ fn prune() {
         .arg("numpy")
         .arg("--prune")
         .arg("joblib")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -477,8 +479,8 @@ fn prune() {
         .arg(context.cache_dir.path())
         .arg("--prune")
         .arg("scipy")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -780,8 +782,8 @@ fn prune_large_tree() {
         .arg(context.cache_dir.path())
         .arg("--prune")
         .arg("hatchling")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -839,7 +841,7 @@ fn cyclic_dependency() {
         .unwrap();
 
     let mut command = context.pip_install();
-    command.env_remove("UV_EXCLUDE_NEWER");
+    command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command
         .arg("-r")
         .arg("requirements.txt")
@@ -1177,7 +1179,7 @@ fn no_dedupe_and_cycle() {
     );
 
     let mut command = context.pip_install();
-    command.env_remove("UV_EXCLUDE_NEWER");
+    command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command
         .arg("uv-cyclic-dependencies-c==0.1.0")
         .arg("--index-url")

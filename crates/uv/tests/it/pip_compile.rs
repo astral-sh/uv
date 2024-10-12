@@ -11,6 +11,7 @@ use url::Url;
 
 use crate::common::{download_to_disk, uv_snapshot, TestContext};
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 
 #[test]
 fn compile_requirements_in() -> Result<()> {
@@ -2189,7 +2190,7 @@ fn allowed_transitive_url_path_dependency() -> Result<()> {
     let hatchling_path = current_dir()?.join("../../scripts/packages/hatchling_editable");
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .env("HATCH_PATH", hatchling_path.as_os_str()), @r###"
+        .env(EnvVars::HATCH_PATH, hatchling_path.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2505,7 +2506,7 @@ fn compile_exclude_newer() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
         // 4.64.0: 2022-04-04T01:48:46.194635Z1
@@ -2528,7 +2529,7 @@ fn compile_exclude_newer() -> Result<()> {
     // We interpret a date as including this day
     uv_snapshot!(context
         .pip_compile()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
         .arg("2022-04-04"), @r###"
@@ -2548,7 +2549,7 @@ fn compile_exclude_newer() -> Result<()> {
     // Check the error message for invalid datetime
     uv_snapshot!(context
         .pip_compile()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
         .arg("2022-04-04+02:00"), @r###"
@@ -2568,7 +2569,7 @@ fn compile_exclude_newer() -> Result<()> {
     // valid date.
     uv_snapshot!(context
         .pip_compile()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
         .arg("2022-04-04T26:00:00+00"), @r###"
@@ -3570,7 +3571,7 @@ fn respect_http_env_var() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .env("URL", "https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl"), @r###"
+            .env(EnvVars::URL, "https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3611,7 +3612,7 @@ fn respect_unnamed_env_var() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .env("URL", "https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl"), @r###"
+            .env(EnvVars::URL, "https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3684,7 +3685,7 @@ fn respect_file_env_var() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .env("FILE_PATH", context.temp_dir.join("flask-3.0.0-py3-none-any.whl")), @r###"
+            .env(EnvVars::FILE_PATH, context.temp_dir.join("flask-3.0.0-py3-none-any.whl")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4051,7 +4052,7 @@ fn compile_html() -> Result<()> {
     requirements_in.write_str("jinja2<=3.1.2")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .env_remove("UV_EXCLUDE_NEWER")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--index-url")
             .arg("https://download.pytorch.org/whl"), @r###"
@@ -4546,7 +4547,7 @@ fn find_links_env_var() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--no-index")
-            .env("URL", "https://download.pytorch.org/whl/torch_stable.html"), @r###"
+            .env(EnvVars::URL, "https://download.pytorch.org/whl/torch_stable.html"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4603,7 +4604,7 @@ fn find_links_uv_env_var() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--no-index")
-            .env("UV_FIND_LINKS", "https://download.pytorch.org/whl/torch_stable.html"), @r###"
+            .env(EnvVars::UV_FIND_LINKS, "https://download.pytorch.org/whl/torch_stable.html"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4721,7 +4722,7 @@ fn requires_python_prefetch() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -5170,7 +5171,7 @@ fn custom_compile_command() -> Result<()> {
     // with env var
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .env("UV_CUSTOM_COMPILE_COMMAND", "./custom-uv-compile.sh"), @r###"
+            .env(EnvVars::UV_CUSTOM_COMPILE_COMMAND, "./custom-uv-compile.sh"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7579,7 +7580,7 @@ fn existing_prerelease_preference() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("-o")
             .arg("requirements.txt"), @r###"
@@ -7614,7 +7615,7 @@ fn universal_disjoint_prereleases() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
@@ -7654,7 +7655,7 @@ fn universal_disjoint_prereleases_preference() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("-o")
             .arg("requirements.txt")
@@ -7699,7 +7700,7 @@ fn universal_disjoint_prereleases_preference_marker() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("-o")
             .arg("requirements.txt")
@@ -7736,7 +7737,7 @@ fn universal_disjoint_prereleases_allow() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--universal")
             .arg("--prerelease")
@@ -7776,7 +7777,7 @@ fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
@@ -7818,7 +7819,7 @@ fn universal_prerelease_mode() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("--prerelease=allow")
             .arg("requirements.in")
             .arg("--universal"), @r###"
@@ -7866,7 +7867,7 @@ fn universal_overlapping_prerelease_requirement() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
@@ -7920,7 +7921,7 @@ fn universal_disjoint_prerelease_requirement() -> Result<()> {
     // Some marker expressions on the output here are missing due to https://github.com/astral-sh/uv/issues/5086,
     // but the pre-release versions are still respected correctly.
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
@@ -8940,7 +8941,7 @@ fn empty_index_url_env_var() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .env("UV_INDEX_URL", ""), @r###"
+            .env(EnvVars::UV_INDEX_URL, ""), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8973,7 +8974,7 @@ fn empty_extra_index_url_env_var() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .env("EXTRA_UV_INDEX_URL", ""), @r###"
+            .env(EnvVars::UV_EXTRA_INDEX_URL, ""), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9007,7 +9008,7 @@ fn empty_index_url_env_var_override() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .env("UV_INDEX_URL", ""), @r###"
+            .env(EnvVars::UV_INDEX_URL, ""), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9036,7 +9037,7 @@ fn index_url_env_var_override() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .env("UV_INDEX_URL", "https://test.pypi.org/simple"), @r###"
+            .env(EnvVars::UV_INDEX_URL, "https://test.pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9320,7 +9321,7 @@ fn no_stream() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("-c")
         .arg("constraints.in")
@@ -9419,7 +9420,7 @@ fn compile_root_uri_editable() -> Result<()> {
     let root_path = current_dir()?.join("../../scripts/packages/root_editable");
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .env("ROOT_PATH", root_path.as_os_str()), @r###"
+        .env(EnvVars::ROOT_PATH, root_path.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9450,8 +9451,8 @@ fn compile_root_uri_non_editable() -> Result<()> {
     let black_path = current_dir()?.join("../../scripts/packages/black_editable");
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .env("ROOT_PATH", root_path.as_os_str())
-        .env("BLACK_PATH", black_path.as_os_str()), @r###"
+        .env(EnvVars::ROOT_PATH, root_path.as_os_str())
+        .env(EnvVars::BLACK_PATH, black_path.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10892,7 +10893,7 @@ fn emit_index_annotation_hide_password() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--emit-index-annotation")
-        .env("UV_INDEX_URL", "https://test-user:test-password@pypi.org/simple"), @r###"
+        .env(EnvVars::UV_INDEX_URL, "https://test-user:test-password@pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11715,7 +11716,7 @@ fn no_binary_only_binary() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--only-binary")
         .arg(":all:"), @r###"
@@ -11732,7 +11733,7 @@ fn no_binary_only_binary() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--only-binary")
         .arg(":all:")

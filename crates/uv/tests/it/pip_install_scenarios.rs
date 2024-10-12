@@ -11,6 +11,8 @@ use std::process::Command;
 use assert_cmd::assert::Assert;
 use assert_cmd::prelude::*;
 
+use uv_static::EnvVars;
+
 use crate::common::{
     build_vendor_links_url, get_bin, packse_index_url, uv_snapshot, venv_to_interpreter,
     TestContext,
@@ -49,7 +51,7 @@ fn command(context: &TestContext) -> Command {
         .arg("--find-links")
         .arg(build_vendor_links_url());
     context.add_shared_args(&mut command, true);
-    command.env_remove("UV_EXCLUDE_NEWER");
+    command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command
 }
 
