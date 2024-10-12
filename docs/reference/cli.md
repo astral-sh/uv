@@ -2329,6 +2329,8 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
 </dd><dt><code>--no-dedupe</code></dt><dd><p>Do not de-duplicate repeated dependencies. Usually, when a package has already displayed its dependencies, further occurrences will not re-display its dependencies, and will include a (*) to indicate it has already been shown. This flag will cause those duplicates to be repeated</p>
 
+</dd><dt><code>--no-dev</code></dt><dd><p>Omit development dependencies</p>
+
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>

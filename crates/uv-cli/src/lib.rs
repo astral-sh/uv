@@ -3070,6 +3070,17 @@ pub struct TreeArgs {
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
 
+    /// Include development dependencies.
+    ///
+    /// Development dependencies are defined via `tool.uv.dev-dependencies` in a
+    /// `pyproject.toml`.
+    #[arg(long, overrides_with("no_dev"), hide = true)]
+    pub dev: bool,
+
+    /// Omit development dependencies.
+    #[arg(long, overrides_with("dev"), conflicts_with = "invert")]
+    pub no_dev: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or
