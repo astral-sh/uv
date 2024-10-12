@@ -193,11 +193,6 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: Install and launch fopro
-        run: |
-          curl -sL https://github.com/bearcove/fopro/releases/download/v1.0.1/fopro-installer.sh | bash
-          ~/.cargo/bin/fopro &
-
       - name: Cache .fopro-cache
         uses: actions/cache@v3
         with:
@@ -205,6 +200,16 @@ jobs:
           key: ${{ runner.os }}-fopro-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-fopro-
+
+      - name: Install and launch fopro
+        run: |
+          curl -sL https://github.com/bearcove/fopro/releases/download/v1.0.1/fopro-installer.sh | bash
+          ~/.cargo/bin/fopro &
+
+      - name: "Set proxy and Git SSL verification"
+        run: |
+          echo "ALL_PROXY=localhost:8080" >> $GITHUB_ENV
+          echo "GIT_SSL_NO_VERIFY=true" >> $GITHUB_ENV
 
       - name: "Cargo test"
         run: |
