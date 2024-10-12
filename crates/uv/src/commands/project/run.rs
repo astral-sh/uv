@@ -529,6 +529,7 @@ pub(crate) async fn run(
                     project.workspace(),
                     venv.interpreter(),
                     settings.as_ref().into(),
+                    &state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
                     } else {
@@ -576,7 +577,6 @@ pub(crate) async fn run(
                     install_options,
                     Modifications::Sufficient,
                     settings.as_ref().into(),
-                    &state,
                     if show_resolution {
                         Box::new(DefaultInstallLogger)
                     } else {

@@ -13,7 +13,7 @@ use uv_workspace::{DiscoveryOptions, Workspace};
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
 use crate::commands::project::ProjectInterpreter;
-use crate::commands::{project, ExitStatus};
+use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -59,6 +59,9 @@ pub(crate) async fn tree(
     .await?
     .into_interpreter();
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     // Update the lockfile, if necessary.
     let lock = project::lock::do_safe_lock(
         locked,
@@ -66,6 +69,7 @@ pub(crate) async fn tree(
         &workspace,
         &interpreter,
         settings.as_ref(),
+        &state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,

@@ -103,12 +103,16 @@ pub(crate) async fn sync(
     )
     .await?;
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     let lock = match do_safe_lock(
         locked,
         frozen,
         target.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
+        &state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -140,9 +144,6 @@ pub(crate) async fn sync(
         Err(err) => return Err(err.into()),
     };
 
-    // Initialize any shared state.
-    let state = SharedState::default();
-
     // Perform the sync operation.
     do_sync(
         target,
@@ -154,7 +155,6 @@ pub(crate) async fn sync(
         install_options,
         modifications,
         settings.as_ref().into(),
-        &state,
         Box::new(DefaultInstallLogger),
         connectivity,
         concurrency,
@@ -179,7 +179,6 @@ pub(super) async fn do_sync(
     install_options: InstallOptions,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
-    state: &SharedState,
     logger: Box<dyn InstallLogger>,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -187,6 +186,17 @@ pub(super) async fn do_sync(
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
+    // Use isolated state for universal resolution. When resolving, we don't enforce that the
+    // prioritized distributions match the current platform. So if we lock here, then try to
+    // install from the same state, and we end up performing a resolution during the sync (i.e.,
+    // for the build dependencies of a source distribution), we may try to use incompatible
+    // distributions.
+    // TODO(charlie): In universal resolution, we should still track version compatibility! We
+    // just need to accept versions that are platform-incompatible. That would also make us more
+    // likely to (e.g.) download a wheel that we'll end up using when installing. This would
+    // make it safe to share the state.
+    let state = SharedState::default();
+
     // Extract the project settings.
     let InstallerSettingsRef {
         index_locations,
