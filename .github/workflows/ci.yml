@@ -203,7 +203,8 @@ jobs:
 
       - name: Install and launch fopro
         run: |
-          curl -sL https://github.com/bearcove/fopro/releases/download/v1.0.1/fopro-installer.sh | bash
+          gh release download --repo bearcove/fopro v1.0.1 --pattern fopro-installer.sh
+          bash fopro-installer.sh
           ~/.cargo/bin/fopro &
 
       - name: "Set proxy and Git SSL verification"
