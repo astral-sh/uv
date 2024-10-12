@@ -146,7 +146,7 @@ Using CPython 3.12.0
 Creating virtual environment at: .venv
 Activate with: source .venv/bin/activate
 
-$ uv run --python pypy@3.8 -- python --version
+$ uv run --python pypy@3.8 -- python
 Python 3.8.16 (a9dbdca6fc3286b0addd2240f11d97d8e8de187a, Dec 29 2022, 11:45:30)
 [PyPy 7.3.11 with GCC Apple LLVM 13.1.6 (clang-1316.0.21.2.5)] on darwin
 Type "help", "copyright", "credits" or "license" for more information.
