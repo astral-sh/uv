@@ -176,10 +176,10 @@ async fn init_script(
     native_tls: bool,
 ) -> Result<()> {
     if no_workspace {
-        warn_user_once!("`--no_workspace` is a no-op for Python scripts, which are standalone");
+        warn_user_once!("`--no-workspace` is a no-op for Python scripts, which are standalone");
     }
     if no_readme {
-        warn_user_once!("`--no_readme` is a no-op for Python scripts, which are standalone");
+        warn_user_once!("`--no-readme` is a no-op for Python scripts, which are standalone");
     }
     if author_from.is_some() {
         warn_user_once!("`--author-from` is a no-op for Python scripts, which are standalone");

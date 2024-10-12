@@ -61,7 +61,7 @@ pub(crate) async fn remove(
         }
         if no_sync {
             warn_user_once!(
-                "`--no_sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
+                "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         Target::Script(script)
