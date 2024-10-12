@@ -10,7 +10,7 @@ use std::fmt::{Debug, Display};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
@@ -20,10 +20,10 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
-    IndexLocations, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, StaticMetadata,
-    ToUrlError, UrlString,
+    Dist, DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, IndexLocations,
+    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, StaticMetadata, ToUrlError,
+    UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
@@ -35,14 +35,17 @@ use uv_pypi_types::{
     redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
     RequirementSource, ResolverMarkerEnvironment,
 };
-use uv_types::BuildContext;
+use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{InstallTarget, Workspace};
 
 pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
-use crate::{ExcludeNewer, PrereleaseMode, RequiresPython, ResolutionGraph, ResolutionMode};
+use crate::{
+    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionGraph,
+    ResolutionMode,
+};
 
 mod requirements_txt;
 mod tree;
@@ -927,6 +930,8 @@ impl Lock {
         indexes: Option<&IndexLocations>,
         build_options: &BuildOptions,
         tags: &Tags,
+        hasher: &HashStrategy,
+        index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
         let mut queue: VecDeque<&Package> = VecDeque::new();
@@ -1158,18 +1163,48 @@ impl Lock {
                 build_options,
             )?;
 
-            let archive = database
-                .get_or_build_wheel_metadata(&dist, HashPolicy::None)
-                .await
-                .map_err(|err| LockErrorKind::Resolution {
-                    id: package.id.clone(),
-                    err,
-                })?;
+            // Fetch the metadata for the distribution.
+            let metadata = {
+                let id = dist.version_id();
+                if let Some(archive) =
+                    index
+                        .distributions()
+                        .get(&id)
+                        .as_deref()
+                        .and_then(|response| {
+                            if let MetadataResponse::Found(archive, ..) = response {
+                                Some(archive)
+                            } else {
+                                None
+                            }
+                        })
+                {
+                    // If the metadata is already in the index, return it.
+                    archive.metadata.clone()
+                } else {
+                    // Run the PEP 517 build process to extract metadata from the source distribution.
+                    let archive = database
+                        .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                        .await
+                        .map_err(|err| LockErrorKind::Resolution {
+                            id: package.id.clone(),
+                            err,
+                        })?;
+
+                    let metadata = archive.metadata.clone();
+
+                    // Insert the metadata into the index.
+                    index
+                        .distributions()
+                        .done(id, Arc::new(MetadataResponse::Found(archive)));
+
+                    metadata
+                }
+            };
 
             // Validate the `requires-dist` metadata.
             {
-                let expected: BTreeSet<_> = archive
-                    .metadata
+                let expected: BTreeSet<_> = metadata
                     .requires_dist
                     .into_iter()
                     .map(|requirement| normalize_requirement(requirement, workspace))
@@ -1194,8 +1229,7 @@ impl Lock {
 
             // Validate the `dev-dependencies` metadata.
             {
-                let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = archive
-                    .metadata
+                let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
                     .dev_dependencies
                     .into_iter()
                     .map(|(group, requirements)| {
