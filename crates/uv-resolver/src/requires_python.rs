@@ -553,13 +553,11 @@ impl LowerBound {
     /// Return the [`LowerBound`] truncated to the major and minor version.
     fn major_minor(&self) -> Self {
         match &self.0 {
-            // Ex) `>=3.10.1` -> `>=3.10` (and `>=3.10.0` is `>=3.10`)
+            // Ex) `>=3.10.1` -> `>=3.10`
             Bound::Included(version) => Self(Bound::Included(Version::new(
                 version.release().iter().take(2),
             ))),
             // Ex) `>3.10.1` -> `>=3.10`.
-            // This is unintuitive, but `>3.10.1` does indicate that _some_ version of Python 3.10
-            // is supported.
             Bound::Excluded(version) => Self(Bound::Included(Version::new(
                 version.release().iter().take(2),
             ))),
@@ -668,24 +666,20 @@ impl UpperBound {
     /// Return the [`UpperBound`] truncated to the major and minor version.
     fn major_minor(&self) -> Self {
         match &self.0 {
-            // Ex) `<=3.10.1` -> `<3.11` (but `<=3.10.0` is `<=3.10`)
-            Bound::Included(version) => {
-                let major = version.release().first().copied().unwrap_or(3);
-                let minor = version.release().get(1).copied().unwrap_or(0);
-                if version.release().get(2).is_some_and(|patch| *patch > 0) {
-                    Self(Bound::Excluded(Version::new([major, minor + 1])))
-                } else {
-                    Self(Bound::Included(Version::new([major, minor])))
-                }
-            }
-            // Ex) `<3.10.1` -> `<3.11` (but `<3.10.0` is `<3.10`)
+            // Ex) `<=3.10.1` -> `<=3.10`
+            Bound::Included(version) => Self(Bound::Included(Version::new(
+                version.release().iter().take(2),
+            ))),
+            // Ex) `<3.10.1` -> `<=3.10` (but `<3.10.0` is `<3.10`)
             Bound::Excluded(version) => {
-                let major = version.release().first().copied().unwrap_or(3);
-                let minor = version.release().get(1).copied().unwrap_or(0);
                 if version.release().get(2).is_some_and(|patch| *patch > 0) {
-                    Self(Bound::Excluded(Version::new([major, minor + 1])))
+                    Self(Bound::Included(Version::new(
+                        version.release().iter().take(2),
+                    )))
                 } else {
-                    Self(Bound::Excluded(Version::new([major, minor])))
+                    Self(Bound::Excluded(Version::new(
+                        version.release().iter().take(2),
+                    )))
                 }
             }
             Bound::Unbounded => Self(Bound::Unbounded),
