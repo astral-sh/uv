@@ -350,8 +350,8 @@ impl RequiresPython {
                             return true;
                         };
 
-                        // Ex) If the wheel bound is `3.12`, then it doesn't match `==3.10.*`.
-                        let wheel_bound = UpperBound(Bound::Excluded(Version::new([3, minor + 1])));
+                        // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
+                        let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
                         if wheel_bound > self.range.upper().major_minor() {
                             return false;
                         }
@@ -375,7 +375,8 @@ impl RequiresPython {
                             return false;
                         }
 
-                        let wheel_bound = UpperBound(Bound::Excluded(Version::new([3, minor + 1])));
+                        // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
+                        let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
                         if wheel_bound > self.range.upper().major_minor() {
                             return false;
                         }
@@ -403,8 +404,8 @@ impl RequiresPython {
                     return false;
                 }
 
-                // Ex) If the wheel bound is `3.12`, then it doesn't match `==3.10.*`.
-                let wheel_bound = UpperBound(Bound::Excluded(Version::new([3, minor + 1])));
+                // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
+                let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
                 if wheel_bound > self.range.upper().major_minor() {
                     return false;
                 }
@@ -428,8 +429,8 @@ impl RequiresPython {
                     return false;
                 }
 
-                // Ex) If the wheel bound is `3.12`, then it doesn't match `==3.10.*`.
-                let wheel_bound = UpperBound(Bound::Excluded(Version::new([3, minor + 1])));
+                // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
+                let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
                 if wheel_bound > self.range.upper().major_minor() {
                     return false;
                 }
