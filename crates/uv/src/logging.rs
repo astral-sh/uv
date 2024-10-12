@@ -174,6 +174,10 @@ pub(crate) fn setup_logging(
                         .with_writer(std::io::stderr)
                         .with_filter(filter),
                 )
+                .with(
+                    tracing_subscriber::fmt::layer()
+                        .event_format(tracing_subscriber::fmt::format().with_source_location(true)),
+                )
                 .init();
         }
     }
