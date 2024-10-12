@@ -767,10 +767,7 @@ pub(crate) enum Error {
     Fmt(#[from] std::fmt::Error),
 
     #[error(transparent)]
-    Lookahead(#[from] uv_requirements::LookaheadError),
-
-    #[error(transparent)]
-    Named(#[from] uv_requirements::NamedRequirementsError),
+    Requirements(#[from] uv_requirements::Error),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),

@@ -921,13 +921,15 @@ impl PythonRunner {
     ) -> Result<PythonRunnerOutput, Error> {
         /// Read lines from a reader and store them in a buffer.
         async fn read_from(
-            mut reader: tokio::io::Lines<tokio::io::BufReader<impl tokio::io::AsyncRead + Unpin>>,
+            mut reader: tokio::io::Split<tokio::io::BufReader<impl tokio::io::AsyncRead + Unpin>>,
             mut printer: Printer,
             buffer: &mut Vec<String>,
         ) -> io::Result<()> {
             loop {
-                match reader.next_line().await? {
-                    Some(line) => {
+                match reader.next_segment().await? {
+                    Some(line_buf) => {
+                        let line_buf = line_buf.strip_suffix(b"\r").unwrap_or(&line_buf);
+                        let line = String::from_utf8_lossy(line_buf).into();
                         let _ = write!(printer, "{line}");
                         buffer.push(line);
                     }
@@ -945,7 +947,7 @@ impl PythonRunner {
             .env("PATH", modified_path)
             .env("VIRTUAL_ENV", venv.root())
             .env("CLICOLOR_FORCE", "1")
-            .env("PYTHONIOENCODING", "utf-8")
+            .env("PYTHONIOENCODING", "utf-8:backslashreplace")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
@@ -956,8 +958,8 @@ impl PythonRunner {
         let mut stderr_buf = Vec::with_capacity(1024);
 
         // Create separate readers for `stdout` and `stderr`.
-        let stdout_reader = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
-        let stderr_reader = tokio::io::BufReader::new(child.stderr.take().unwrap()).lines();
+        let stdout_reader = tokio::io::BufReader::new(child.stdout.take().unwrap()).split(b'\n');
+        let stderr_reader = tokio::io::BufReader::new(child.stderr.take().unwrap()).split(b'\n');
 
         // Asynchronously read from the in-memory pipes.
         let printer = Printer::from(self.level);

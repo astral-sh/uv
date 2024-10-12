@@ -1,4 +1,4 @@
-use uv_distribution_types::{Dist, GitSourceDist, SourceDist};
+use uv_distribution_types::{BuiltDist, Dist, GitSourceDist, SourceDist};
 use uv_git::GitUrl;
 use uv_pypi_types::{Requirement, RequirementSource};
 
@@ -16,6 +16,27 @@ mod sources;
 mod specification;
 mod unnamed;
 pub mod upgrade;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Failed to download: `{0}`")]
+    Download(BuiltDist, #[source] uv_distribution::Error),
+
+    #[error("Failed to download and build: `{0}`")]
+    DownloadAndBuild(SourceDist, #[source] uv_distribution::Error),
+
+    #[error("Failed to build: `{0}`")]
+    Build(SourceDist, #[source] uv_distribution::Error),
+
+    #[error(transparent)]
+    Distribution(#[from] uv_distribution::Error),
+
+    #[error(transparent)]
+    DistributionTypes(#[from] uv_distribution_types::Error),
+
+    #[error(transparent)]
+    WheelFilename(#[from] uv_distribution_filename::WheelFilenameError),
+}
 
 /// Convert a [`Requirement`] into a [`Dist`], if it is a direct URL.
 pub(crate) fn required_dist(

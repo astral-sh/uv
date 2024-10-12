@@ -130,7 +130,7 @@ pub(crate) async fn run(
             diagnostics::no_solution_context(&err, "tool");
             return Ok(ExitStatus::Failure);
         }
-        Err(ProjectError::NamedRequirements(err)) => {
+        Err(ProjectError::Requirements(err)) => {
             let err = miette::Report::msg(format!("{err}")).context("Invalid `--with` requirement");
             eprint!("{err:?}");
             return Ok(ExitStatus::Failure);
